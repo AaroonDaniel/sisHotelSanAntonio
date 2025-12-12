@@ -8,5 +8,6 @@ class Block extends Model
 {
     protected $fillable = [
         'code',
+        'description'
     ];
 }

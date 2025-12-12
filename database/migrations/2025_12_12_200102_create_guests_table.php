@@ -15,10 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('first_name');
             $table->string('last_name');
-            $table->string('nacionality');
+            $table->string('nationality');
             $table->string('identification_number')->unique();
             $table->string('issued_in');
-            $table->enum('civil_status', ['Single', 'Married', 'Divorced', 'Widowed']);
+            $table->enum('civil_status', ['single', 'married', 'divorced', 'widowed']);
             $table->integer('age');
             $table->string('profession');
             $table->string('origin');

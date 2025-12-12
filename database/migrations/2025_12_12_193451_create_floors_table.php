@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('floors', function (Blueprint $table) {
             $table->id();
-            $table->string('level', 2);
+            $table->string('name', 50); 
             $table->timestamps();
         });
     }
