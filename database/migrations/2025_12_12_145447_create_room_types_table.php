@@ -1,0 +1,41 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+       Schema::create('room_types', function (Blueprint $table) {
+            $table->id(); 
+            
+            // ESTA ES LA COLUMNA QUE TE FALTA O TIENE OTRO NOMBRE
+            $table->enum('name', [
+                'single', 
+                'double', 
+                'triple', 
+                'quadruple', 
+                'matrimonial', 
+                'group'
+            ]);
+
+            $table->integer('capacity'); // Capacidad
+            $table->string('description', 150)->nullable(); // Descripción extra
+            
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('room_types');
+    }
+};
