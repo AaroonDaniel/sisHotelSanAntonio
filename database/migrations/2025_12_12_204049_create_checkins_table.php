@@ -31,6 +31,11 @@ return new class extends Migration
             $table->foreignId('user_id')
                   ->constrained()
                   ->onDelete('restrict');
+            // 4. Usuario 
+            /*$table->foreignId('reservation_id')
+                  ->nullable()
+                  ->constrained()
+                  ->onDelete('set null');*/
 
             // --- DATOS DE LA ESTADÍA ---
 

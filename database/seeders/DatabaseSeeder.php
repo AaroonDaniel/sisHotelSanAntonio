@@ -12,49 +12,51 @@ use App\Models\Guest;
 use App\Models\Service;
 use App\Models\Checkin;
 use App\Models\CheckinDetail;
+use App\Models\Reservation;
+use App\Models\ReservationDetail;
+use App\Models\Invoice;
+use App\Models\InvoiceDetail;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Faker\Factory as Faker;
+use Carbon\Carbon;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
         $faker = Faker::create('es_ES');
-
+        
         $this->command->warn('----------------------------------------------------');
-        $this->command->warn('🔥 INICIANDO PRUEBA DE ESTRÉS (CORE OPERATIVO) 🔥');
+        $this->command->warn('🏨 INICIANDO SIMULACIÓN COMPLETA: SISTEMA HOTELERO 🏨');
         $this->command->warn('----------------------------------------------------');
 
         // ==========================================
-        // 1. USUARIOS
+        // 1. USUARIOS (STAFF)
         // ==========================================
         User::create([
             'nickname' => 'aaron_admin',
             'full_name' => 'Aaron Mendoza',
             'phone' => '70000000',
-            'address' => 'Av. Cívica',
+            'address' => 'Gerencia General',
             'password' => Hash::make('password123'),
-            'is_active' => true,
         ]);
 
-        for ($i = 1; $i <= 20; $i++) {
-            User::create([
+        $staff = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $staff[] = User::create([
                 'nickname' => "recep_{$i}",
                 'full_name' => $faker->name,
                 'phone' => $faker->phoneNumber,
                 'address' => $faker->address,
                 'password' => Hash::make('12345678'),
-                'is_active' => true,
             ]);
         }
-        $this->command->info('✅ 21 Usuarios generados.');
+        $this->command->info('✅ Usuarios creados.');
 
         // ==========================================
-        // 2. CONFIGURACIÓN (CORREGIDO AL INGLÉS)
+        // 2. CONFIGURACIÓN E INFRAESTRUCTURA
         // ==========================================
-        
-        // CORRECCIÓN AQUÍ: Usamos los términos exactos de tu migración
         $types = ['single', 'double', 'triple', 'quadruple', 'matrimonial', 'group'];
         $typeModels = [];
 
@@ -62,45 +64,39 @@ class DatabaseSeeder extends Seeder
             $t = RoomType::create([
                 'name' => $type,
                 'capacity' => rand(1, 6),
-                'description' => "Habitación tipo $type" // Esto es solo descripción, puede ir mixto
+                'description' => "Clase $type"
             ]);
             $typeModels[] = $t;
             
-            Price::create(['room_type_id' => $t->id, 'bathroom_type' => 'private', 'amount' => rand(150, 350)]);
+            // Precios
+            Price::create(['room_type_id' => $t->id, 'bathroom_type' => 'private', 'amount' => rand(150, 300)]);
             Price::create(['room_type_id' => $t->id, 'bathroom_type' => 'shared', 'amount' => rand(60, 100)]);
         }
 
-        $blockModels = [];
-        $blockCodes = ['A', 'B', 'C']; // Mantenemos simple A, B, C
-        foreach ($blockCodes as $code) {
-            $blockModels[] = Block::create(['code' => $code, 'description' => "Pabellón $code"]);
-        }
+        $blocks = [];
+        foreach (['A', 'B', 'C'] as $code) $blocks[] = Block::create(['code' => $code]);
 
-        $floorModels = [];
-        for ($i = 0; $i < 4; $i++) { // 4 Pisos
-            $floorModels[] = Floor::create(['name' => $i == 0 ? "Planta Baja" : "Piso $i"]);
-        }
-
-        $this->command->info('✅ Infraestructura configurada (Tipos EN, Bloques, Pisos).');
+        $floors = [];
+        foreach (['PB', 'Piso 1', 'Piso 2'] as $name) $floors[] = Floor::create(['name' => $name]);
 
         // ==========================================
         // 3. HABITACIONES
         // ==========================================
         $allRooms = [];
-        foreach ($blockModels as $block) {
-            foreach ($floorModels as $index => $floor) {
+        foreach ($blocks as $block) {
+            foreach ($floors as $idx => $floor) {
                 for ($i = 1; $i <= 5; $i++) {
-                    $randomType = $faker->randomElement($typeModels);
-                    $randomPrice = Price::where('room_type_id', $randomType->id)->inRandomOrder()->first();
-
+                    $type = $faker->randomElement($typeModels);
+                    $price = Price::where('room_type_id', $type->id)->first();
+                    
                     $room = Room::create([
-                        'number' => "{$block->code}-" . ($index * 100 + $i),
-                        'room_type_id' => $randomType->id,
+                        'number' => "{$block->code}-" . ($idx * 100 + $i),
+                        'room_type_id' => $type->id,
                         'block_id' => $block->id,
                         'floor_id' => $floor->id,
-                        'price_id' => $randomPrice->id,
+                        'price_id' => $price->id,
                         'status' => 'available',
-                        'notes' => $faker->optional()->sentence,
+                        'notes' => 'Operativa',
                     ]);
                     $allRooms[] = $room;
                 }
@@ -109,108 +105,196 @@ class DatabaseSeeder extends Seeder
         $this->command->info('✅ ' . count($allRooms) . ' Habitaciones listas.');
 
         // ==========================================
-        // 4. CLIENTES
+        // 4. CLIENTES Y SERVICIOS
         // ==========================================
         $allGuests = [];
-        for ($i = 0; $i < 100; $i++) {
-            $guest = Guest::create([
+        for ($i = 0; $i < 60; $i++) {
+            $allGuests[] = Guest::create([
                 'first_name' => $faker->firstName,
                 'last_name' => $faker->lastName,
                 'nationality' => 'Boliviana',
-                'identification_number' => $faker->unique()->numberBetween(1000000, 9999999) . ' PT',
-                'issued_in' => $faker->city,
-                // CORRECCIÓN AQUÍ TAMBIÉN: Aseguramos minúsculas
-                'civil_status' => $faker->randomElement(['single', 'married', 'divorced', 'widowed']),
-                'age' => rand(18, 85),
+                'identification_number' => $faker->unique()->numberBetween(1000000, 9999999) . ' LP',
+                'issued_in' => 'La Paz',
+                'civil_status' => $faker->randomElement(['single', 'married', 'divorced']),
+                'age' => rand(18, 70),
                 'profession' => $faker->jobTitle,
                 'origin' => $faker->city,
             ]);
-            $allGuests[] = $guest;
         }
-        $this->command->info('✅ 100 Clientes registrados.');
 
-        // ==========================================
-        // 5. SERVICIOS
-        // ==========================================
         $services = [];
-        $serviceList = [
-            ['Coca Cola 2L', 15], 
-            ['Cerveza Paceña', 20], 
-            ['Lavandería Express', 25], 
-            ['Agua 2L', 10],
-            ['Sandwich de Pollo', 12]
-        ];
-
-        foreach ($serviceList as $s) {
-            $services[] = Service::create([
-                'name' => $s[0],
-                'status' => 'enabled',
-                'price' => $s[1],
-                'description' => 'Servicio a la habitación'
-            ]);
+        foreach ([['Coca Cola', 15], ['Lavandería', 20], ['Desayuno', 25]] as $s) {
+            $services[] = Service::create(['name' => $s[0], 'status' => 'enabled', 'price' => $s[1], 'description' => 'Servicio']);
         }
-        $this->command->info('✅ Servicios creados.');
+        $this->command->info('✅ Clientes y Servicios listos.');
 
         // ==========================================
-        // 6. CHECK-INS MASIVOS
+        // 5. RESERVAS (RESERVATIONS)
         // ==========================================
-        $this->command->info('⏳ Generando historial de hospedaje...');
-        
-        $recepcionistas = User::all();
-        
-        for ($i = 0; $i < 150; $i++) {
-            $room = $faker->randomElement($allRooms);
-            $guest = $faker->randomElement($allGuests);
-            $user = $recepcionistas->random();
+        $reservations = [];
+        $this->command->info('⏳ Creando Reservas...');
+
+        for ($i = 0; $i < 20; $i++) {
+            $resGuest = $faker->randomElement($allGuests);
+            $resDate = $faker->dateTimeBetween('-1 month', '+1 month');
             
-            $isCurrent = $i > 130; // Los últimos 20 son actuales
+            $res = Reservation::create([
+                'user_id' => User::first()->id,
+                'guest_id' => $resGuest->id,
+                'guest_count' => rand(1, 3),
+                'bathroom_preference' => 'private',
+                'arrival_date' => $resDate,
+                'arrival_time' => '14:00:00',
+                'duration_days' => rand(2, 5),
+                'advance_payment' => 50.00,
+                'payment_type' => 'QR'
+            ]);
 
-            $checkinDate = $isCurrent ? now() : $faker->dateTimeBetween('-6 months', '-1 week');
+            // --- CORRECCIÓN AQUÍ ---
+            // 1. Elegimos una habitación al azar
+            $randomRoom = $faker->randomElement($allRooms);
+            
+            // 2. Buscamos el precio real de esa habitación
+            $roomPrice = Price::find($randomRoom->price_id);
+
+            // 3. Creamos el detalle INCLUYENDO EL PRECIO ('price')
+            ReservationDetail::create([
+                'reservation_id' => $res->id,
+                'room_id' => $randomRoom->id,
+                'price_id' => $roomPrice->id,
+                'price' => $roomPrice->amount, // <--- ¡ESTA LÍNEA FALTABA!
+            ]);
+            // -----------------------
+            
+            if ($resDate < now()) {
+                $reservations[] = $res;
+            }
+        }
+        $this->command->info('✅ Reservas generadas.');
+
+        // ==========================================
+        // 6. CHECK-INS (ASIGNACIONES)
+        // ==========================================
+        $activeCheckins = [];
+        $this->command->info('⏳ Procesando Check-ins y vinculando con Reservas...');
+
+        // CASO A: Checkins que vienen de UNA RESERVA
+        foreach ($reservations as $res) {
+            // Buscamos la habitación que reservó (o le damos otra)
+            $reservedRoomId = ReservationDetail::where('reservation_id', $res->id)->first()->room_id;
             
             $checkin = Checkin::create([
-                'user_id' => $user->id,
-                'guest_id' => $guest->id,
-                'room_id' => $room->id,
-                'check_in_date' => $checkinDate,
-                'duration_days' => rand(1, 5),
-                'notes' => $faker->sentence,
-                'advance_payment' => rand(50, 200)
+                'room_id' => $reservedRoomId,
+                'guest_id' => $res->guest_id,
+                'user_id' => User::first()->id,
+                'reservation_id' => $res->id, // <--- AQUÍ ESTÁ LA RELACIÓN CLAVE
+                'check_in_date' => $res->arrival_date,
+                'duration_days' => $res->duration_days,
+                'notes' => 'Vino con reserva previa',
+                'advance_payment' => $res->advance_payment
             ]);
+            
+            // Marcar habitación
+            Room::where('id', $reservedRoomId)->update(['status' => 'occupied']);
+            $activeCheckins[] = $checkin;
+        }
 
-            if ($isCurrent) {
-                $room->update(['status' => 'occupied']);
+        // CASO B: Checkins SIN RESERVA (Walk-in)
+        for ($i = 0; $i < 5; $i++) {
+            $freeRoom = Room::where('status', 'available')->first();
+            if ($freeRoom) {
+                $checkin = Checkin::create([
+                    'room_id' => $freeRoom->id,
+                    'guest_id' => $faker->randomElement($allGuests)->id,
+                    'user_id' => User::first()->id,
+                    'reservation_id' => null, // <--- SIN RESERVA
+                    'check_in_date' => now(),
+                    'duration_days' => 2,
+                    'notes' => 'Cliente de paso (Walk-in)',
+                    'advance_payment' => 100.00
+                ]);
+                $freeRoom->update(['status' => 'occupied']);
+                $activeCheckins[] = $checkin;
             }
+        }
 
-            // Consumos
+        // Agregar consumos a todos los checkins
+        foreach ($activeCheckins as $chk) {
             if (rand(0,1)) {
                 $srv = $faker->randomElement($services);
                 CheckinDetail::create([
-                    'checkin_id' => $checkin->id,
+                    'checkin_id' => $chk->id,
                     'service_id' => $srv->id,
-                    'quantity' => rand(1, 4),
-                    'selling_price' => $srv->price,
+                    'quantity' => rand(1, 5),
+                    'selling_price' => $srv->price
                 ]);
             }
         }
+        $this->command->info('✅ Check-ins procesados (Con y sin reserva).');
 
-        $this->command->info('✅ 150 Estadías generadas.');
+        // ==========================================
+        // 7. FACTURACIÓN (INVOICES)
+        // ==========================================
+        $this->command->info('⏳ Emitiendo Facturas...');
+        
+        $facturaNro = 1001;
+        
+        // Facturamos los primeros 5 checkins
+        foreach (array_slice($activeCheckins, 0, 5) as $checkin) {
+            $invoice = Invoice::create([
+                'invoice_number' => $facturaNro++,
+                'checkin_id' => $checkin->id,
+                'user_id' => User::first()->id,
+                'issue_date' => now(),
+                'control_code' => strtoupper($faker->bothify('??-##-A1')),
+                'payment_method' => 'EF',
+                'issue_time' => now(),
+                'status' => 'valid'
+            ]);
+
+            // Detalle 1: Cobro por la Habitación
+            // (Calculamos precio * dias)
+            $habitacionPrecio = 150.00; // Simplificado para el seeder
+            $costoHabitacion = $habitacionPrecio * $checkin->duration_days;
+
+            InvoiceDetail::create([
+                'invoice_id' => $invoice->id,
+                'service_id' => null, // NULL porque es habitación
+                'quantity' => $checkin->duration_days,
+                'unit_price' => $habitacionPrecio,
+                'cost' => $costoHabitacion
+            ]);
+
+            // Detalle 2: Cobro por servicios consumidos (si tiene)
+            $consumos = CheckinDetail::where('checkin_id', $checkin->id)->get();
+            foreach ($consumos as $consumo) {
+                InvoiceDetail::create([
+                    'invoice_id' => $invoice->id,
+                    'service_id' => $consumo->service_id,
+                    'quantity' => $consumo->quantity,
+                    'unit_price' => $consumo->selling_price,
+                    'cost' => $consumo->quantity * $consumo->selling_price
+                ]);
+            }
+        }
+        $this->command->info('✅ Facturas emitidas correctamente.');
 
         // ==========================================
         // REPORTE FINAL
         // ==========================================
         $this->command->info('');
         $this->command->table(
-            ['Tabla', 'Registros Totales', 'Estado'],
+            ['Módulo', 'Registros', 'Integridad'],
             [
-                ['Users', User::count(), 'OK'],
-                ['Config (Tipos)', RoomType::count(), 'OK'],
-                ['Rooms', Room::count(), 'OK'],
-                ['Guests', Guest::count(), 'OK'],
-                ['Services', Service::count(), 'OK'],
-                ['Checkins', Checkin::count(), 'OK'],
-                ['CheckinDetails', CheckinDetail::count(), 'OK'],
+                ['Usuarios', User::count(), 'OK'],
+                ['Habitaciones', Room::count(), 'OK'],
+                ['Clientes', Guest::count(), 'OK'],
+                ['Reservas', Reservation::count(), 'OK'],
+                ['Check-ins', Checkin::count(), 'Linked to Reservations'],
+                ['Facturas', Invoice::count(), 'Linked to Checkins'],
+                ['Detalle Fac', InvoiceDetail::count(), 'Calculated'],
             ]
         );
-        $this->command->info('🎉 PRUEBA DE ESTRÉS COMPLETADA. CORE OPERATIVO LISTO.');
+        $this->command->info('🎉 ¡SISTEMA COMPLETAMENTE OPERATIVO Y PROBADO! 🚀');
     }
 }

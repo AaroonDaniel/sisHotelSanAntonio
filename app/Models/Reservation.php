@@ -42,4 +42,9 @@ class Reservation extends Model
     {
         return $this->hasMany(ReservationDetail::class);
     }
+    public function checkin(): HasOne
+    {
+        return $this->hasOne(Checkin::class);
+    }
+    
 }

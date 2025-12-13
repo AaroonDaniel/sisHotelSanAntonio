@@ -23,6 +23,17 @@ return new class extends Migration
             $table->decimal('advance_payment', 10, 2);
             $table->string('payment_type', 20);
             $table->timestamps();
+
+            
+        });
+
+        // 2. AHORA que ya existe, modificamos 'checkins' para agregar la relación
+        Schema::table('checkins', function (Blueprint $table) {
+            $table->foreignId('reservation_id')
+                ->nullable()               // Puede ser nulo
+                ->after('user_id')         // (Opcional) Para ordenarlo visualmente
+                ->constrained('reservations') // Apunta a la tabla que acabamos de crear arriba
+                ->onDelete('set null');
         });
     }
 

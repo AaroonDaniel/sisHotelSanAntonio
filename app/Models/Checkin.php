@@ -12,6 +12,7 @@ class Checkin extends Model
         'room_id',
         'guest_id',
         'user_id',
+        'reservation_id',
         'check_in_date',
         'duration_days',
         'check_out_date',
@@ -32,6 +33,11 @@ class Checkin extends Model
     public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
+    }
+
+    public function reservation(): BelongsTo
+    {
+        return $this->belongsTo(Reservation::class);
     }
 
     // El cliente hospedado
@@ -60,4 +66,5 @@ class Checkin extends Model
     {
         return $this->hasMany(Invoice::class);
     }
+
 }
