@@ -19,7 +19,6 @@ use App\Models\InvoiceDetail;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Faker\Factory as Faker;
-use Carbon\Carbon;
 
 class DatabaseSeeder extends Seeder
 {
@@ -42,9 +41,8 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('password123'),
         ]);
 
-        $staff = [];
         for ($i = 1; $i <= 5; $i++) {
-            $staff[] = User::create([
+            User::create([
                 'nickname' => "recep_{$i}",
                 'full_name' => $faker->name,
                 'phone' => $faker->phoneNumber,
@@ -57,20 +55,30 @@ class DatabaseSeeder extends Seeder
         // ==========================================
         // 2. CONFIGURACIÓN E INFRAESTRUCTURA
         // ==========================================
+        // Nota: 'room_type' ahora es 'name' según tu nueva estructura
         $types = ['single', 'double', 'triple', 'quadruple', 'matrimonial', 'group'];
         $typeModels = [];
+        
+        // ARRAY AUXILIAR: Como ya no hay relación directa en la BD entre Price y RoomType,
+        // guardamos aquí en memoria qué precios corresponden lógicamente a qué tipo
+        // para asignarlos correctamente al crear las habitaciones.
+        $preciosSimulados = []; 
 
         foreach ($types as $type) {
             $t = RoomType::create([
-                'name' => $type,
+                'name' => $type, // Usamos 'name' que es el estándar
                 'capacity' => rand(1, 6),
                 'description' => "Clase $type"
             ]);
             $typeModels[] = $t;
             
-            // Precios
-            Price::create(['room_type_id' => $t->id, 'bathroom_type' => 'private', 'amount' => rand(150, 300)]);
-            Price::create(['room_type_id' => $t->id, 'bathroom_type' => 'shared', 'amount' => rand(60, 100)]);
+            // CREAMOS PRECIOS (Ya no llevan room_type_id)
+            // Creamos un precio caro (baño privado) y uno barato (compartido) para este tipo
+            $p1 = Price::create(['bathroom_type' => 'private', 'amount' => rand(150, 300)]);
+            $p2 = Price::create(['bathroom_type' => 'shared', 'amount' => rand(60, 100)]);
+
+            // Guardamos estos precios en nuestro array temporal vinculados al ID del tipo
+            $preciosSimulados[$t->id] = [$p1, $p2];
         }
 
         $blocks = [];
@@ -86,15 +94,19 @@ class DatabaseSeeder extends Seeder
         foreach ($blocks as $block) {
             foreach ($floors as $idx => $floor) {
                 for ($i = 1; $i <= 5; $i++) {
+                    // Elegimos un tipo al azar
                     $type = $faker->randomElement($typeModels);
-                    $price = Price::where('room_type_id', $type->id)->first();
+                    
+                    // CORRECCIÓN: Obtenemos un precio válido de nuestro array simulado
+                    // (En lugar de buscarlo en la BD con where room_type_id)
+                    $price = $faker->randomElement($preciosSimulados[$type->id]);
                     
                     $room = Room::create([
                         'number' => "{$block->code}-" . ($idx * 100 + $i),
                         'room_type_id' => $type->id,
                         'block_id' => $block->id,
                         'floor_id' => $floor->id,
-                        'price_id' => $price->id,
+                        'price_id' => $price->id, // Asignamos el precio seleccionado
                         'status' => 'available',
                         'notes' => 'Operativa',
                     ]);
@@ -150,21 +162,19 @@ class DatabaseSeeder extends Seeder
                 'payment_type' => 'QR'
             ]);
 
-            // --- CORRECCIÓN AQUÍ ---
             // 1. Elegimos una habitación al azar
             $randomRoom = $faker->randomElement($allRooms);
             
             // 2. Buscamos el precio real de esa habitación
             $roomPrice = Price::find($randomRoom->price_id);
 
-            // 3. Creamos el detalle INCLUYENDO EL PRECIO ('price')
+            // 3. Creamos el detalle
             ReservationDetail::create([
                 'reservation_id' => $res->id,
                 'room_id' => $randomRoom->id,
                 'price_id' => $roomPrice->id,
-                'price' => $roomPrice->amount, // <--- ¡ESTA LÍNEA FALTABA!
+                'price' => $roomPrice->amount, 
             ]);
-            // -----------------------
             
             if ($resDate < now()) {
                 $reservations[] = $res;
@@ -180,21 +190,22 @@ class DatabaseSeeder extends Seeder
 
         // CASO A: Checkins que vienen de UNA RESERVA
         foreach ($reservations as $res) {
-            // Buscamos la habitación que reservó (o le damos otra)
-            $reservedRoomId = ReservationDetail::where('reservation_id', $res->id)->first()->room_id;
+            $detail = ReservationDetail::where('reservation_id', $res->id)->first();
+            if (!$detail) continue; // Seguridad por si acaso
+
+            $reservedRoomId = $detail->room_id;
             
             $checkin = Checkin::create([
                 'room_id' => $reservedRoomId,
                 'guest_id' => $res->guest_id,
                 'user_id' => User::first()->id,
-                'reservation_id' => $res->id, // <--- AQUÍ ESTÁ LA RELACIÓN CLAVE
+                'reservation_id' => $res->id,
                 'check_in_date' => $res->arrival_date,
                 'duration_days' => $res->duration_days,
                 'notes' => 'Vino con reserva previa',
                 'advance_payment' => $res->advance_payment
             ]);
             
-            // Marcar habitación
             Room::where('id', $reservedRoomId)->update(['status' => 'occupied']);
             $activeCheckins[] = $checkin;
         }
@@ -207,7 +218,7 @@ class DatabaseSeeder extends Seeder
                     'room_id' => $freeRoom->id,
                     'guest_id' => $faker->randomElement($allGuests)->id,
                     'user_id' => User::first()->id,
-                    'reservation_id' => null, // <--- SIN RESERVA
+                    'reservation_id' => null,
                     'check_in_date' => now(),
                     'duration_days' => 2,
                     'notes' => 'Cliente de paso (Walk-in)',
@@ -253,8 +264,11 @@ class DatabaseSeeder extends Seeder
             ]);
 
             // Detalle 1: Cobro por la Habitación
-            // (Calculamos precio * dias)
-            $habitacionPrecio = 150.00; // Simplificado para el seeder
+            // Obtenemos el precio real de la habitación usada
+            $habitacion = Room::find($checkin->room_id);
+            $precioInfo = Price::find($habitacion->price_id);
+            $habitacionPrecio = $precioInfo->amount; 
+
             $costoHabitacion = $habitacionPrecio * $checkin->duration_days;
 
             InvoiceDetail::create([
@@ -265,7 +279,7 @@ class DatabaseSeeder extends Seeder
                 'cost' => $costoHabitacion
             ]);
 
-            // Detalle 2: Cobro por servicios consumidos (si tiene)
+            // Detalle 2: Cobro por servicios consumidos
             $consumos = CheckinDetail::where('checkin_id', $checkin->id)->get();
             foreach ($consumos as $consumo) {
                 InvoiceDetail::create([
@@ -290,8 +304,8 @@ class DatabaseSeeder extends Seeder
                 ['Habitaciones', Room::count(), 'OK'],
                 ['Clientes', Guest::count(), 'OK'],
                 ['Reservas', Reservation::count(), 'OK'],
-                ['Check-ins', Checkin::count(), 'Linked to Reservations'],
-                ['Facturas', Invoice::count(), 'Linked to Checkins'],
+                ['Check-ins', Checkin::count(), 'Linked'],
+                ['Facturas', Invoice::count(), 'Linked'],
                 ['Detalle Fac', InvoiceDetail::count(), 'Calculated'],
             ]
         );

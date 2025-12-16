@@ -17,7 +17,7 @@ return new class extends Migration
             $table->integer('invoice_number')->unique(); // facnro
             
             // Relación con el Checkin (Hospedaje)
-            $table->foreignId('checkin_id')->constrained()->onDelete('cascade'); // asiid
+            $table->foreignId('checkin_id')->constrained()->onDelete('restrict'); // asiid
             
             $table->date('issue_date'); // facfch
             

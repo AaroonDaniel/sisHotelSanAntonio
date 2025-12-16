@@ -14,22 +14,10 @@ return new class extends Migration
         Schema::create('rooms', function (Blueprint $table) {
             $table->id(); 
             $table->string('number')->unique();
-
-            // --- RELACIONES ---
             $table->foreignId('room_type_id')->constrained()->onDelete('restrict');
-            
-            // Relación con Bloque (A, B)
             $table->foreignId('block_id')->constrained()->onDelete('restrict');
-            
-            // Relación con Piso (1, 2)
-            $table->foreignId('floor_id')->constrained()->onDelete('restrict');
-            
-            
+            $table->foreignId('floor_id')->constrained()->onDelete('restrict'); 
             $table->foreignId('price_id')->constrained()->onDelete('restrict');
-
-            // --- ESTADOS Y EXTRAS ---
-
-            // habest (Estado)
             $table->enum('status', [
                 'available',    // libre
                 'occupied',     // ocupado
@@ -38,13 +26,8 @@ return new class extends Migration
                 'maintenance',  // mantenimiento
                 'disabled'      // inhabilitado
             ])->default('available');
-
-            // habobs (Observaciones)
             $table->string('notes')->nullable();
-
-            // habimg (Ruta de la imagen)
             $table->string('image_path')->nullable();
-
             $table->timestamps();
         });
     }

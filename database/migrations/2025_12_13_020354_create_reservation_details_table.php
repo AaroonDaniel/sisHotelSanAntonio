@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('reservation_details', function (Blueprint $table) {
             $table->id();
             $table->foreignId('reservation_id')->constrained()->onDelete('cascade');
-            $table->foreignId('room_id')->constrained()->onDelete('cascade');
-            $table->foreignId('price_id')->constrained()->onDelete('cascade');
+            $table->foreignId('room_id')->constrained()->onDelete('restrict');
+            $table->foreignId('price_id')->constrained()->onDelete('restrict');
             $table->decimal('price', 6, 2);
             $table->timestamps();
         });

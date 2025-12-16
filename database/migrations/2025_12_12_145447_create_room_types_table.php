@@ -13,8 +13,6 @@ return new class extends Migration
     {
        Schema::create('room_types', function (Blueprint $table) {
             $table->id(); 
-            
-            // ESTA ES LA COLUMNA QUE TE FALTA O TIENE OTRO NOMBRE
             $table->enum('name', [
                 'single', 
                 'double', 
@@ -23,10 +21,8 @@ return new class extends Migration
                 'matrimonial', 
                 'group'
             ]);
-
             $table->integer('capacity'); // Capacidad
             $table->string('description', 150)->nullable(); // Descripción extra
-            
             $table->timestamps();
         });
     }

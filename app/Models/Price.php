@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Price extends Model
 {
     protected $fillable = [
-        'room_type_id',
+        //'room_type_id',
         'bathroom_type',
         'amount',
     ];
@@ -18,10 +18,10 @@ class Price extends Model
         'amount' => 'decimal:2',
     ];
 
-    public function RoomType(): BelongsTo
+    /*public function RoomType(): BelongsTo
     {
         return $this->belongsTo(RoomType::class);
-    }
+    }*/
 
     public function rooms(): HasMany
     {
