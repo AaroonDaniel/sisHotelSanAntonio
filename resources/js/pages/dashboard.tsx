@@ -115,7 +115,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                         <div className="flex">
                             {/* Logo */}
                             <div className="flex shrink-1 items-center gap-3">
-                                <Link href="/dashboard">
+                                <Link href="/dashboard" className="flex items-center gap-3 mt-1">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-900/50">
                                         <Hotel className="h-5 w-5 text-white" />
                                     </div>
