@@ -6,6 +6,8 @@ import {
     LogOut,
     Menu,
     Search,
+    Settings, 
+    User as UserIcon,
     X,
 } from 'lucide-react';
 import { useState, PropsWithChildren } from 'react';
@@ -47,7 +49,8 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                         <div className="flex">
                             {/* Logo */}
                             <div className="flex shrink-1 items-center gap-3">
-                                <Link href="/dashboard" className="flex items-center gap-3 mt-1">
+                                {/* 1. CAMBIO: href en español */}
+                                <Link href="/inicio" className="flex items-center gap-3 mt-1">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-900/50">
                                         <Hotel className="h-5 w-5 text-white" />
                                     </div>
@@ -59,36 +62,24 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
 
                             {/* Links Escritorio */}
                             <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
+                                {/* 2. CAMBIO: href en español */}
                                 <Link
-                                    href="/dashboard"
+                                    href="/inicio"
                                     className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
                                 >
-                                    Dashboard
+                                    Inicio
                                 </Link>
                                 <button
                                     onClick={() => router.visit('/reservations')}
                                     className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-300 transition duration-150 ease-in-out hover:border-gray-300 hover:text-white"
                                 >
-                                    Reservas
+                                    Habitaciones
                                 </button>
                             </div>
                         </div>
 
                         {/* Menú Usuario */}
                         <div className="hidden gap-4 sm:ml-6 sm:flex sm:items-center">
-                            <div className="relative hidden lg:block">
-                                <Search className="absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar..."
-                                    className="h-9 w-64 rounded-full border border-white/10 bg-white/5 pr-4 pl-9 text-sm text-gray-200 placeholder-gray-500 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none"
-                                />
-                            </div>
-
-                            <button className="rounded-full p-1 text-gray-400 hover:text-white focus:outline-none">
-                                <Bell className="h-5 w-5" />
-                            </button>
-
                             <div className="relative ml-3">
                                 <div onClick={() => setShowUserMenu(!showUserMenu)}>
                                     <button className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition-all hover:bg-white/10">
@@ -103,26 +94,44 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                                 </div>
 
                                 {showUserMenu && (
-                                    <div className="ring-opacity-5 absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-gray-700 bg-gray-800 py-1 shadow-lg ring-1 ring-black focus:outline-none">
-                                        <div className="border-b border-gray-700 px-4 py-2">
-                                            <p className="text-xs text-gray-400">Conectado como</p>
-                                            <p className="truncate text-sm font-medium text-white">
+                                    <div className="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-xl border border-gray-700 bg-gray-800 py-2 shadow-2xl ring-1 ring-black focus:outline-none">
+                                        
+                                        {/* Cabecera del Menú */}
+                                        <div className="border-b border-gray-700 px-4 py-3 mb-1">
+                                            <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Conectado como</p>
+                                            <p className="mt-1 truncate text-sm font-bold text-white">
                                                 {user.full_name}
                                             </p>
                                         </div>
-                                        <Link href="/user/profile" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+
+                                        {/* Opción: Perfil */}
+                                        <Link
+                                            href="/user/profile"
+                                            className="group flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                        >
+                                            <UserIcon className="h-4 w-4 text-blue-500 group-hover:text-blue-400" />
                                             Perfil
                                         </Link>
-                                        <Link href="/settings" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+
+                                        {/* Opción: Configuración */}
+                                        <Link
+                                            href="/settings"
+                                            className="group flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                        >
+                                            <Settings className="h-4 w-4 text-amber-500 group-hover:text-amber-400" />
                                             Configuración
                                         </Link>
+
+                                        <div className="my-1 border-t border-gray-700" />
+
+                                        {/* Opción: Cerrar Sesión */}
                                         <Link
                                             href="/logout"
                                             method="post"
                                             as="button"
-                                            className="flex w-full items-center px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700"
+                                            className="group flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                                         >
-                                            <LogOut className="mr-2 h-4 w-4" />
+                                            <LogOut className="h-4 w-4 text-red-500 group-hover:text-red-400" />
                                             Cerrar Sesión
                                         </Link>
                                     </div>
@@ -151,9 +160,6 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
             <main className="relative z-10 py-10">
                 {children}
             </main>
-            
-            {/* --- FOOTER (Opcional, futuro) --- */}
-             {/* <footer className="relative z-10 ..."> ... </footer> */}
         </div>
     );
 }
