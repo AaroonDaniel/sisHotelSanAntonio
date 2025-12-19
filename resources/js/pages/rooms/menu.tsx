@@ -7,6 +7,7 @@ import {
     BedDouble,  // Para Habitaciones
     PlusCircle, // Icono de Añadir
     ArrowRight,
+    ArrowLeft,
     LayoutDashboard
 } from 'lucide-react';
 
@@ -63,6 +64,16 @@ export default function RoomsMenu({ auth }: Props) {
             <Head title="Gestión de Habitaciones" />
 
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+
+                <button 
+                    onClick={() => window.history.back()} 
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 border border-gray-700 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
                 
                 {/* --- CABECERA CON BOTÓN VERDE --- */}
                 <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-800 pb-6 sm:flex-row sm:items-end">

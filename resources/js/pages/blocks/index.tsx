@@ -2,12 +2,13 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import { User } from '@/layouts/AuthenticatedLayout';
+
 interface Props {
   auth: {
     user: User;
   };
-}
-export default function formato({ auth }: Props) {
+}                                                                                                                                                                                                                                                                                                               
+export default function MiNuevaPagina({ auth }: Props) {
     return (
         // 2. Envuelves todo con el Layout y le pasas el usuario
         <AuthenticatedLayout user={auth.user}>
@@ -15,7 +16,7 @@ export default function formato({ auth }: Props) {
             
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* 3. Tu contenido va aquí */}
-                <h1 className="text-white text-2xl">Hola mundo</h1>
+                <h1 className="text-white text-2xl">Hola</h1>
             </div>
         </AuthenticatedLayout>
     );
