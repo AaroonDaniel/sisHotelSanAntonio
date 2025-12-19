@@ -4,11 +4,11 @@ import {
     BedDouble,
     CalendarDays,
     ClipboardList,
-    CreditCard,
+    //CreditCard,
     FileBarChart,
     Hotel,
     Receipt,
-    Settings,
+    //Settings,
     SprayCan,
     Users,
     Wrench,
@@ -26,10 +26,14 @@ const hotelModules = [
         title: 'Recepción & Reservas',
         theme: 'red',
         items: [
-            { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservations/create' },
+            {
+                name: 'Nueva Reserva',
+                icon: CalendarDays,
+                url: '/reservations/create',
+            },
             { name: 'Asignación Hab.', icon: BedDouble, url: '/assignments' },
             { name: 'Huéspedes', icon: Users, url: '/guests' },
-            { name: 'Check-in / Out', icon: ClipboardList, url: '/checkin' },
+            //{ name: 'Check-in / Out', icon: ClipboardList, url: '/checkin' },
         ],
     },
     {
@@ -37,9 +41,9 @@ const hotelModules = [
         theme: 'blue',
         items: [
             { name: 'Facturación', icon: Receipt, url: '/invoices' },
-            { name: 'Caja Chica', icon: CreditCard, url: '/petty-cash' },
+            //{ name: 'Caja Chica', icon: CreditCard, url: '/petty-cash' },
             { name: 'Reportes', icon: FileBarChart, url: '/reports' },
-            { name: 'Configuración', icon: Settings, url: '/settings' },
+            //{ name: 'Configuración', icon: Settings, url: '/settings' },
         ],
     },
     {
@@ -50,6 +54,11 @@ const hotelModules = [
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
             { name: 'Inventario', icon: ClipboardList, url: '/inventory' },
+            {
+                name: 'Gestión Habitaciones',
+                icon: Hotel,
+                url: '/gestion-habitaciones',
+            },
         ],
     },
 ];
@@ -98,7 +107,9 @@ export default function Dashboard({ auth }: DashboardProps) {
                     {hotelModules.map((group, groupIndex) => (
                         <div key={groupIndex} className="flex flex-col gap-6">
                             <div className="flex items-center gap-4">
-                                <div className={`h-8 w-1 rounded-full bg-${group.theme}-500 shadow-[0_0_10px_currentColor] text-${group.theme}-500`}></div>
+                                <div
+                                    className={`h-8 w-1 rounded-full bg-${group.theme}-500 shadow-[0_0_10px_currentColor] text-${group.theme}-500`}
+                                ></div>
                                 <h3 className="text-xl font-bold tracking-wider text-white uppercase">
                                     {group.title}
                                 </h3>

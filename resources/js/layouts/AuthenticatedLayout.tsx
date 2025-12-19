@@ -63,14 +63,15 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                                     href="/dashboard"
                                     className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
                                 >
-                                    Dashboard
+                                    Inicio
                                 </Link>
                                 <button
                                     onClick={() => router.visit('/reservations')}
                                     className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-300 transition duration-150 ease-in-out hover:border-gray-300 hover:text-white"
                                 >
-                                    Reservas
+                                    Habitaciones
                                 </button>
+                               
                             </div>
                         </div>
 
