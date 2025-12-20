@@ -75,6 +75,7 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                                 >
                                     Habitaciones
                                 </button>
+                               
                             </div>
                         </div>
 

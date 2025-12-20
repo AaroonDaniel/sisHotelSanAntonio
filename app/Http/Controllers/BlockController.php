@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Block;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class BlockController extends Controller
 {
@@ -12,7 +13,10 @@ class BlockController extends Controller
      */
     public function index()
     {
-        //
+        $blocks = Block::all();
+        return Inertia::render('blocks/index', [
+            'blocks' => $blocks
+        ]);
     }
 
     /**
@@ -20,7 +24,7 @@ class BlockController extends Controller
      */
     public function create()
     {
-        //
+        return Inertia::render('blocks/create');
     }
 
     /**
@@ -28,7 +32,7 @@ class BlockController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        
     }
 
     /**
