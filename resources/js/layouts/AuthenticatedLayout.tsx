@@ -31,7 +31,9 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
     return (
-        <div className="min-h-screen bg-gray-900 font-sans text-gray-100 selection:bg-red-500 selection:text-white">
+        /* CAMBIO AQUÍ: Se reemplazó selection:bg-red-500 por selection:bg-green-600 */
+        <div className="min-h-screen bg-gray-900 font-sans text-gray-100 selection:bg-sky-600 selection:text-white">
+            
             {/* --- FONDO (Background) --- */}
             <div
                 className="fixed inset-0 z-0 scale-105 transform bg-cover bg-center bg-no-repeat opacity-40 blur-sm"
@@ -49,7 +51,6 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                         <div className="flex">
                             {/* Logo */}
                             <div className="flex shrink-1 items-center gap-3">
-                                {/* 1. CAMBIO: href en español */}
                                 <Link href="/dashboard" className="flex items-center gap-3 mt-1">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-900/50">
                                         <Hotel className="h-5 w-5 text-white" />
@@ -62,7 +63,6 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
 
                             {/* Links Escritorio */}
                             <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
-                                {/* 2. CAMBIO: href en español */}
                                 <Link
                                     href="/inicio"
                                     className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"

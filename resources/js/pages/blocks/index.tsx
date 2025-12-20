@@ -1,23 +1,15 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head ,Link } from '@inertiajs/react';
-import {
-    ArrowLeft,
-    Building2,
-    Link as LinkIcon,
-    MapPin,
-    Pencil,
-    Plus,
-    Trash2,
-} from 'lucide-react';
-
-// --- SOLUCIÓN ERROR ROUTE ---
-//declare function route(name: string, params?: any, absolute?: boolean): string;
-// ----------------------------
+import { Head } from '@inertiajs/react';
+import { ArrowLeft, MapPin, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import CreateModal from './createModal';
 
 interface Block {
     id: number;
     code: string;
-    description: string;
+    description: string | null;
+    created_at?: string;
+    updated_at?: string;
 }
 
 interface Props {
@@ -28,10 +20,11 @@ interface Props {
 }
 
 export default function BlocksIndex({ auth, blocks }: Props) {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Bloques" />
-
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <button
                     onClick={() => window.history.back()}
@@ -43,129 +36,107 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                     <span>Volver</span>
                 </button>
 
-                {/* CABECERA */}
-                <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-800 pb-6 sm:flex-row sm:items-end">
-                    <div>
-                        <div className="mb-1 flex items-center gap-2 text-gray-400">
-                            <Building2 className="h-4 w-4" />
-                            <span className="text-sm">/ Infraestructura</span>
+                <div>
+                    <h2 className="text-3xl font-bold text-white">
+                        Lista de Bloques
+                    </h2>
+                </div>
+
+                <div className="py-12">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                            {/* Header: Buscador y Botón */}
+                            <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
+                                <div className="relative w-full sm:w-72">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <Search className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar bloque..."
+                                        className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm focus:border-green-500 focus:ring-green-500"
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                                >
+                                    <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
+                                    <span>Nuevo Bloque</span>
+                                </button>
+                            </div>
+
+                            {/* Tabla */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-gray-600">
+                                    <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+                                        <tr>
+                                            <th className="px-6 py-4">ID</th>
+                                            <th className="px-6 py-4">
+                                                Código
+                                            </th>
+                                            <th className="px-6 py-4">
+                                                Descripción
+                                            </th>
+                                            <th className="px-6 py-4 text-right">
+                                                Acciones
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {blocks.length > 0 ? (
+                                            blocks.map((block) => (
+                                                <tr
+                                                    key={block.id}
+                                                    className="transition-colors hover:bg-gray-50"
+                                                >
+                                                    <td className="px-6 py-4 font-bold">
+                                                        {block.id}
+                                                    </td>
+                                                    <td className="px-6 py-4 font-bold text-gray-900">
+                                                        {block.code}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <MapPin className="h-4 w-4 opacity-50" />
+                                                            {block.description ||
+                                                                'Sin descripción'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button className="text-gray-400 transition hover:text-blue-600">
+                                                                <Pencil className="h-4 w-4" />
+                                                            </button>
+                                                            <button className="text-gray-400 transition hover:text-red-600">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td
+                                                    colSpan={4}
+                                                    className="p-8 text-center text-gray-500"
+                                                >
+                                                    No hay registros aún.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <h2 className="text-3xl font-bold text-white">
-                            Bloques del Hotel
-                        </h2>
-                        <p className="mt-1 text-gray-400">
-                            Listado de edificios y sectores registrados.
-                        </p>
                     </div>
                 </div>
 
-                {/* TABLA BLANCA (LIGHT MODE) */}
-
-                <div className="mx-auto w-fit overflow-visible rounded-2xl border border-gray-200 bg-white shadow-xl">
-                    {/* Buscador */}
-                    <div className="border-b border-gray-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-4">
-                            {/* BUSCADOR */}
-                            <input
-                                type="text"
-                                placeholder="Buscar bloque..."
-                                className="w-72 rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none"
-                            />
-
-                            {/* BOTÓN NUEVO BLOQUE */}
-                            <Link
-                                href="/bloques/crear"
-                                className="group flex shrink-0 items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
-                            >
-                                <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
-                                <span>Nuevo Bloque</span>
-                            </Link>
-                        </div>
-                    </div>
-
-                    <table className="w-full text-left text-sm text-gray-600">
-                        {/* Encabezado gris muy claro */}
-                        <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
-                            <tr>
-                                {/* --- 1. NUEVA COLUMNA ID --- */}
-                                <th className="w-20 px-6 py-4 font-semibold">
-                                    ID
-                                </th>
-                                <th className="px-6 py-4 font-semibold">
-                                    Código
-                                </th>
-                                <th className="px-6 py-4 font-semibold">
-                                    Descripción
-                                </th>
-                                <th className="px-6 py-4 text-right font-semibold">
-                                    Acciones
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                            {blocks.length > 0 ? (
-                                blocks.map((block) => (
-                                    <tr
-                                        key={block.id}
-                                        className="group transition duration-150 hover:bg-gray-50"
-                                    >
-                                        {/* --- 1. DATO ID --- */}
-                                        <td className="px-6 py-7 font-mono text-base font-bold text-gray-900">
-                                            {block.id}
-                                        </td>
-
-                                        {/* DATO CÓDIGO */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-base font-bold text-gray-900">
-                                                    {block.code}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* DATO DESCRIPCIÓN */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 text-gray-500">
-                                                <MapPin className="h-4 w-4 opacity-50" />
-                                                <span>
-                                                    {block.description ||
-                                                        'Sin descripción'}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* ACCIONES (Visuales) */}
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button
-                                                    className="cursor-not-allowed p-2 text-gray-400 hover:text-blue-600"
-                                                    disabled
-                                                >
-                                                    <Pencil className="h-5 w-5" />
-                                                </button>
-                                                <button
-                                                    className="cursor-not-allowed p-2 text-gray-400 hover:text-red-600"
-                                                    disabled
-                                                >
-                                                    <Trash2 className="h-5 w-5" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td
-                                        colSpan={4}
-                                        className="px-6 py-12 text-center text-gray-500"
-                                    >
-                                        No hay bloques registrados.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                <CreateModal
+                    show={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                />
             </div>
         </AuthenticatedLayout>
     );
