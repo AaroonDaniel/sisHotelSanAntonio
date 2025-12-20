@@ -2,7 +2,8 @@ import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import { ArrowLeft, MapPin, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import CreateModal from './createModal';
+import BlockModal from './blockModal'; 
+import DeleteModal from './deleteModal'; 
 
 interface Block {
     id: number;
@@ -20,12 +21,43 @@ interface Props {
 }
 
 export default function BlocksIndex({ auth, blocks }: Props) {
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    // --- 1. ESTADO PARA EL BUSCADOR ---
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Estado para los modales
+    const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+    const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deletingBlockId, setDeletingBlockId] = useState<number | null>(null);
+
+    // --- 2. LÓGICA DE FILTRADO ---
+    // Filtramos la lista 'blocks' antes de renderizarla
+    const filteredBlocks = blocks.filter((block) => 
+        block.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (block.description && block.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+
+    // Funciones Helper
+    const openCreateModal = () => {
+        setEditingBlock(null);
+        setIsBlockModalOpen(true);
+    };
+
+    const openEditModal = (block: Block) => {
+        setEditingBlock(block);
+        setIsBlockModalOpen(true);
+    };
+
+    const openDeleteModal = (id: number) => {
+        setDeletingBlockId(id);
+        setIsDeleteModalOpen(true);
+    };
 
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Bloques" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
@@ -43,99 +75,99 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                 </div>
 
                 <div className="py-12">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                        <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                            {/* Header: Buscador y Botón */}
-                            <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
-                                <div className="relative w-full sm:w-72">
-                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                        <Search className="h-4 w-4 text-gray-400" />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar bloque..."
-                                        className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm focus:border-green-500 focus:ring-green-500"
-                                    />
+                    <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                        
+                        {/* Header: Buscador y Botón Crear */}
+                        <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:w-72">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
                                 </div>
-
-                                <button
-                                    onClick={() => setIsModalOpen(true)}
-                                    className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
-                                >
-                                    <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
-                                    <span>Nuevo Bloque</span>
-                                </button>
+                                {/* --- 3. INPUT CONECTADO AL BUSCADOR --- */}
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Buscar por código..."
+                                    className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                />
                             </div>
 
-                            {/* Tabla */}
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm text-gray-600">
-                                    <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
-                                        <tr>
-                                            <th className="px-6 py-4">ID</th>
-                                            <th className="px-6 py-4">
-                                                Código
-                                            </th>
-                                            <th className="px-6 py-4">
-                                                Descripción
-                                            </th>
-                                            <th className="px-6 py-4 text-right">
-                                                Acciones
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {blocks.length > 0 ? (
-                                            blocks.map((block) => (
-                                                <tr
-                                                    key={block.id}
-                                                    className="transition-colors hover:bg-gray-50"
-                                                >
-                                                    <td className="px-6 py-4 font-bold">
-                                                        {block.id}
-                                                    </td>
-                                                    <td className="px-6 py-4 font-bold text-gray-900">
-                                                        {block.code}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <MapPin className="h-4 w-4 opacity-50" />
-                                                            {block.description ||
-                                                                'Sin descripción'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex justify-end gap-2">
-                                                            <button className="text-gray-400 transition hover:text-blue-600">
-                                                                <Pencil className="h-4 w-4" />
-                                                            </button>
-                                                            <button className="text-gray-400 transition hover:text-red-600">
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td
-                                                    colSpan={4}
-                                                    className="p-8 text-center text-gray-500"
-                                                >
-                                                    No hay registros aún.
+                            <button
+                                onClick={openCreateModal}
+                                className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                            >
+                                <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
+                                <span>Nuevo Bloque</span>
+                            </button>
+                        </div>
+
+                        {/* Tabla */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-gray-600">
+                                <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+                                    <tr>
+                                        <th className="px-6 py-4">ID</th>
+                                        <th className="px-6 py-4">Código</th>
+                                        <th className="px-6 py-4">Descripción</th>
+                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {/* --- 4. USAMOS LA LISTA FILTRADA --- */}
+                                    {filteredBlocks.length > 0 ? (
+                                        filteredBlocks.map((block) => (
+                                            <tr key={block.id} className="transition-colors hover:bg-gray-50">
+                                                <td className="px-6 py-4 font-bold">{block.id}</td>
+                                                <td className="px-6 py-4 font-bold text-gray-900">{block.code}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <MapPin className="h-4 w-4 opacity-50" />
+                                                        {block.description || 'Sin descripción'}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button 
+                                                            onClick={() => openEditModal(block)}
+                                                            className="text-gray-400 transition hover:text-blue-600"
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                        
+                                                        <button 
+                                                            onClick={() => openDeleteModal(block.id)}
+                                                            className="text-gray-400 transition hover:text-red-600"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={4} className="p-8 text-center text-gray-500">
+                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay registros aún.'}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
 
-                <CreateModal
-                    show={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
+                <BlockModal
+                    show={isBlockModalOpen}
+                    onClose={() => setIsBlockModalOpen(false)}
+                    blockToEdit={editingBlock}
+                />
+
+                <DeleteModal
+                    show={isDeleteModalOpen}
+                    onClose={() => setIsDeleteModalOpen(false)}
+                    blockId={deletingBlockId}
                 />
             </div>
         </AuthenticatedLayout>

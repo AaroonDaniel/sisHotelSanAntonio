@@ -2,38 +2,55 @@ import { useForm } from '@inertiajs/react';
 import { X, Save, Building, Hash, FileText } from 'lucide-react';
 import { useEffect, FormEventHandler } from 'react';
 
-// YA NO NECESITAS declarar route ni importar nada extra.
-
-interface CreateModalProps {
-    show: boolean;
-    onClose: () => void;
+interface Block {
+    id?: number;
+    code: string;
+    description: string | null;
 }
 
-export default function CreateModal({ show, onClose }: CreateModalProps) {
-    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
-        code: '',         // El formulario envía 'code'
+interface BlockModalProps {
+    show: boolean;
+    onClose: () => void;
+    blockToEdit?: Block | null; // Opcional: Si viene, estamos editando
+}
+
+export default function BlockModal({ show, onClose, blockToEdit }: BlockModalProps) {
+    const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
+        code: '',
         description: '',
     });
 
+    // Cargar datos si estamos editando, o limpiar si es nuevo
     useEffect(() => {
-        if (!show) {
-            reset();
+        if (show) {
+            if (blockToEdit) {
+                setData({
+                    code: blockToEdit.code,
+                    description: blockToEdit.description || '',
+                });
+            } else {
+                reset();
+            }
             clearErrors();
         }
-    }, [show]);
+    }, [show, blockToEdit]);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        
-        // CORRECCIÓN:
-        // 1. Usamos la URL manual '/bloques' (Coincide con Route::post('/bloques'...))
-        // 2. Quitamos route() para evitar errores de undefined.
-        post('/bloques', {
-            onSuccess: () => {
-                reset();
-                onClose();
-            },
-        });
+
+        const onSuccess = () => {
+            reset();
+            onClose();
+        };
+
+        if (blockToEdit) {
+            // EDITAR (PUT)
+            // Usamos ruta manual: /bloques/{id}
+            put(`/bloques/${blockToEdit.id}`, { onSuccess });
+        } else {
+            // CREAR (POST)
+            post('/bloques', { onSuccess });
+        }
     };
 
     if (!show) return null;
@@ -48,7 +65,7 @@ export default function CreateModal({ show, onClose }: CreateModalProps) {
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                             <Building className="h-5 w-5" />
                         </div>
-                        Nuevo Bloque
+                        {blockToEdit ? 'Editar Bloque' : 'Nuevo Bloque'}
                     </h2>
                     <button onClick={onClose} className="rounded-full p-1 text-gray-400 hover:bg-gray-200 transition">
                         <X className="h-5 w-5" />
