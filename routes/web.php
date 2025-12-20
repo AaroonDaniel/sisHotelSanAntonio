@@ -19,6 +19,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     //Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
-
-});
+    Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
+    Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
+    
+}); 
 require __DIR__ . '/settings.php';

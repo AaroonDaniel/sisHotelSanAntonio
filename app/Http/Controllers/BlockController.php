@@ -32,7 +32,12 @@ class BlockController extends Controller
      */
     public function store(Request $request)
     {
-        
+        $validated = $request->validate([
+            'name' => 'required/string/max:10',
+            'description' => 'nullable/string',
+        ]);
+        Block::create($validated);
+        return redirect()->route('blocks.index');  
     }
 
     /**
@@ -40,7 +45,7 @@ class BlockController extends Controller
      */
     public function show(Block $block)
     {
-        //
+        
     }
 
     /**

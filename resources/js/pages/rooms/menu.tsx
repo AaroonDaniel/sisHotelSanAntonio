@@ -28,7 +28,7 @@ export default function RoomsMenu({ auth }: Props) {
                     icon: Building2, 
                     url: '/bloques',
                     color: 'text-blue-500'
-                },
+                }, 
                 { 
                     name: 'Pisos', 
                     description: 'Niveles y plantas del hotel',

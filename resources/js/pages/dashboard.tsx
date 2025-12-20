@@ -50,6 +50,7 @@ const hotelModules = [
         title: 'Pisos & Mantenimiento',
         theme: 'amber',
         items: [
+            
             { name: 'Estado Habitaciones', icon: Hotel, url: '/rooms/status' },
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
