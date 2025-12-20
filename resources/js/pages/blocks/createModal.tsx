@@ -2,12 +2,8 @@ import { useForm } from '@inertiajs/react';
 import { X, Save, Building, Hash, FileText } from 'lucide-react';
 import { useEffect, FormEventHandler } from 'react';
 
-// 1. SOLUCIÓN AL ERROR "Cannot find name 'route'"
-// Le decimos a TypeScript que esta función existe globalmente
-declare function route(name: string, params?: any, absolute?: boolean): string;
+// YA NO NECESITAS declarar route ni importar nada extra.
 
-// 2. SOLUCIÓN A LOS ERRORES "Implicitly has an 'any' type"
-// Definimos qué tipo de datos recibe este componente
 interface CreateModalProps {
     show: boolean;
     onClose: () => void;
@@ -15,11 +11,10 @@ interface CreateModalProps {
 
 export default function CreateModal({ show, onClose }: CreateModalProps) {
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
-        code: '',
+        code: '',         // El formulario envía 'code'
         description: '',
     });
 
-    // Limpiar formulario al abrir/cerrar
     useEffect(() => {
         if (!show) {
             reset();
@@ -29,10 +24,14 @@ export default function CreateModal({ show, onClose }: CreateModalProps) {
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('blocks.store'), {
+        
+        // CORRECCIÓN:
+        // 1. Usamos la URL manual '/bloques' (Coincide con Route::post('/bloques'...))
+        // 2. Quitamos route() para evitar errores de undefined.
+        post('/bloques', {
             onSuccess: () => {
                 reset();
-                onClose(); // Cierra el modal al terminar
+                onClose();
             },
         });
     };
@@ -41,7 +40,6 @@ export default function CreateModal({ show, onClose }: CreateModalProps) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
-            {/* Modal Container */}
             <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
                 
                 {/* Header */}
