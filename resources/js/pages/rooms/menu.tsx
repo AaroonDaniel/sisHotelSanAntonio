@@ -40,7 +40,7 @@ export default function RoomsMenu({ auth }: Props) {
                     name: 'Tipo de Habitaciones', 
                     description: 'Ver listado del tipo de habitaciones',
                     icon: BedDouble, 
-                    url: '/tipohabitaciones',
+                    url: '/tipohabitacion',
                     color: 'text-red-500'
                 },
             ]

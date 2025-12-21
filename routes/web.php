@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\FloorController;
+use App\Http\Controllers\RoomTypeController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -30,6 +31,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/pisos', [FloorController::class, 'store'])->name('floors.store');
     Route::put('/pisos/{floor}', [FloorController::class, 'update'])->name('floors.update');
     Route::delete('/pisos/{floor}', [FloorController::class, 'destroy'])->name('floors.destroy');
-    Route::patch('/pisos/{floor}/toggle', [FloorController::class, 'toggleStatus'])->name('floors.toggle');   
+    Route::patch('/pisos/{floor}/toggle', [FloorController::class, 'toggleStatus'])->name('floors.toggle');
+    
+    //Tipos de Habitaciones
+    Route::get('/tipohabitacion', [RoomTypeController::class, 'index'])->name('room_types.index');
+    Route::get('/tipohabitacion/crear', [RoomTypeController::class, 'create'])->name('room_types.create');
+    Route::post('/tipohabitacion', [RoomTypeController::class, 'store'])->name('room_types.store');
+    Route::put('/tipohabitacion/{roomType}', [RoomTypeController::class, 'update'])->name('room_types.update');
+    Route::delete('/tipohabitacion/{roomType}', [RoomTypeController::class, 'destroy'])->name('room_types.destroy');
+    Route::patch('/tipohabitacion/{roomType}/toggle', [RoomTypeController::class, 'toggleStatus'])->name('room_types.toggle');
+        
 }); 
 require __DIR__ . '/settings.php';

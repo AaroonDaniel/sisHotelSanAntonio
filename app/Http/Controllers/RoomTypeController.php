@@ -4,62 +4,52 @@ namespace App\Http\Controllers;
 
 use App\Models\RoomType;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class RoomTypeController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        //
+        // Enviamos 'RoomTypes' al frontend
+        return Inertia::render('roomTypes/index', [ 
+        'Roomtypes' => RoomType::all()
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        //
+        $validated = $request->validate([
+            'name' => 'required|string|max:50',
+            'capacity' => 'required|integer|min:1', // Validamos que sea número
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        RoomType::create($validated);
+        return redirect()->route('room_types.index');
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(RoomType $roomType)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(RoomType $roomType)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, RoomType $roomType)
     {
-        //
+        $validated = $request->validate([
+            'name' => 'required|string|max:50',
+            'capacity' => 'required|integer|min:1',
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        $roomType->update($validated);
+        return redirect()->route('room_types.index');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(RoomType $roomType)
     {
-        //
+        // Aquí podrías agregar el try-catch si hay relaciones con habitaciones
+        $roomType->delete();
+        return redirect()->route('room_types.index');
+    }
+
+    public function toggleStatus(RoomType $roomType)
+    {
+        $roomType->update(['is_active' => !$roomType->is_active]);
+        return back();
     }
 }
