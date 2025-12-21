@@ -36,6 +36,13 @@ export default function RoomsMenu({ auth }: Props) {
                     url: '/pisos',
                     color: 'text-purple-500' 
                 },
+                { 
+                    name: 'Tipo de Habitaciones', 
+                    description: 'Ver listado del tipo de habitaciones',
+                    icon: BedDouble, 
+                    url: '/tipohabitaciones',
+                    color: 'text-red-500'
+                },
             ]
         },
         {
@@ -48,13 +55,7 @@ export default function RoomsMenu({ auth }: Props) {
                     url: '/precios',
                     color: 'text-green-500'
                 },
-                { 
-                    name: 'Inventario Habitaciones', 
-                    description: 'Ver listado completo',
-                    icon: BedDouble, 
-                    url: '/habitaciones', // La tabla que hicimos antes
-                    color: 'text-red-500'
-                },
+                
             ]
         }
     ];
