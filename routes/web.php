@@ -26,6 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
     Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
     Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
+    Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
 
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');

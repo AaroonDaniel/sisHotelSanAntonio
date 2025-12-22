@@ -59,7 +59,15 @@ class BlockController extends Controller
         return redirect()->route('blocks.index');
     }
 
-    // Estas las puedes dejar vacías o borrarlas si no las usas
+    public function toggleStatus(Block $block)
+    {
+        $block->update([
+            'is_active' => !$block->is_active
+        ]);
+
+        return back();
+    }
+   
     public function show(Block $block) {}
     public function edit(Block $block) {}
 }

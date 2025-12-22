@@ -8,6 +8,10 @@ class Block extends Model
 {
     protected $fillable = [
         'code',
-        'description'
+        'description',  
+        'is_active',
+    ];
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

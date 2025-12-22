@@ -1,6 +1,6 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
-import { ArrowLeft, MapPin, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Head, router } from '@inertiajs/react'; // <--- CORREGIDO: Agregado 'router'
+import { ArrowLeft, MapPin, Pencil, Plus, Power, Search, Trash2 } from 'lucide-react'; // <--- CORREGIDO: Agregado 'Power'
 import { useState } from 'react';
 import BlockModal from './blockModal'; 
 import DeleteModal from './deleteModal'; 
@@ -9,6 +9,7 @@ interface Block {
     id: number;
     code: string;
     description: string | null;
+    is_active: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -31,11 +32,16 @@ export default function BlocksIndex({ auth, blocks }: Props) {
     const [deletingBlockId, setDeletingBlockId] = useState<number | null>(null);
 
     // --- 2. LÓGICA DE FILTRADO ---
-    // Filtramos la lista 'blocks' antes de renderizarla
     const filteredBlocks = blocks.filter((block) => 
         block.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
         (block.description && block.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    // --- 3. NUEVO: FUNCIÓN PARA CAMBIAR ESTADO ---
+    const toggleStatus = (block: Block) => {
+        // Asegúrate de tener esta ruta en tu web.php o dará error 404
+        router.patch(`/bloques/${block.id}/toggle`);
+    };
 
     // Funciones Helper
     const openCreateModal = () => {
@@ -83,7 +89,6 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Search className="h-4 w-4 text-gray-400" />
                                 </div>
-                                {/* --- 3. INPUT CONECTADO AL BUSCADOR --- */}
                                 <input
                                     type="text"
                                     value={searchTerm}
@@ -110,14 +115,14 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                         <th className="px-6 py-4">ID</th>
                                         <th className="px-6 py-4">Código</th>
                                         <th className="px-6 py-4">Descripción</th>
+                                        <th className="px-6 py-4">Estado</th>
                                         <th className="px-6 py-4 text-right">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
-                                    {/* --- 4. USAMOS LA LISTA FILTRADA --- */}
                                     {filteredBlocks.length > 0 ? (
                                         filteredBlocks.map((block) => (
-                                            <tr key={block.id} className="transition-colors hover:bg-gray-50">
+                                            <tr key={block.id} className={`transition-colors hover:bg-gray-50 ${!block.is_active ? 'bg-gray-50' : ''}`}>
                                                 <td className="px-6 py-4 font-bold">{block.id}</td>
                                                 <td className="px-6 py-4 font-bold text-gray-900">{block.code}</td>
                                                 <td className="px-6 py-4">
@@ -126,8 +131,36 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                                         {block.description || 'Sin descripción'}
                                                     </div>
                                                 </td>
+                                                
+                                                {/* --- COLUMNA ESTADO --- */}
+                                                <td className="px-6 py-4">
+                                                    <span
+                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                            block.is_active
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                        }`}
+                                                    >
+                                                        {block.is_active ? 'Activo' : 'Inactivo'}
+                                                    </span>
+                                                </td>
+
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        
+                                                        {/* --- NUEVO: BOTÓN POWER --- */}
+                                                        <button
+                                                            onClick={() => toggleStatus(block)}
+                                                            title={block.is_active ? 'Desactivar' : 'Activar'}
+                                                            className={`transition ${
+                                                                block.is_active
+                                                                    ? 'text-green-600 hover:text-green-800'
+                                                                    : 'text-gray-400 hover:text-gray-600'
+                                                            }`}
+                                                        >
+                                                            <Power className="h-4 w-4" />
+                                                        </button>
+
                                                         <button 
                                                             onClick={() => openEditModal(block)}
                                                             className="text-gray-400 transition hover:text-blue-600"
@@ -147,7 +180,7 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={4} className="p-8 text-center text-gray-500">
+                                            <td colSpan={5} className="p-8 text-center text-gray-500">
                                                 {searchTerm ? 'No se encontraron resultados.' : 'No hay registros aún.'}
                                             </td>
                                         </tr>
