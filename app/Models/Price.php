@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Price extends Model
 {
     protected $fillable = [
-        //'room_type_id',
+        'room_type_id',
         'bathroom_type',
         'amount',
         'is_active',
@@ -17,20 +17,22 @@ class Price extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'is_active' => 'boolean',
     ];
 
-    /*public function RoomType(): BelongsTo
+    public function roomType(): BelongsTo
     {
         return $this->belongsTo(RoomType::class);
-    }*/
+    }
 
     public function rooms(): HasMany
     {
         return $this->hasMany(Room::class);
     }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
     }
-
 }
+

@@ -55,6 +55,7 @@ return new class extends Migration
             // Adelanto de dinero (asiade)
             // Usamos decimal para dinero, no float
             $table->decimal('advance_payment', 10, 2)->default(0);
+            
 
             $table->timestamps();
   

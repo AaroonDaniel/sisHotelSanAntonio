@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('rooms', function (Blueprint $table) {
             $table->id(); 
             $table->string('number')->unique();
-            $table->foreignId('room_type_id')->constrained()->onDelete('restrict');
             $table->foreignId('block_id')->constrained()->onDelete('restrict');
             $table->foreignId('floor_id')->constrained()->onDelete('restrict'); 
             $table->foreignId('price_id')->constrained()->onDelete('restrict');
@@ -28,6 +27,7 @@ return new class extends Migration
             ])->default('available');
             $table->string('notes')->nullable();
             $table->string('image_path')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

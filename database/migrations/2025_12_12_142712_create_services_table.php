@@ -17,6 +17,7 @@ return new class extends Migration
             $table->enum('status', ['enabled', 'disabled'])->default('enabled');
             $table->decimal('price', 8, 2);
             $table->string('description')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

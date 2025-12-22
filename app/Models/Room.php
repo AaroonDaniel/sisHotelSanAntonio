@@ -36,7 +36,7 @@ class Room extends Model
         return $this->belongsTo(Floor::class);
     }
 
-    public function price(): BelongsTo
+     public function price(): BelongsTo
     {
         return $this->belongsTo(Price::class);
     }

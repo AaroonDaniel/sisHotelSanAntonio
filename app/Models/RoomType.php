@@ -10,15 +10,15 @@ class RoomType extends Model
         'name',
         'capacity',
         'description',
-        'is_active'
+        'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
     ];
 
-    /*public function scopeActive($query)
+    public function prices(): HasMany
     {
-        return $query->where('is_active', true);
-    }*/
+        return $this->hasMany(Price::class);
+    }
 }
