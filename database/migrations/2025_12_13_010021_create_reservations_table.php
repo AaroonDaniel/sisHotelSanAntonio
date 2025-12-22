@@ -22,9 +22,15 @@ return new class extends Migration
             $table->integer('duration_days');
             $table->decimal('advance_payment', 10, 2);
             $table->string('payment_type', 20);
+            $table->enum('status', [
+                'pendiente',
+                'confirmada',
+                'completada',
+                'cancelada',
+                'no_show',
+                'expirada'
+            ])->default('pendiente');
             $table->timestamps();
-
-            
         });
 
         // 2. AHORA que ya existe, modificamos 'checkins' para agregar la relación
