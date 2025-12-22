@@ -74,7 +74,7 @@ export default function RoomtypeModal({
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                             <Building className="h-5 w-5" />
                         </div>
-                        {RoomtypeToEdit ? 'Editar Piso' : 'Nuevo Piso'}
+                        {RoomtypeToEdit ? 'Editar Piso' : 'Nuevo tipo de Habitación'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -91,7 +91,7 @@ export default function RoomtypeModal({
                         <div>
                             {/* CORREGIDO: 'block' en lugar de 'Roomtype' */}
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                Nombre / N° Piso
+                                Tipo de Habitación
                             </label>
                             <div className="relative">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -105,7 +105,7 @@ export default function RoomtypeModal({
                                     }
                                     // CORREGIDO: 'block' en lugar de 'Roomtype'
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Ej: Piso 1"
+                                    placeholder="Ej: Simple"
                                 />
                             </div>
                             {errors.name && (
@@ -160,7 +160,7 @@ export default function RoomtypeModal({
                                     }
                                     rows={3}
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Detalles del sector..."
+                                    placeholder="Detalles del tipo de habitación..."
                                 />
                             </div>
                             {errors.description && (

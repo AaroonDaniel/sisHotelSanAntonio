@@ -49,5 +49,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/precios', [PriceController::class, 'store'])->name('prices.store');
     Route::put('/precios/{price}', [PriceController::class, 'update'])->name('prices.update');
     Route::delete('/precios/{price}', [PriceController::class, 'destroy'])->name('prices.destroy');
+    Route::patch('/precios/{price}/toggle', [PriceController::class, 'toggleStatus'])->name('prices.toggle');
 }); 
 require __DIR__ . '/settings.php';

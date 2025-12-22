@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Price;
+use App\Models\RoomType;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -10,11 +11,10 @@ class PriceController extends Controller
 {
     public function index()
     {
-        $prices = Price::all();
-        // CORRECCIÓN 1: Respetamos tu carpeta 'prices/index' (minúscula como en la imagen)
-        // PERO enviamos la variable 'Prices' (Mayúscula) para que React la entienda
+        // No necesitas la variable $prices aquí si no la usas
         return Inertia::render('prices/index', [
-            'Prices' => $prices 
+            'Prices' => Price::with('roomType')->get(),
+            'RoomTypes' => RoomType::where('is_active', true)->get(),
         ]);
     }
 
@@ -25,25 +25,44 @@ class PriceController extends Controller
 
     public function store(Request $request)
     {
-        // CORRECCIÓN 2: Validamos lo que envía el formulario (Privado/Compartido)
         $validated = $request->validate([
-            'bathroom_type' => 'required|in:Privado,Compartido',
+            'room_type_id' => 'required|exists:room_types,id',
+            'bathroom_type' => 'required|in:Privado,Compartido,private,shared', // Aceptamos ambos por seguridad
             'amount' => 'required|numeric|min:0',
         ]);
         
-        // Agregamos el estado activo por defecto
+        // TRADUCCIÓN: Si viene en español, lo pasamos a inglés para la BD
+        $mapBathroom = [
+            'Privado' => 'private',
+            'Compartido' => 'shared'
+        ];
+        if (isset($mapBathroom[$validated['bathroom_type']])) {
+            $validated['bathroom_type'] = $mapBathroom[$validated['bathroom_type']];
+        }
+
         $validated['is_active'] = true;
 
         Price::create($validated);
         return redirect()->route('prices.index');
     }
 
+    // CORRECCIÓN IMPORTANTE: Quitamos 'RoomType $roomType' de los argumentos
     public function update(Request $request, Price $price)
     {
         $validated = $request->validate([
-            'bathroom_type' => 'required|in:Privado,Compartido',
+            'room_type_id' => 'required|exists:room_types,id',
+            'bathroom_type' => 'required|in:Privado,Compartido,private,shared',
             'amount' => 'required|numeric|min:0',
         ]);
+
+        // TRADUCCIÓN (Igual que en store)
+        $mapBathroom = [
+            'Privado' => 'private',
+            'Compartido' => 'shared'
+        ];
+        if (isset($mapBathroom[$validated['bathroom_type']])) {
+            $validated['bathroom_type'] = $mapBathroom[$validated['bathroom_type']];
+        }
 
         if ($request->has('is_active')) {
             $validated['is_active'] = $request->boolean('is_active');
@@ -59,10 +78,10 @@ class PriceController extends Controller
         return redirect()->route('prices.index');
     }
 
-    // CORRECCIÓN 3: Agregamos la función Toggle
     public function toggleStatus(Price $price)
     {
         $price->update(['is_active' => !$price->is_active]);
         return back();
     }
+    
 }

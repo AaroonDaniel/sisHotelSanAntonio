@@ -166,7 +166,6 @@ export default function RoomtypesIndex({ auth, Roomtypes }: Props) {
                                                 {/* Columna Descripción */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-1.5">
-                                                        <Users className="h-4 w-4 text-gray-400" />
                                                         {Roomtype.description}
                                                     </div>
                                                 </td>
