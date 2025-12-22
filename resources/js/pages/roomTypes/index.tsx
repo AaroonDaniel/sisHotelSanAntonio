@@ -133,6 +133,7 @@ export default function RoomtypesIndex({ auth, Roomtypes }: Props) {
                                         <th className="px-6 py-4">ID</th>
                                         <th className="px-6 py-4">Nombre</th>
                                         <th className="px-6 py-4">Capacidad</th>
+                                        <th className="px-6 py-4">Descripción</th>
                                         <th className="px-6 py-4">Estado</th>
                                         <th className="px-6 py-4 text-right">
                                             Acciones
@@ -159,6 +160,14 @@ export default function RoomtypesIndex({ auth, Roomtypes }: Props) {
                                                         <Users className="h-4 w-4 text-gray-400" />
                                                         {Roomtype.capacity}{' '}
                                                         pers.
+                                                    </div>
+                                                </td>
+
+                                                {/* Columna Descripción */}
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Users className="h-4 w-4 text-gray-400" />
+                                                        {Roomtype.description}
                                                     </div>
                                                 </td>
 

@@ -13,14 +13,7 @@ return new class extends Migration
     {
        Schema::create('room_types', function (Blueprint $table) {
             $table->id(); 
-            $table->enum('name', [
-                'single', 
-                'double', 
-                'triple', 
-                'quadruple', 
-                'matrimonial', 
-                'group'
-            ]);
+            $table->string('name', 50); // Nombre del tipo de habitación
             $table->integer('capacity'); // Capacidad
             $table->string('description', 150)->nullable(); // Descripción extra
             $table->timestamps();
