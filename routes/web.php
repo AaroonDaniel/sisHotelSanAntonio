@@ -3,6 +3,7 @@
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\FloorController;
 use App\Http\Controllers\RoomTypeController;
+use App\Http\Controllers\PriceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -40,6 +41,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/tipohabitacion/{roomType}', [RoomTypeController::class, 'update'])->name('room_types.update');
     Route::delete('/tipohabitacion/{roomType}', [RoomTypeController::class, 'destroy'])->name('room_types.destroy');
     Route::patch('/tipohabitacion/{roomType}/toggle', [RoomTypeController::class, 'toggleStatus'])->name('room_types.toggle');
-        
+    
+    //Tipos de precios habitaciones
+    Route::get('/precios', [PriceController::class, 'index'])->name('prices.index');
+    Route::get('/precios/crear', [PriceController::class, 'create'])->name('prices.create');
+    Route::post('/precios', [PriceController::class, 'store'])->name('prices.store');
+    Route::put('/precios/{price}', [PriceController::class, 'update'])->name('prices.update');
+    Route::delete('/precios/{price}', [PriceController::class, 'destroy'])->name('prices.destroy');
 }); 
 require __DIR__ . '/settings.php';

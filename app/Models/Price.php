@@ -12,6 +12,7 @@ class Price extends Model
         //'room_type_id',
         'bathroom_type',
         'amount',
+        'is_active',
     ];
 
     protected $casts = [
@@ -27,4 +28,9 @@ class Price extends Model
     {
         return $this->hasMany(Room::class);
     }
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
 }

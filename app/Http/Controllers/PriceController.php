@@ -4,62 +4,65 @@ namespace App\Http\Controllers;
 
 use App\Models\Price;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class PriceController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        //
+        $prices = Price::all();
+        // CORRECCIÓN 1: Respetamos tu carpeta 'prices/index' (minúscula como en la imagen)
+        // PERO enviamos la variable 'Prices' (Mayúscula) para que React la entienda
+        return Inertia::render('prices/index', [
+            'Prices' => $prices 
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        //
+        return Inertia::render('prices/create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        //
+        // CORRECCIÓN 2: Validamos lo que envía el formulario (Privado/Compartido)
+        $validated = $request->validate([
+            'bathroom_type' => 'required|in:Privado,Compartido',
+            'amount' => 'required|numeric|min:0',
+        ]);
+        
+        // Agregamos el estado activo por defecto
+        $validated['is_active'] = true;
+
+        Price::create($validated);
+        return redirect()->route('prices.index');
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Price $price)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Price $price)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, Price $price)
     {
-        //
+        $validated = $request->validate([
+            'bathroom_type' => 'required|in:Privado,Compartido',
+            'amount' => 'required|numeric|min:0',
+        ]);
+
+        if ($request->has('is_active')) {
+            $validated['is_active'] = $request->boolean('is_active');
+        }
+
+        $price->update($validated);
+        return redirect()->route('prices.index');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Price $price)
     {
-        //
+        $price->delete();
+        return redirect()->route('prices.index');
+    }
+
+    // CORRECCIÓN 3: Agregamos la función Toggle
+    public function toggleStatus(Price $price)
+    {
+        $price->update(['is_active' => !$price->is_active]);
+        return back();
     }
 }
