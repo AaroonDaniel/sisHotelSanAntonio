@@ -8,7 +8,8 @@ import {
     PlusCircle, // Icono de Añadir
     ArrowRight,
     ArrowLeft,
-    LayoutDashboard
+    LayoutDashboard,
+    Bed
 } from 'lucide-react';
 
 interface Props {
@@ -19,6 +20,19 @@ export default function RoomsMenu({ auth }: Props) {
     
     // Configuración de las opciones de este menú
     const roomModules = [
+        {
+            title: 'Habitaciones',
+            items: [
+                { 
+                    name: 'Habitaciones', 
+                    description: 'Gestionar habitaciones del hotel',
+                    icon: Bed, 
+                    url: '/habitaciones',
+                    color: 'text-blue-500'
+                }, 
+            ]
+        },
+        
         {
             title: 'Infraestructura',
             items: [
@@ -102,7 +116,7 @@ export default function RoomsMenu({ auth }: Props) {
                 </div>
 
                 {/* --- GRID DE OPCIONES (Estilo Dashboard) --- */}
-                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
                     {roomModules.map((section, index) => (
                         <div key={index} className="flex flex-col gap-4">
                             <h3 className="text-sm font-semibold tracking-wider text-gray-500 uppercase ml-1">

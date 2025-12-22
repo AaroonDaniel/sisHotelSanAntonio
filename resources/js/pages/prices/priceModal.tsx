@@ -84,6 +84,7 @@ export default function PriceModal({ show, onClose, PriceToEdit, roomTypes }: Pr
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                 Tipo de Habitación
                             </label>
+                            
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <BedDouble className="h-4 w-4 text-gray-400" />

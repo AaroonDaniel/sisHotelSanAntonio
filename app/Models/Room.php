@@ -10,13 +10,14 @@ class Room extends Model
 {
     protected $fillable = [
         'number',
-        'room_type_id',
         'block_id',
         'floor_id',
         'price_id',
+        'room_type_id',
         'status',
         'notes',
         'image_path',
+        'is_active',
     ];
 
     // --- RELACIONES CON PADRES (BelongsTo) ---
@@ -36,7 +37,7 @@ class Room extends Model
         return $this->belongsTo(Floor::class);
     }
 
-     public function price(): BelongsTo
+    public function price(): BelongsTo
     {
         return $this->belongsTo(Price::class);
     }

@@ -17,6 +17,7 @@ return new class extends Migration
             $table->foreignId('block_id')->constrained()->onDelete('restrict');
             $table->foreignId('floor_id')->constrained()->onDelete('restrict'); 
             $table->foreignId('price_id')->constrained()->onDelete('restrict');
+            $table->foreignId('room_type_id')->constrained()->onDelete('restrict');
             $table->enum('status', [
                 'available',    // libre
                 'occupied',     // ocupado

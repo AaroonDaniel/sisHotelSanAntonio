@@ -4,6 +4,7 @@ use App\Http\Controllers\BlockController;
 use App\Http\Controllers\FloorController;
 use App\Http\Controllers\RoomTypeController;
 use App\Http\Controllers\PriceController;
+use App\Http\Controllers\RoomController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -50,5 +51,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/precios/{price}', [PriceController::class, 'update'])->name('prices.update');
     Route::delete('/precios/{price}', [PriceController::class, 'destroy'])->name('prices.destroy');
     Route::patch('/precios/{price}/toggle', [PriceController::class, 'toggleStatus'])->name('prices.toggle');
+
+    //Habitaciones
+    Route::get('/habitaciones', [RoomController::class, 'index'])->name('rooms.index');
+    Route::get('/habitaciones/crear', [RoomController::class, 'create'])->name('rooms.create');
+    Route::post('/habitaciones', [RoomController::class, 'store'])->name('rooms.store');
+    Route::put('/habitaciones/{room}', [RoomController::class, 'update'])->name('rooms.update');
+    Route::delete('/habitaciones/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
+    Route::patch('/habitaciones/{room}/toggle', [RoomController::class, 'toggleStatus'])->name('rooms.toggle');
+    
 }); 
 require __DIR__ . '/settings.php';

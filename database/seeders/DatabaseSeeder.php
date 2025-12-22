@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
             'full_name' => 'Administrador Principal',
             'phone'     => '70000001',
             'address'   => 'Oficina Gerencia',
-            'password'  => 'admin123', // Se encripta automático por el cast 'hashed' en tu Modelo
+            'password'  => '123', // Se encripta automático por el cast 'hashed' en tu Modelo
             'is_active' => true,
         ]);
 
@@ -28,7 +28,7 @@ class DatabaseSeeder extends Seeder
             'full_name' => 'Juan Perez',
             'phone'     => '60000002',
             'address'   => 'Mostrador Entrada',
-            'password'  => 'recepcion123',
+            'password'  => '123',
             'is_active' => true,
         ]);
         
