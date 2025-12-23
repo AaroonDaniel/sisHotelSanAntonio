@@ -9,6 +9,7 @@ use App\Models\Price;
 use App\Models\Floor;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Storage;
 
 class RoomController extends Controller
 {
@@ -16,7 +17,7 @@ class RoomController extends Controller
     {
         // Usamos 'with' para cargar las relaciones y evitar consultas N+1
         $rooms = Room::with(['roomType', 'price', 'floor', 'block'])->get();
-        
+
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
             'RoomTypes' => RoomType::where('is_active', true)->get(),
@@ -40,14 +41,14 @@ class RoomController extends Controller
     {
         // 1. Validación (Aceptamos español e inglés para el status)
         $validated = $request->validate([
-            'number' => 'required|unique:rooms,number', 
+            'number' => 'required|unique:rooms,number',
             'room_type_id' => 'required|exists:room_types,id',
             'price_id' => 'required|exists:prices,id',
             'floor_id' => 'required|exists:floors,id',
             'block_id' => 'required|exists:blocks,id',
             'status' => 'required|in:libre,ocupado,reservado,limpieza,mantenimiento,inhabilitado,available,occupied,reserved,cleaning,maintenance,disabled',
             'notes' => 'nullable|string',
-            'image_path' => 'nullable|string',
+            'image' => 'nullable|image|max:2048',
         ]);
 
         // 2. Mapeo de Español a Inglés para la Base de Datos
@@ -64,9 +65,15 @@ class RoomController extends Controller
         if (isset($mapStatus[$validated['status']])) {
             $validated['status'] = $mapStatus[$validated['status']];
         }
-        
+
         // 3. Valores por defecto
         $validated['is_active'] = true;
+
+        if ($request->hasFile('image')) {
+            $validated['image_path'] = $request
+                ->file('image')
+                ->store('rooms', 'public'); // rooms/archivo.jpg
+        }
 
         Room::create($validated);
         return redirect()->route('rooms.index');
@@ -83,7 +90,7 @@ class RoomController extends Controller
             'room_type_id' => 'required|exists:room_types,id',
             'status' => 'required|in:libre,ocupado,reservado,limpieza,mantenimiento,inhabilitado,available,occupied,reserved,cleaning,maintenance,disabled',
             'notes' => 'nullable|string',
-            'image_path' => 'nullable|string',
+            'image' => 'nullable|image|max:2048',
         ]);
 
         // 2. Mapeo de Español a Inglés
@@ -103,6 +110,18 @@ class RoomController extends Controller
         // 3. Manejo del checkbox 'is_active' (si se envía)
         if ($request->has('is_active')) {
             $validated['is_active'] = $request->boolean('is_active');
+        }
+
+
+        if ($request->hasFile('image')) {
+            // opcional: borrar la anterior
+            if ($room->image_path) {
+                Storage::disk('public')->delete($room->image_path);
+            }
+
+            $validated['image_path'] = $request
+                ->file('image')
+                ->store('rooms', 'public');
         }
 
         $room->update($validated);

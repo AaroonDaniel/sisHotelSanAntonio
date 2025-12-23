@@ -13,10 +13,10 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
-import DeleteModal from './deleteModal'; 
-import RoomModal from './roomModal';     
+import DeleteModal from './deleteModal';
+import RoomModal from './roomModal';
 
-// --- 1. DICCIONARIO DE TRADUCCIÓN DE ESTADOS ---
+// --- 1. CONSTANTES Y TRADUCCIONES ---
 const statusTranslations: Record<string, string> = {
     available: 'Libre',
     occupied: 'Ocupado',
@@ -35,29 +35,50 @@ const statusColors: Record<string, string> = {
     disabled: 'bg-gray-100 text-gray-800',
 };
 
-// --- 2. INTERFACES (Coinciden con el Backend) ---
-interface RoomType { id: number; name: string; }
-interface Block { id: number; code: string; description?: string; }
-interface Floor { id: number; name: string; }
-interface Price { id: number; amount: number; bathroom_type: string; }
+// --- 2. INTERFACES ACTUALIZADAS PARA CORREGIR EL ERROR ---
+interface RoomType {
+    id: number;
+    name: string;
+}
+
+interface Block {
+    id: number;
+    code: string;
+    description?: string;
+}
+
+interface Floor {
+    id: number;
+    name: string;
+}
+
+// *** CORRECCIÓN CRÍTICA: Añadido room_type_id ***
+interface Price {
+    id: number;
+    amount: number;
+    bathroom_type: string;
+    room_type_id: number; // <--- Esto soluciona el error de TypeScript
+    is_active?: boolean;
+    room_type?: RoomType;
+}
 
 interface Room {
     id: number;
     number: string;
     status: string;
     is_active: boolean;
-    // Relaciones (pueden venir nulas si se borró el padre, por seguridad usamos ?)
-    room_type?: RoomType;
-    block?: Block;
-    floor?: Floor;
-    price?: Price;
-    // IDs para edición
+    notes?: string;
+    image_path?: string;
+    // IDs
     room_type_id: number;
     block_id: number;
     floor_id: number;
     price_id: number;
-    notes?: string;
-    image_path?: string;
+    // Relaciones
+    room_type?: RoomType;
+    block?: Block;
+    floor?: Floor;
+    price?: Price;
 }
 
 interface Props {
@@ -70,7 +91,14 @@ interface Props {
     Prices: Price[];
 }
 
-export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Prices }: Props) {
+export default function RoomsIndex({
+    auth,
+    Rooms,
+    RoomTypes,
+    Blocks,
+    Floors,
+    Prices,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
@@ -79,7 +107,7 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingRoomId, setDeletingRoomId] = useState<number | null>(null);
 
-    // --- 3. FILTRO AVANZADO ---
+    // Filtro Avanzado
     const filteredRooms = Rooms.filter((room) => {
         const term = searchTerm.toLowerCase();
         return (
@@ -94,7 +122,7 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
         router.patch(
             `/habitaciones/${room.id}/toggle`,
             {},
-            { preserveScroll: true }
+            { preserveScroll: true },
         );
     };
 
@@ -118,7 +146,6 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Habitaciones" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                
                 {/* Botón Volver */}
                 <button
                     onClick={() => window.history.back()}
@@ -138,7 +165,6 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
 
                 <div className="py-12">
                     <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                         {/* Header: Buscador y Botón */}
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
                             <div className="relative w-full sm:w-72">
@@ -148,7 +174,9 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar habitación..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
@@ -172,8 +200,10 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                         <th className="px-6 py-4">Tipo</th>
                                         <th className="px-6 py-4">Precio</th>
                                         <th className="px-6 py-4">Estado</th>
-                                        <th className="px-6 py-4">Activo</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4">Imagen</th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
@@ -184,20 +214,22 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                                 className={`transition-colors hover:bg-gray-50 ${!room.is_active ? 'bg-gray-50 opacity-75' : ''}`}
                                             >
                                                 {/* Columna: Número */}
-                                                <td className="px-6 py-4 font-bold text-gray-900 text-lg">
+                                                <td className="px-6 py-4 text-lg font-bold text-gray-900">
                                                     {room.number}
                                                 </td>
 
-                                                {/* Columna: Ubicación (Bloque y Piso) */}
+                                                {/* Columna: Ubicación */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col">
-                                                        <div className="flex items-center gap-1 text-gray-900 font-medium">
+                                                        <div className="flex items-center gap-1 font-medium text-gray-900">
                                                             <Building2 className="h-3 w-3 text-gray-400" />
-                                                            {room.block?.code || '-'}
+                                                            {room.block?.code ||
+                                                                '-'}
                                                         </div>
-                                                        <div className="flex items-center gap-1 text-gray-500 text-xs">
+                                                        <div className="flex items-center gap-1 text-xs text-gray-500">
                                                             <Layers className="h-3 w-3" />
-                                                            {room.floor?.name || '-'}
+                                                            {room.floor?.name ||
+                                                                '-'}
                                                         </div>
                                                     </div>
                                                 </td>
@@ -206,7 +238,8 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <BedDouble className="h-4 w-4 text-blue-500" />
-                                                        {room.room_type?.name || 'Sin tipo'}
+                                                        {room.room_type?.name ||
+                                                            'Sin tipo'}
                                                     </div>
                                                 </td>
 
@@ -216,40 +249,82 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                                         <DollarSign className="h-3 w-3" />
                                                         {room.price?.amount}
                                                     </div>
-                                                    <span className="text-xs text-gray-400 font-normal">
-                                                        {room.price?.bathroom_type === 'private' ? 'Privado' : 'Compartido'}
+                                                    <span className="text-xs font-normal text-gray-400">
+                                                        {room.price
+                                                            ?.bathroom_type ===
+                                                        'private'
+                                                            ? 'Privado'
+                                                            : 'Compartido'}
                                                     </span>
                                                 </td>
 
-                                                {/* Columna: Estado (Limpieza, Ocupado, etc) */}
+                                                {/* Columna: Estado (Badge) */}
                                                 <td className="px-6 py-4">
-                                                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${statusColors[room.status] || 'bg-gray-50 text-gray-600 ring-gray-500/10'} ring-opacity-20`}>
-                                                        {statusTranslations[room.status] || room.status}
-                                                    </span>
-                                                </td>
-
-                                                {/* Columna: Activo (Toggle) */}
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        onClick={() => toggleStatus(room)}
-                                                        title={room.is_active ? 'Desactivar' : 'Activar'}
-                                                        className={`transition-colors ${room.is_active ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'}`}
+                                                    <span
+                                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${statusColors[room.status] || 'bg-gray-50 text-gray-600 ring-gray-500/10'} ring-opacity-20`}
                                                     >
-                                                        <Power className="h-5 w-5" />
-                                                    </button>
+                                                        {statusTranslations[
+                                                            room.status
+                                                        ] || room.status}
+                                                    </span>
                                                 </td>
 
-                                                {/* Columna: Acciones */}
+                                                {/* Columna: Imagen */}
+                                                <td className="px-6 py-4">
+                                                    <div className="flex justify-center">
+                                                        {room.image_path ? (
+                                                            <img
+                                                                src={`/storage/${room.image_path}`}
+                                                                alt={`Habitación ${room.number}`}
+                                                                className="h-10 w-10 rounded-lg border border-gray-200 object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-gray-300 text-xs text-gray-400">
+                                                                N/A
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                {/* Columna: Acciones (Toggle + Edit + Delete) */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        {/* Toggle Activo */}
                                                         <button
-                                                            onClick={() => openEditModal(room)}
+                                                            onClick={() =>
+                                                                toggleStatus(
+                                                                    room,
+                                                                )
+                                                            }
+                                                            title={
+                                                                room.is_active
+                                                                    ? 'Desactivar'
+                                                                    : 'Activar'
+                                                            }
+                                                            className={`transition ${room.is_active ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'}`}
+                                                        >
+                                                            <Power className="h-4 w-4" />
+                                                        </button>
+
+                                                        {/* Editar */}
+                                                        <button
+                                                            onClick={() =>
+                                                                openEditModal(
+                                                                    room,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-blue-600"
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
+
+                                                        {/* Eliminar */}
                                                         <button
-                                                            onClick={() => openDeleteModal(room.id)}
+                                                            onClick={() =>
+                                                                openDeleteModal(
+                                                                    room.id,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-red-600"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
@@ -260,8 +335,13 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={7} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay habitaciones registradas.'}
+                                            <td
+                                                colSpan={7}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay habitaciones registradas.'}
                                             </td>
                                         </tr>
                                     )}
@@ -272,12 +352,11 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                 </div>
 
                 {/* --- MODALES CONECTADOS --- */}
-                
                 <RoomModal
                     show={isRoomModalOpen}
                     onClose={() => setIsRoomModalOpen(false)}
                     RoomToEdit={editingRoom}
-                    // IMPORTANTE: Pasamos todas las listas necesarias
+                    // Ahora TS reconocerá que 'Prices' es del tipo correcto
                     roomTypes={RoomTypes}
                     blocks={Blocks}
                     floors={Floors}
@@ -287,7 +366,7 @@ export default function RoomsIndex({ auth, Rooms, RoomTypes, Blocks, Floors, Pri
                 <DeleteModal
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
-                    roomId={deletingRoomId} // Nombre corregido
+                    roomId={deletingRoomId}
                 />
             </div>
         </AuthenticatedLayout>
