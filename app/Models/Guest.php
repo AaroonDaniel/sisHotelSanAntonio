@@ -14,7 +14,7 @@ class Guest extends Model
     protected $fillable = [
         'first_name',
         'last_name',
-        'nacionality',
+        'nationality',
         'identification_number',
         'issued_in',
         'civil_status',

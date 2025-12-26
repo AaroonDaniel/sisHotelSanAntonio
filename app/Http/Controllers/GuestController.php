@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Guest;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class GuestController extends Controller
 {
@@ -12,7 +13,10 @@ class GuestController extends Controller
      */
     public function index()
     {
-        //
+        $guest = Guest::all();
+        return Inertia::render('guests/index', [
+            'Guests' => $guest
+        ]);
     }
 
     /**
@@ -20,7 +24,7 @@ class GuestController extends Controller
      */
     public function create()
     {
-        //
+        return Inertia::render('guests/create');
     }
 
     /**
@@ -28,7 +32,19 @@ class GuestController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $validated = $request->validate([
+            'last_name' => 'required|string|max:100',
+            'first_name' => 'required|string|max:100',
+            'nationality' => 'required|string|max:100',
+            'identification_number' => 'required|string|max:50|unique:guests,identification_number',
+            'issued_in' => 'required|string|max:100',
+            'civil_status' => 'required|string|max:50',
+            'age' => 'required|integer|min:0',
+            'profession' => 'required|string|max:100',
+            'origin' => 'required|string|max:100',
+        ]);
+        Guest::create($validated);
+        return redirect()->route('guests.index');
     }
 
     /**
@@ -52,7 +68,19 @@ class GuestController extends Controller
      */
     public function update(Request $request, Guest $guest)
     {
-        //
+        $validated = $request->validate([
+            'last_name' => 'required|string|max:100',
+            'first_name' => 'required|string|max:100',
+            'nationality' => 'required|string|max:100',
+            'identification_number' => 'required|string|max:50|unique:guests,identification_number,' . $guest->id,
+            'issued_in' => 'required|string|max:100',
+            'civil_status' => 'required|string|max:50',
+            'age' => 'required|integer|min:0',
+            'profession' => 'required|string|max:100',
+            'origin' => 'required|string|max:100',
+        ]);
+        $guest->update($validated);
+        return redirect()->route('guests.index');
     }
 
     /**
@@ -60,6 +88,8 @@ class GuestController extends Controller
      */
     public function destroy(Guest $guest)
     {
-        //
+        $guest->delete();
+        return redirect()->route('guests.index');
     }
+
 }

@@ -32,7 +32,7 @@ const hotelModules = [
                 url: '/reservations/create',
             },
             { name: 'Asignación Hab.', icon: BedDouble, url: '/assignments' },
-            { name: 'Huéspedes', icon: Users, url: '/guests' },
+            { name: 'Huéspedes', icon: Users, url: '/invitados' },
             //{ name: 'Check-in / Out', icon: ClipboardList, url: '/checkin' },
         ],
     },
