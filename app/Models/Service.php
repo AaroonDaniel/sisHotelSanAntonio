@@ -11,5 +11,7 @@ class Service extends Model
         'status',
         'price',
         'description',
+        'is_active',
+        'quantity',
     ];
 }

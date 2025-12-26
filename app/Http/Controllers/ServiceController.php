@@ -2,64 +2,72 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\service;
+use App\Models\Service; // Asegúrate de tener el modelo Service
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class ServiceController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        //
+        // Enviamos los servicios ordenados por los más recientes
+        $services = Service::orderBy('created_at', 'desc')->get();
+
+        return Inertia::render('services/index', [
+            'Services' => $services,
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        //
+        // Si tuvieras una página separada para crear, iría aquí.
+        // Como usas modal, esto no se usa mucho, pero lo dejamos por si acaso.
+        return Inertia::render('services/create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        //
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'description' => 'nullable|string',
+            'quantity' => 'nullable|integer|min:0',
+        ]);
+
+        // --- CORRECCIÓN FINAL ---
+        // Usamos 'enabled' porque es lo que dice tu migración
+        $validated['status'] = 'enabled'; 
+        
+        $validated['is_active'] = true;
+
+        Service::create($validated);
+
+        return redirect()->back();
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(service $service)
+    public function update(Request $request, Service $service)
     {
-        //
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'description' => 'nullable|string',
+            'quantity' => 'nullable|integer|min:0',
+        ]);
+
+        $service->update($validated);
+
+        return redirect()->back();
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(service $service)
+    public function destroy(Service $service)
     {
-        //
+        $service->delete();
+        return redirect()->back();
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, service $service)
+    public function toggleStatus(Service $service)
     {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(service $service)
-    {
-        //
+        $service->update(['is_active' => !$service->is_active]);
+        return redirect()->back();
     }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\FloorController;
 use App\Http\Controllers\RoomTypeController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\PriceController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\GuestController;
 use Illuminate\Support\Facades\Route;
+
 use Inertia\Inertia;
 
 Route::redirect('/', '/login');
@@ -69,5 +71,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/invitados/{guest}', [GuestController::class, 'destroy'])->name('guests.destroy');
     Route::patch('/invitados/{guest}/toggle', [GuestController::class, 'toggleStatus'])->name('guests.toggle');
     
+    //Servicios
+    Route::get('/servicios', [ServiceController::class, 'index'])->name('services.index');
+    Route::get('/servicios/crear', [ServiceController::class, 'create'])->name('services.create');
+    Route::post('/servicios', [ServiceController::class, 'store'])->name('services.store');
+    Route::put('/servicios/{service}', [ServiceController::class, 'update'])->name('services.update');
+    Route::delete('/servicios/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+    Route::patch('/servicios/{service}/toggle', [ServiceController::class, 'toggleStatus'])->name('services.toggle');
 }); 
 require __DIR__ . '/settings.php';

@@ -54,7 +54,7 @@ const hotelModules = [
             { name: 'Estado Habitaciones', icon: Hotel, url: '/rooms/status' },
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
-            { name: 'Inventario', icon: ClipboardList, url: '/inventory' },
+            { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
             {
                 name: 'Gestión Habitaciones',
                 icon: Hotel,
