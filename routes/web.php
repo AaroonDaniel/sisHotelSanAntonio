@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CheckinController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\FloorController;
@@ -78,5 +79,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/servicios/{service}', [ServiceController::class, 'update'])->name('services.update');
     Route::delete('/servicios/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
     Route::patch('/servicios/{service}/toggle', [ServiceController::class, 'toggleStatus'])->name('services.toggle');
-}); 
+
+    // --- RECEPCIÓN (CHECKS) ---
+    // Nota: El parámetro en la URL es {checkin} para coincidir con el controlador
+    Route::get('/checks', [CheckinController::class, 'index'])->name('checks.index');
+    Route::get('/checks/crear', [CheckinController::class, 'create'])->name('checks.create');
+    Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
+    Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
+    Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
+    
+    // Acciones extra para checks
+    Route::patch('/checks/{checkin}/checkout', [CheckinController::class, 'checkout'])->name('checks.checkout');
+    Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateReceipt'])->name('checks.receipt');
+
+    // Estados de Limpieza y Mantenimiento (Reportes visuales)
+    Route::get('/rooms/status', [RoomController::class, 'status'])->name('rooms.status');
+    Route::get('/housekeeping', [RoomController::class, 'housekeeping'])->name('rooms.housekeeping');
+    Route::get('/maintenance', [RoomController::class, 'maintenance'])->name('rooms.maintenance');
+});
+
 require __DIR__ . '/settings.php';

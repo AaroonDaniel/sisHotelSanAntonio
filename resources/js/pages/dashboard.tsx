@@ -31,7 +31,7 @@ const hotelModules = [
                 icon: CalendarDays,
                 url: '/reservations/create',
             },
-            { name: 'Asignación Hab.', icon: BedDouble, url: '/assignments' },
+            { name: 'Asignación Hab.', icon: BedDouble, url: '/checks' },
             { name: 'Huéspedes', icon: Users, url: '/invitados' },
             //{ name: 'Check-in / Out', icon: ClipboardList, url: '/checkin' },
         ],

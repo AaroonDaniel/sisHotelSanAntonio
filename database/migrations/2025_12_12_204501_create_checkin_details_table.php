@@ -13,25 +13,10 @@ return new class extends Migration
     {
         Schema::create('checkin_details', function (Blueprint $table) {
             $table->id(); 
-            $table->foreignId('checkin_id')
-                  ->constrained()
-                  ->onDelete('cascade');
-
-            $table->foreignId('service_id')
-                  ->constrained()
-                  ->onDelete('restrict');
-
-            // Cantidad (Ej: 2 Lavanderías)
-            $table->integer('quantity')->default(1);
-
-            // Precio al momento del consumo (Snapshot)
-            // Guardamos esto por si el precio del servicio cambia en el futuro
-            $table->decimal('selling_price', 10, 2);
-
-            // Opcional: Total calculado (quantity * selling_price)
-            // A veces es útil guardarlo, o se puede calcular al vuelo.
-            // Lo omito aquí para no redundar, pero si quieres puedes agregarlo.
-
+            $table->foreignId('checkin_id')->constrained()->onDelete('cascade');//id del check-in
+            $table->foreignId('service_id')->constrained()->onDelete('restrict');//id del servicio
+            $table->integer('quantity')->default(1);//cantidad del servicio
+            $table->decimal('selling_price', 10, 2);//precio de venta del servicio
             $table->timestamps();
         });
     }
