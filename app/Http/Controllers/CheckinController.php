@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Fpdf; // <--- ESTO ESTÁ MAL para la librería estándar
 use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
@@ -119,5 +120,100 @@ class CheckinController extends Controller
         $checkin->update(['check_out_date' => now()]);
 
         return redirect()->back()->with('success', 'Checkout realizado. Habitación en limpieza.');
+    }
+    
+
+    public function generateReceipt(Checkin $checkin)
+    {
+        // 1. Cargar relaciones
+        $checkin->load(['guest', 'room']);
+
+        // 2. Configuración de Tamaño TICKET (80mm ancho x 150mm alto aprox)
+        // Puedes ajustar el 150 según el largo que necesites
+        $pdf = new \FPDF('P', 'mm', array(80, 150)); 
+        
+        // Márgenes pequeños (4mm) para aprovechar el papel
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(true, 2);
+        $pdf->AddPage();
+        
+        // --- CABECERA ---
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+        
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, 'Calle Principal #123 - Potosi', 0, 1, 'C');
+        $pdf->Cell(0, 4, 'Telf: 2-6224455', 0, 1, 'C');
+        $pdf->Ln(2);
+        
+        // Línea separadora
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // --- DETALLES DEL RECIBO ---
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(0, 5, 'RECIBO DE CAJA #' . str_pad($checkin->id, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // Datos en formato compacto (Etiqueta: Valor)
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Fecha:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $checkin->created_at->format('d/m/Y H:i'), 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Huesped:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        // MultiCell ayuda si el nombre es muy largo para que baje de línea
+        $nombre = utf8_decode($checkin->guest->first_name . ' ' . $checkin->guest->last_name);
+        $pdf->MultiCell(0, 4, $nombre, 0, 'L');
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'CI/Doc:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $checkin->guest->identification_number, 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Habitacion:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, 'Nro ' . $checkin->room->number, 0, 1);
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // --- DETALLE DE PAGO ---
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(45, 5, 'CONCEPTO', 0, 0);
+        $pdf->Cell(0, 5, 'TOTAL', 0, 1, 'R');
+
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(45, 4, 'Adelanto Hospedaje', 0, 0);
+        $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2), 0, 1, 'R');
+        
+        $pdf->Cell(45, 4, 'Dias (' . $checkin->duration_days . ')', 0, 0);
+        $pdf->Cell(0, 4, '', 0, 1, 'R');
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // --- TOTALES ---
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell(35, 6, 'TOTAL PAGADO:', 0, 0);
+        $pdf->Cell(0, 6, 'Bs. ' . number_format($checkin->advance_payment, 2), 0, 1, 'R');
+
+        $pdf->Ln(5);
+
+        // --- PIE DE PÁGINA ---
+        $pdf->SetFont('Arial', 'I', 6);
+        $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nConserve este comprobante."), 0, 'C');
+        $pdf->Ln(2);
+        $pdf->Cell(0, 3, 'Usuario: ' . utf8_decode(Auth::user()->name ?? 'Admin'), 0, 1, 'C');
+
+        // 4. Salida
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="ticket-'.$checkin->id.'.pdf"');
     }
 }

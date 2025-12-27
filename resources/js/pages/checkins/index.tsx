@@ -3,23 +3,34 @@ import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     BedDouble,
-    Calendar,
     Clock,
     LogIn,
     LogOut,
     Pencil,
     Plus,
+    Printer,
     Search,
     Trash2,
-    User as UserIcon
+    User as UserIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinModal from './checkinModal';
 import DeleteModal from './deleteModal';
 
 // --- INTERFACES ---
-interface Guest { id: number; first_name: string; last_name: string; identification_number: string; }
-interface Room { id: number; number: string; status: string; room_type?: { name: string }; price?: { amount: number }; }
+interface Guest {
+    id: number;
+    first_name: string;
+    last_name: string;
+    identification_number: string;
+}
+interface Room {
+    id: number;
+    number: string;
+    status: string;
+    room_type?: { name: string };
+    price?: { amount: number };
+}
 
 interface Checkin {
     id: number;
@@ -41,28 +52,46 @@ interface Props {
     Rooms: Room[];
 }
 
-
-export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) {
+export default function CheckinsIndex({
+    auth,
+    Checkins,
+    Guests,
+    Rooms,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
     const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
     const [editingCheckin, setEditingCheckin] = useState<Checkin | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [deletingCheckinId, setDeletingCheckinId] = useState<number | null>(null);
+    const [deletingCheckinId, setDeletingCheckinId] = useState<number | null>(
+        null,
+    );
 
     // --- 1. LÓGICA DE FILTRADO ---
     const filteredCheckins = Checkins.filter((checkin) => {
         const term = searchTerm.toLowerCase();
-        const guestName = checkin.guest ? `${checkin.guest.first_name} ${checkin.guest.last_name}`.toLowerCase() : '';
-        const roomNumber = checkin.room ? checkin.room.number.toLowerCase() : '';
+        const guestName = checkin.guest
+            ? `${checkin.guest.first_name} ${checkin.guest.last_name}`.toLowerCase()
+            : '';
+        const roomNumber = checkin.room
+            ? checkin.room.number.toLowerCase()
+            : '';
         return guestName.includes(term) || roomNumber.includes(term);
     });
 
     // --- 2. ACCIONES ---
     const handleCheckout = (checkin: Checkin) => {
-        if (confirm(`¿Finalizar la estadía de la habitación ${checkin.room?.number}?`)) {
-            router.patch(`/checks/${checkin.id}/checkout`, {}, { preserveScroll: true });
+        if (
+            confirm(
+                `¿Finalizar la estadía de la habitación ${checkin.room?.number}?`,
+            )
+        ) {
+            router.patch(
+                `/checks/${checkin.id}/checkout`,
+                {},
+                { preserveScroll: true },
+            );
         }
     };
 
@@ -84,7 +113,10 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
         return new Date(dateString).toLocaleDateString('es-BO', {
-            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
         });
     };
 
@@ -92,7 +124,6 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Hospedajes" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                
                 {/* Botón Volver */}
                 <button
                     onClick={() => window.history.back()}
@@ -112,7 +143,6 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
 
                 <div className="py-12">
                     <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                         {/* Header: Buscador y Botón Crear */}
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
                             <div className="relative w-full sm:w-72">
@@ -122,7 +152,9 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar huésped o habitación..."
                                     // CAMBIO: Estilos verdes para coincidir con FloorsIndex
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
@@ -145,19 +177,30 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
                                         <th className="px-6 py-4">ID</th>
-                                        <th className="px-6 py-4">Habitación</th>
+                                        <th className="px-6 py-4">
+                                            Habitación
+                                        </th>
                                         <th className="px-6 py-4">Huésped</th>
-                                        <th className="px-6 py-4">Entrada / Salida</th>
+                                        <th className="px-6 py-4">
+                                            Entrada / Salida
+                                        </th>
                                         <th className="px-6 py-4">Adelanto</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredCheckins.length > 0 ? (
                                         filteredCheckins.map((checkin) => (
-                                            <tr key={checkin.id} className="transition-colors hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-bold text-gray-400">#{checkin.id}</td>
-                                                
+                                            <tr
+                                                key={checkin.id}
+                                                className="transition-colors hover:bg-gray-50"
+                                            >
+                                                <td className="px-6 py-4 font-bold text-gray-400">
+                                                    #{checkin.id}
+                                                </td>
+
                                                 {/* Habitación */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2 font-bold text-gray-900">
@@ -165,9 +208,16 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                                         <div className="rounded bg-green-100 p-1 text-green-600">
                                                             <BedDouble className="h-4 w-4" />
                                                         </div>
-                                                        {checkin.room?.number || 'S/N'}
+                                                        {checkin.room?.number ||
+                                                            'S/N'}
                                                     </div>
-                                                    <span className="ml-7 text-xs text-gray-500">{checkin.room?.room_type?.name}</span>
+                                                    <span className="ml-7 text-xs text-gray-500">
+                                                        {
+                                                            checkin.room
+                                                                ?.room_type
+                                                                ?.name
+                                                        }
+                                                    </span>
                                                 </td>
 
                                                 {/* Huésped */}
@@ -175,11 +225,22 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                                     <div className="flex items-center gap-2">
                                                         <UserIcon className="h-4 w-4 text-gray-400" />
                                                         <span className="font-medium text-gray-800">
-                                                            {checkin.guest?.first_name} {checkin.guest?.last_name}
+                                                            {
+                                                                checkin.guest
+                                                                    ?.first_name
+                                                            }{' '}
+                                                            {
+                                                                checkin.guest
+                                                                    ?.last_name
+                                                            }
                                                         </span>
                                                     </div>
                                                     <div className="ml-6 text-xs text-gray-500">
-                                                        CI: {checkin.guest?.identification_number}
+                                                        CI:{' '}
+                                                        {
+                                                            checkin.guest
+                                                                ?.identification_number
+                                                        }
                                                     </div>
                                                 </td>
 
@@ -189,48 +250,79 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                                         {/* CAMBIO: Texto verde para la fecha */}
                                                         <div className="flex items-center gap-1 text-green-700">
                                                             <LogIn className="h-3 w-3" />
-                                                            {formatDate(checkin.check_in_date)}
+                                                            {formatDate(
+                                                                checkin.check_in_date,
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-1 text-gray-500">
                                                             <Clock className="h-3 w-3" />
-                                                            {checkin.duration_days} días
+                                                            {
+                                                                checkin.duration_days
+                                                            }{' '}
+                                                            días
                                                         </div>
                                                     </div>
                                                 </td>
 
                                                 {/* Pago */}
                                                 <td className="px-6 py-4 font-mono font-medium text-green-700">
-                                                    Bs. {checkin.advance_payment}
+                                                    Bs.{' '}
+                                                    {checkin.advance_payment}
                                                 </td>
 
                                                 {/* Acciones */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        
+                                                        {/* Botón Imprimir Recibo */}
+                                                        <button
+                                                            onClick={() =>
+                                                                window.open(
+                                                                    `/checks/${checkin.id}/receipt`,
+                                                                    '_blank',
+                                                                )
+                                                            }
+                                                            className="text-gray-400 transition hover:text-purple-600"
+                                                            title="Imprimir Recibo"
+                                                        >
+                                                            <Printer className="h-4 w-4" />
+                                                        </button>
+
                                                         {/* Botón Checkout */}
                                                         {!checkin.check_out_date && (
-                                                            <button 
-                                                                onClick={() => handleCheckout(checkin)}
+                                                            <button
+                                                                onClick={() =>
+                                                                    handleCheckout(
+                                                                        checkin,
+                                                                    )
+                                                                }
                                                                 title="Finalizar Estadía (Check-out)"
                                                                 // CAMBIO: Verde para acción principal
-                                                                className="transition text-green-600 hover:text-green-800"
+                                                                className="text-green-600 transition hover:text-green-800"
                                                             >
                                                                 <LogOut className="h-4 w-4" />
                                                             </button>
                                                         )}
 
                                                         {/* Botón Editar */}
-                                                        <button 
-                                                            onClick={() => openEditModal(checkin)}
+                                                        <button
+                                                            onClick={() =>
+                                                                openEditModal(
+                                                                    checkin,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-blue-600"
                                                             title="Editar Check-in"
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
-                                                        
+
                                                         {/* Botón Eliminar */}
-                                                        <button 
-                                                            onClick={() => openDeleteModal(checkin.id)}
+                                                        <button
+                                                            onClick={() =>
+                                                                openDeleteModal(
+                                                                    checkin.id,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-red-600"
                                                             title="Eliminar Registro"
                                                         >
@@ -242,8 +334,13 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay registros activos.'}
+                                            <td
+                                                colSpan={6}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay registros activos.'}
                                             </td>
                                         </tr>
                                     )}
@@ -258,14 +355,14 @@ export default function CheckinsIndex({ auth, Checkins, Guests, Rooms }: Props) 
                     show={isCheckinModalOpen}
                     onClose={() => setIsCheckinModalOpen(false)}
                     checkinToEdit={editingCheckin}
-                    guests={Guests} 
-                    rooms={Rooms} 
+                    guests={Guests}
+                    rooms={Rooms}
                 />
 
                 <DeleteModal
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
-                    checkinId={deletingCheckinId} 
+                    checkinId={deletingCheckinId}
                 />
             </div>
         </AuthenticatedLayout>

@@ -6,6 +6,7 @@ use App\Models\Guest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
+
 class GuestController extends Controller
 {
     public function index()
@@ -82,4 +83,6 @@ class GuestController extends Controller
         $guest->delete();
         return redirect()->route('guests.index');
     }
+
+    
 }
