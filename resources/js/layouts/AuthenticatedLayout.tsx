@@ -64,18 +64,17 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                             {/* Links Escritorio */}
                             <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
                                 <Link
-                                    href="/inicio"
+                                    href="/dashboard"
                                     className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
                                 >
                                     Inicio
                                 </Link>
-                                <button
-                                    onClick={() => router.visit('/reservations')}
-                                    className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-300 transition duration-150 ease-in-out hover:border-gray-300 hover:text-white"
+                                 <Link
+                                    href="/status"
+                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
                                 >
                                     Habitaciones
-                                </button>
-                               
+                                </Link>
                             </div>
                         </div>
 

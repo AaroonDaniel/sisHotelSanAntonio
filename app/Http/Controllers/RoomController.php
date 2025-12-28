@@ -139,4 +139,13 @@ class RoomController extends Controller
         $room->update(['is_active' => !$room->is_active]);
         return back();
     }
+    public function status()
+    {
+        // Cargamos todas las habitaciones con su tipo
+        $rooms = Room::with('roomType')->orderBy('number')->get();
+
+        return Inertia::render('rooms/status', [
+            'Rooms' => $rooms
+        ]);
+    }
 }
