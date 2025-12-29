@@ -100,7 +100,7 @@ export default function LoginSelector({ users = [] }: { users: UserProps[] }) {
                             ¿Quién está iniciando turno?
                         </h2>
 
-                        <div className="grid grid-cols-2 justify-items-center gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        <div className="flex flex-wrap justify-center gap-8">
                             {users.map((user) => (
                                 <button
                                     key={user.id}

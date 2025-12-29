@@ -94,7 +94,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateReceipt'])->name('checks.receipt');
 
     // Estados de Limpieza y Mantenimiento (Reportes visuales)
-    Route::get('/rooms/status', [RoomController::class, 'status'])->name('rooms.status');
+
     Route::get('/housekeeping', [RoomController::class, 'housekeeping'])->name('rooms.housekeeping');
     Route::get('/maintenance', [RoomController::class, 'maintenance'])->name('rooms.maintenance');
 });

@@ -7,34 +7,36 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // 1. Usuario Administrador
+        // USUARIO 1
         User::create([
-            'nickname'  => 'admin',
-            'full_name' => 'Administrador Principal',
+            'nickname'  => 'Ricardo', // <--- IMPORTANTE: Todo en minúscula
+            'full_name' => 'DON RICARDO',
             'phone'     => '70000001',
             'address'   => 'Oficina Gerencia',
-            'password'  => '123', // Se encripta automático por el cast 'hashed' en tu Modelo
+            'password'  => '123',     // <--- IMPORTANTE: Texto plano (sin Hash::make)
             'is_active' => true,
         ]);
 
-        // 2. Usuario Recepcionista
+        // USUARIO 2
         User::create([
-            'nickname'  => 'recepcion',
-            'full_name' => 'Juan Perez',
+            'nickname'  => 'Carlos',  // <--- Minúscula
+            'full_name' => 'RECEPCION CARLOS',
             'phone'     => '60000002',
             'address'   => 'Mostrador Entrada',
-            'password'  => '123',
+            'password'  => '123',     // <--- Texto plano
             'is_active' => true,
         ]);
-        
-        // Puedes llamar a otros seeders aquí si los creas después
-        // $this->call([
-        //     RoomTypeSeeder::class,
-        // ]);
+
+        // USUARIO 3
+        User::create([
+            'nickname'  => 'Raul',    // <--- Minúscula
+            'full_name' => 'RAUL RECEPCION',
+            'phone'     => '60000003',
+            'address'   => 'Mostrador Entrada',
+            'password'  => '123',     // <--- Texto plano
+            'is_active' => true,
+        ]);
     }
 }
