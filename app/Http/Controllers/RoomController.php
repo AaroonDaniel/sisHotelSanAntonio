@@ -7,6 +7,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Price;
 use App\Models\Floor;
+use App\Models\Guest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -141,11 +142,14 @@ class RoomController extends Controller
     }
     public function status()
     {
-        // Cargamos todas las habitaciones con su tipo
-        $rooms = Room::with('roomType')->orderBy('number')->get();
+        // Cargamos 'price' para el modal y enviamos 'Guests'
+        $rooms = Room::with(['roomType', 'price'])->orderBy('number')->get();
+        $guests = Guest::all();
 
         return Inertia::render('rooms/status', [
-            'Rooms' => $rooms
+            'Rooms' => $rooms,
+            'Guests' => $guests
         ]);
+        
     }
 }

@@ -64,17 +64,18 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                             {/* Links Escritorio */}
                             <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
                                 <Link
-                                    href="/dashboard"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
-                                >
-                                    Administracion
-                                </Link>
-                                 <Link
                                     href="/status"
                                     className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
                                 >
                                     Habitaciones
                                 </Link>
+                                <Link
+                                    href="/dashboard"
+                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
+                                >
+                                    Administracion
+                                </Link>
+                                
                             </div>
                         </div>
 
