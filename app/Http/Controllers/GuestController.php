@@ -70,6 +70,7 @@ class GuestController extends Controller
             'issued_in' => 'nullable|string|max:100',
             'civil_status' => 'nullable|string|max:50',
             'birth_date' => 'nullable|date',
+            'age' => 'exclude',
             'profession' => 'nullable|string|max:100',
             'origin' => 'nullable|string|max:100',
         ]);

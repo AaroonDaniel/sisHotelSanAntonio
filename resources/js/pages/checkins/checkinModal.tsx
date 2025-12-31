@@ -50,7 +50,7 @@ export interface Guest {
     issued_in?: string;
     nationality?: string;
     civil_status?: string;
-    birth_date?: string; //
+    birth_date?: string;
     age?: number;
     profession?: string;
     origin?: string;
@@ -114,7 +114,7 @@ export default function CheckinModal({
         guest_id: '' as string | null,
         room_id: '',
         check_in_date: now,
-        duration_days: 1,
+        duration_days: 1 as number | string, // Permitimos string vacío
         advance_payment: 0,
         notes: '',
         selected_services: [] as string[],
@@ -124,13 +124,12 @@ export default function CheckinModal({
         issued_in: '',
         nationality: 'BOLIVIA',
         civil_status: '',
-        birth_date: '' as string, //
+        birth_date: '' as string,
         profession: '',
         origin: '',
     });
 
     // --- EFECTOS ---
-    //
     useEffect(() => {
         if (data.birth_date) {
             setDisplayAge(calculateAge(data.birth_date));
@@ -161,7 +160,7 @@ export default function CheckinModal({
                     issued_in: checkinToEdit.guest?.issued_in || '',
                     nationality: checkinToEdit.guest?.nationality || 'BOLIVIA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
-                    birth_date: checkinToEdit.guest?.birth_date || '', //
+                    birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
                 });
@@ -198,7 +197,7 @@ export default function CheckinModal({
             issued_in: guest.issued_in || '',
             nationality: guest.nationality || 'BOLIVIA',
             civil_status: guest.civil_status || '',
-            birth_date: guest.birth_date || '', //
+            birth_date: guest.birth_date || '',
             profession: guest.profession || '',
             origin: guest.origin || '',
         }));
@@ -258,6 +257,13 @@ export default function CheckinModal({
     const checkoutString = durationVal > 0 
         ? estimatedCheckout.toLocaleDateString('es-BO', { weekday: 'short', day: '2-digit', month: 'short' })
         : 'Indefinido / Por confirmar';
+
+    // Servicios
+    const servicesList = [
+        { id: '1', name: 'Desayuno', price: 35 },
+        { id: '2', name: 'Lavandería', price: 20 },
+        { id: '3', name: 'Limpieza', price: 50 },
+    ];
 
     if (!show) return null;
     const hasErrors = Object.keys(errors).length > 0;
@@ -390,7 +396,6 @@ export default function CheckinModal({
                                 </div>
                             </div>
                             
-                            {/* Fecha Nacimiento en vez de Edad */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">Estado Civil</label>
@@ -413,7 +418,6 @@ export default function CheckinModal({
                                         className="w-full rounded-lg border-gray-200 px-2 py-2 text-sm text-black disabled:bg-gray-50"
                                         value={data.birth_date}
                                         onChange={e => setData('birth_date', e.target.value)}
-                                        // No deshabilitamos si quieres permitir editar fecha de un existente que no tenga
                                         disabled={!!checkinToEdit} 
                                     />
                                     <span className="text-[10px] text-gray-400 font-medium">
@@ -431,18 +435,15 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            {/* Procedencia habilitada para editar al asignar */}
+                            {/* Procedencia */}
                             <div>
-                                <label className="mb-1 block text-xs font-bold text-gray-500">Procedencia (Origen)</label>
+                                <label className="text-xs font-bold text-gray-500">Procedencia</label>
                                 <div className="relative">
                                     <Globe className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                     <input 
-                                        className="w-full rounded-lg border-gray-200 pl-9 py-2 text-sm uppercase text-black focus:border-green-500 disabled:bg-gray-100"
+                                        className="w-full rounded-lg border-gray-200 pl-9 py-2 text-sm uppercase text-black disabled:bg-gray-50"
                                         value={data.origin}
                                         onChange={e => setData('origin', e.target.value.toUpperCase())}
-                                        
-                                        // Eliminamos 'disabled={isExistingGuest}'
-                                        // Ahora siempre estará habilitado para que puedas escribir y se envíe al backend
                                         placeholder="CIUDAD DE ORIGEN"
                                     />
                                 </div>
@@ -450,7 +451,7 @@ export default function CheckinModal({
                         </div>
                     </div>
 
-                    {/* DERECHA - ASIGNACIÓN (Sin cambios mayores) */}
+                    {/* DERECHA - ASIGNACIÓN */}
                     <div className="flex-1 p-6 bg-gray-50">
                         <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1 mb-4">Detalles de Asignación</h3>
 
@@ -486,11 +487,16 @@ export default function CheckinModal({
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">Estadía (Días)</label>
+                                    
+                                    {/* */}
                                     <input
                                         type="number"
                                         min="0"
                                         value={data.duration_days}
-                                        onChange={(e) => setData('duration_days', Number(e.target.value))}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setData('duration_days', val === '' ? '' : Number(val));
+                                        }}
                                         className="w-full rounded-lg border-gray-200 text-sm text-black"
                                     />
                                     <span className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}>
@@ -524,6 +530,32 @@ export default function CheckinModal({
                                         className="w-full rounded-lg border-gray-200 pl-9 text-sm uppercase text-black"
                                         placeholder="DETALLES..."
                                     />
+                                </div>
+                            </div>
+
+                            {/* Servicios Extra */}
+                            <div>
+                                <label className="mb-2 block text-xs font-bold text-gray-500">Servicios Adicionales</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {servicesList.map(srv => {
+                                        const active = data.selected_services.includes(srv.id);
+                                        return (
+                                            <button
+                                                key={srv.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    const newServs = active 
+                                                        ? data.selected_services.filter(id => id !== srv.id)
+                                                        : [...data.selected_services, srv.id];
+                                                    setData('selected_services', newServs);
+                                                }}
+                                                className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs border transition ${active ? 'bg-green-100 border-green-500 text-green-700 font-bold' : 'bg-white border-gray-200 text-gray-600'}`}
+                                            >
+                                                {active && <CheckCircle2 className="h-3 w-3" />}
+                                                {srv.name}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
