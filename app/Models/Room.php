@@ -5,9 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\AutoUpperCase;
 
 class Room extends Model
 {
+    use AutoUpperCase;
     protected $fillable = [
         'number',
         'block_id',
@@ -20,6 +22,10 @@ class Room extends Model
         'is_active',
     ];
 
+    protected $uppercaseFields = [
+        'status',
+        'notes',
+    ];
     // --- RELACIONES CON PADRES (BelongsTo) ---
 
     public function roomType(): BelongsTo

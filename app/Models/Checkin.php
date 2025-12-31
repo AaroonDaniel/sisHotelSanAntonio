@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\AutoUpperCase;
 
 class Checkin extends Model
 {
+    use AutoUpperCase;
+
     protected $fillable = [
         'room_id',
         'guest_id',
@@ -18,6 +21,10 @@ class Checkin extends Model
         'check_out_date',
         'notes',
         'advance_payment',
+    ];
+
+    protected $uppercaseFields = [
+        'notes',
     ];
 
     // Para que Laravel maneje las fechas automáticamente como objetos Carbon

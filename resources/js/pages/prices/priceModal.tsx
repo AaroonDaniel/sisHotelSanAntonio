@@ -118,8 +118,8 @@ export default function PriceModal({ show, onClose, PriceToEdit, roomTypes }: Pr
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500 bg-white"
                                 >
                                     <option value="" disabled>Seleccionar...</option>
-                                    <option value="Privado">Privado</option>
-                                    <option value="Compartido">Compartido</option>
+                                    <option value="Privado">PRIVADO</option>
+                                    <option value="Compartido">COMPARTIDO</option>
                                 </select>
                             </div>
                             {errors.bathroom_type && <p className="mt-1 text-xs text-red-500 font-bold">{errors.bathroom_type}</p>}

@@ -190,8 +190,8 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                                 <input
                                     type="text"
                                     value={data.number}
-                                    onChange={(e) => setData('number', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-1.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    onChange={(e) => setData('number', e.target.value.toUpperCase())}
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-1.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ej: 101, A-20, Suite Principal"
                                 />
                             </div>
@@ -357,8 +357,8 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">Notas Adicionales</label>
                             <textarea
                                 value={data.notes}
-                                onChange={(e) => setData('notes', e.target.value)}
-                                className="block w-full rounded-xl border-gray-200 py-1.5 px-3 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                onChange={(e) => setData('notes', e.target.value.toUpperCase())}
+                                className="uppercase block w-full rounded-xl border-gray-200 py-1.5 px-3 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 rows={2}
                                 placeholder="Detalles sobre la habitación..."
                             />

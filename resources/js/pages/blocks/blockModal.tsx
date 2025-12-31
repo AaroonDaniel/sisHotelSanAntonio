@@ -2,6 +2,7 @@ import { useForm } from '@inertiajs/react';
 import { X, Save, Building, Hash, FileText } from 'lucide-react';
 import { useEffect, FormEventHandler } from 'react';
 
+
 interface Block {
     id?: number;
     code: string;
@@ -85,8 +86,8 @@ export default function BlockModal({ show, onClose, blockToEdit }: BlockModalPro
                                 <input
                                     type="text"
                                     value={data.code}
-                                    onChange={(e) => setData('code', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    onChange={(e) => setData('code', e.target.value.toUpperCase())}
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ej: B-101"
                                 />
                             </div>
@@ -102,9 +103,9 @@ export default function BlockModal({ show, onClose, blockToEdit }: BlockModalPro
                                 </div>
                                 <textarea
                                     value={data.description}
-                                    onChange={(e) => setData('description', e.target.value)}
+                                    onChange={(e) => setData('description', e.target.value.toUpperCase())}
                                     rows={3}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Detalles del sector..."
                                 />
                             </div>

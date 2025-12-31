@@ -15,25 +15,25 @@ import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
 // --- Lista para el autocompletado ---
 const countries = [
-    'Bolivia',
-    'Argentina',
-    'Brasil',
-    'Chile',
-    'Colombia',
-    'Perú',
-    'Ecuador',
-    'Paraguay',
-    'Uruguay',
-    'Venezuela',
-    'México',
-    'Estados Unidos',
-    'España',
-    'Francia',
-    'Alemania',
-    'Italia',
-    'China',
-    'Japón',
-    'Rusia',
+    'BOLIVIA',
+    'ARGENTINA',
+    'BRASIL',
+    'CHILE',
+    'COLOMBIA',
+    'PERÚ',
+    'ECUADOR',
+    'PARAGUAY',
+    'URUGUAY',
+    'VENEZUELA',
+    'MÉXICO',
+    'ESTADOS UNIDOS',
+    'ESPAÑA',
+    'FRANCIA',
+    'ALEMANIA',
+    'ITALIA',
+    'CHINA',
+    'JAPÓN',
+    'RUSIA',
 ];
 
 interface Guest {
@@ -188,9 +188,9 @@ export default function GuestModal({
                                     type="text"
                                     value={data.first_name}
                                     onChange={(e) =>
-                                        setData('first_name', e.target.value)
+                                        setData('first_name', e.target.value.toUpperCase())
                                     }
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Juan"
                                 />
                             </div>
@@ -214,9 +214,9 @@ export default function GuestModal({
                                     type="text"
                                     value={data.last_name}
                                     onChange={(e) =>
-                                        setData('last_name', e.target.value)
+                                        setData('last_name', e.target.value.toUpperCase())
                                     }
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Pérez"
                                 />
                             </div>
@@ -245,7 +245,7 @@ export default function GuestModal({
                                         setShowSuggestions(true)
                                     }
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Bolivia"
+                                    placeholder="BOLIVIA"
                                     autoComplete="off"
                                 />
                                 {showSuggestions &&
@@ -263,7 +263,7 @@ export default function GuestModal({
                                                             false,
                                                         );
                                                     }}
-                                                    className="cursor-pointer px-4 py-2 text-sm hover:bg-green-50 hover:text-green-700"
+                                                    className="cursor-pointer px-4 py-2 text-sm text-black hover:bg-green-50 hover:text-green-700"
                                                 >
                                                     {c}
                                                 </div>
@@ -321,9 +321,9 @@ export default function GuestModal({
                                         type="text"
                                         value={data.issued_in}
                                         onChange={(e) =>
-                                            setData('issued_in', e.target.value)
+                                            setData('issued_in', e.target.value.toUpperCase())
                                         }
-                                        className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                        className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                         placeholder="LP"
                                     />
                                 </div>
@@ -378,18 +378,18 @@ export default function GuestModal({
                                 >
                                     <option value="">Seleccionar</option>
                                     {/* CAMBIO AQUÍ: Los 'value' deben coincidir con tu base de datos */}
-                                    <option value="single">Soltero(a)</option>{' '}
+                                    <option value="single">SOLTERO(A)</option>{' '}
                                     {/* Antes: "soltero" */}
                                     <option value="married">
-                                        Casado(a)
+                                        CASADO(A)
                                     </option>{' '}
                                     {/* Antes: "casado" */}
                                     <option value="divorced">
-                                        Divorciado(a)
+                                        DIVIRCIADO(A)
                                     </option>{' '}
                                     {/* Antes: "divorciado" */}
                                     <option value="widowed">
-                                        Viudo(a)
+                                        VIUDO(A)
                                     </option>{' '}
                                     {/* Antes: "viudo" */}
                                 </select>
@@ -414,9 +414,9 @@ export default function GuestModal({
                                     type="text"
                                     value={data.profession}
                                     onChange={(e) =>
-                                        setData('profession', e.target.value)
+                                        setData('profession', e.target.value.toUpperCase())
                                     }
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ingeniero"
                                 />
                             </div>
@@ -440,9 +440,9 @@ export default function GuestModal({
                                     type="text"
                                     value={data.origin}
                                     onChange={(e) =>
-                                        setData('origin', e.target.value)
+                                        setData('origin', e.target.value.toUpperCase())
                                     }
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ciudad"
                                 />
                             </div>

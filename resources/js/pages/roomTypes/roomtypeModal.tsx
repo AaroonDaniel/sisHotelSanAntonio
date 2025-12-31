@@ -101,10 +101,10 @@ export default function RoomtypeModal({
                                     type="text"
                                     value={data.name}
                                     onChange={(e) =>
-                                        setData('name', e.target.value)
+                                        setData('name', e.target.value.toUpperCase())
                                     }
                                     // CORREGIDO: 'block' en lugar de 'Roomtype'
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ej: Simple"
                                 />
                             </div>
@@ -156,10 +156,10 @@ export default function RoomtypeModal({
                                 <textarea
                                     value={data.description}
                                     onChange={(e) =>
-                                        setData('description', e.target.value)
+                                        setData('description', e.target.value.toUpperCase())
                                     }
                                     rows={3}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Detalles del tipo de habitación..."
                                 />
                             </div>
