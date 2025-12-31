@@ -30,7 +30,9 @@ class Guest extends Model
         'last_name',
         'nationality',
         'profession',
-        'origin'
+        'origin',
+        'civil_status',
+        'issued_in',
 
     ];
 

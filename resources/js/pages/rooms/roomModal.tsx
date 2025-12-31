@@ -320,12 +320,12 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                                 onChange={(e) => setData('status', e.target.value)}
                                 className="block w-full rounded-xl border-gray-200 py-1.5 px-3 text-sm text-black bg-white focus:border-green-500 focus:ring-green-500"
                             >
-                                <option value="available">Libre</option>
-                                <option value="occupied">Ocupado</option>
-                                <option value="reserved">Reservado</option>
-                                <option value="cleaning">Limpieza</option>
-                                <option value="maintenance">Mantenimiento</option>
-                                <option value="disabled">Inhabilitado</option>
+                                <option value="available">LIBRE</option>
+                                <option value="occupied">OCUPADO</option>
+                                <option value="reserved">RESERVADO</option>
+                                <option value="cleaning">LIMPIEZA</option>
+                                <option value="maintenance">MANTENIMIENTO</option>
+                                <option value="disabled">INHABILITADO</option>
                             </select>
                         </div>
 

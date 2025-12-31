@@ -7,7 +7,6 @@ import {
     MapPin,
     Pencil,
     Plus,
-    Power,
     Search,
     Trash2,
     User as UserIcon,
@@ -16,7 +15,17 @@ import { useState } from 'react';
 import DeleteModal from './deleteModal';
 import GuestModal from './guestModal';
 
-// --- 1. INTERFAZ DE DATOS (Coincide con tu BD) ---
+// --- 1. DICCIONARIO DE TRADUCCIÓN (AGREGADO) ---
+// Como ya migraste tu BD a mayúsculas, esto funcionará perfecto.
+const civilStatusTranslations: Record<string, string> = {
+    SINGLE: 'Soltero',
+    MARRIED: 'Casado',
+    DIVORCED: 'Divorciado',
+    WIDOWED: 'Viudo',
+    CONCUBINAGE: 'Concubinato',
+};
+
+// --- 2. INTERFAZ DE DATOS ---
 interface Guest {
     id: number;
     first_name: string;
@@ -24,7 +33,7 @@ interface Guest {
     nationality: string; 
     identification_number: string;
     issued_in: string;
-    civil_status: string;
+    civil_status: string; // Vendrá como "SINGLE", "MARRIED", etc.
     age: number;
     profession: string;
     origin: string;
@@ -44,7 +53,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingGuestId, setDeletingGuestId] = useState<number | null>(null);
 
-    // --- 2. FILTRO AVANZADO ---
+    // --- 3. FILTRO AVANZADO ---
     const filteredGuests = Guests.filter((guest) => {
         const term = searchTerm.toLowerCase();
         const fullName = `${guest.first_name} ${guest.last_name}`.toLowerCase();
@@ -56,7 +65,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
             guest.profession.toLowerCase().includes(term)
         );
     });
-
 
     // Funciones de apertura de modales
     const openCreateModal = () => {
@@ -139,7 +147,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                         filteredGuests.map((guest) => (
                                             <tr
                                                 key={guest.id}
-                                                className={`transition-colors hover:bg-gray-50 'bg-gray-50 opacity-75' : ''}`}
+                                                className="transition-colors hover:bg-gray-50"
                                             >
                                                 {/* Columna: Nombre y Profesión */}
                                                 <td className="px-6 py-4">
@@ -183,13 +191,16 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                     </div>
                                                 </td>
 
-                                                {/* Columna: Edad y Estado Civil */}
+                                                {/* Columna: Edad y Estado Civil (CORREGIDO) */}
                                                 <td className="px-6 py-4">
                                                     <div className="text-sm text-gray-900">
                                                         {guest.age} años
                                                     </div>
+                                                    {/* APLICAMOS LA TRADUCCIÓN AQUÍ */}
                                                     <div className="text-xs text-gray-500 capitalize">
-                                                        {guest.civil_status}
+                                                        {guest.civil_status 
+                                                            ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
+                                                            : '-'}
                                                     </div>
                                                 </td>
 
@@ -236,7 +247,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                 <DeleteModal
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
-                    // Asegúrate que tu DeleteModal acepte 'guestId' o 'id'
                     guestId={deletingGuestId} 
                 />
             </div>

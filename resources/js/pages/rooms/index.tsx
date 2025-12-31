@@ -18,21 +18,21 @@ import RoomModal from './roomModal';
 
 // --- 1. CONSTANTES Y TRADUCCIONES ---
 const statusTranslations: Record<string, string> = {
-    available: 'Libre',
-    occupied: 'Ocupado',
-    reserved: 'Reservado',
-    cleaning: 'Limpieza',
-    maintenance: 'Mantenimiento',
-    disabled: 'Inhabilitado',
+    AVAILABLE: 'LIBRE',
+    OCCUPIED: 'OCUPADO',
+    RESERVED: 'RESERVADO',
+    CLEANING: 'LIMPIEZA',
+    MAINTENANCE: 'MANTENIMIENTO',
+    DISABLED: 'INHABILITADO',
 };
 
 const statusColors: Record<string, string> = {
-    available: 'bg-green-100 text-green-800',
-    occupied: 'bg-red-100 text-red-800',
-    reserved: 'bg-yellow-100 text-yellow-800',
-    cleaning: 'bg-blue-100 text-blue-800',
-    maintenance: 'bg-orange-100 text-orange-800',
-    disabled: 'bg-gray-100 text-gray-800',
+    AVAILABLE: 'bg-green-100 text-green-800',
+    OCCUPIED: 'bg-red-100 text-red-800',
+    RESERVED: 'bg-yellow-100 text-yellow-800',
+    CLEANING: 'bg-blue-100 text-blue-800',
+    MAINTENANCE: 'bg-orange-100 text-orange-800',
+    DISABLED: 'bg-gray-100 text-gray-800',
 };
 
 // --- 2. INTERFACES ACTUALIZADAS PARA CORREGIR EL ERROR ---
