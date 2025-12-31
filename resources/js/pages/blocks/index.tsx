@@ -112,7 +112,7 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
+                                        
                                         <th className="px-6 py-4">Código</th>
                                         <th className="px-6 py-4">Descripción</th>
                                         <th className="px-6 py-4">Estado</th>
@@ -123,7 +123,7 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                     {filteredBlocks.length > 0 ? (
                                         filteredBlocks.map((block) => (
                                             <tr key={block.id} className={`transition-colors hover:bg-gray-50 ${!block.is_active ? 'bg-gray-50' : ''}`}>
-                                                <td className="px-6 py-4 font-bold">{block.id}</td>
+                                                
                                                 <td className="px-6 py-4 font-bold text-gray-900">{block.code}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">

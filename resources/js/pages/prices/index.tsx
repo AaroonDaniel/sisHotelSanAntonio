@@ -145,7 +145,7 @@ export default function PricesIndex({ auth, Prices, RoomTypes }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
+                                        
                                         <th className="px-6 py-4">
                                             Tipo Habitación
                                         </th>
@@ -164,9 +164,7 @@ export default function PricesIndex({ auth, Prices, RoomTypes }: Props) {
                                                 key={Price.id}
                                                 className={`transition-colors hover:bg-gray-50 ${!Price.is_active ? 'bg-gray-50' : ''}`}
                                             >
-                                                <td className="px-6 py-4 font-bold">
-                                                    {Price.id}
-                                                </td>
+                                                
 
                                                 {/* Columna: Nombre del Tipo de Habitación */}
                                                 <td className="px-6 py-4 font-bold text-gray-900">

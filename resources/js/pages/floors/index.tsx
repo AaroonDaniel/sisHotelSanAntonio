@@ -109,7 +109,7 @@ export default function FloorsIndex({ auth, Floors }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
+                                        
                                         <th className="px-6 py-4">Piso</th>
                                         <th className="px-6 py-4">Estado</th>
                                         <th className="px-6 py-4 text-right">
@@ -125,9 +125,7 @@ export default function FloorsIndex({ auth, Floors }: Props) {
                                                 key={Floor.id}
                                                 className={`transition-colors hover:bg-gray-50 ${!Floor.is_active ? 'bg-gray-50' : ''}`}
                                             >
-                                                <td className="px-6 py-4 font-bold">
-                                                    {Floor.id}
-                                                </td>
+                                                
                                                 <td className="px-6 py-4 font-bold text-gray-900">
                                                     {Floor.name}
                                                 </td>

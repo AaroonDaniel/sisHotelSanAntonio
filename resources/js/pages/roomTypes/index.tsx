@@ -130,7 +130,7 @@ export default function RoomtypesIndex({ auth, Roomtypes }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
+                                        
                                         <th className="px-6 py-4">Nombre</th>
                                         <th className="px-6 py-4">Capacidad</th>
                                         <th className="px-6 py-4">Descripción</th>
@@ -147,9 +147,7 @@ export default function RoomtypesIndex({ auth, Roomtypes }: Props) {
                                                 key={Roomtype.id}
                                                 className={`transition-colors hover:bg-gray-50 ${!Roomtype.is_active ? 'bg-gray-50' : ''}`}
                                             >
-                                                <td className="px-6 py-4 font-bold">
-                                                    {Roomtype.id}
-                                                </td>
+                                                
                                                 <td className="px-6 py-4 font-bold text-gray-900">
                                                     {Roomtype.name}
                                                 </td>

@@ -106,7 +106,7 @@ export default function CheckinsIndex({
     };
 
     const openDeleteModal = (id: number) => {
-        setDeletingCheckinId(id);
+        setDeletingCheckinId(id); 
         setIsDeleteModalOpen(true);
     };
 
@@ -176,7 +176,6 @@ export default function CheckinsIndex({
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
                                         <th className="px-6 py-4">
                                             Habitación
                                         </th>
@@ -197,10 +196,6 @@ export default function CheckinsIndex({
                                                 key={checkin.id}
                                                 className="transition-colors hover:bg-gray-50"
                                             >
-                                                <td className="px-6 py-4 font-bold text-gray-400">
-                                                    #{checkin.id}
-                                                </td>
-
                                                 {/* Habitación */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2 font-bold text-gray-900">

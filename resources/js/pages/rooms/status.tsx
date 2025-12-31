@@ -1,4 +1,4 @@
-import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import {
     ArrowLeft,
@@ -10,9 +10,19 @@ import {
     Search,
     User as UserIcon
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // --- INTERFACES ---
+// Corrección de la interfaz User para evitar errores con AuthenticatedLayout
+interface User {
+    id: number;
+    name: string;
+    email: string;
+    nickname?: string;
+    full_name?: string;
+    [key: string]: any;
+}
+
 interface RoomType {
     id: number;
     name: string;
@@ -21,7 +31,8 @@ interface RoomType {
 interface Room {
     id: number;
     number: string;
-    status: 'available' | 'occupied' | 'cleaning' | 'maintenance';
+    // Cambiamos a string para aceptar lo que venga de la BD y luego normalizarlo
+    status: string; 
     room_type?: RoomType;
 }
 
@@ -34,58 +45,84 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
 
+    // --- DEBUG: MIRA ESTO EN LA CONSOLA DEL NAVEGADOR (F12) ---
+    useEffect(() => {
+        console.log("Datos recibidos de Habitaciones:", Rooms);
+    }, [Rooms]);
+
+    // --- HELPER: NORMALIZADOR DE ESTADO ---
+    // Convierte 'Disponible', 'DISPONIBLE', 'available' -> 'available'
+    const getNormalizedStatus = (status: string) => {
+        const s = status ? status.toLowerCase().trim() : '';
+        
+        if (['available', 'disponible', 'libre'].includes(s)) return 'available';
+        if (['occupied', 'ocupado', 'ocupada'].includes(s)) return 'occupied';
+        if (['cleaning', 'limpieza', 'sucio'].includes(s)) return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(s)) return 'maintenance';
+        
+        return 'unknown';
+    };
+
     // --- LÓGICA DE FILTRADO ---
     const filteredRooms = Rooms.filter((room) => {
+        // 1. Buscador
         const matchesSearch = room.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               room.room_type?.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'all' || room.status === filterStatus;
+        
+        // 2. Filtro de Estado (Usando el estado normalizado)
+        const currentStatus = getNormalizedStatus(room.status);
+        const matchesStatus = filterStatus === 'all' || currentStatus === filterStatus;
         
         return matchesSearch && matchesStatus;
     });
 
-    // --- HELPER: COLORES Y TEXTOS SEGÚN ESTADO ---
-    const getStatusConfig = (status: string) => {
+    // --- CONFIGURACIÓN VISUAL SEGÚN ESTADO ---
+    const getStatusConfig = (rawStatus: string) => {
+        const status = getNormalizedStatus(rawStatus);
+
         switch (status) {
             case 'available':
                 return {
-                    colorClass: 'bg-emerald-600', // Verde fuerte
+                    colorClass: 'bg-emerald-600',
                     borderColor: 'border-emerald-700',
                     label: 'Disponible',
                     icon: <BedDouble className="h-10 w-10 text-emerald-200/50" />
                 };
             case 'occupied':
                 return {
-                    colorClass: 'bg-red-600', // Rojo fuerte
+                    colorClass: 'bg-red-600',
                     borderColor: 'border-red-700',
                     label: 'Ocupado',
                     icon: <UserIcon className="h-10 w-10 text-red-200/50" />
                 };
             case 'cleaning':
                 return {
-                    colorClass: 'bg-blue-500', // Azul
+                    colorClass: 'bg-blue-500',
                     borderColor: 'border-blue-600',
                     label: 'Limpieza',
                     icon: <Brush className="h-10 w-10 text-blue-200/50" />
                 };
             case 'maintenance':
                 return {
-                    colorClass: 'bg-gray-600', // Gris
+                    colorClass: 'bg-gray-600',
                     borderColor: 'border-gray-700',
                     label: 'Mantenimiento',
                     icon: <Construction className="h-10 w-10 text-gray-300/50" />
                 };
             default:
                 return {
-                    colorClass: 'bg-gray-400',
-                    borderColor: 'border-gray-500',
-                    label: 'Desconocido',
+                    colorClass: 'bg-slate-500', // Un gris diferente para distinguir de mantenimiento
+                    borderColor: 'border-slate-600',
+                    label: rawStatus || 'Desc.', // Muestra el texto original si no se reconoce
                     icon: <Home className="h-10 w-10 text-white/50" />
                 };
         }
     };
 
-    // --- HELPER: CONTADORES ---
-    const countStatus = (status: string) => Rooms.filter(r => r.status === status).length;
+    // --- CONTADORES ---
+    const countStatus = (targetStatus: string) => {
+        return Rooms.filter(r => getNormalizedStatus(r.status) === targetStatus).length;
+    };
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -131,7 +168,7 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
                     </div>
                 </div>
 
-                {/* 3. GRILLA DE HABITACIONES (EL DISEÑO SOLICITADO) */}
+                {/* 3. GRILLA DE HABITACIONES */}
                 {filteredRooms.length > 0 ? (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                         {filteredRooms.map((room) => {
@@ -142,7 +179,7 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
                                     key={room.id}
                                     className={`relative flex h-32 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-transform hover:scale-105 ${config.colorClass}`}
                                 >
-                                    {/* Fondo decorativo del icono grande */}
+                                    {/* Fondo decorativo */}
                                     <div className="absolute -right-2 -top-2 opacity-30 rotate-12 transform">
                                         {config.icon}
                                     </div>
@@ -152,25 +189,25 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
                                         <div className="flex items-start justify-between">
                                             <div>
                                                 <h3 className="text-2xl font-extrabold tracking-tight">
-                                                    Nro: {room.number}
+                                                    {room.number}
                                                 </h3>
                                                 <p className="mt-1 text-xs font-medium text-white/90 line-clamp-1" title={room.room_type?.name}>
                                                     {room.room_type?.name || 'Estándar'}
                                                 </p>
                                             </div>
-                                            {/* Icono pequeño visual */}
                                             <div className="rounded-full bg-white/20 p-1.5 backdrop-blur-sm">
                                                 <BedDouble className="h-5 w-5 text-white" />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Barra Inferior de Estado */}
+                                    {/* Barra Inferior */}
                                     <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-1.5`}>
                                         <span className="text-xs font-bold uppercase tracking-wider text-white">
                                             {config.label}
                                         </span>
-                                        <div className="h-2 w-2 rounded-full bg-white shadow-sm animate-pulse"></div>
+                                        {/* Indicador de pulso solo si no está disponible (opcional) */}
+                                        <div className={`h-2 w-2 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
                                     </div>
                                 </div>
                             );
@@ -182,6 +219,7 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
                             <Search className="h-8 w-8" />
                         </div>
                         <p className="mt-4 text-lg">No se encontraron habitaciones.</p>
+                        <p className="text-sm">Prueba cambiando los filtros o la búsqueda.</p>
                     </div>
                 )}
             </div>
@@ -189,7 +227,7 @@ export default function RoomsStatus({ auth, Rooms }: Props) {
     );
 }
 
-// Componente pequeño para los botones de filtro (Legend)
+// Componente pequeño para los botones de filtro
 function Badge({ count, label, color, onClick, active }: { count: number, label: string, color: string, onClick: () => void, active: boolean }) {
     return (
         <button 
