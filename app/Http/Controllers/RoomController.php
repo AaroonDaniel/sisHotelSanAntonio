@@ -143,7 +143,10 @@ class RoomController extends Controller
     public function status()
     {
         // Cargamos 'price' para el modal y enviamos 'Guests'
-        $rooms = Room::with(['roomType', 'price'])->orderBy('number')->get();
+        $rooms = Room::with(['roomType', 'price', 'checkins' => function($q) {
+            $q->with('guest')->latest('id'); 
+        }])->orderBy('number')->get();
+        
         $guests = Guest::all();
 
         return Inertia::render('rooms/status', [
