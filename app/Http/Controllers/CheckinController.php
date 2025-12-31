@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use Fpdf; // <--- ESTO ESTÁ MAL para la librería estándar
+// Si usas FPDF globalmente, esta línea a veces sobra, 
+// pero la dejo porque en tu código anterior estaba.
+use Fpdf; 
+
 use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin juntos
 
 class CheckinController extends Controller
 {
@@ -18,50 +22,96 @@ class CheckinController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // --- CORRECCIÓN AQUÍ ---
-        // ANTES: $guests = Guest::where('is_active', true)->orderBy('last_name')->get();
-        // AHORA (Quitamos el where):
         $guests = Guest::orderBy('last_name')->get();
-
         $rooms = Room::with(['roomType', 'price'])->get(); 
 
         return Inertia::render('checkins/index', [
             'Checkins' => $checkins,
-            'Guests' => $guests, // Ahora enviamos todos los huéspedes sin filtrar por activo
+            'Guests' => $guests,
             'Rooms' => $rooms,
         ]);
     }
 
+    // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
-        // 1. Validación
         $validated = $request->validate([
-            'guest_id' => 'required|exists:guests,id',
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
-            'duration_days' => 'required|integer|min:1',
+            
+            // 1. Aceptamos 0 días (min:0)
+            'duration_days' => 'required|integer|min:0', 
+            
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
+            
+            // 2. guest_id es opcional (nullable) para permitir nuevos
+            'guest_id' => 'nullable|exists:guests,id',
+
+            // 3. Validamos datos del huésped SOLO si es nuevo
+            'first_name' => 'required_without:guest_id|nullable|string|max:255',
+            'last_name' => 'required_without:guest_id|nullable|string|max:255',
+            'identification_number' => 'required_without:guest_id|nullable|string|max:20',
+            'nationality' => 'nullable|string',
+            'civil_status' => 'nullable|string',
+            'age' => 'nullable|integer',
+            'profession' => 'nullable|string',
+            'origin' => 'nullable|string',
+            'issued_in' => 'nullable|string',
         ]);
 
-        // 2. Datos adicionales automáticos
-        $validated['user_id'] = Auth::id(); // Registramos qué recepcionista hizo el checkin
-        
-        // Calculamos fecha de salida estimada
-        $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
-        $validated['check_out_date'] = $checkInDate->copy()->addDays($validated['duration_days']);
+        return DB::transaction(function () use ($request, $validated) {
+            $guestId = $request->guest_id;
 
-        // 3. Crear el Checkin
-        $checkin = Checkin::create($validated);
+            // Si no hay ID, creamos el Huésped primero
+            if (empty($guestId)) {
+                // Evitamos duplicados por CI
+                $existingGuest = Guest::where('identification_number', $request->identification_number)->first();
+                
+                if ($existingGuest) {
+                    $guestId = $existingGuest->id;
+                } else {
+                    $newGuest = Guest::create([
+                        'first_name' => $request->first_name,
+                        'last_name' => $request->last_name,
+                        'identification_number' => $request->identification_number,
+                        'nationality' => $request->nationality,
+                        'civil_status' => $request->civil_status,
+                        'age' => $request->age,
+                        'profession' => $request->profession,
+                        'origin' => $request->origin,
+                        'issued_in' => $request->issued_in,
+                    ]);
+                    $guestId = $newGuest->id;
+                }
+            }
 
-        // 4. ACTUALIZAR ESTADO DE LA HABITACIÓN
-        // Al hacer checkin, la habitación pasa a estar 'occupied'
-        $room = Room::find($validated['room_id']);
-        if ($room) {
-            $room->update(['status' => 'occupied']);
-        }
+            // Calculamos fecha salida (null si son 0 días)
+            $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
+            $checkOutDate = $validated['duration_days'] > 0 
+                ? $checkInDate->copy()->addDays($validated['duration_days']) 
+                : null; 
 
-        return redirect()->back()->with('success', 'Check-in registrado correctamente.');
+            // Creamos el Checkin
+            Checkin::create([
+                'room_id' => $validated['room_id'],
+                'guest_id' => $guestId,
+                'user_id' => Auth::id(),
+                'check_in_date' => $validated['check_in_date'],
+                'duration_days' => $validated['duration_days'],
+                'check_out_date' => $checkOutDate,
+                'advance_payment' => $validated['advance_payment'],
+                'notes' => $validated['notes'],
+            ]);
+
+            // Ocupamos la habitación
+            $room = Room::find($validated['room_id']);
+            if ($room) {
+                $room->update(['status' => 'OCCUPIED']); // O 'occupied' según tu BD
+            }
+
+            return redirect()->back()->with('success', 'Check-in registrado correctamente.');
+        });
     }
 
     public function update(Request $request, Checkin $checkin)
@@ -70,21 +120,19 @@ class CheckinController extends Controller
             'guest_id' => 'required|exists:guests,id',
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
-            'duration_days' => 'required|integer|min:1',
+            'duration_days' => 'required|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
         ]);
 
-        // Recalcular fecha de salida si cambiaron la fecha de entrada o duración
         $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
-        $validated['check_out_date'] = $checkInDate->copy()->addDays($validated['duration_days']);
+        $validated['check_out_date'] = $validated['duration_days'] > 0
+            ? $checkInDate->copy()->addDays($validated['duration_days'])
+            : null;
 
-        // Si cambiaron de habitación, liberar la anterior y ocupar la nueva
         if ($checkin->room_id != $validated['room_id']) {
-            // Liberar anterior
-            Room::where('id', $checkin->room_id)->update(['status' => 'available']); // O 'cleaning'
-            // Ocupar nueva
-            Room::where('id', $validated['room_id'])->update(['status' => 'occupied']);
+            Room::where('id', $checkin->room_id)->update(['status' => 'AVAILABLE']);
+            Room::where('id', $validated['room_id'])->update(['status' => 'OCCUPIED']);
         }
 
         $checkin->update($validated);
@@ -94,45 +142,34 @@ class CheckinController extends Controller
 
     public function destroy(Checkin $checkin)
     {
-        // Al eliminar un checkin (cancelar), liberamos la habitación
         $room = Room::find($checkin->room_id);
         if ($room) {
-            $room->update(['status' => 'available']);
+            $room->update(['status' => 'AVAILABLE']);
         }
 
         $checkin->delete();
-        return redirect()->back()->with('success', 'Registro eliminado y habitación liberada.');
+        return redirect()->back()->with('success', 'Registro eliminado.');
     }
 
-    // Método extra para "Finalizar Estadía" (Checkout)
     public function checkout(Checkin $checkin)
     {
-        // 1. Marcar checkin como finalizado (si tuvieras un campo status en checkins, ej: 'completed')
-        // Si no tienes campo status en checkin, asumimos que checkout libera la habitación.
-
-        // 2. Cambiar estado de habitación a 'cleaning' (Limpieza) o 'available'
         $room = Room::find($checkin->room_id);
         if ($room) {
-            $room->update(['status' => 'cleaning']); 
+            $room->update(['status' => 'CLEANING']);
         }
-
-        // Opcional: Registrar fecha real de salida si difiere de la estimada
         $checkin->update(['check_out_date' => now()]);
 
-        return redirect()->back()->with('success', 'Checkout realizado. Habitación en limpieza.');
+        return redirect()->back()->with('success', 'Checkout realizado.');
     }
-    
 
+    // --- TU CÓDIGO DE PDF RESTAURADO ---
     public function generateReceipt(Checkin $checkin)
     {
-        // 1. Cargar relaciones
         $checkin->load(['guest', 'room']);
 
-        // 2. Configuración de Tamaño TICKET (80mm ancho x 150mm alto aprox)
-        // Puedes ajustar el 150 según el largo que necesites
+        // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150)); 
         
-        // Márgenes pequeños (4mm) para aprovechar el papel
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
@@ -191,7 +228,8 @@ class CheckinController extends Controller
         $pdf->Cell(45, 4, 'Adelanto Hospedaje', 0, 0);
         $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2), 0, 1, 'R');
         
-        $pdf->Cell(45, 4, 'Dias (' . $checkin->duration_days . ')', 0, 0);
+        $diasTexto = ($checkin->duration_days > 0) ? $checkin->duration_days : 'Por Confirmar';
+        $pdf->Cell(45, 4, 'Dias (' . $diasTexto . ')', 0, 0);
         $pdf->Cell(0, 4, '', 0, 1, 'R');
 
         $pdf->Ln(2);
@@ -209,7 +247,10 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'I', 6);
         $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nConserve este comprobante."), 0, 'C');
         $pdf->Ln(2);
-        $pdf->Cell(0, 3, 'Usuario: ' . utf8_decode(Auth::user()->name ?? 'Admin'), 0, 1, 'C');
+        
+        // Verificación segura del usuario
+        $userName = Auth::user() ? Auth::user()->name : 'Admin';
+        $pdf->Cell(0, 3, 'Usuario: ' . utf8_decode($userName), 0, 1, 'C');
 
         // 4. Salida
         return response($pdf->Output('S'), 200)
