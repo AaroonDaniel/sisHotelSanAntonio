@@ -7,7 +7,7 @@ import {
     DollarSign,
     FileText,
     Globe,
-    Printer, //
+    Printer,
     Save,
     Search,
     User,
@@ -29,6 +29,18 @@ const countries = [
     'PARAGUAY', 'URUGUAY', 'VENEZUELA', 'MÉXICO', 'ESTADOS UNIDOS', 'ESPAÑA'
 ];
 
+const calculateAge = (dateString: string) => {
+    if (!dateString) return '';
+    const today = new Date();
+    const birthDate = new Date(dateString);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+};
+
 // --- 2. INTERFACES ---
 export interface Guest {
     id: number;
@@ -38,6 +50,7 @@ export interface Guest {
     issued_in?: string;
     nationality?: string;
     civil_status?: string;
+    birth_date?: string; //
     age?: number;
     profession?: string;
     origin?: string;
@@ -62,14 +75,13 @@ export interface Room {
     status: string;
     price?: { amount: number };
     room_type?: { name: string };
-    // Agregamos checkins opcional para compatibilidad con la vista
     checkins?: CheckinData[];
 }
 
 interface CheckinModalProps {
     show: boolean;
     onClose: () => void;
-    checkinToEdit?: CheckinData | null; // Tipado mejorado
+    checkinToEdit?: CheckinData | null;
     guests: Guest[];
     rooms: Room[];
     initialRoomId?: number | null;
@@ -87,6 +99,9 @@ export default function CheckinModal({
     const [guestSearch, setGuestSearch] = useState('');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
+    
+    //
+    const [displayAge, setDisplayAge] = useState<number | string>('');
     
     // Autocompletado Nacionalidad
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
@@ -109,12 +124,21 @@ export default function CheckinModal({
         issued_in: '',
         nationality: 'BOLIVIA',
         civil_status: '',
-        age: '' as string | number,
+        birth_date: '' as string, //
         profession: '',
         origin: '',
     });
 
     // --- EFECTOS ---
+    //
+    useEffect(() => {
+        if (data.birth_date) {
+            setDisplayAge(calculateAge(data.birth_date));
+        } else {
+            setDisplayAge('');
+        }
+    }, [data.birth_date]);
+
     useEffect(() => {
         if (show) {
             clearErrors();
@@ -137,7 +161,7 @@ export default function CheckinModal({
                     issued_in: checkinToEdit.guest?.issued_in || '',
                     nationality: checkinToEdit.guest?.nationality || 'BOLIVIA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
-                    age: checkinToEdit.guest?.age || '',
+                    birth_date: checkinToEdit.guest?.birth_date || '', //
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
                 });
@@ -153,7 +177,7 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit, initialRoomId]);
 
-    // --- FUNCIONES AUXILIARES (Búsqueda, Selección, etc.) ---
+    // --- FUNCIONES AUXILIARES ---
     const filteredGuests = guests.filter((g) => {
         const term = guestSearch.toLowerCase();
         const fullName = `${g.first_name} ${g.last_name}`.toLowerCase();
@@ -174,7 +198,7 @@ export default function CheckinModal({
             issued_in: guest.issued_in || '',
             nationality: guest.nationality || 'BOLIVIA',
             civil_status: guest.civil_status || '',
-            age: guest.age || '',
+            birth_date: guest.birth_date || '', //
             profession: guest.profession || '',
             origin: guest.origin || '',
         }));
@@ -192,7 +216,7 @@ export default function CheckinModal({
             issued_in: '',
             nationality: 'BOLIVIA',
             civil_status: '',
-            age: '',
+            birth_date: '',
             profession: '',
             origin: '',
         }));
@@ -220,7 +244,6 @@ export default function CheckinModal({
         }
     };
 
-    //
     const handlePrint = () => {
         if (checkinToEdit) {
             window.open(`/checks/${checkinToEdit.id}/receipt`, '_blank');
@@ -235,12 +258,6 @@ export default function CheckinModal({
     const checkoutString = durationVal > 0 
         ? estimatedCheckout.toLocaleDateString('es-BO', { weekday: 'short', day: '2-digit', month: 'short' })
         : 'Indefinido / Por confirmar';
-
-    const servicesList = [
-        { id: '1', name: 'Desayuno', price: 35 },
-        { id: '2', name: 'Lavandería', price: 20 },
-        { id: '3', name: 'Limpieza', price: 50 },
-    ];
 
     if (!show) return null;
     const hasErrors = Object.keys(errors).length > 0;
@@ -273,7 +290,7 @@ export default function CheckinModal({
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
                     {/* IZQUIERDA - DATOS HUÉSPED */}
                     <div className="flex-1 border-r border-gray-100 p-6">
-                        {/* Buscador - visible solo si no editamos o queremos cambiar */}
+                        {/* Buscador */}
                         <div className="mb-6 relative">
                             <label className="mb-1.5 block text-xs font-bold uppercase text-gray-500">Huésped Principal</label>
                             <div className="flex gap-2">
@@ -288,7 +305,7 @@ export default function CheckinModal({
                                             if(e.target.value === '') handleClearGuest();
                                         }}
                                         placeholder="Buscar..."
-                                        disabled={!!checkinToEdit} // Bloquear búsqueda si estamos editando una asignación ya hecha (opcional)
+                                        disabled={!!checkinToEdit}
                                         className="w-full rounded-xl border-gray-200 pl-9 text-sm text-black focus:border-green-500 disabled:bg-gray-100"
                                     />
                                     {isDropdownOpen && guestSearch && !isExistingGuest && !checkinToEdit && (
@@ -310,7 +327,7 @@ export default function CheckinModal({
                             </div>
                         </div>
 
-                        {/* Campos Personales (ReadOnly si es existente o editando) */}
+                        {/* Campos Personales */}
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -372,6 +389,8 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
+                            
+                            {/* Fecha Nacimiento en vez de Edad */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">Estado Civil</label>
@@ -388,14 +407,18 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">Edad</label>
+                                    <label className="text-xs font-bold text-gray-500">Fecha Nac.</label>
                                     <input 
-                                        type="number"
-                                        className="w-full rounded-lg border-gray-200 px-3 py-2 text-sm text-black disabled:bg-gray-50"
-                                        value={data.age}
-                                        onChange={e => setData('age', e.target.value)}
-                                        disabled={isExistingGuest || !!checkinToEdit}
+                                        type="date"
+                                        className="w-full rounded-lg border-gray-200 px-2 py-2 text-sm text-black disabled:bg-gray-50"
+                                        value={data.birth_date}
+                                        onChange={e => setData('birth_date', e.target.value)}
+                                        // No deshabilitamos si quieres permitir editar fecha de un existente que no tenga
+                                        disabled={!!checkinToEdit} 
                                     />
+                                    <span className="text-[10px] text-gray-400 font-medium">
+                                        Edad: {displayAge ? `${displayAge} años` : '-'}
+                                    </span>
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">Profesión</label>
@@ -407,6 +430,8 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
+
+                            {/* Procedencia habilitada para editar al asignar */}
                             <div>
                                 <label className="text-xs font-bold text-gray-500">Procedencia</label>
                                 <div className="relative">
@@ -415,14 +440,16 @@ export default function CheckinModal({
                                         className="w-full rounded-lg border-gray-200 pl-9 py-2 text-sm uppercase text-black disabled:bg-gray-50"
                                         value={data.origin}
                                         onChange={e => setData('origin', e.target.value.toUpperCase())}
-                                        disabled={isExistingGuest || !!checkinToEdit}
+                                        //
+                                        placeholder="CIUDAD / PAÍS"
+                                        required 
                                     />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* DERECHA - ASIGNACIÓN */}
+                    {/* DERECHA - ASIGNACIÓN (Sin cambios mayores) */}
                     <div className="flex-1 p-6 bg-gray-50">
                         <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1 mb-4">Detalles de Asignación</h3>
 
@@ -435,7 +462,6 @@ export default function CheckinModal({
                                 <select
                                     value={data.room_id}
                                     onChange={(e) => setData('room_id', e.target.value)}
-                                    // Si estamos editando, tal vez no queramos cambiar la habitación fácilmente, pero lo dejaremos habilitado.
                                     className={`block w-full rounded-xl bg-white py-2.5 pl-3 text-base font-bold text-black focus:ring-green-500 shadow-sm border-green-200`}
                                 >
                                     <option value="">Seleccionar Plaza...</option>
@@ -499,13 +525,9 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
-
-                            
                         </div>
 
-                        {/* Footer Botones */}
                         <div className="mt-8 flex justify-end gap-3 items-center">
-                            {/* */}
                             {checkinToEdit && (
                                 <button
                                     type="button"

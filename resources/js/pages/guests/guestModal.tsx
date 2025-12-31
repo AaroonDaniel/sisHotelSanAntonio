@@ -15,26 +15,29 @@ import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
 // --- Lista para el autocompletado ---
 const countries = [
-    'BOLIVIA',
-    'ARGENTINA',
-    'BRASIL',
-    'CHILE',
-    'COLOMBIA',
-    'PERÚ',
-    'ECUADOR',
-    'PARAGUAY',
-    'URUGUAY',
-    'VENEZUELA',
-    'MÉXICO',
-    'ESTADOS UNIDOS',
-    'ESPAÑA',
-    'FRANCIA',
-    'ALEMANIA',
-    'ITALIA',
-    'CHINA',
-    'JAPÓN',
-    'RUSIA',
+    'BOLIVIA', 'ARGENTINA', 'BRASIL', 'CHILE', 'COLOMBIA', 'PERÚ', 'ECUADOR',
+    'PARAGUAY', 'URUGUAY', 'VENEZUELA', 'MÉXICO', 'ESTADOS UNIDOS', 'ESPAÑA',
+    'FRANCIA', 'ALEMANIA', 'ITALIA', 'CHINA', 'JAPÓN', 'RUSIA',
 ];
+
+// Función para calcular edad (robusta)
+const calculateAge = (dateString: string): number | '' => {
+    if (!dateString) return '';
+    const today = new Date();
+    const birthDate = new Date(dateString);
+    
+    // Validar fecha inválida
+    if (isNaN(birthDate.getTime())) return '';
+
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    // Evitar edades negativas por error de selección
+    return age < 0 ? 0 : age;
+};
 
 interface Guest {
     id?: number;
@@ -44,9 +47,10 @@ interface Guest {
     identification_number: string;
     issued_in: string;
     civil_status: string;
-    age: number;
+    birth_date?: string;
+    age?: number;
     profession: string;
-    origin: string;
+    origin?: string;
 }
 
 interface GuestModalProps {
@@ -68,15 +72,26 @@ export default function GuestModal({
             identification_number: '',
             issued_in: '',
             civil_status: '',
-            age: '', // String vacío inicial para input
+            birth_date: '',
             profession: '',
-            origin: '',
+            origin: '', 
         });
 
     // --- Lógica Autocompletado Nacionalidad ---
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const suggestionRef = useRef<HTMLDivElement>(null);
+    
+    const [displayAge, setDisplayAge] = useState<number | string>('');
+
+    // Calcular edad cuando cambia la fecha
+    useEffect(() => {
+        if (data.birth_date) {
+            setDisplayAge(calculateAge(data.birth_date));
+        } else {
+            setDisplayAge('');
+        }
+    }, [data.birth_date]);
 
     // Cargar datos al editar
     useEffect(() => {
@@ -89,12 +104,13 @@ export default function GuestModal({
                     identification_number: GuestToEdit.identification_number,
                     issued_in: GuestToEdit.issued_in,
                     civil_status: GuestToEdit.civil_status,
-                    age: GuestToEdit.age.toString(),
+                    birth_date: GuestToEdit.birth_date || '',
                     profession: GuestToEdit.profession,
-                    origin: GuestToEdit.origin,
+                    origin: GuestToEdit.origin || '',
                 });
             } else {
                 reset();
+                setDisplayAge(''); // Limpiar edad visual
             }
             clearErrors();
             setShowSuggestions(false);
@@ -141,12 +157,9 @@ export default function GuestModal({
             onClose();
         };
 
-        // NOTA: Usamos rutas manuales como en tu ejemplo de BlockModal
         if (GuestToEdit) {
-            // EDITAR (PUT) -> /invitados/{id}
             put(`/invitados/${GuestToEdit.id}`, { onSuccess });
         } else {
-            // CREAR (POST) -> /invitados
             post('/invitados', { onSuccess });
         }
     };
@@ -192,6 +205,7 @@ export default function GuestModal({
                                     }
                                     className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Juan"
+                                    required
                                 />
                             </div>
                             {errors.first_name && (
@@ -218,6 +232,7 @@ export default function GuestModal({
                                     }
                                     className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Pérez"
+                                    required
                                 />
                             </div>
                             {errors.last_name && (
@@ -227,7 +242,7 @@ export default function GuestModal({
                             )}
                         </div>
 
-                        {/* Nacionalidad (Con Autocompletado) */}
+                        {/* Nacionalidad */}
                         <div ref={suggestionRef}>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                 Nacionalidad
@@ -255,13 +270,8 @@ export default function GuestModal({
                                                 <div
                                                     key={i}
                                                     onClick={() => {
-                                                        setData(
-                                                            'nationality',
-                                                            c,
-                                                        );
-                                                        setShowSuggestions(
-                                                            false,
-                                                        );
+                                                        setData('nationality', c);
+                                                        setShowSuggestions(false);
                                                     }}
                                                     className="cursor-pointer px-4 py-2 text-sm text-black hover:bg-green-50 hover:text-green-700"
                                                 >
@@ -291,13 +301,11 @@ export default function GuestModal({
                                     type="text"
                                     value={data.identification_number}
                                     onChange={(e) =>
-                                        setData(
-                                            'identification_number',
-                                            e.target.value,
-                                        )
+                                        setData('identification_number', e.target.value)
                                     }
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="1234567"
+                                    required
                                 />
                             </div>
                             {errors.identification_number && (
@@ -307,7 +315,7 @@ export default function GuestModal({
                             )}
                         </div>
 
-                        {/* Expedido y Edad */}
+                        {/* Expedido y Fecha Nacimiento */}
                         <div className="flex gap-4">
                             <div className="w-1/2">
                                 <label className="mb-1.5 block text-sm font-semibold text-gray-700">
@@ -333,33 +341,30 @@ export default function GuestModal({
                                     </p>
                                 )}
                             </div>
+                            
+                            {/* Fecha Nac. */}
                             <div className="w-1/2">
                                 <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                    Edad
+                                    Fecha Nac.
                                 </label>
                                 <div className="relative">
-                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                        <Calendar className="h-4 w-4 text-gray-400" />
-                                    </div>
                                     <input
-                                        type="number"
-                                        value={data.age}
+                                        type="date"
+                                        value={data.birth_date}
                                         onChange={(e) =>
-                                            setData('age', e.target.value)
+                                            setData('birth_date', e.target.value)
                                         }
-                                        className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                        placeholder="0"
+                                        className="block w-full rounded-xl border-gray-200 py-2.5 px-3 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                        required
                                     />
                                 </div>
-                                {errors.age && (
-                                    <p className="mt-1 text-xs font-bold text-red-500">
-                                        {errors.age}
-                                    </p>
-                                )}
+                                {/* Comprobamos que no sea string vacío, permitiendo el 0 */}
+                                <span className="text-[10px] text-gray-400 font-medium ml-1">
+                                    {displayAge !== '' ? `${displayAge} años` : ''}
+                                </span>
                             </div>
                         </div>
 
-                        {/* Estado Civil */}
                         {/* Estado Civil */}
                         <div>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
@@ -377,21 +382,11 @@ export default function GuestModal({
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 >
                                     <option value="">Seleccionar</option>
-                                    {/* CAMBIO AQUÍ: Los 'value' deben coincidir con tu base de datos */}
-                                    <option value="single">SOLTERO(A)</option>{' '}
-                                    {/* Antes: "soltero" */}
-                                    <option value="married">
-                                        CASADO(A)
-                                    </option>{' '}
-                                    {/* Antes: "casado" */}
-                                    <option value="divorced">
-                                        DIVIRCIADO(A)
-                                    </option>{' '}
-                                    {/* Antes: "divorciado" */}
-                                    <option value="widowed">
-                                        VIUDO(A)
-                                    </option>{' '}
-                                    {/* Antes: "viudo" */}
+                                    <option value="SINGLE">SOLTERO(A)</option>
+                                    <option value="MARRIED">CASADO(A)</option>
+                                    <option value="DIVORCED">DIVORCIADO(A)</option>
+                                    <option value="WIDOWED">VIUDO(A)</option>
+                                    <option value="CONCUBINAGE">CONCUBINATO</option>
                                 </select>
                             </div>
                             {errors.civil_status && (
@@ -426,32 +421,6 @@ export default function GuestModal({
                                 </p>
                             )}
                         </div>
-
-                        {/* Procedencia */}
-                        <div>
-                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                Procedencia
-                            </label>
-                            <div className="relative">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <Globe className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="text"
-                                    value={data.origin}
-                                    onChange={(e) =>
-                                        setData('origin', e.target.value.toUpperCase())
-                                    }
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Ciudad"
-                                />
-                            </div>
-                            {errors.origin && (
-                                <p className="mt-1 text-xs font-bold text-red-500">
-                                    {errors.origin}
-                                </p>
-                            )}
-                        </div>
                     </div>
 
                     {/* Footer */}
@@ -466,7 +435,7 @@ export default function GuestModal({
                         <button
                             type="submit"
                             disabled={processing}
-                            className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-black text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
+                            className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
                         >
                             {processing ? (
                                 'Guardando...'

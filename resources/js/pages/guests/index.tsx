@@ -1,5 +1,5 @@
-import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { Head } from '@inertiajs/react';
 import {
     ArrowLeft,
     Briefcase,
@@ -15,8 +15,7 @@ import { useState } from 'react';
 import DeleteModal from './deleteModal';
 import GuestModal from './guestModal';
 
-// --- 1. DICCIONARIO DE TRADUCCIÓN (AGREGADO) ---
-// Como ya migraste tu BD a mayúsculas, esto funcionará perfecto.
+// --- 1. DICCIONARIO DE TRADUCCIÓN ---
 const civilStatusTranslations: Record<string, string> = {
     SINGLE: 'Soltero',
     MARRIED: 'Casado',
@@ -25,18 +24,42 @@ const civilStatusTranslations: Record<string, string> = {
     CONCUBINAGE: 'Concubinato',
 };
 
+// --- HELPER: Cálculo de edad fallback ---
+const calculateAge = (dateString?: string) => {
+    if (!dateString) return null;
+    const today = new Date();
+    const birthDate = new Date(dateString);
+    if (isNaN(birthDate.getTime())) return null;
+    
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+};
+
 // --- 2. INTERFAZ DE DATOS ---
-interface Guest {
+interface User {
+    id: number;
+    name: string;
+    email: string;
+    nickname: string;
+    full_name: string;
+}
+
+export interface Guest {
     id: number;
     first_name: string;
     last_name: string;
-    nationality: string; 
+    nationality: string;
     identification_number: string;
     issued_in: string;
-    civil_status: string; // Vendrá como "SINGLE", "MARRIED", etc.
-    age: number;
+    civil_status: string;
+    birth_date?: string;
+    age?: number; 
     profession: string;
-    origin: string;
+    origin?: string;
 }
 
 interface Props {
@@ -61,8 +84,8 @@ export default function GuestsIndex({ auth, Guests }: Props) {
         return (
             fullName.includes(term) ||
             guest.identification_number.includes(term) ||
-            guest.nationality.toLowerCase().includes(term) ||
-            guest.profession.toLowerCase().includes(term)
+            (guest.nationality && guest.nationality.toLowerCase().includes(term)) ||
+            (guest.profession && guest.profession.toLowerCase().includes(term))
         );
     });
 
@@ -144,89 +167,95 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredGuests.length > 0 ? (
-                                        filteredGuests.map((guest) => (
-                                            <tr
-                                                key={guest.id}
-                                                className="transition-colors hover:bg-gray-50"
-                                            >
-                                                {/* Columna: Nombre y Profesión */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                                                            <UserIcon className="h-5 w-5" />
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-gray-900">
-                                                                {guest.first_name} {guest.last_name}
+                                        filteredGuests.map((guest) => {
+                                            //
+                                            // Si guest.age existe, úsalo. Si no, calcúlalo desde birth_date.
+                                            const ageToDisplay = guest.age ?? calculateAge(guest.birth_date);
+
+                                            return (
+                                                <tr
+                                                    key={guest.id}
+                                                    className="transition-colors hover:bg-gray-50"
+                                                >
+                                                    {/* Columna: Nombre y Profesión */}
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                                                                <UserIcon className="h-5 w-5" />
                                                             </div>
+                                                            <div>
+                                                                <div className="font-bold text-gray-900">
+                                                                    {guest.first_name} {guest.last_name}
+                                                                </div>
+                                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                                    <Briefcase className="h-3 w-3" />
+                                                                    {guest.profession || 'Sin profesión'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Columna: Documento */}
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col">
+                                                            <div className="flex items-center gap-1 font-mono font-medium text-gray-900">
+                                                                <CreditCard className="h-3 w-3 text-gray-400" />
+                                                                {guest.identification_number}
+                                                            </div>
+                                                            <span className="text-xs text-gray-500">
+                                                                Exp: {guest.issued_in || '-'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Columna: Origen y Nacionalidad */}
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-gray-900">{guest.nationality}</span>
                                                             <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                                <Briefcase className="h-3 w-3" />
-                                                                {guest.profession || 'Sin profesión'}
+                                                                <MapPin className="h-3 w-3" />
+                                                                {guest.origin || 'Sin origen'}
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                </td>
+                                                    </td>
 
-                                                {/* Columna: Documento */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col">
-                                                        <div className="flex items-center gap-1 font-mono font-medium text-gray-900">
-                                                            <CreditCard className="h-3 w-3 text-gray-400" />
-                                                            {guest.identification_number}
+                                                    {/* Columna: Edad y Estado Civil */}
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm text-gray-900">
+                                                            {ageToDisplay != null ? `${ageToDisplay} años` : '-'}
                                                         </div>
-                                                        <span className="text-xs text-gray-500">
-                                                            Exp: {guest.issued_in}
-                                                        </span>
-                                                    </div>
-                                                </td>
-
-                                                {/* Columna: Origen y Nacionalidad */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-gray-900">{guest.nationality}</span>
-                                                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                            <MapPin className="h-3 w-3" />
-                                                            {guest.origin}
+                                                        <div className="text-xs text-gray-500 capitalize">
+                                                            {guest.civil_status 
+                                                                ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
+                                                                : '-'}
                                                         </div>
-                                                    </div>
-                                                </td>
+                                                    </td>
 
-                                                {/* Columna: Edad y Estado Civil (CORREGIDO) */}
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-900">
-                                                        {guest.age} años
-                                                    </div>
-                                                    {/* APLICAMOS LA TRADUCCIÓN AQUÍ */}
-                                                    <div className="text-xs text-gray-500 capitalize">
-                                                        {guest.civil_status 
-                                                            ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
-                                                            : '-'}
-                                                    </div>
-                                                </td>
-
-
-                                                {/* Columna: Acciones */}
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={() => openEditModal(guest)}
-                                                            className="text-gray-400 transition hover:text-blue-600"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => openDeleteModal(guest.id)}
-                                                            className="text-gray-400 transition hover:text-red-600"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
+                                                    {/* Columna: Acciones */}
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                onClick={() => openEditModal(guest)}
+                                                                className="text-gray-400 transition hover:text-blue-600"
+                                                                title="Editar"
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => openDeleteModal(guest.id)}
+                                                                className="text-gray-400 transition hover:text-red-600"
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="p-8 text-center text-gray-500">
+                                            <td colSpan={5} className="p-8 text-center text-gray-500">
                                                 {searchTerm ? 'No se encontraron resultados.' : 'No hay huéspedes registrados.'}
                                             </td>
                                         </tr>
@@ -237,7 +266,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                     </div>
                 </div>
 
-                {/* --- MODALES CONECTADOS --- */}
                 <GuestModal
                     show={isGuestModalOpen}
                     onClose={() => setIsGuestModalOpen(false)}

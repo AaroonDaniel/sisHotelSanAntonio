@@ -40,9 +40,10 @@ class GuestController extends Controller
             // Campos que pueden venir vacíos desde el modal rápido:
             'issued_in' => 'nullable|string|max:100',
             'civil_status' => 'nullable|string|max:50',
-            'age' => 'nullable|integer|min:0',
+            'birth_date' => 'required|date',
+            'age' => 'exclude',
             'profession' => 'nullable|string|max:100',
-            'origin' => 'nullable|string|max:100',
+            'origin' => 'nullable|string|max:255'
         ];
 
         $validated = $request->validate($rules);

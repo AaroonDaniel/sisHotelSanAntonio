@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Traits\AutoUpperCase;
+use Carbon\Carbon;
 
 class Guest extends Model
 {
@@ -20,7 +21,7 @@ class Guest extends Model
         'identification_number',
         'issued_in',
         'civil_status',
-        'age',
+        'birth_date', // Antes decía 'age', ahora debe ser 'birth_date'
         'profession',
         'origin',
     ];
@@ -33,8 +34,16 @@ class Guest extends Model
         'origin',
         'civil_status',
         'issued_in',
-
     ];
+
+    // Esto hace que "age" se envíe automáticamente en el JSON de respuesta
+    protected $appends = ['age'];
+    
+    // Calcula la edad basándose en la fecha de nacimiento guardada
+    public function getAgeAttribute()
+    {
+        return $this->birth_date ? Carbon::parse($this->birth_date)->age : null;
+    }
 
     public function checkins(): HasMany
     {
