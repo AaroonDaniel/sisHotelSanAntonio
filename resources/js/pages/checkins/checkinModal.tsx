@@ -433,16 +433,17 @@ export default function CheckinModal({
 
                             {/* Procedencia habilitada para editar al asignar */}
                             <div>
-                                <label className="text-xs font-bold text-gray-500">Procedencia</label>
+                                <label className="mb-1 block text-xs font-bold text-gray-500">Procedencia (Origen)</label>
                                 <div className="relative">
                                     <Globe className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                     <input 
-                                        className="w-full rounded-lg border-gray-200 pl-9 py-2 text-sm uppercase text-black disabled:bg-gray-50"
+                                        className="w-full rounded-lg border-gray-200 pl-9 py-2 text-sm uppercase text-black focus:border-green-500 disabled:bg-gray-100"
                                         value={data.origin}
                                         onChange={e => setData('origin', e.target.value.toUpperCase())}
-                                        //
-                                        placeholder="CIUDAD / PAÍS"
-                                        required 
+                                        
+                                        // Eliminamos 'disabled={isExistingGuest}'
+                                        // Ahora siempre estará habilitado para que puedas escribir y se envíe al backend
+                                        placeholder="CIUDAD DE ORIGEN"
                                     />
                                 </div>
                             </div>

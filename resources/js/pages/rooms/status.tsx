@@ -90,7 +90,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     const getOccupantName = (room: Room) => {
         if (room.checkins && room.checkins.length > 0) {
             const guest = room.checkins[0].guest;
-            if (guest) return `${guest.first_name} ${guest.last_name}`;
+            if (guest) {
+                // Si tiene origen, lo mostramos entre paréntesis o guión
+                const originText = guest.origin ? ` (${guest.origin})` : '';
+                return `${guest.first_name} ${guest.last_name}${originText}`;
+            }
         }
         return 'Huésped';
     };

@@ -74,4 +74,11 @@ class Checkin extends Model
         return $this->hasMany(Invoice::class);
     }
 
+
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'checkin_details')
+                    ->withPivot('quantity', 'selling_price') // Campos extra de la tabla intermedia
+                    ->withTimestamps();
+    }
 }

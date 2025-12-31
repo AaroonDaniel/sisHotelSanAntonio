@@ -69,13 +69,12 @@ class GuestController extends Controller
             'nationality' => 'nullable|string|max:100',
             'issued_in' => 'nullable|string|max:100',
             'civil_status' => 'nullable|string|max:50',
-            'age' => 'nullable|integer|min:0',
+            'birth_date' => 'nullable|date',
             'profession' => 'nullable|string|max:100',
             'origin' => 'nullable|string|max:100',
         ]);
 
         $guest->update($validated);
-        
         return redirect()->route('guests.index')->with('success', 'Huésped actualizado.');
     }
 
