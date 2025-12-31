@@ -12,7 +12,7 @@ class GuestController extends Controller
     public function index()
     {
         // Ordenamos por apellido para que la lista se vea mejor
-        $guests = Guest::orderBy('last_name')->get();
+        $guests = Guest::orderBy('full_name')->get();
         return Inertia::render('guests/index', [
             'Guests' => $guests
         ]);
@@ -32,8 +32,8 @@ class GuestController extends Controller
         // Si es creación rápida, permitimos nulos en datos no esenciales.
         // Si es creación normal (formulario completo), podemos ser más estrictos o dejarlos nullable también.
         $rules = [
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
+            //'first_name' => 'required|string|max:100',
+            'full_name' => 'required|string|max:100',
             'identification_number' => 'required|string|max:50|unique:guests,identification_number',
             'nationality' => 'nullable|string|max:100',
             
@@ -63,8 +63,8 @@ class GuestController extends Controller
     public function update(Request $request, Guest $guest)
     {
         $validated = $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
+            //'first_name' => 'required|string|max:100',
+            'full_name' => 'required|string|max:100',
             'identification_number' => 'required|string|max:50|unique:guests,identification_number,' . $guest->id,
             'nationality' => 'nullable|string|max:100',
             'issued_in' => 'nullable|string|max:100',

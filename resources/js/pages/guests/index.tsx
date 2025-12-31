@@ -50,8 +50,8 @@ interface User {
 
 export interface Guest {
     id: number;
-    first_name: string;
-    last_name: string;
+    //first_name: string;
+    full_name: string;
     nationality: string;
     identification_number: string;
     issued_in: string;
@@ -79,7 +79,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
     // --- 3. FILTRO AVANZADO ---
     const filteredGuests = Guests.filter((guest) => {
         const term = searchTerm.toLowerCase();
-        const fullName = `${guest.first_name} ${guest.last_name}`.toLowerCase();
+        const fullName = ` ${guest.full_name}`.toLowerCase();
         
         return (
             fullName.includes(term) ||
@@ -185,7 +185,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                             </div>
                                                             <div>
                                                                 <div className="font-bold text-gray-900">
-                                                                    {guest.first_name} {guest.last_name}
+                                                                    {guest.full_name}
                                                                 </div>
                                                                 <div className="flex items-center gap-1 text-xs text-gray-500">
                                                                     <Briefcase className="h-3 w-3" />

@@ -22,7 +22,7 @@ class CheckinController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $guests = Guest::orderBy('last_name')->get();
+        $guests = Guest::orderBy('full_name')->get();
         $rooms = Room::with(['roomType', 'price'])->get(); 
 
         return Inertia::render('checkins/index', [
@@ -43,8 +43,8 @@ class CheckinController extends Controller
             'advance_payment' => 'nullable|numeric|min:0',
             
             // Datos del huésped
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
+            //'full_name' => 'required|string',
+            'full_name' => 'required|string',
             'identification_number' => 'required|string',
             'nationality' => 'required|string',
             'origin' => 'nullable|string', //
@@ -72,8 +72,8 @@ class CheckinController extends Controller
             //
             // Aquí es donde forzamos que se guarde la PROCEDENCIA (origin) aunque el huésped sea antiguo
             $guestData = [
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
+                //'full_name' => $validated['full_name'],
+                'full_name' => $validated['full_name'],
                 'identification_number' => $validated['identification_number'],
                 'nationality' => $validated['nationality'],
                 'origin' => $validated['origin'], // <--- AQUÍ SE GUARDA EL DATO NUEVO
@@ -214,7 +214,7 @@ class CheckinController extends Controller
         $pdf->Cell(20, 4, 'Huesped:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
         // MultiCell ayuda si el nombre es muy largo para que baje de línea
-        $nombre = utf8_decode($checkin->guest->first_name . ' ' . $checkin->guest->last_name);
+        $nombre = utf8_decode($checkin->guest->full_name);
         $pdf->MultiCell(0, 4, $nombre, 0, 'L');
 
         $pdf->SetFont('Arial', 'B', 7);

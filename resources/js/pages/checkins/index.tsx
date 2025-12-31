@@ -20,8 +20,7 @@ import DeleteModal from './deleteModal';
 // --- INTERFACES ---
 interface Guest {
     id: number;
-    first_name: string;
-    last_name: string;
+    full_name: string;
     identification_number: string;
 }
 interface Room {
@@ -72,7 +71,7 @@ export default function CheckinsIndex({
     const filteredCheckins = Checkins.filter((checkin) => {
         const term = searchTerm.toLowerCase();
         const guestName = checkin.guest
-            ? `${checkin.guest.first_name} ${checkin.guest.last_name}`.toLowerCase()
+            ? `${checkin.guest.full_name}`.toLowerCase()
             : '';
         const roomNumber = checkin.room
             ? checkin.room.number.toLowerCase()
@@ -220,13 +219,10 @@ export default function CheckinsIndex({
                                                     <div className="flex items-center gap-2">
                                                         <UserIcon className="h-4 w-4 text-gray-400" />
                                                         <span className="font-medium text-gray-800">
+                                                           
                                                             {
                                                                 checkin.guest
-                                                                    ?.first_name
-                                                            }{' '}
-                                                            {
-                                                                checkin.guest
-                                                                    ?.last_name
+                                                                    ?.full_name
                                                             }
                                                         </span>
                                                     </div>

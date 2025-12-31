@@ -41,8 +41,8 @@ const calculateAge = (dateString: string): number | '' => {
 
 interface Guest {
     id?: number;
-    first_name: string;
-    last_name: string;
+    //first_name: string;
+    full_name: string;
     nationality: string;
     identification_number: string;
     issued_in: string;
@@ -66,8 +66,8 @@ export default function GuestModal({
 }: GuestModalProps) {
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({
-            first_name: '',
-            last_name: '',
+            //first_name: '',
+            full_name: '',
             nationality: '',
             identification_number: '',
             issued_in: '',
@@ -98,8 +98,8 @@ export default function GuestModal({
         if (show) {
             if (GuestToEdit) {
                 setData({
-                    first_name: GuestToEdit.first_name,
-                    last_name: GuestToEdit.last_name,
+                    //first_name: GuestToEdit.first_name,
+                    full_name: GuestToEdit.full_name,
                     nationality: GuestToEdit.nationality,
                     identification_number: GuestToEdit.identification_number,
                     issued_in: GuestToEdit.issued_in,
@@ -188,37 +188,12 @@ export default function GuestModal({
                 {/* Body */}
                 <form onSubmit={submit} className="p-6">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {/* Nombres */}
-                        <div>
-                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                Nombres
-                            </label>
-                            <div className="relative">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <User className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="text"
-                                    value={data.first_name}
-                                    onChange={(e) =>
-                                        setData('first_name', e.target.value.toUpperCase())
-                                    }
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Juan"
-                                    required
-                                />
-                            </div>
-                            {errors.first_name && (
-                                <p className="mt-1 text-xs font-bold text-red-500">
-                                    {errors.first_name}
-                                </p>
-                            )}
-                        </div>
+                        
 
                         {/* Apellidos */}
                         <div>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                Apellidos
+                                Nombre completo
                             </label>
                             <div className="relative">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -226,18 +201,18 @@ export default function GuestModal({
                                 </div>
                                 <input
                                     type="text"
-                                    value={data.last_name}
+                                    value={data.full_name}
                                     onChange={(e) =>
-                                        setData('last_name', e.target.value.toUpperCase())
+                                        setData('full_name', e.target.value.toUpperCase())
                                     }
                                     className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Pérez"
                                     required
                                 />
                             </div>
-                            {errors.last_name && (
+                            {errors.full_name && (
                                 <p className="mt-1 text-xs font-bold text-red-500">
-                                    {errors.last_name}
+                                    {errors.full_name}
                                 </p>
                             )}
                         </div>

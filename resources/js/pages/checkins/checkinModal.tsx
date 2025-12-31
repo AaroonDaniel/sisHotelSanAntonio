@@ -44,8 +44,8 @@ const calculateAge = (dateString: string) => {
 // --- 2. INTERFACES ---
 export interface Guest {
     id: number;
-    first_name: string;
-    last_name: string;
+    //: string;
+    full_name: string;
     identification_number: string;
     issued_in?: string;
     nationality?: string;
@@ -118,8 +118,8 @@ export default function CheckinModal({
         advance_payment: 0,
         notes: '',
         selected_services: [] as string[],
-        first_name: '',
-        last_name: '',
+        //: '',
+        full_name: '',
         identification_number: '',
         issued_in: '',
         nationality: 'BOLIVIA',
@@ -144,7 +144,7 @@ export default function CheckinModal({
             if (checkinToEdit) {
                 // MODO EDICIÓN / VER
                 setIsExistingGuest(true);
-                setGuestSearch(`${checkinToEdit.guest?.first_name || ''} ${checkinToEdit.guest?.last_name || ''}`);
+                setGuestSearch(`${checkinToEdit.guest?.full_name || ''}`);
                 setData({
                     ...data,
                     guest_id: String(checkinToEdit.guest_id),
@@ -154,8 +154,8 @@ export default function CheckinModal({
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     selected_services: checkinToEdit.services || [],
-                    first_name: checkinToEdit.guest?.first_name || '',
-                    last_name: checkinToEdit.guest?.last_name || '',
+                    //: checkinToEdit.guest?. || '',
+                    full_name: checkinToEdit.guest?.full_name || '',
                     identification_number: checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
                     nationality: checkinToEdit.guest?.nationality || 'BOLIVIA',
@@ -179,20 +179,20 @@ export default function CheckinModal({
     // --- FUNCIONES AUXILIARES ---
     const filteredGuests = guests.filter((g) => {
         const term = guestSearch.toLowerCase();
-        const fullName = `${g.first_name} ${g.last_name}`.toLowerCase();
+        const fullName = ` ${g.full_name}`.toLowerCase();
         return fullName.includes(term) || g.identification_number.includes(term);
     });
 
     const handleSelectGuest = (guest: Guest) => {
         setIsExistingGuest(true);
-        setGuestSearch(`${guest.first_name} ${guest.last_name}`);
+        setGuestSearch(`${guest.full_name}`);
         setIsDropdownOpen(false);
         clearErrors();
         setData((prev) => ({
             ...prev,
             guest_id: guest.id.toString(),
-            first_name: guest.first_name,
-            last_name: guest.last_name,
+            //: guest.,
+            full_name: guest.full_name,
             identification_number: guest.identification_number,
             issued_in: guest.issued_in || '',
             nationality: guest.nationality || 'BOLIVIA',
@@ -209,8 +209,8 @@ export default function CheckinModal({
         setData((prev) => ({
             ...prev,
             guest_id: null,
-            first_name: '',
-            last_name: '',
+            //: '',
+            full_name: '',
             identification_number: '',
             issued_in: '',
             nationality: 'BOLIVIA',
@@ -318,7 +318,7 @@ export default function CheckinModal({
                                         <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
                                             {filteredGuests.map(g => (
                                                 <div key={g.id} onClick={() => handleSelectGuest(g)} className="cursor-pointer px-4 py-2 text-sm text-black hover:bg-green-50">
-                                                    <span className="font-bold">{g.first_name} {g.last_name}</span>
+                                                    <span className="font-bold">{g.full_name}</span>
                                                     <span className="ml-2 text-xs text-gray-500">CI: {g.identification_number}</span>
                                                 </div>
                                             ))}
@@ -336,22 +336,13 @@ export default function CheckinModal({
                         {/* Campos Personales */}
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
+                                
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">Nombres</label>
+                                    <label className="text-xs font-bold text-gray-500">Nombre Completo</label>
                                     <input 
                                         className="w-full rounded-lg border-gray-200 px-3 py-2 text-sm uppercase text-black disabled:bg-gray-50"
-                                        value={data.first_name}
-                                        onChange={e => setData('first_name', e.target.value.toUpperCase())}
-                                        disabled={isExistingGuest || !!checkinToEdit}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-gray-500">Apellidos</label>
-                                    <input 
-                                        className="w-full rounded-lg border-gray-200 px-3 py-2 text-sm uppercase text-black disabled:bg-gray-50"
-                                        value={data.last_name}
-                                        onChange={e => setData('last_name', e.target.value.toUpperCase())}
+                                        value={data.full_name}
+                                        onChange={e => setData('full_name', e.target.value.toUpperCase())}
                                         disabled={isExistingGuest || !!checkinToEdit}
                                         required
                                     />

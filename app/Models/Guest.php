@@ -15,20 +15,20 @@ class Guest extends Model
     use AutoUpperCase;
 
     protected $fillable = [
-        'first_name',
-        'last_name',
+        //'first_name',
+        'full_name',
         'nationality',
         'identification_number',
         'issued_in',
         'civil_status',
-        'birth_date', // Antes decía 'age', ahora debe ser 'birth_date'
+        'birth_date', 
         'profession',
         'origin',
     ];
 
     protected $uppercaseFields = [
         'first_name',
-        'last_name',
+        'full_name',
         'nationality',
         'profession',
         'origin',
@@ -50,10 +50,5 @@ class Guest extends Model
         return $this->hasMany(Checkin::class);
     }
 
-    protected function fullName(): Attribute
-    {
-        return Attribute::make(
-            get: fn () => "{$this->first_name} {$this->last_name}",
-        );
-    }
+    
 }
