@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Traits\AutoUpperCase;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Checkin extends Model
 {
@@ -21,6 +22,7 @@ class Checkin extends Model
         'check_out_date',
         'notes',
         'advance_payment',
+        'status'
     ];
 
     protected $uppercaseFields = [

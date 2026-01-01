@@ -9,8 +9,9 @@ import {
     Globe,
     Printer,
     Save,
-    User, // Usamos este icono para el input de nombre
+    User,
     X,
+    AlertTriangle // Icono para advertencia
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useState, useRef } from 'react';
 
@@ -52,6 +53,7 @@ export interface Guest {
     age?: number;
     profession?: string;
     origin?: string;
+    profile_status?: string; // Nuevo campo
 }
 
 export interface CheckinData {
@@ -103,7 +105,7 @@ export default function CheckinModal({
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
     const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
 
-    // --- FORMULARIO UNIFICADO ---
+    // --- FORMULARIO ---
     const now = new Date().toISOString().slice(0, 16);
     
     const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
@@ -151,7 +153,7 @@ export default function CheckinModal({
         if (show) {
             clearErrors();
             if (checkinToEdit) {
-                // MODO EDICIÓN / VER
+                // MODO EDICIÓN
                 setIsExistingGuest(true);
                 setData({
                     ...data,
@@ -182,18 +184,24 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit, initialRoomId]);
 
-    // --- FILTRADO INTELIGENTE ---
-    // Filtramos usando directamente el campo full_name del formulario
+    // --- LÓGICA DE ESTADO PENDIENTE ---
+    // Si no es un invitado existente y no tiene carnet, es un perfil "Pendiente"
+    const isProfileIncomplete = !isExistingGuest && (
+        !data.identification_number || 
+        data.identification_number.length < 3
+    );
+
+    // Filtramos usando directamente el campo full_name
     const filteredGuests = (data.full_name && data.full_name.length > 1) 
         ? guests.filter((g) => {
             const term = data.full_name.toLowerCase();
             const fullName = g.full_name.toLowerCase();
-            return fullName.includes(term) || g.identification_number.toLowerCase().includes(term);
+            return fullName.includes(term) || g.identification_number?.toLowerCase().includes(term);
         })
         : [];
 
     const handleSelectGuest = (guest: Guest) => {
-        setIsExistingGuest(true); // Bloqueamos campos porque es un invitado existente
+        setIsExistingGuest(true);
         setIsDropdownOpen(false);
         clearErrors();
         
@@ -201,7 +209,7 @@ export default function CheckinModal({
             ...prev,
             guest_id: guest.id.toString(),
             full_name: guest.full_name,
-            identification_number: guest.identification_number,
+            identification_number: guest.identification_number || '',
             issued_in: guest.issued_in || '',
             nationality: guest.nationality || 'BOLIVIA',
             civil_status: guest.civil_status || '',
@@ -222,7 +230,6 @@ export default function CheckinModal({
         }
     };
 
-    // --- ACCIONES ---
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         const onSuccess = () => { reset(); onClose(); };
@@ -284,8 +291,21 @@ export default function CheckinModal({
 
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
                     {/* IZQUIERDA - DATOS HUÉSPED */}
-                    <div className="flex-1 border-r border-gray-100 p-6">
+                    <div className="flex-1 border-r border-gray-100 p-6 relative bg-white">
                         
+                        {/* AVISO DE PERFIL PENDIENTE */}
+                        {isProfileIncomplete && data.full_name.length > 3 && (
+                            <div className="absolute top-0 right-0 left-0 bg-amber-50 px-6 py-2 border-b border-amber-100 flex items-center justify-between animate-in slide-in-from-top-2 z-10">
+                                <span className="text-[11px] font-bold text-amber-700 flex items-center gap-1.5">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    PERFIL PENDIENTE: Se guardará solo con el nombre.
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Espaciador si hay aviso */}
+                        <div className={`${isProfileIncomplete && data.full_name.length > 3 ? 'mt-8' : ''} transition-all`}></div>
+
                         {/* 1. CAMPO FUSIONADO: NOMBRE COMPLETO / BUSCADOR */}
                         <div className="mb-6 space-y-4" ref={dropdownRef}>
                             <div className="relative">
@@ -306,20 +326,20 @@ export default function CheckinModal({
                                             setData(prev => ({
                                                 ...prev,
                                                 full_name: val,
-                                                guest_id: null // Al cambiar texto, reseteamos el ID (es uno nuevo o editado)
+                                                guest_id: null 
                                             }));
-                                            setIsExistingGuest(false); // Habilitamos campos para llenado manual
+                                            setIsExistingGuest(false);
                                             setIsDropdownOpen(true);
                                         }}
                                         onFocus={() => {
                                             if (data.full_name.length > 1) setIsDropdownOpen(true);
                                         }}
-                                        disabled={!!checkinToEdit} // Si editamos checkin, no cambiamos el huésped
-                                        required
+                                        disabled={!!checkinToEdit}
+                                        required // Nombre SIEMPRE requerido
                                         autoComplete="off"
                                     />
                                     
-                                    {/* DROPDOWN DE SUGERENCIAS INTEGRADO */}
+                                    {/* DROPDOWN DE SUGERENCIAS */}
                                     {isDropdownOpen && !isExistingGuest && filteredGuests.length > 0 && (
                                         <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
                                             {filteredGuests.map(g => (
@@ -330,7 +350,7 @@ export default function CheckinModal({
                                                 >
                                                     <div className="font-bold text-gray-800">{g.full_name}</div>
                                                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                        <span className="bg-gray-100 px-1.5 py-0.5 rounded">CI: {g.identification_number}</span>
+                                                        <span className="bg-gray-100 px-1.5 py-0.5 rounded">CI: {g.identification_number || 'S/N'}</span>
                                                         {g.nationality && <span>• {g.nationality}</span>}
                                                     </div>
                                                 </div>
@@ -341,25 +361,24 @@ export default function CheckinModal({
                                         </div>
                                     )}
                                 </div>
-                                {/* Mensaje de estado */}
-                                {!isExistingGuest && data.full_name.length > 3 && !checkinToEdit && (
-                                    <p className="mt-1 text-[10px] text-blue-600 font-medium animate-pulse">
-                                        * Llenando datos para un NUEVO huésped
-                                    </p>
-                                )}
                             </div>
 
-                            {/* RESTO DE CAMPOS (Se habilitan si isExistingGuest es false) */}
+                            {/* CAMPOS OPCIONALES PARA ASIGNACIÓN RÁPIDA */}
+                            {/* NOTA: Hemos quitado 'required' de los inputs */}
+                            
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="col-span-1">
-                                    <label className="text-xs font-bold text-gray-500">Carnet (CI)</label>
+                                    <label className="text-xs font-bold text-gray-500 flex items-center justify-between">
+                                        Carnet (CI)
+                                        {isProfileIncomplete && <span className="text-[9px] text-amber-600 bg-amber-100 px-1 rounded">Opcional</span>}
+                                    </label>
                                     <input 
-                                        className="w-full rounded-lg border-gray-200 px-3 py-2 text-sm uppercase text-black disabled:bg-gray-100 disabled:text-gray-500"
+                                        className={`w-full rounded-lg border-gray-200 px-3 py-2 text-sm uppercase text-black disabled:bg-gray-100 disabled:text-gray-500 ${isProfileIncomplete ? 'border-amber-300 focus:border-amber-500 focus:ring-amber-500' : ''}`}
                                         value={data.identification_number}
                                         onChange={e => setData('identification_number', e.target.value.toUpperCase())}
                                         disabled={isExistingGuest || !!checkinToEdit}
-                                        required
                                         placeholder="123456"
+                                        // NO REQUIRED
                                     />
                                 </div>
                                 <div className="col-span-1">
@@ -413,7 +432,8 @@ export default function CheckinModal({
                                         className="w-full rounded-lg border-gray-200 px-2 py-2 text-sm text-black disabled:bg-gray-100 disabled:text-gray-500"
                                         value={data.birth_date}
                                         onChange={e => setData('birth_date', e.target.value)}
-                                        disabled={!!checkinToEdit} // Permitimos editar fecha nac aunque sea existente, a veces falta
+                                        disabled={!!checkinToEdit} 
+                                        // NO REQUIRED
                                     />
                                     <span className="text-[10px] text-gray-400 font-medium">
                                         Edad: {displayAge ? `${displayAge} años` : '-'}
@@ -445,7 +465,7 @@ export default function CheckinModal({
                         </div>
                     </div>
 
-                    {/* DERECHA - ASIGNACIÓN (Sin cambios mayores) */}
+                    {/* DERECHA - ASIGNACIÓN */}
                     <div className="flex-1 p-6 bg-gray-50">
                         <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1 mb-4">Detalles de Asignación</h3>
 
@@ -525,7 +545,6 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            {/* Servicios Extra */}
                             <div>
                                 <label className="mb-2 block text-xs font-bold text-gray-500">Servicios Adicionales</label>
                                 <div className="flex flex-wrap gap-2">
@@ -568,9 +587,14 @@ export default function CheckinModal({
                             <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200">
                                 Cancelar
                             </button>
-                            <button type="submit" disabled={processing} className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-green-500 active:scale-95 disabled:opacity-50">
+                            
+                            {/* BOTÓN CAMBIA DE COLOR SEGÚN ESTADO */}
+                            <button type="submit" disabled={processing} className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${isProfileIncomplete ? 'bg-amber-600 hover:bg-amber-500' : 'bg-green-600 hover:bg-green-500'}`}>
                                 {processing ? 'Procesando...' : (
-                                    <><Save className="h-4 w-4" /> {checkinToEdit ? 'Actualizar' : 'Registrar'}</>
+                                    <>
+                                        <Save className="h-4 w-4" /> 
+                                        {checkinToEdit ? 'Actualizar' : (isProfileIncomplete ? 'Asignación Rápida' : 'Registrar')}
+                                    </>
                                 )}
                             </button>
                         </div>

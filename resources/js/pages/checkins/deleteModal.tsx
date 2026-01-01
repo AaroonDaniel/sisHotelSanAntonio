@@ -29,9 +29,9 @@ export default function DeleteModal({ show, onClose, checkinId }: DeleteModalPro
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
                         <AlertTriangle className="h-8 w-8" />
                     </div>
-                    <h3 className="mb-2 text-xl font-bold text-gray-800">¿Eliminar bloque?</h3>
+                    <h3 className="mb-2 text-xl font-bold text-gray-800">¿Eliminar Asignación?</h3>
                     <p className="text-gray-500">
-                        Esta acción no se puede deshacer. El bloque será eliminado permanentemente del sistema.
+                        Esta acción no se puede deshacer. El asignación será eliminado permanentemente del sistema.
                     </p>
                     
                     <form onSubmit={submit} className="mt-8 flex justify-center gap-3">

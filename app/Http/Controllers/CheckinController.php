@@ -35,128 +35,154 @@ class CheckinController extends Controller
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
-        // 1. Validaciones
-        $validated = $request->validate([
-            'room_id' => 'required|exists:rooms,id',
-            'check_in_date' => 'required|date',
-            'duration_days' => 'required|integer|min:1',
-            'advance_payment' => 'nullable|numeric|min:0',
+        // 1. Validar si es huésped nuevo o existente
+        if (!$request->filled('guest_id')) {
+            // --- NUEVO HUÉSPED ---
             
-            // Datos del huésped
-            //'full_name' => 'required|string',
-            'full_name' => 'required|string',
-            'identification_number' => 'required|string',
-            'nationality' => 'required|string',
-            'origin' => 'nullable|string', //
-            'birth_date' => 'nullable|date',
-            'civil_status' => 'nullable|string',
-            'profession' => 'nullable|string',
-            'issued_in' => 'nullable|string',
-        ]);
-
-        return DB::transaction(function () use ($validated, $request) {
+            // Si falta el CI, es registro rápido (INCOMPLETE)
+            $isComplete = $request->filled('identification_number');
             
-            // 2. BUSCAR O CREAR HUÉSPED
-            // Si viene un guest_id, lo buscamos para actualizarlo. Si no, creamos o buscamos por CI.
-            $guest = null;
-
-            if ($request->filled('guest_id')) {
-                $guest = Guest::find($request->guest_id);
-            }
-
-            if (!$guest) {
-                // Intento buscar por carnet si no vino ID, para evitar duplicados
-                $guest = Guest::where('identification_number', $validated['identification_number'])->first();
-            }
-
-            //
-            // Aquí es donde forzamos que se guarde la PROCEDENCIA (origin) aunque el huésped sea antiguo
-            $guestData = [
-                //'full_name' => $validated['full_name'],
-                'full_name' => $validated['full_name'],
-                'identification_number' => $validated['identification_number'],
-                'nationality' => $validated['nationality'],
-                'origin' => $validated['origin'], // <--- AQUÍ SE GUARDA EL DATO NUEVO
-                'birth_date' => $request->birth_date,
-                'civil_status' => $request->civil_status,
-                'profession' => $request->profession,
-                'issued_in' => $request->issued_in,
-            ];
-
-            if ($guest) {
-                $guest->update($guestData); // Actualiza si existe
-            } else {
-                $guest = Guest::create($guestData); // Crea si no existe
-            }
-
-            // 3. Crear el Check-in
-            $checkin = Checkin::create([
-                'guest_id' => $guest->id,
-                'room_id' => $validated['room_id'],
-                'user_id' => auth()->id(),
-                'check_in_date' => $validated['check_in_date'],
-                'duration_days' => $validated['duration_days'],
-                'advance_payment' => $validated['advance_payment'] ?? 0,
-                'notes' => $request->notes,
-                'status' => 'ACTIVE'
+            // Validamos solo el nombre obligatorio, el resto nullable
+            $request->validate([
+                'full_name' => 'required|string|max:150',
+                'identification_number' => 'nullable|string|max:50', 
             ]);
 
-            // 4. Cambiar estado de la habitación
-            $room = Room::find($validated['room_id']);
-            $room->update(['status' => 'OCCUPIED']);
+            // Crear huésped
+            $guest = \App\Models\Guest::create([
+                'full_name' => strtoupper($request->full_name),
+                'identification_number' => $request->identification_number ? strtoupper($request->identification_number) : null,
+                'nationality' => $request->nationality ?? 'BOLIVIA',
+                'civil_status' => $request->civil_status,
+                'birth_date' => $request->birth_date,
+                'profession' => $request->profession ? strtoupper($request->profession) : null,
+                'origin' => $request->origin ? strtoupper($request->origin) : null,
+                'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
+                'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE', // <--- AQUÍ SE GUARDA EL ESTADO
+            ]);
 
-            // 5. Guardar servicios adicionales si los hay
-            if ($request->has('selected_services') && count($request->selected_services) > 0) {
-                // Buscamos los servicios seleccionados para obtener su precio actual
-                $services = \App\Models\Service::whereIn('id', $request->selected_services)->get();
-                
-                $syncData = [];
-                foreach ($services as $service) {
-                    $syncData[$service->id] = [
-                        'quantity' => 1, // Por defecto 1, o puedes ajustar si tu frontend manda cantidades
-                        'selling_price' => $service->price //
-                    ];
-                }
+            $guestId = $guest->id;
+        } else {
+            // --- HUÉSPED EXISTENTE ---
+            $guestId = $request->guest_id;
+        }
 
-                // Usamos sync con los datos extra (precio)
-                $checkin->services()->sync($syncData);
-            }
+        // 2. Crear Checkin (Igual que antes)
+        $validatedCheckin = $request->validate([
+            'room_id' => 'required|exists:rooms,id',
+            'check_in_date' => 'required|date',
+            'duration_days' => 'required|integer|min:0',
+            'advance_payment' => 'nullable|numeric',
+            'notes' => 'nullable|string',
+        ]);
 
-            return redirect()->back()->with('success', 'Ingreso registrado y datos actualizados correctamente.');
-        });
+        $checkin = \App\Models\Checkin::create([
+            'guest_id' => $guestId,
+            'room_id' => $validatedCheckin['room_id'],
+            'user_id' => auth()->id(),
+            'check_in_date' => $validatedCheckin['check_in_date'],
+            'duration_days' => $validatedCheckin['duration_days'],
+            'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
+            'notes' => $validatedCheckin['notes'],
+            'status' => 'activo', // <--- CORREGIDO (antes decía 'active')
+        ]);
+
+        if ($request->has('selected_services')) {
+            $checkin->services()->sync($request->selected_services);
+        }
+        
+        \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+        return redirect()->back()->with('success', 'Asignación registrada correctamente.');
     }
 
     public function update(Request $request, Checkin $checkin)
     {
+        // 1. Validaciones: Incluimos los datos del Huésped que faltaban
         $validated = $request->validate([
-            'guest_id' => 'required|exists:guests,id',
+            // Datos del Checkin
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
             'duration_days' => 'required|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
+            
+            // Datos del Huésped (NECESARIOS para completar el perfil)
+            'full_name' => 'required|string|max:150',
+            'identification_number' => 'nullable|string|max:50',
+            'nationality' => 'nullable|string',
+            'origin' => 'nullable|string',        // <--- AHORA SÍ SE GUARDA EL ORIGEN
+            'profession' => 'nullable|string',
+            'civil_status' => 'nullable|string',
+            'birth_date' => 'nullable|date',
+            'issued_in' => 'nullable|string',
         ]);
 
-        $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
-        $validated['check_out_date'] = $validated['duration_days'] > 0
-            ? $checkInDate->copy()->addDays($validated['duration_days'])
-            : null;
+        return DB::transaction(function () use ($validated, $request, $checkin) {
+            
+            // 2. ACTUALIZAR HUÉSPED (Aquí ocurre la magia del cambio de color)
+            $guest = $checkin->guest;
+            
+            // Verificamos si se ha ingresado el Carnet (CI)
+            $hasIdNumber = !empty($validated['identification_number']);
+            
+            $guest->update([
+                'full_name' => strtoupper($validated['full_name']),
+                'identification_number' => $hasIdNumber ? strtoupper($validated['identification_number']) : null,
+                'nationality' => strtoupper($validated['nationality'] ?? 'BOLIVIA'),
+                'origin' => strtoupper($validated['origin'] ?? ''), // <--- Guardamos Procedencia
+                'profession' => strtoupper($validated['profession'] ?? ''),
+                'civil_status' => $validated['civil_status'],
+                'birth_date' => $validated['birth_date'],
+                'issued_in' => strtoupper($validated['issued_in'] ?? ''),
+                
+                // CAMBIO DE ESTADO / COLOR:
+                // Si tiene CI -> 'COMPLETE' (Se vuelve ROJO en tu vista)
+                // Si no tiene CI -> 'INCOMPLETE' (Se queda ÁMBAR/PENDIENTE)
+                'profile_status' => $hasIdNumber ? 'COMPLETE' : 'INCOMPLETE'
+            ]);
 
-        if ($checkin->room_id != $validated['room_id']) {
-            Room::where('id', $checkin->room_id)->update(['status' => 'AVAILABLE']);
-            Room::where('id', $validated['room_id'])->update(['status' => 'OCCUPIED']);
-        }
+            // 3. Actualizar fechas del Checkin
+            $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
+            $checkOutDate = $validated['duration_days'] > 0
+                ? $checkInDate->copy()->addDays($validated['duration_days'])
+                : null;
 
-        $checkin->update($validated);
+            // 4. Gestionar cambio de habitación si es necesario
+            if ($checkin->room_id != $validated['room_id']) {
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
+                \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
+            }
 
-        return redirect()->back()->with('success', 'Hospedaje actualizado.');
+            // 5. Actualizar el registro de Checkin
+            $checkin->update([
+                'room_id' => $validated['room_id'],
+                'check_in_date' => $validated['check_in_date'],
+                'duration_days' => $validated['duration_days'],
+                'check_out_date' => $checkOutDate,
+                'advance_payment' => $validated['advance_payment'],
+                'notes' => strtoupper($validated['notes'] ?? ''),
+            ]);
+
+            // 6. Actualizar servicios adicionales
+            if ($request->has('selected_services')) {
+                $services = \App\Models\Service::whereIn('id', $request->selected_services)->get();
+                $syncData = [];
+                foreach ($services as $service) {
+                    $syncData[$service->id] = ['quantity' => 1, 'selling_price' => $service->price];
+                }
+                $checkin->services()->sync($syncData);
+            }
+
+            return redirect()->back()->with('success', 'Datos completados y actualizados correctamente.');
+        });
     }
 
     public function destroy(Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
         if ($room) {
-            $room->update(['status' => 'AVAILABLE']);
+            $room->update(['status' => 'LIBRE']);
         }
 
         $checkin->delete();
@@ -167,13 +193,13 @@ class CheckinController extends Controller
     {
         $room = Room::find($checkin->room_id);
         if ($room) {
-            $room->update(['status' => 'CLEANING']);
+            // ANTES: $room->update(['status' => 'CLEANING']);
+            $room->update(['status' => 'LIMPIEZA']); // <--- CORREGIDO
         }
         $checkin->update(['check_out_date' => now()]);
 
         return redirect()->back()->with('success', 'Checkout realizado.');
     }
-
     // --- TU CÓDIGO DE PDF RESTAURADO ---
     public function generateReceipt(Checkin $checkin)
     {
