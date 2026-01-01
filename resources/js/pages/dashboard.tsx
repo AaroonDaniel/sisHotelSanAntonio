@@ -12,7 +12,8 @@ import {
     Wrench,
     Building,   // Para Bloques
     Layers,     // Para Pisos
-    Tag,        // Para Precios
+    Tag,  
+    BookDown,      // Para Precios
 } from 'lucide-react';
 
 // === CORRECCIÓN AQUÍ ===
@@ -62,7 +63,7 @@ const hotelModules = [
         title: 'Reportes',
         theme: 'amber',
         items: [
-            { name: 'Estado Hotel', icon: Hotel, url: '/rooms/status' },
+            { name: 'Libro Diario', icon: BookDown, url: '/daily_pdf' },
             { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
         ],
     },
@@ -83,7 +84,7 @@ export default function Dashboard({ auth }: DashboardProps) {
     };
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <AuthenticatedLayout user={auth.user as any}>
             <Head title="Panel Principal" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* Header con Bienvenida */}

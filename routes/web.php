@@ -8,6 +8,7 @@ use App\Http\Controllers\RoomTypeController;
 use App\Http\Controllers\PriceController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\GuestController;
+use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
 
 use Inertia\Inertia;
@@ -100,6 +101,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);   
 
     // Estados de Limpieza y Mantenimiento (Reportes visuales)
+
+
+    //Reportes 
+    // Página principal de reportes
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+
+    // Verificar estado para Libro Diario (AJAX)
+    Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
+
+    // Generar PDF Libro Diario
+    Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');    
 
     Route::get('/housekeeping', [RoomController::class, 'housekeeping'])->name('rooms.housekeeping');
     Route::get('/maintenance', [RoomController::class, 'maintenance'])->name('rooms.maintenance');
