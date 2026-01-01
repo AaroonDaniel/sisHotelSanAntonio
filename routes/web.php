@@ -90,9 +90,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
     
-    // Acciones extra para checks
-    Route::patch('/checks/{checkin}/checkout', [CheckinController::class, 'checkout'])->name('checks.checkout');
-    Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateReceipt'])->name('checks.receipt');
+   // 1. Ruta para finalizar la estadía (Checkout) - Usamos PUT
+    Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
+
+    // 2. Ruta para el PDF de salida (Checkout Receipt)
+    Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
+
+    // 3. Ruta para el PDF de ingreso (Solo asignación)
+    Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);   
 
     // Estados de Limpieza y Mantenimiento (Reportes visuales)
 

@@ -221,22 +221,25 @@ class CheckinController extends Controller
     public function checkout(Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
+        
         if ($room) {
-            // ANTES: $room->update(['status' => 'CLEANING']);
-            $room->update(['status' => 'LIMPIEZA']); // <--- CORREGIDO
+            $room->update(['status' => 'LIMPIEZA']);
         }
-        $checkin->update(['check_out_date' => now()]);
+        
+        $checkin->update([
+            'check_out_date' => now(),
+            'status' => 'finalizado'
+        ]);
 
-        return redirect()->back()->with('success', 'Checkout realizado.');
+        return redirect()->back()->with('success', 'Estadía finalizada. Generando Nota de Salida...');
     }
     // --- TU CÓDIGO DE PDF RESTAURADO ---
-    public function generateReceipt(Checkin $checkin)
+    public function generateAssignmentReceipt(Checkin $checkin)
     {
         $checkin->load(['guest', 'room']);
 
         // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150)); 
-        
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
@@ -374,4 +377,161 @@ class CheckinController extends Controller
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="ticket-'.$checkin->id.'.pdf"');
     }
+
+
+    public function generateCheckoutReceipt(Checkin $checkin)
+    {
+        $checkin->load(['guest', 'room.price', 'services']);
+
+        // FECHAS Y CÁLCULOS
+        $ingreso = Carbon::parse($checkin->check_in_date);
+        $salida = $checkin->check_out_date ? Carbon::parse($checkin->check_out_date) : now();
+        
+        // Calculamos días reales
+        $diasReales = $ingreso->diffInDays($salida);
+        if ($diasReales == 0) $diasReales = 1; // Mínimo 1 día
+        
+        // Días pactados originalmente
+        $diasPactados = $checkin->duration_days;
+        
+        // Verificamos si se excedió
+        $diasExcedidos = 0;
+        if ($diasReales > $diasPactados) {
+            $diasExcedidos = $diasReales - $diasPactados;
+        }
+
+        // CÁLCULO DE COSTOS
+        // Nota: Idealmente el precio debería estar guardado en el checkin para congelarlo.
+        // Aquí usamos el precio actual de la habitación.
+        $precioUnitario = $checkin->room->price->amount ?? 0;
+        
+        // Cobramos por los días reales que se quedó
+        $totalHospedaje = $precioUnitario * $diasReales;
+
+        // Servicios
+        $totalServicios = 0;
+        foreach($checkin->services as $srv) {
+            $totalServicios += ($srv->pivot->quantity * $srv->pivot->selling_price);
+        }
+
+        $granTotal = $totalHospedaje + $totalServicios;
+        $adelanto = $checkin->advance_payment;
+        $saldoPagar = $granTotal - $adelanto;
+
+        // --- GENERACIÓN PDF ---
+        // Usamos un formato más largo para el detalle completo
+        $pdf = new \FPDF('P', 'mm', array(80, 220)); 
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(true, 2);
+        $pdf->AddPage();
+
+        // CABECERA
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, 'Calle Principal #123 - Potosi', 0, 1, 'C');
+        $pdf->Ln(2);
+        
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 6, 'NOTA DE SALIDA (CHECKOUT)', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, 'Nro: ' . str_pad($checkin->id, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // DATOS HUESPED
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+        
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(20, 4, 'Huesped:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
+        
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(20, 4, 'CI/Doc:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, $checkin->guest->identification_number, 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(20, 4, utf8_decode('Habitación:'), 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, $checkin->room->number, 0, 1);
+
+        $pdf->Ln(2);
+
+        // FECHAS
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(25, 4, $ingreso->format('d/m/Y H:i'), 0, 0);
+        
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(12, 4, 'Salida:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, $salida->format('d/m/Y H:i'), 0, 1);
+
+        // DETALLE ECONÓMICO
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+        
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(45, 4, 'CONCEPTO', 0, 0);
+        $pdf->Cell(0, 4, 'SUBTOTAL', 0, 1, 'R');
+        $pdf->Ln(2);
+
+        // 1. Hospedaje
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(45, 4, utf8_decode("Hospedaje ($diasReales dias)"), 0, 0);
+        $pdf->Cell(0, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
+
+        // Aviso de días excedidos
+        if ($diasExcedidos > 0) {
+            $pdf->SetFont('Arial', 'I', 6);
+            $pdf->SetTextColor(200, 0, 0); // Texto rojo para aviso (si es impresora color) o gris oscuro
+            $pdf->Cell(0, 3, utf8_decode("* Estadía excedida por $diasExcedidos días (Plan original: $diasPactados)"), 0, 1, 'L');
+            $pdf->SetTextColor(0, 0, 0); // Volver a negro
+        }
+
+        // 2. Servicios
+        foreach($checkin->services as $srv) {
+            $subtotal = $srv->pivot->quantity * $srv->pivot->selling_price;
+            $nombreSrv = substr($srv->name, 0, 18);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(45, 4, utf8_decode("$nombreSrv (x{$srv->pivot->quantity})"), 0, 0);
+            $pdf->Cell(0, 4, number_format($subtotal, 2), 0, 1, 'R');
+        }
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // TOTALES
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell(50, 5, 'TOTAL CONSUMO:', 0, 0, 'R');
+        $pdf->Cell(0, 5, number_format($granTotal, 2), 0, 1, 'R');
+
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->Cell(50, 5, '(-) Adelanto:', 0, 0, 'R');
+        $pdf->Cell(0, 5, number_format($adelanto, 2), 0, 1, 'R');
+
+        $pdf->Ln(1);
+        $pdf->SetFont('Arial', 'B', 11);
+        $pdf->Cell(50, 6, 'SALDO A PAGAR:', 0, 0, 'R');
+        $pdf->Cell(0, 6, number_format($saldoPagar, 2) . ' Bs', 0, 1, 'R');
+
+        // PIE
+        $pdf->Ln(8);
+        $pdf->SetFont('Arial', 'I', 7);
+        $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nEsperamos verlo pronto."), 0, 'C');
+        
+        $pdf->Ln(4);
+        $usuario = Auth::user() ? Auth::user()->name : 'Admin';
+        $pdf->Cell(0, 3, 'Atendido por: ' . utf8_decode($usuario), 0, 1, 'C');
+
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="checkout-'.$checkin->id.'.pdf"');
+    }
+
 }
