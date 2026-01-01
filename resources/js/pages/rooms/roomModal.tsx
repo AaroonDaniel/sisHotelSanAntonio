@@ -1,5 +1,4 @@
 import { useForm } from '@inertiajs/react';
-// 1. CORRECCIÓN: Eliminé 'FileText' de aquí
 import { X, Save, BedDouble, Building2, Layers, DollarSign, Info, Image as ImageIcon, Bath } from 'lucide-react'; 
 import { useEffect, FormEventHandler, useState, useMemo } from 'react';
 
@@ -91,10 +90,8 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
     };
 
     // --- 2. CORRECCIÓN DEL USE EFFECT ---
-    // El problema ocurría al setear estados inmediatamente. 
-    // Ahora solo reaccionamos a cambios reales en la prop 'RoomToEdit' o 'show'.
     useEffect(() => {
-        if (!show) return; // Si no se muestra, no hacemos nada
+        if (!show) return; 
 
         clearErrors();
 
@@ -104,6 +101,20 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
             // Calculamos valores auxiliares
             const currentPrice = prices.find(p => p.id === RoomToEdit.price_id);
             const initialBathType = currentPrice?.bathroom_type === 'private' ? 'Privado' : 'Compartido';
+
+            // TRADUCCIÓN INVERSA (BD -> Frontend)
+            // La BD tiene 'LIBRE', el Frontend necesita 'available'
+            const statusMapReverse: Record<string, string> = {
+                'LIBRE': 'available',
+                'OCUPADO': 'occupied',
+                'RESERVADO': 'reserved',
+                'LIMPIEZA': 'cleaning',
+                'MANTENIMIENTO': 'maintenance',
+                'INHABILITADO': 'disabled'
+            };
+
+            // Intentamos traducir, si no existe (raro), usamos 'available' por defecto
+            const mappedStatus = statusMapReverse[RoomToEdit.status] || 'available';
             
             // Actualizamos estados UI
             setSelectedBathroomType(initialBathType);
@@ -116,7 +127,7 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                 floor_id: RoomToEdit.floor_id.toString(),
                 price_id: RoomToEdit.price_id.toString(),
                 room_type_id: RoomToEdit.room_type_id.toString(),
-                status: RoomToEdit.status,
+                status: mappedStatus, // <--- AQUI USAMOS EL VALOR TRADUCIDO
                 notes: RoomToEdit.notes || '',
                 is_active: RoomToEdit.is_active ?? true,
                 image: null,
@@ -124,12 +135,9 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
             });
         } else {
             // --- MODO CREACIÓN ---
-            
-            // Limpiamos estados UI
             setSelectedBathroomType('');
             setPreview(null);
             
-            // Limpiamos Formulario manualmente para asegurar que esté vacío
             setData({
                 number: '',
                 block_id: '',
@@ -145,12 +153,12 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [show, RoomToEdit]); 
-    // NOTA: Quitamos 'prices' y 'data' de las dependencias para evitar el bucle infinito que causaba el error.
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         const onSuccess = () => { reset(); onClose(); };
         if (RoomToEdit) {
+            // Importante: al usar _method: 'put', Inertia lo maneja correctamente
             post(`/habitaciones/${RoomToEdit.id}`, { onSuccess });
         } else {
             post('/habitaciones', { onSuccess });
@@ -159,6 +167,7 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
 
     if (!show) return null;
 
+    // ... (El resto del renderizado es idéntico a tu código)
     // Calculamos el precio visual
     const displayAmount = prices.find(p => p.id.toString() === data.price_id)?.amount;
 
@@ -352,7 +361,7 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                              {errors.image && <p className="mt-1 text-xs text-red-500 font-bold">{errors.image}</p>}
                         </div>
 
-                        {/* Notas (Opcional - Reagregado sin icono FileText para evitar error) */}
+                        {/* Notas */}
                         <div className="sm:col-span-2">
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">Notas Adicionales</label>
                             <textarea

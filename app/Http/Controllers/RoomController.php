@@ -54,12 +54,12 @@ class RoomController extends Controller
 
         // 2. Mapeo de Español a Inglés para la Base de Datos
         $mapStatus = [
-            'libre' => 'available',
-            'ocupado' => 'occupied',
-            'reservado' => 'reserved',
-            'limpieza' => 'cleaning',
-            'mantenimiento' => 'maintenance',
-            'inhabilitado' => 'disabled'
+            'available' => 'libre',
+            'occupied' => 'ocupado',
+            'reserved' => 'reservado',
+            'cleaning' => 'limpieza',
+            'maintenance' => 'mantenimiento',
+            'disabled' => 'inhabilitado'
         ];
 
         // Si el status viene en español, lo traducimos
@@ -96,13 +96,14 @@ class RoomController extends Controller
 
         // 2. Mapeo de Español a Inglés
         $mapStatus = [
-            'libre' => 'available',
-            'ocupado' => 'occupied',
-            'reservado' => 'reserved',
-            'limpieza' => 'cleaning',
-            'mantenimiento' => 'maintenance',
-            'inhabilitado' => 'disabled'
+            'available' => 'libre',
+            'occupied' => 'ocupado',
+            'reserved' => 'reservado',
+            'cleaning' => 'limpieza',
+            'maintenance' => 'mantenimiento',
+            'disabled' => 'inhabilitado'
         ];
+        
 
         if (isset($mapStatus[$validated['status']])) {
             $validated['status'] = $mapStatus[$validated['status']];

@@ -17,9 +17,7 @@ class Price extends Model
         'is_active',
     ];
     
-    protected $uppercaseFields = [
-        'bathroom_type',
-    ];
+    
 
     protected $casts = [
         'amount' => 'decimal:2',
