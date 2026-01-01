@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 // Si usas FPDF globalmente, esta línea a veces sobra, 
 // pero la dejo porque en tu código anterior estaba.
 use Fpdf; 
-
+ 
 use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
@@ -52,7 +52,7 @@ class CheckinController extends Controller
             $guest = \App\Models\Guest::create([
                 'full_name' => strtoupper($request->full_name),
                 'identification_number' => $request->identification_number ? strtoupper($request->identification_number) : null,
-                'nationality' => $request->nationality ?? 'BOLIVIA',
+                'nationality' => $request->nationality ?? 'BOLIVIANA',
                 'civil_status' => $request->civil_status,
                 'birth_date' => $request->birth_date,
                 'profession' => $request->profession ? strtoupper($request->profession) : null,
