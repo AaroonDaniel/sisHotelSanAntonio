@@ -8,8 +8,8 @@ import {
     Home,
     Search,
     User as UserIcon,
-    AlertTriangle, // Icono para estado pendiente
-    FileEdit       // Icono para acción de completar
+    AlertTriangle,
+    FileEdit
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinModal, { Room as ModalRoom, Guest as ModalGuest, CheckinData } from '../checkins/checkinModal';
@@ -28,17 +28,13 @@ interface RoomType {
     name: string;
 }
 
-// Sincronizamos la interfaz Guest para incluir el profile_status
 interface Guest extends ModalGuest {
     profile_status?: string; 
 }
 
-// Extendemos la interfaz para incluir checkins y que sea compatible
 interface Room extends ModalRoom {
     room_type?: RoomType;
     checkins?: CheckinData[];
-    // Sobrescribimos el tipo de guest dentro de checkins para que coincida
-    // (TypeScript trickery para asegurar compatibilidad)
 }
 
 interface Props {
@@ -57,15 +53,15 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     const [checkinToEdit, setCheckinToEdit] = useState<CheckinData | null>(null);
 
     // --- LÓGICA DE ESTADO ---
-    // Determina el estado real visual de la habitación
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
         
-        // 1. Si está ocupada, verificamos si el huésped tiene datos pendientes
         if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) {
-            const activeCheckin = room.checkins?.[0]; // Asumimos el más reciente primero
-            if (activeCheckin?.guest?.profile_status === 'INCOMPLETE') {
-                return 'incomplete'; // <--- NUEVO ESTADO VISUAL
+            const activeCheckin = room.checkins?.[0];
+            // Tipado seguro para guest
+            const guest = activeCheckin?.guest as Guest | undefined;
+            if (guest?.profile_status === 'INCOMPLETE') {
+                return 'incomplete';
             }
             return 'occupied';
         }
@@ -77,19 +73,16 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
         return 'unknown';
     };
 
-    // --- MANEJO DE CLIC EN HABITACIÓN ---
+    // --- MANEJO DE CLIC ---
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
         
         if (status === 'available') {
-            // MODO CREAR
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
         } else if (status === 'occupied' || status === 'incomplete') {
-            // MODO EDITAR / COMPLETAR
             const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
-            
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);
@@ -100,20 +93,16 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
 
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch = room.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              room.room_type?.name.toLowerCase().includes(searchTerm.toLowerCase());
-        
+                              (room.room_type?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
         const currentStatus = getDisplayStatus(room);
         const matchesStatus = filterStatus === 'all' || currentStatus === filterStatus;
-        
         return matchesSearch && matchesStatus;
     });
 
-    // Helper para obtener datos del ocupante
     const getOccupantName = (room: Room) => {
         if (room.checkins && room.checkins.length > 0) {
-            const guest = room.checkins[0].guest;
+            const guest = room.checkins[0].guest as Guest | undefined;
             if (guest) {
-                // Si es incompleto, mostramos mensaje especial
                 if (guest.profile_status === 'INCOMPLETE') {
                     return `${guest.full_name} (Faltan Datos)`;
                 }
@@ -145,9 +134,9 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                     info: getOccupantName(room),
                     actionLabel: 'Ver / Editar'
                 };
-            case 'incomplete': // <--- CONFIGURACIÓN DEL NUEVO ESTADO
+            case 'incomplete':
                 return {
-                    colorClass: 'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900', // Ring para destacar
+                    colorClass: 'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900',
                     borderColor: 'border-amber-600',
                     label: 'Completar Datos',
                     icon: <AlertTriangle className="h-10 w-10 text-amber-100 animate-pulse" />,
@@ -200,14 +189,9 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                         <h2 className="text-3xl font-bold text-white">Panel de Habitaciones</h2>
                     </div>
                     <div className="flex flex-wrap gap-2 pb-2">
-                        {/* Botones de Filtro */}
                         <Badge count={countStatus('available')} label="Libres" color="bg-emerald-600" onClick={() => setFilterStatus('available')} active={filterStatus === 'available'} />
-                        
                         <Badge count={countStatus('occupied')} label="Ocupadas" color="bg-red-600" onClick={() => setFilterStatus('occupied')} active={filterStatus === 'occupied'} />
-                        
-                        {/* Nuevo Filtro: Pendientes */}
                         <Badge count={countStatus('incomplete')} label="Pendientes" color="bg-amber-500 text-black" onClick={() => setFilterStatus('incomplete')} active={filterStatus === 'incomplete'} />
-                        
                         <Badge count={countStatus('cleaning')} label="Limpieza" color="bg-blue-500" onClick={() => setFilterStatus('cleaning')} active={filterStatus === 'cleaning'} />
                         <Badge count={countStatus('maintenance')} label="Mant." color="bg-gray-600" onClick={() => setFilterStatus('maintenance')} active={filterStatus === 'maintenance'} />
                         <Badge count={Rooms.length} label="Todas" color="bg-slate-700" onClick={() => setFilterStatus('all')} active={filterStatus === 'all'} />
@@ -234,6 +218,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {filteredRooms.map((room) => {
                         const config = getStatusConfig(room);
+                        const isActionable = getDisplayStatus(room) === 'incomplete';
                         
                         return (
                             <div 
@@ -249,7 +234,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <h3 className="text-2xl font-extrabold tracking-tight">{room.number}</h3>
-                                            <p className="mt-1 text-xs font-bold text-white/90 line-clamp-2" title={config.info}>
+                                            <p className="mt-1 text-xs font-bold text-white/90 line-clamp-2" title={String(config.info)}>
                                                 {config.info}
                                             </p>
                                         </div>
@@ -259,20 +244,32 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                     </div>
                                 </div>
 
-                                <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}>
-                                    <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1">
-                                        {config.label === 'Completar Datos' && <FileEdit className="h-3 w-3" />}
-                                        {config.label}
-                                    </span>
-                                    <div className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
-                                </div>
+                                {/* BOTÓN DE ACCIÓN PARA COMPLETAR */}
+                                {isActionable ? (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRoomClick(room);
+                                        }}
+                                        className="flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-amber-800 z-20"
+                                    >
+                                        <FileEdit className="h-3 w-3" />
+                                        Completar Datos
+                                    </button>
+                                ) : (
+                                    <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}>
+                                        <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-white">
+                                            {config.label}
+                                        </span>
+                                        <div className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
             </div>
 
-            {/* MODAL */}
             <CheckinModal 
                 show={isCheckinModalOpen}
                 onClose={() => {
