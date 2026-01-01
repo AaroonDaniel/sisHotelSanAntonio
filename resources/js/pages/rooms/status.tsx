@@ -93,7 +93,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             if (guest) {
                 // Si tiene origen, lo mostramos entre paréntesis o guión
                 const originText = guest.origin ? ` (${guest.origin})` : '';
-                return `${guest.first_name} ${guest.last_name}${originText}`;
+                return `${guest.full_name}${originText}`;
             }
         }
         return 'Huésped';
