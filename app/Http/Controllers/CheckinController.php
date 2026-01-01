@@ -98,20 +98,19 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
-        // 1. Validaciones: Incluimos los datos del Huésped que faltaban
+        // 1. Validaciones (Todos son nullable para permitir borrarlos temporalmente)
         $validated = $request->validate([
-            // Datos del Checkin
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
             'duration_days' => 'required|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
             
-            // Datos del Huésped (NECESARIOS para completar el perfil)
+            // Datos del Huésped
             'full_name' => 'required|string|max:150',
             'identification_number' => 'nullable|string|max:50',
             'nationality' => 'nullable|string',
-            'origin' => 'nullable|string',        // <--- AHORA SÍ SE GUARDA EL ORIGEN
+            'origin' => 'nullable|string',
             'profession' => 'nullable|string',
             'civil_status' => 'nullable|string',
             'birth_date' => 'nullable|date',
@@ -120,51 +119,80 @@ class CheckinController extends Controller
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
             
-            // 2. ACTUALIZAR HUÉSPED (Aquí ocurre la magia del cambio de color)
             $guest = $checkin->guest;
+            $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
+
+            // 2. LÓGICA DE COMPLETITUD (NUEVO)
+            // Definimos qué campos son OBLIGATORIOS para que el estado sea 'COMPLETE'
+            $requiredFields = [
+                'identification_number',
+                'nationality',
+                'origin',
+                'profession',
+                'civil_status',
+                'birth_date',
+                'issued_in'
+            ];
+
+            $isProfileComplete = true;
+
+            // Verificamos uno por uno. Si falta alguno, el perfil está incompleto.
+            foreach ($requiredFields as $field) {
+                // Usamos 'filled' para verificar que no sea null ni string vacío ("")
+                if (!$request->filled($field)) {
+                    $isProfileComplete = false;
+                    break;
+                }
+            }
             
-            // Verificamos si se ha ingresado el Carnet (CI)
-            $hasIdNumber = !empty($validated['identification_number']);
-            
+            // 3. ACTUALIZAR HUÉSPED
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
-                'identification_number' => $hasIdNumber ? strtoupper($validated['identification_number']) : null,
-                'nationality' => strtoupper($validated['nationality'] ?? 'BOLIVIA'),
-                'origin' => strtoupper($validated['origin'] ?? ''), // <--- Guardamos Procedencia
-                'profession' => strtoupper($validated['profession'] ?? ''),
-                'civil_status' => $validated['civil_status'],
-                'birth_date' => $validated['birth_date'],
-                'issued_in' => strtoupper($validated['issued_in'] ?? ''),
+                // Guardamos el valor (convertido a mayúsculas si es string) o null si se borró
+                'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
+                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null, // Quitamos el default forzado para permitir validación real
+                'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
+                'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
+                'civil_status' => $validated['civil_status'], // Puede ser null
+                'birth_date' => $validated['birth_date'],     // Puede ser null
+                'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
                 
-                // CAMBIO DE ESTADO / COLOR:
-                // Si tiene CI -> 'COMPLETE' (Se vuelve ROJO en tu vista)
-                // Si no tiene CI -> 'INCOMPLETE' (Se queda ÁMBAR/PENDIENTE)
-                'profile_status' => $hasIdNumber ? 'COMPLETE' : 'INCOMPLETE'
+                // ESTADO CALCULADO:
+                'profile_status' => $isProfileComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
 
-            // 3. Actualizar fechas del Checkin
-            $checkInDate = \Carbon\Carbon::parse($validated['check_in_date']);
+            // 4. LÓGICA DE FECHAS INTELIGENTE
+            $newCheckInDate = $validated['check_in_date'];
+
+            // Si antes faltaban datos y AHORA está todo completo, actualizamos la fecha a "AHORA"
+            // (Simula que el ingreso real ocurre al completar la ficha)
+            if ($wasIncomplete && $isProfileComplete) {
+                $newCheckInDate = now(); 
+            }
+            
+            // Recalcular salida
+            $checkInCarbon = \Carbon\Carbon::parse($newCheckInDate);
             $checkOutDate = $validated['duration_days'] > 0
-                ? $checkInDate->copy()->addDays($validated['duration_days'])
+                ? $checkInCarbon->copy()->addDays($validated['duration_days'])
                 : null;
 
-            // 4. Gestionar cambio de habitación si es necesario
+            // 5. Gestionar cambio de habitación si aplica
             if ($checkin->room_id != $validated['room_id']) {
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
                 \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
             }
 
-            // 5. Actualizar el registro de Checkin
+            // 6. Actualizar Checkin
             $checkin->update([
                 'room_id' => $validated['room_id'],
-                'check_in_date' => $validated['check_in_date'],
+                'check_in_date' => $newCheckInDate,
                 'duration_days' => $validated['duration_days'],
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
                 'notes' => strtoupper($validated['notes'] ?? ''),
             ]);
 
-            // 6. Actualizar servicios adicionales
+            // 7. Servicios
             if ($request->has('selected_services')) {
                 $services = \App\Models\Service::whereIn('id', $request->selected_services)->get();
                 $syncData = [];
@@ -174,7 +202,7 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-            return redirect()->back()->with('success', 'Datos completados y actualizados correctamente.');
+            return redirect()->back()->with('success', 'Datos actualizados. Estado del huésped recalculado.');
         });
     }
 
