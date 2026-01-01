@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 // Si usas FPDF globalmente, esta línea a veces sobra, 
 // pero la dejo porque en tu código anterior estaba.
 use Fpdf; 
- 
+use Carbon\Carbon;
 use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin juntos
+
 
 class CheckinController extends Controller
 {
@@ -243,80 +244,130 @@ class CheckinController extends Controller
         // --- CABECERA ---
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
-        
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, 'Calle Principal #123 - Potosi', 0, 1, 'C');
-        $pdf->Cell(0, 4, 'Telf: 2-6224455', 0, 1, 'C');
-        $pdf->Ln(2);
-        
-        // Línea separadora
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
-        $pdf->Ln(2);
-
-        // --- DETALLES DEL RECIBO ---
+    
+        // --- DETALLES DE HABITACIÓN ---
         $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(0, 5, 'RECIBO DE CAJA #' . str_pad($checkin->id, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
+        $text = 'Pza. Nº ' . str_pad($checkin->room->number, 2, '0', STR_PAD_LEFT);
+        $pdf->Cell(0, 5, utf8_decode($text), 0, 1, 'R');
         $pdf->Ln(2);
 
-        // Datos en formato compacto (Etiqueta: Valor)
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(20, 4, 'Fecha:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $checkin->created_at->format('d/m/Y H:i'), 0, 1);
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(20, 4, 'Huesped:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        // MultiCell ayuda si el nombre es muy largo para que baje de línea
-        $nombre = utf8_decode($checkin->guest->full_name);
-        $pdf->MultiCell(0, 4, $nombre, 0, 'L');
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(20, 4, 'CI/Doc:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $checkin->guest->identification_number, 0, 1);
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(20, 4, 'Habitacion:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, 'Nro ' . $checkin->room->number, 0, 1);
-
-        $pdf->Ln(2);
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
-        $pdf->Ln(2);
-
-        // --- DETALLE DE PAGO ---
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(45, 5, 'CONCEPTO', 0, 0);
-        $pdf->Cell(0, 5, 'TOTAL', 0, 1, 'R');
-
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(45, 4, 'Adelanto Hospedaje', 0, 0);
-        $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2), 0, 1, 'R');
+        // --- DATOS DEL HUÉSPED ---
         
-        $diasTexto = ($checkin->duration_days > 0) ? $checkin->duration_days : 'Por Confirmar';
-        $pdf->Cell(45, 4, 'Dias (' . $diasTexto . ')', 0, 0);
-        $pdf->Cell(0, 4, '', 0, 1, 'R');
+        // Nombre
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(12, 4, 'Nombre:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L'); // MultiCell para nombres largos
 
-        $pdf->Ln(2);
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
-        $pdf->Ln(2);
+        // Nacionalidad
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(18, 4, 'Nacionalidad:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, utf8_decode($checkin->guest->nationality), 0, 1);
 
-        // --- TOTALES ---
-        $pdf->SetFont('Arial', 'B', 9);
-        $pdf->Cell(35, 6, 'TOTAL PAGADO:', 0, 0);
-        $pdf->Cell(0, 6, 'Bs. ' . number_format($checkin->advance_payment, 2), 0, 1, 'R');
-
-        $pdf->Ln(5);
-
-        // --- PIE DE PÁGINA ---
-        $pdf->SetFont('Arial', 'I', 6);
-        $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nConserve este comprobante."), 0, 'C');
-        $pdf->Ln(2);
+        // Carnet y Otorgado (Misma línea para ahorrar espacio)
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(18, 4, 'CI/Pasaporte:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(20, 4, $checkin->guest->identification_number, 0, 0);
         
-        // Verificación segura del usuario
-        $userName = Auth::user() ? Auth::user()->name : 'Admin';
-        $pdf->Cell(0, 3, 'Usuario: ' . utf8_decode($userName), 0, 1, 'C');
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(15, 4, 'Otorgado:', 0, 0); // Etiqueta corta
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, utf8_decode($checkin->guest->issued_in), 0, 1);
+
+        // Estado Civil y Edad (Misma línea)
+        $estado = $checkin->guest->civil_status;
+        $inicial = $estado ? strtoupper(substr($estado, 0, 1)) : '-';
+
+        $edad = '-';
+        if ($checkin->guest->birth_date) {
+            $edad = \Carbon\Carbon::parse($checkin->guest->birth_date)->age;
+        }
+            
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(18, 4, 'Estado civil:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(20, 4, $inicial, 0, 0);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(10, 4, 'Edad:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $edad, 0, 1);
+
+        // Profesión
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(18, 4, utf8_decode('Profesión:'), 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, utf8_decode($checkin->guest->profession), 0, 1);
+
+        // Procedencia
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, utf8_decode($checkin->guest->origin), 0, 1);
+
+        // --- DATOS DE INGRESO ---
+        $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');
+        $horaIngreso  = \Carbon\Carbon::parse($checkin->check_in_date)->format('H:i');
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Fecha ingreso:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(18, 4, $fechaIngreso, 0, 0);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(10, 4, 'Hora:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $horaIngreso, 0, 1);
+
+        // Permanencia
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(28, 4, utf8_decode('Permanencia (días):'), 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $checkin->duration_days, 0, 1);
+
+        // Total Cancelado (Adelanto)
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(28, 4, 'Total cancelado:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2) . ' Bs.', 0, 1);
+
+        // Observaciones (Multilinea)
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(28, 4, 'Observaciones:', 0, 1); // Salto de línea para escribir abajo
+        $pdf->SetFont('Arial', '', 7);
+        if($checkin->notes) {
+            $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
+        } else {
+            $pdf->Cell(0, 4, '-', 0, 1);
+        }
+
+        // Celular (Campo vacío para rellenar a mano si no existe en BD)
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(15, 4, 'Celular:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        
+
+        
+        // --- FIRMA ---
+        $pdf->Ln(10); // Espacio vertical generoso para la firma
+
+        // Calculamos posición para centrar la línea
+        $pageWidth = $pdf->GetPageWidth(); // 80mm
+        $margins = 4;
+        $printableWidth = $pageWidth - ($margins * 2); // 72mm
+        $lineLength = 50; // Longitud de la línea de firma
+        
+        $x = ($pageWidth - $lineLength) / 2; // Centrado matemático
+        $y = $pdf->GetY();
+
+        $pdf->Line($x, $y, $x + $lineLength, $y); // Dibuja la línea
+        
+        $pdf->Ln(2); // Pequeño espacio entre línea y texto
+        
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C'); // Centrado
 
         // 4. Salida
         return response($pdf->Output('S'), 200)
