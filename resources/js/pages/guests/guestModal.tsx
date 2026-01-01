@@ -15,9 +15,12 @@ import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
 // --- Lista para el autocompletado ---
 const countries = [
-    'BOLIVIA', 'ARGENTINA', 'BRASIL', 'CHILE', 'COLOMBIA', 'PERÚ', 'ECUADOR',
-    'PARAGUAY', 'URUGUAY', 'VENEZUELA', 'MÉXICO', 'ESTADOS UNIDOS', 'ESPAÑA',
-    'FRANCIA', 'ALEMANIA', 'ITALIA', 'CHINA', 'JAPÓN', 'RUSIA',
+    'BOLIVIANA', 'ARGENTINA', 'BRASILERA', 'CHILENA', 'COLOMBIANA', 'PERÚANA', 'ECUATORIANA',
+    'PARAGUAYA', 'URUGUAYA', 'VENEZOLANA', 'MÉXICANA', 'ESTADOUNIDENSE', 'ESPAÑOLA',
+    'FRANCESA', 'ALEMANA', 'ITALIANA', 'CHINA', 'JAPÓNESA', 'RUSA', 'CANADIENSE',
+    'INGLESA', 'PORTUGUESA', 'INDIA', 'AUSTRALIANA', 'CUBANA', 'DOMINICANA',
+    'GUATEMALTECA', 'HONDUREÑA', 'SALVADOREÑA', 'NICARAGÜENSE', 'COSTARRICENSE',
+    'PANAMEÑA', 'PUERTORRIQUEÑA', 'HAITIANA', 'TRINITARIA', 'JAMAICANA','OTRO'
 ];
 
 // Función para calcular edad (robusta)
@@ -138,9 +141,9 @@ export default function GuestModal({
         const value = e.target.value;
         setData('nationality', value);
         if (value.length > 0) {
-            setFilteredCountries(
+            setFilteredCountries( 
                 countries.filter((c) =>
-                    c.toLowerCase().includes(value.toLowerCase()),
+                    c.toUpperCase().includes(value.toUpperCase()),
                 ),
             );
             setShowSuggestions(true);
@@ -206,7 +209,7 @@ export default function GuestModal({
                                         setData('full_name', e.target.value.toUpperCase())
                                     }
                                     className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Pérez"
+                                    placeholder="JUAN PEREZ"
                                     required
                                 />
                             </div>
@@ -234,9 +237,9 @@ export default function GuestModal({
                                         data.nationality &&
                                         setShowSuggestions(true)
                                     }
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                    placeholder="BOLIVIA"
-                                    autoComplete="off"
+                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500 uppercase"
+                                    placeholder="BOLIVIANA"
+                                    autoComplete="on"
                                 />
                                 {showSuggestions &&
                                     filteredCountries.length > 0 && (
