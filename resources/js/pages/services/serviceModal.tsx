@@ -89,10 +89,10 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                     <Tag className="h-4 w-4 text-gray-400" />
                                 </div>
                                 <input
-                                    type="text"
+                                    type="text" 
                                     value={data.name}
-                                    onChange={(e) => setData('name', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    onChange={(e) => setData('name', e.target.value.toUpperCase())}
+                                    className="UpperCase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Ej: Lavandería"
                                 />
                             </div>
@@ -149,9 +149,9 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                 </div>
                                 <textarea
                                     value={data.description}
-                                    onChange={(e) => setData('description', e.target.value)}
+                                    onChange={(e) => setData('description', e.target.value.toUpperCase())}
                                     rows={3}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="UpperCase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                     placeholder="Detalles del servicio..."
                                 />
                             </div>

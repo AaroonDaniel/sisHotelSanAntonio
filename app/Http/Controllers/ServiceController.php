@@ -36,6 +36,7 @@ class ServiceController extends Controller
 
         // --- CORRECCIÓN FINAL ---
         // Usamos 'enabled' porque es lo que dice tu migración
+        $validated['quantity'] = $validated['quantity'] ?? 0;
         $validated['status'] = 'enabled'; 
         
         $validated['is_active'] = true;
@@ -53,6 +54,8 @@ class ServiceController extends Controller
             'description' => 'nullable|string',
             'quantity' => 'nullable|integer|min:0',
         ]);
+
+        $validated['quantity'] = $validated['quantity'] ?? 0;
 
         $service->update($validated);
 
