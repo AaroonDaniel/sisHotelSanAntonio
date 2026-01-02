@@ -383,43 +383,57 @@ class CheckinController extends Controller
     {
         $checkin->load(['guest', 'room.price', 'services']);
 
-        // FECHAS Y CÁLCULOS
-        $ingreso = Carbon::parse($checkin->check_in_date);
-        $salida = $checkin->check_out_date ? Carbon::parse($checkin->check_out_date) : now();
+        // --- 1. LÓGICA DE DÍAS A COBRAR (CORREGIDA) ---
         
-        // Calculamos días reales
-        $diasReales = $ingreso->diffInDays($salida);
-        if ($diasReales == 0) $diasReales = 1; // Mínimo 1 día
-        
-        // Días pactados originalmente
-        $diasPactados = $checkin->duration_days;
-        
-        // Verificamos si se excedió
-        $diasExcedidos = 0;
-        if ($diasReales > $diasPactados) {
-            $diasExcedidos = $diasReales - $diasPactados;
+        // Tomamos los días que se definieron al registrar el ingreso (ej: 1 día)
+        $diasPactados = intval($checkin->duration_days);
+
+        // REGLA DE ORO: Mínimo se cobra 1 día, aunque haya estado 5 minutos.
+        if ($diasPactados < 1) {
+            $diasPactados = 1;
         }
 
-        // CÁLCULO DE COSTOS
-        // Nota: Idealmente el precio debería estar guardado en el checkin para congelarlo.
-        // Aquí usamos el precio actual de la habitación.
+        // Verificamos si se excedió del tiempo pactado (Solo para cobrar extra, no para cobrar menos)
+        $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
+        $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
+        
+        // diffInDays devuelve días ENTEROS redondeados hacia abajo (0, 1, 2...)
+        $diasRealesTranscurridos = $ingreso->diffInDays($salida);
+
+        // Definimos los días finales a cobrar:
+        // Si se quedó MENOS o IGUAL a lo pactado -> Cobramos lo pactado ($diasPactados).
+        // Si se quedó MÁS de lo pactado -> Cobramos lo real ($diasRealesTranscurridos).
+        $diasACobrar = max($diasPactados, $diasRealesTranscurridos);
+
+        // Calculamos excedente solo informativo
+        $diasExcedidos = 0;
+        if ($diasRealesTranscurridos > $diasPactados) {
+            $diasExcedidos = $diasRealesTranscurridos - $diasPactados;
+        }
+
+        // --- 2. CÁLCULOS ECONÓMICOS ---
+        
         $precioUnitario = $checkin->room->price->amount ?? 0;
         
-        // Cobramos por los días reales que se quedó
-        $totalHospedaje = $precioUnitario * $diasReales;
+        // Costo Total Hospedaje (Precio x Días Enteros)
+        $totalHospedaje = $precioUnitario * $diasACobrar;
 
-        // Servicios
+        // Costo Total Servicios
         $totalServicios = 0;
         foreach($checkin->services as $srv) {
             $totalServicios += ($srv->pivot->quantity * $srv->pivot->selling_price);
         }
 
+        // Gran Total
         $granTotal = $totalHospedaje + $totalServicios;
-        $adelanto = $checkin->advance_payment;
+
+        // Adelanto
+        $adelanto = $checkin->advance_payment ?? 0;
+
+        // Saldo a Pagar
         $saldoPagar = $granTotal - $adelanto;
 
-        // --- GENERACIÓN PDF ---
-        // Usamos un formato más largo para el detalle completo
+        // --- 3. GENERACIÓN PDF ---
         $pdf = new \FPDF('P', 'mm', array(80, 220)); 
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
@@ -482,15 +496,16 @@ class CheckinController extends Controller
 
         // 1. Hospedaje
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(45, 4, utf8_decode("Hospedaje ($diasReales dias)"), 0, 0);
+        // Mostramos número entero de días
+        $pdf->Cell(45, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0);
         $pdf->Cell(0, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
 
         // Aviso de días excedidos
         if ($diasExcedidos > 0) {
             $pdf->SetFont('Arial', 'I', 6);
-            $pdf->SetTextColor(200, 0, 0); // Texto rojo para aviso (si es impresora color) o gris oscuro
-            $pdf->Cell(0, 3, utf8_decode("* Estadía excedida por $diasExcedidos días (Plan original: $diasPactados)"), 0, 1, 'L');
-            $pdf->SetTextColor(0, 0, 0); // Volver a negro
+            $pdf->SetTextColor(200, 0, 0); 
+            $pdf->Cell(0, 3, utf8_decode("* Estadía excedida por $diasExcedidos días"), 0, 1, 'L');
+            $pdf->SetTextColor(0, 0, 0); 
         }
 
         // 2. Servicios

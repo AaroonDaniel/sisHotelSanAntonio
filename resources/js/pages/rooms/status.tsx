@@ -14,7 +14,7 @@ import {
     CheckCircle2,
     X // Importamos X para cerrar el modal
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Agregamos useEffect para depuración si es necesario
 import CheckinModal, { Room as ModalRoom, Guest as ModalGuest, CheckinData } from '../checkins/checkinModal';
 
 // --- SOLUCIÓN AL ERROR "route is not defined" ---
@@ -64,16 +64,24 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     // --- NUEVO ESTADO PARA MODAL DE CONFIRMACIÓN (CHECKOUT) ---
     const [confirmCheckoutId, setConfirmCheckoutId] = useState<number | null>(null);
 
-    // --- LÓGICA DE ESTADO ---
+    // --- LÓGICA DE ESTADO (CORREGIDA Y REFORZADA) ---
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
         
+        // Prioridad 1: Verificar si está ocupada
         if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) {
-            const activeCheckin = room.checkins?.[0];
-            const guest = activeCheckin?.guest as Guest | undefined;
-            if (guest?.profile_status === 'INCOMPLETE') {
-                return 'incomplete';
+            // Verificamos si hay un checkin activo
+            const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+            
+            if (activeCheckin) {
+                const guest = activeCheckin.guest as Guest | undefined;
+                
+                // CRUCIAL: Si el guest existe y su estado es INCOMPLETE, forzamos el estado visual a 'incomplete'
+                if (guest && guest.profile_status === 'INCOMPLETE') {
+                    return 'incomplete'; // Devolverá estado Amarillo
+                }
             }
+            // Si tiene datos completos, devolvemos ocupado (Rojo)
             return 'occupied';
         }
 
@@ -88,24 +96,27 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
         
+        // Lógica para estado OCUPADO (Rojo - Datos completos)
         if (status === 'occupied') {
             if (selectedForAction === room.id) {
-                // Deseleccionar si ya estaba seleccionado
-                setSelectedForAction(null);
+                setSelectedForAction(null); // Deseleccionar
             } else {
-                // Seleccionar para acción global
-                setSelectedForAction(room.id);
+                setSelectedForAction(room.id); // Seleccionar para acción global
             }
             return;
         }
 
+        // Si hago click en cualquier otro estado, limpio la selección global
         setSelectedForAction(null);
 
+        // Lógica para estado DISPONIBLE (Verde - Crear nuevo)
         if (status === 'available') {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
-        } else if (status === 'incomplete') {
+        } 
+        // Lógica para estado INCOMPLETO (Amarillo - Completar datos)
+        else if (status === 'incomplete') {
             const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
@@ -122,20 +133,33 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
         const activeCheckin = room?.checkins?.[0];
         
         if (activeCheckin) {
-            setConfirmCheckoutId(activeCheckin.id); // <--- ESTO ABRE EL MODAL
+            setConfirmCheckoutId(activeCheckin.id);
         }
     };
 
     // --- ABRIR MODAL DE CONFIRMACIÓN (DIRECTO DESDE TARJETA) ---
     const handleDirectCheckoutTrigger = (checkinId: number) => {
-        setConfirmCheckoutId(checkinId); // <--- ESTO ABRE EL MODAL
+        setConfirmCheckoutId(checkinId);
+    };
+
+    // --- ABRIR DETALLES SIN SELECCIONAR (PARA BOTÓN "DETALLES") ---
+    const handleOpenDetails = (room: Room) => {
+        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+        if (activeCheckin) {
+            setCheckinToEdit(activeCheckin);
+            setSelectedRoomId(room.id);
+            setIsCheckinModalOpen(true);
+            setSelectedForAction(null); // Aseguramos que no quede seleccionado
+        }
     };
 
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch = room.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               (room.room_type?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+        
         const currentStatus = getDisplayStatus(room);
         const matchesStatus = filterStatus === 'all' || currentStatus === filterStatus;
+        
         return matchesSearch && matchesStatus;
     });
 
@@ -178,7 +202,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 return {
                     colorClass: 'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900',
                     borderColor: 'border-amber-600',
-                    label: 'Completar Datos',
+                    label: 'Completar Datos', // Etiqueta clara
                     icon: <AlertTriangle className="h-10 w-10 text-amber-100 animate-pulse" />,
                     info: getOccupantName(room),
                     actionLabel: 'Actualizar Info'
@@ -232,7 +256,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">Panel de Habitaciones</h2>
                             
-                            {/* BOTÓN SUPERIOR: AHORA ABRE EL MODAL DE CONFIRMACIÓN */}
+                            {/* BOTÓN SUPERIOR */}
                             <button
                                 onClick={handleTopCheckoutTrigger}
                                 disabled={!selectedForAction}
@@ -279,8 +303,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {filteredRooms.map((room) => {
                         const config = getStatusConfig(room);
-                        const isActionable = getDisplayStatus(room) === 'incomplete';
-                        const isOccupied = getDisplayStatus(room) === 'occupied';
+                        const displayStatus = getDisplayStatus(room);
+                        
+                        const isActionable = displayStatus === 'incomplete'; // ¿Es amarillo?
+                        const isOccupied = displayStatus === 'occupied';     // ¿Es rojo?
+                        
                         const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
                         const isSelected = selectedForAction === room.id;
                         
@@ -319,7 +346,10 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                     </div>
                                 </div>
 
+                                {/* LÓGICA DE BOTONES SEGÚN ESTADO */}
+                                
                                 {isActionable ? (
+                                    // ESTADO INCOMPLETO (Amarillo) -> Botón "Completar Datos"
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -331,18 +361,18 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                         Completar Datos
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
+                                    // ESTADO OCUPADO (Rojo) -> Botones Detalles y Finalizar
                                     <div className="flex border-t border-red-800 z-20">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleRoomClick(room);
+                                                handleOpenDetails(room);
                                             }}
                                             className="flex-1 flex items-center justify-center gap-1 bg-red-700 hover:bg-red-800 py-2 text-[10px] font-bold uppercase text-white border-r border-red-800 transition-colors"
                                         >
                                             <UserIcon className="h-3 w-3" />
                                             Detalles
                                         </button>
-                                        {/* BOTÓN TARJETA: ABRE MODAL CONFIRMACIÓN */}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -355,6 +385,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                         </button>
                                     </div>
                                 ) : (
+                                    // OTROS ESTADOS (Verde, Azul, Gris) -> Barra normal
                                     <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}>
                                         <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-white">
                                             {config.label}
@@ -383,7 +414,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 initialRoomId={selectedRoomId}
             />
 
-            {/* --- NUEVO MODAL DE CONFIRMACIÓN (FLOAT) --- */}
+            {/* MODAL DE CONFIRMACIÓN (FLOAT) */}
             {confirmCheckoutId && (
                 <CheckoutConfirmationModal 
                     checkinId={confirmCheckoutId}
@@ -396,17 +427,15 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
 }
 
 // --- COMPONENTE MODAL DE CONFIRMACIÓN ---
-// Diseño similar a "DeleteModal" pero para Finalizar Estadía
 function CheckoutConfirmationModal({ checkinId, onClose }: { checkinId: number, onClose: () => void }) {
     const [processing, setProcessing] = useState(false);
 
     const handleConfirm = () => {
         setProcessing(true);
-        // Usamos la URL directa sin Ziggy para evitar problemas
+        // Sin Ziggy: Usamos URL directa
         router.put(`/checks/${checkinId}/checkout`, {}, {
             onSuccess: () => {
                 onClose();
-                // Abrimos el recibo
                 window.open(`/checks/${checkinId}/checkout-receipt`, '_blank');
             },
             onFinish: () => setProcessing(false)
