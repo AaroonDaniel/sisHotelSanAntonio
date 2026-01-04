@@ -9,6 +9,7 @@ import {
     MapPin,
     Save,
     User,
+    Phone,
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
@@ -22,6 +23,47 @@ const countries = [
     'GUATEMALTECA', 'HONDUREÑA', 'SALVADOREÑA', 'NICARAGÜENSE', 'COSTARRICENSE',
     'PANAMEÑA', 'PUERTORRIQUEÑA', 'HAITIANA', 'TRINITARIA', 'JAMAICANA','OTRO'
 ];
+
+// --- Mapeo de Códigos Telefónicos (AGREGADO) ---
+const countryCodes: { [key: string]: string } = {
+    'BOLIVIANA': '+591',
+    'ARGENTINA': '+54',
+    'BRASILERA': '+55',
+    'CHILENA': '+56',
+    'COLOMBIANA': '+57',
+    'PERÚANA': '+51',
+    'ECUATORIANA': '+593',
+    'PARAGUAYA': '+595',
+    'URUGUAYA': '+598',
+    'VENEZOLANA': '+58',
+    'MÉXICANA': '+52',
+    'ESTADOUNIDENSE': '+1',
+    'ESPAÑOLA': '+34',
+    'FRANCESA': '+33',
+    'ALEMANA': '+49',
+    'ITALIANA': '+39',
+    'CHINA': '+86',
+    'JAPÓNESA': '+81',
+    'RUSA': '+7',
+    'CANADIENSE': '+1',
+    'INGLESA': '+44',
+    'PORTUGUESA': '+351',
+    'INDIA': '+91',
+    'AUSTRALIANA': '+61',
+    'CUBANA': '+53',
+    'DOMINICANA': '+1',
+    'GUATEMALTECA': '+502',
+    'HONDUREÑA': '+504',
+    'SALVADOREÑA': '+503',
+    'NICARAGÜENSE': '+505',
+    'COSTARRICENSE': '+506',
+    'PANAMEÑA': '+507',
+    'PUERTORRIQUEÑA': '+1',
+    'HAITIANA': '+509',
+    'TRINITARIA': '+1',
+    'JAMAICANA': '+1',
+    'OTRO': ''
+};
 
 // Función para calcular edad (robusta)
 const calculateAge = (dateString: string): number | '' => {
@@ -54,6 +96,7 @@ interface Guest {
     age?: number;
     profession: string;
     origin?: string;
+    phone?: string;
 }
 
 interface GuestModalProps {
@@ -78,6 +121,7 @@ export default function GuestModal({
             birth_date: '',
             profession: '',
             origin: '', 
+            phone: '',
         });
 
     // --- Lógica Autocompletado Nacionalidad ---
@@ -110,6 +154,7 @@ export default function GuestModal({
                     birth_date: GuestToEdit.birth_date || '',
                     profession: GuestToEdit.profession,
                     origin: GuestToEdit.origin || '',
+                    phone: GuestToEdit.phone || '',
                 });
             } else {
                 reset();
@@ -135,21 +180,54 @@ export default function GuestModal({
             document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleNationalityChange = (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-        const value = e.target.value;
-        setData('nationality', value);
-        if (value.length > 0) {
+    // --- LÓGICA DE ACTUALIZACIÓN (NACIONALIDAD -> TELÉFONO) ---
+    const updateNationalityAndPhone = (nationalityValue: string) => {
+        const upperValue = nationalityValue.toUpperCase();
+        
+        // 1. Buscar código telefónico
+        let newPhone = data.phone;
+        const code = countryCodes[upperValue];
+
+        // 2. Comprobar si el campo teléfono está vacío o solo tiene un código anterior
+        // (Para no borrar números que el usuario ya haya escrito)
+        const currentPhoneClean = data.phone ? data.phone.trim() : '';
+        const isJustCode = Object.values(countryCodes).some(c => c === currentPhoneClean);
+
+        if (code && (data.phone === '' || isJustCode)) {
+            newPhone = code + ' ';
+        }
+
+        // 3. Actualizar el estado
+        setData(prev => ({
+            ...prev,
+            nationality: upperValue,
+            phone: newPhone
+        }));
+
+        // 4. Filtrar la lista de sugerencias
+        if (upperValue.length > 0) {
             setFilteredCountries( 
                 countries.filter((c) =>
-                    c.toUpperCase().includes(value.toUpperCase()),
+                    c.toUpperCase().includes(upperValue),
                 ),
             );
             setShowSuggestions(true);
         } else {
             setShowSuggestions(false);
         }
+    };
+
+    // Handler para el input de texto
+    const handleNationalityChange = (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        updateNationalityAndPhone(e.target.value);
+    };
+
+    // Handler para el clic en la lista
+    const handleSelectNationality = (country: string) => {
+        updateNationalityAndPhone(country);
+        setShowSuggestions(false);
     };
 
     const submit: FormEventHandler = (e) => {
@@ -192,8 +270,7 @@ export default function GuestModal({
                 <form onSubmit={submit} className="p-6">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         
-
-                        {/* Apellidos */}
+                        {/* Nombre completo */}
                         <div>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                 Nombre completo
@@ -234,12 +311,11 @@ export default function GuestModal({
                                     value={data.nationality}
                                     onChange={handleNationalityChange}
                                     onFocus={() =>
-                                        data.nationality &&
-                                        setShowSuggestions(true)
+                                        data.nationality && setShowSuggestions(true)
                                     }
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500 uppercase"
                                     placeholder="BOLIVIANA"
-                                    autoComplete="on"
+                                    autoComplete="off"
                                 />
                                 {showSuggestions &&
                                     filteredCountries.length > 0 && (
@@ -247,10 +323,7 @@ export default function GuestModal({
                                             {filteredCountries.map((c, i) => (
                                                 <div
                                                     key={i}
-                                                    onClick={() => {
-                                                        setData('nationality', c);
-                                                        setShowSuggestions(false);
-                                                    }}
+                                                    onClick={() => handleSelectNationality(c)}
                                                     className="cursor-pointer px-4 py-2 text-sm text-black hover:bg-green-50 hover:text-green-700"
                                                 >
                                                     {c}
@@ -320,7 +393,6 @@ export default function GuestModal({
                                 )}
                             </div>
                             
-                            {/* Fecha Nac. */}
                             <div className="w-1/2">
                                 <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                     Fecha Nac.
@@ -336,7 +408,6 @@ export default function GuestModal({
                                         required
                                     />
                                 </div>
-                                {/* Comprobamos que no sea string vacío, permitiendo el 0 */}
                                 <span className="text-[10px] text-gray-400 font-medium ml-1">
                                     {displayAge !== '' ? `${displayAge} años` : ''}
                                 </span>
@@ -364,7 +435,6 @@ export default function GuestModal({
                                     <option value="MARRIED">CASADO(A)</option>
                                     <option value="DIVORCED">DIVORCIADO(A)</option>
                                     <option value="WIDOWED">VIUDO(A)</option>
-                                    <option value="CONCUBINAGE">CONCUBINATO</option>
                                 </select>
                             </div>
                             {errors.civil_status && (
@@ -396,6 +466,33 @@ export default function GuestModal({
                             {errors.profession && (
                                 <p className="mt-1 text-xs font-bold text-red-500">
                                     {errors.profession}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Teléfono */}
+                        <div>
+                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                Teléfono
+                            </label>
+                            <div className="relative">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Phone className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={data.phone}
+                                    onChange={(e) =>
+                                        setData('phone', e.target.value)
+                                    }
+                                    disabled={!data.nationality}
+                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    placeholder="#### ####"
+                                />
+                            </div>
+                            {errors.phone && (
+                                <p className="mt-1 text-xs font-bold text-red-500">
+                                    {errors.phone}
                                 </p>
                             )}
                         </div>

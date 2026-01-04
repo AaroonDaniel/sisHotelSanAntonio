@@ -60,6 +60,7 @@ export interface Guest {
     age?: number; 
     profession: string;
     origin?: string;
+    phone?: string;
 }
 
 interface Props {
@@ -162,6 +163,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                         <th className="px-6 py-4">Documento</th>
                                         <th className="px-6 py-4">Origen</th>
                                         <th className="px-6 py-4">Edad / Civil</th>
+                                        <th className="px-6 py-4">Telefono</th>
                                         <th className="px-6 py-4 text-right">Acciones</th>
                                     </tr>
                                 </thead>
@@ -228,6 +230,13 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                             {guest.civil_status 
                                                                 ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
                                                                 : '-'}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Columna: Teléfono */}
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm text-gray-900">
+                                                            {guest.phone || '-'}
                                                         </div>
                                                     </td>
 

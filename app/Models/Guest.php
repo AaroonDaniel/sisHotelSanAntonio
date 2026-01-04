@@ -25,6 +25,7 @@ class Guest extends Model
         'birth_date', 
         'profession',
         'origin',
+        'phone',
     ];
 
     protected $uppercaseFields = [

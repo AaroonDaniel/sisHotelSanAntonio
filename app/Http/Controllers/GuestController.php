@@ -40,6 +40,7 @@ class GuestController extends Controller
                 'birth_date' => 'nullable|date',
                 'profession' => 'nullable|string',
                 'origin' => 'nullable|string',
+                'phone' => 'nullable|string|max:20',
                 'issued_in' => 'nullable|string',
             ]);
 
@@ -51,6 +52,7 @@ class GuestController extends Controller
                 'birth_date' => $request->birth_date,
                 'profession' => $request->profession,
                 'origin' => $request->origin,
+                'phone' => $request->phone,
                 'issued_in' => $request->issued_in,
                 'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
             ]);
@@ -108,6 +110,7 @@ class GuestController extends Controller
             'age' => 'exclude',
             'profession' => 'nullable|string|max:100',
             'origin' => 'nullable|string|max:100',
+            'phone' => 'nullable|string|max:20',
         ]);
 
         $guest->update($validated);
