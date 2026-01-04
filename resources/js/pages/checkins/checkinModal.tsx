@@ -7,10 +7,11 @@ import {
     Clock,
     FileText,
     Globe,
-    LogOut, // Icono LogOut
+    LogOut,
     Printer,
     Save,
     User,
+    Phone,
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
@@ -25,44 +26,53 @@ const civilStatusOptions = [
 ];
 
 const countries = [
-    'BOLIVIANA',
-    'ARGENTINA',
-    'BRASILERA',
-    'CHILENA',
-    'COLOMBIANA',
-    'PERÚANA',
-    'ECUATORIANA',
-    'PARAGUAYA',
-    'URUGUAYA',
-    'VENEZOLANA',
-    'MÉXICANA',
-    'ESTADOUNIDENSE',
-    'ESPAÑOLA',
-    'FRANCESA',
-    'ALEMANA',
-    'ITALIANA',
-    'CHINA',
-    'JAPÓNESA',
-    'RUSA',
-    'CANADIENSE',
-    'INGLESA',
-    'PORTUGUESA',
-    'INDIA',
-    'AUSTRALIANA',
-    'CUBANA',
-    'DOMINICANA',
-    'GUATEMALTECA',
-    'HONDUREÑA',
-    'SALVADOREÑA',
-    'NICARAGÜENSE',
-    'COSTARRICENSE',
-    'PANAMEÑA',
-    'PUERTORRIQUEÑA',
-    'HAITIANA',
-    'TRINITARIA',
-    'JAMAICANA',
-    'OTRO',
+    'BOLIVIANA', 'ARGENTINA', 'BRASILERA', 'CHILENA', 'COLOMBIANA', 'PERÚANA', 'ECUATORIANA',
+    'PARAGUAYA', 'URUGUAYA', 'VENEZOLANA', 'MÉXICANA', 'ESTADOUNIDENSE', 'ESPAÑOLA',
+    'FRANCESA', 'ALEMANA', 'ITALIANA', 'CHINA', 'JAPÓNESA', 'RUSA', 'CANADIENSE',
+    'INGLESA', 'PORTUGUESA', 'INDIA', 'AUSTRALIANA', 'CUBANA', 'DOMINICANA',
+    'GUATEMALTECA', 'HONDUREÑA', 'SALVADOREÑA', 'NICARAGÜENSE', 'COSTARRICENSE',
+    'PANAMEÑA', 'PUERTORRIQUEÑA', 'HAITIANA', 'TRINITARIA', 'JAMAICANA', 'OTRO',
 ];
+
+const countryCodes: { [key: string]: string } = {
+    'BOLIVIANA': '+591',
+    'ARGENTINA': '+54',
+    'BRASILERA': '+55',
+    'CHILENA': '+56',
+    'COLOMBIANA': '+57',
+    'PERÚANA': '+51',
+    'ECUATORIANA': '+593',
+    'PARAGUAYA': '+595',
+    'URUGUAYA': '+598',
+    'VENEZOLANA': '+58',
+    'MÉXICANA': '+52',
+    'ESTADOUNIDENSE': '+1',
+    'ESPAÑOLA': '+34',
+    'FRANCESA': '+33',
+    'ALEMANA': '+49',
+    'ITALIANA': '+39',
+    'CHINA': '+86',
+    'JAPÓNESA': '+81',
+    'RUSA': '+7',
+    'CANADIENSE': '+1',
+    'INGLESA': '+44',
+    'PORTUGUESA': '+351',
+    'INDIA': '+91',
+    'AUSTRALIANA': '+61',
+    'CUBANA': '+53',
+    'DOMINICANA': '+1',
+    'GUATEMALTECA': '+502',
+    'HONDUREÑA': '+504',
+    'SALVADOREÑA': '+503',
+    'NICARAGÜENSE': '+505',
+    'COSTARRICENSE': '+506',
+    'PANAMEÑA': '+507',
+    'PUERTORRIQUEÑA': '+1',
+    'HAITIANA': '+509',
+    'TRINITARIA': '+1',
+    'JAMAICANA': '+1',
+    'OTRO': ''
+};
 
 const calculateAge = (dateString: string) => {
     if (!dateString) return '';
@@ -76,7 +86,6 @@ const calculateAge = (dateString: string) => {
     return age;
 };
 
-// Función auxiliar para formatear la fecha de BD (Y-m-d H:i:s) a input (Y-m-dTH:i)
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
     return dateString.replace(' ', 'T').substring(0, 16);
@@ -94,6 +103,7 @@ export interface Guest {
     age?: number;
     profession?: string;
     origin?: string;
+    phone?: string;
     profile_status?: string;
 }
 
@@ -137,7 +147,11 @@ export default function CheckinModal({
 }: CheckinModalProps) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    
+    // REFS PARA DETECTAR CLICS FUERA
+    const dropdownRef = useRef<HTMLDivElement>(null);   // Para el buscador de nombre
+    const nationalityRef = useRef<HTMLDivElement>(null); // Para el buscador de nacionalidad (NUEVO)
+
     const [displayAge, setDisplayAge] = useState<number | string>('');
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
     const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
@@ -161,15 +175,25 @@ export default function CheckinModal({
             birth_date: '' as string,
             profession: '',
             origin: '',
+            phone: '', 
         });
 
+    // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            // Cierra el buscador de huéspedes si clic fuera
             if (
                 dropdownRef.current &&
                 !dropdownRef.current.contains(event.target as Node)
             ) {
                 setIsDropdownOpen(false);
+            }
+            // Cierra el buscador de nacionalidad si clic fuera
+            if (
+                nationalityRef.current &&
+                !nationalityRef.current.contains(event.target as Node)
+            ) {
+                setShowCountrySuggestions(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -215,6 +239,7 @@ export default function CheckinModal({
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
+                    phone: checkinToEdit.guest?.phone || '', 
                 });
             } else {
                 reset();
@@ -260,18 +285,40 @@ export default function CheckinModal({
             birth_date: guest.birth_date || '',
             profession: guest.profession || '',
             origin: guest.origin || '',
+            phone: guest.phone || '', 
         }));
     };
 
-    const handleNationalityChange = (val: string) => {
-        const upperVal = val.toUpperCase();
-        setData('nationality', upperVal);
-        if (upperVal.length > 0) {
-            setFilteredCountries(countries.filter((c) => c.includes(upperVal)));
+    // --- LOGICA DE ACTUALIZACIÓN (NACIONALIDAD -> TELÉFONO) ---
+    const updateNationalityAndPhone = (nationalityValue: string) => {
+        const upperValue = nationalityValue.toUpperCase();
+        
+        let newPhone = data.phone;
+        const code = countryCodes[upperValue];
+
+        const currentPhoneClean = data.phone ? data.phone.trim() : '';
+        const isJustCode = Object.values(countryCodes).some(c => c === currentPhoneClean);
+
+        if (code && (data.phone === '' || isJustCode)) {
+            newPhone = code + ' ';
+        }
+
+        setData(prev => ({
+            ...prev,
+            nationality: upperValue,
+            phone: newPhone
+        }));
+
+        if (upperValue.length > 0) {
+            setFilteredCountries(countries.filter((c) => c.includes(upperValue)));
             setShowCountrySuggestions(true);
         } else {
             setShowCountrySuggestions(false);
         }
+    };
+
+    const handleNationalityChange = (val: string) => {
+        updateNationalityAndPhone(val);
     };
 
     const submit: FormEventHandler = (e) => {
@@ -287,7 +334,6 @@ export default function CheckinModal({
         }
     };
 
-    // Función checkout desde Header
     const handleCheckout = () => {
         if (!checkinToEdit) return;
         if (
@@ -398,9 +444,9 @@ export default function CheckinModal({
                             className={`${isProfileIncomplete && data.full_name.length > 3 ? 'mt-8' : ''} transition-all`}
                         ></div>
 
-                        <div className="mb-6 space-y-4" ref={dropdownRef}>
+                        <div className="mb-6 space-y-4">
                             {/* NOMBRE COMPLETO */}
-                            <div className="relative">
+                            <div className="relative" ref={dropdownRef}>
                                 <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                     Nombre Completo
                                 </label>
@@ -427,7 +473,7 @@ export default function CheckinModal({
                                             if (data.full_name.length > 1)
                                                 setIsDropdownOpen(true);
                                         }}
-                                        disabled={!!checkinToEdit}
+                                        
                                         required
                                         autoComplete="off"
                                     />
@@ -502,7 +548,7 @@ export default function CheckinModal({
                                         placeholder="LP"
                                     />
                                 </div>
-                                <div className="relative col-span-1">
+                                <div className="relative col-span-1" ref={nationalityRef}>
                                     <label className="text-xs font-bold text-gray-500">
                                         Nacionalidad
                                     </label>
@@ -517,6 +563,7 @@ export default function CheckinModal({
                                         onFocus={() =>
                                             setShowCountrySuggestions(true)
                                         }
+                                        autoComplete="off"
                                     />
                                     {showCountrySuggestions && (
                                         <div className="absolute z-10 mt-1 max-h-32 w-full overflow-y-auto rounded-md border bg-white shadow-lg">
@@ -524,13 +571,9 @@ export default function CheckinModal({
                                                 <div
                                                     key={c}
                                                     onClick={() => {
-                                                        setData(
-                                                            'nationality',
-                                                            c,
-                                                        );
-                                                        setShowCountrySuggestions(
-                                                            false,
-                                                        );
+                                                        // USAMOS LA NUEVA LÓGICA AQUÍ
+                                                        updateNationalityAndPhone(c);
+                                                        setShowCountrySuggestions(false); // <--- CERRAMOS LA LISTA
                                                     }}
                                                     className="cursor-pointer px-2 py-1 text-xs text-black hover:bg-gray-100"
                                                 >
@@ -610,23 +653,48 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="text-xs font-bold text-gray-500">
-                                    Procedencia
-                                </label>
-                                <div className="relative">
-                                    <Globe className="absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
-                                    <input
-                                        className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm text-black uppercase"
-                                        value={data.origin}
-                                        onChange={(e) =>
-                                            setData(
-                                                'origin',
-                                                e.target.value.toUpperCase(),
-                                            )
-                                        }
-                                        placeholder="CIUDAD DE ORIGEN"
-                                    />
+                            {/* --- FILA DE PROCEDENCIA Y TELÉFONO --- */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">
+                                        Procedencia
+                                    </label>
+                                    <div className="relative">
+                                        <Globe className="absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
+                                        <input
+                                            className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm text-black uppercase"
+                                            value={data.origin}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'origin',
+                                                    e.target.value.toUpperCase(),
+                                                )
+                                            }
+                                            placeholder="CIUDAD DE ORIGEN"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                {/* CAMPO TELÉFONO CON ICONO PHONE */}
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">
+                                        Teléfono
+                                    </label>
+                                    <div className="relative">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Phone className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={data.phone}
+                                            onChange={(e) =>
+                                                setData('phone', e.target.value)
+                                            }
+                                            disabled={!data.nationality}
+                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                                            placeholder="#### ####"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -650,7 +718,7 @@ export default function CheckinModal({
                                     onChange={(e) =>
                                         setData('room_id', e.target.value)
                                     }
-                                    disabled={true} // SIEMPRE BLOQUEADO
+                                    disabled={true} 
                                     className="block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
                                 >
                                     {rooms.map((room) => (
@@ -681,8 +749,6 @@ export default function CheckinModal({
                                     />
                                 </div>
                                 <div className="w-24">
-                                    {' '}
-                                    {/* Ancho fijo reducido para Estadía */}
                                     <label className="text-xs font-bold text-gray-500">
                                         Estadía
                                     </label>
@@ -702,7 +768,6 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            {/* Fecha Salida estimada visual */}
                             <div className="-mt-3 text-right">
                                 <span
                                     className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
@@ -724,7 +789,7 @@ export default function CheckinModal({
                                     <input
                                         type="number"
                                         step="0.01"
-                                        min = "0"
+                                        min="0"
                                         value={data.advance_payment}
                                         onChange={(e) =>
                                             setData(

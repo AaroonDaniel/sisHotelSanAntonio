@@ -44,9 +44,11 @@ class CheckinController extends Controller
             $isComplete = $request->filled('identification_number');
             
             // Validamos solo el nombre obligatorio, el resto nullable
+            // AGREGADO: phone
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50', 
+                'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
             ]);
 
             // Crear huésped
@@ -59,13 +61,22 @@ class CheckinController extends Controller
                 'profession' => $request->profession ? strtoupper($request->profession) : null,
                 'origin' => $request->origin ? strtoupper($request->origin) : null,
                 'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
-                'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE', // <--- AQUÍ SE GUARDA EL ESTADO
+                'phone' => $request->phone, // <--- GUARDAR TELÉFONO
+                'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
             ]);
 
             $guestId = $guest->id;
         } else {
             // --- HUÉSPED EXISTENTE ---
             $guestId = $request->guest_id;
+            
+            // Opcional: Si envían teléfono al seleccionar uno existente, actualizarlo si no tiene
+            if ($request->filled('phone')) {
+                $existingGuest = \App\Models\Guest::find($guestId);
+                if ($existingGuest) {
+                    $existingGuest->update(['phone' => $request->phone]);
+                }
+            }
         }
 
         // 2. Crear Checkin (Igual que antes)
@@ -85,7 +96,7 @@ class CheckinController extends Controller
             'duration_days' => $validatedCheckin['duration_days'],
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => $validatedCheckin['notes'],
-            'status' => 'activo', // <--- CORREGIDO (antes decía 'active')
+            'status' => 'activo', 
         ]);
 
         if ($request->has('selected_services')) {
@@ -116,6 +127,7 @@ class CheckinController extends Controller
             'civil_status' => 'nullable|string',
             'birth_date' => 'nullable|date',
             'issued_in' => 'nullable|string',
+            'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
         ]);
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
@@ -136,12 +148,14 @@ class CheckinController extends Controller
             ];
 
             $isProfileComplete = true;
+            $missingField = null; 
 
             // Verificamos uno por uno. Si falta alguno, el perfil está incompleto.
             foreach ($requiredFields as $field) {
                 // Usamos 'filled' para verificar que no sea null ni string vacío ("")
                 if (!$request->filled($field)) {
                     $isProfileComplete = false;
+                    $missingField = $field;
                     break;
                 }
             }
@@ -149,14 +163,14 @@ class CheckinController extends Controller
             // 3. ACTUALIZAR HUÉSPED
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
-                // Guardamos el valor (convertido a mayúsculas si es string) o null si se borró
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
-                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null, // Quitamos el default forzado para permitir validación real
+                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null, 
                 'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
                 'civil_status' => $validated['civil_status'], // Puede ser null
                 'birth_date' => $validated['birth_date'],     // Puede ser null
                 'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
+                'phone' => $request->phone, // <--- ACTUALIZAR TELÉFONO
                 
                 // ESTADO CALCULADO:
                 'profile_status' => $isProfileComplete ? 'COMPLETE' : 'INCOMPLETE'
@@ -166,7 +180,6 @@ class CheckinController extends Controller
             $newCheckInDate = $validated['check_in_date'];
 
             // Si antes faltaban datos y AHORA está todo completo, actualizamos la fecha a "AHORA"
-            // (Simula que el ingreso real ocurre al completar la ficha)
             if ($wasIncomplete && $isProfileComplete) {
                 $newCheckInDate = now(); 
             }
@@ -203,6 +216,23 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
+            // --- LÓGICA DE RESPUESTA CONDICIONAL ---
+            if (!$isProfileComplete) {
+                // Traducción simple del campo faltante
+                $campoFaltante = match($missingField) {
+                    'identification_number' => 'Carnet de Identidad',
+                    'nationality' => 'Nacionalidad',
+                    'origin' => 'Procedencia',
+                    'profession' => 'Profesión',
+                    'civil_status' => 'Estado Civil',
+                    'birth_date' => 'Fecha de Nacimiento',
+                    'issued_in' => 'Lugar de Expedición',
+                    default => 'algún dato obligatorio'
+                };
+
+                return redirect()->back()->with('error', 'Falta completar: ' . $campoFaltante . '. La habitación sigue PENDIENTE.');
+            }
+
             return redirect()->back()->with('success', 'Datos actualizados. Estado del huésped recalculado.');
         });
     }
@@ -233,7 +263,8 @@ class CheckinController extends Controller
 
         return redirect()->back()->with('success', 'Estadía finalizada. Generando Nota de Salida...');
     }
-    // --- TU CÓDIGO DE PDF RESTAURADO ---
+
+    // --- GENERACIÓN DE RECIBOS ---
     public function generateAssignmentReceipt(Checkin $checkin)
     {
         $checkin->load(['guest', 'room']);
@@ -346,13 +377,14 @@ class CheckinController extends Controller
             $pdf->Cell(0, 4, '-', 0, 1);
         }
 
-        // Celular (Campo vacío para rellenar a mano si no existe en BD)
+        // Celular (Usando el dato guardado en guest)
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(15, 4, 'Celular:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        
+        // CAMBIO: Se lee del modelo guest, no del checkin
+        $telefono = $checkin->guest->phone ? $checkin->guest->phone : '___________________';
+        $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
 
-        
         // --- FIRMA ---
         $pdf->Ln(10); // Espacio vertical generoso para la firma
 
