@@ -47,7 +47,7 @@ class ReportController extends Controller
     // 2. GENERAR PDF LIBRO DIARIO (El método que te faltaba)
     public function generateDailyBookPdf()
     {
-        // Obtenemos solo los checkins activos (habitaciones ocupadas)
+        // ... (Tu código de consulta de checkins se mantiene igual) ...
         $checkins = Checkin::with(['guest', 'room'])
             ->whereHas('room', function($q) {
                 $q->whereIn('status', ['occupied', 'OCUPADO', 'ocupado']);
@@ -64,110 +64,92 @@ class ReportController extends Controller
         $pdf->AddPage();
 
         // ==========================================
-        //              CABECERA OFICIAL
+        //              CABECERA CON IMAGEN
         // ==========================================
         
-        // LOGO (Triángulo de la imagen)
-        // Si tienes el archivo, descomenta la siguiente línea:
-        // $pdf->Image(public_path('images/logo_camara.png'), 10, 8, 25); 
+        // --- AQUÍ ESTÁ EL CÓDIGO PARA LA IMAGEN ---
+        
+        // 1. Definimos la ruta física de la imagen usando public_path()
+        // Asegúrate de crear la carpeta 'images' dentro de 'public' y poner ahí tu logo
+        $logoPath = public_path('images/logo_camara.png'); 
+
+        // 2. Verificamos que el archivo exista para que no rompa el PDF si falta
+        if (file_exists($logoPath)) {
+            // Sintaxis: Image(ruta, x, y, ancho, alto, tipo, link)
+            // x=15: Un poco separado del borde izquierdo
+            // y=10: En la parte superior
+            // w=25: Ancho de 25mm (el alto se calcula solo si lo dejas en 0 o nulo)
+            $pdf->Image($logoPath, 15, 10, 20); 
+        }
 
         // 1. TÍTULO PRINCIPAL (Centrado en la página)
         $pdf->SetFont('Arial', 'B', 16);
-        // Color rojo oscuro tipo sello (opcional, si es B/N quitar SetTextColor)
         $pdf->SetTextColor(60, 0, 0); 
+        
+        // Movemos un poco el cursor a la derecha si la imagen es muy ancha para no tapar el título,
+        // pero como el título es centrado ('C'), suele ajustarse bien.
         $pdf->Cell(0, 8, utf8_decode('Cámara Departamental de Hotelería de Potosí'), 0, 1, 'C');
+        
+        // ... (El resto de tu código sigue igual) ...
         
         // 2. CELULAR (A la derecha)
         $pdf->SetTextColor(0, 0, 0); // Negro
         $pdf->SetFont('Arial', 'B', 10);
-        // Nos movemos a la derecha
         $pdf->SetXY(230, 15); 
         $pdf->Cell(40, 5, 'CEL : 70461010', 0, 1, 'R');
 
-        // 3. NOMBRE DEL HOTEL (Centrado abajo del título)
-        $pdf->SetY(18); // Ajustamos Y para que quede debajo del título principal
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(0, 6, utf8_decode('HOTEL  "SAN ANTONIO"'), 0, 1, 'C');
-
+        // ... (Resto del código de la cabecera y tabla) ...
+        
         // 4. "Parte de Pasajeros" y Línea (Izquierda - Centro)
+        $pdf->Ln(10);
+        $pdf->Ln(10);
         $pdf->SetY(28); 
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(35, 5, utf8_decode('Parte de Pasajeros'), 0, 0, 'L');
-        
-        // Línea subrayada manual para simular el formulario
-        $pdf->Cell(120, 5, '_______________________________________________________', 0, 0, 'L');
+        $pdf->Cell(120, 5, 'HOTEL  "SAN ANTONIO"', 0, 0, 'L');
 
-        // 5. NÚMERO DE CORRELATIVO (Derecha, alineado con "Parte de...")
-        // Usamos la fecha como número de serie diario o un contador si tienes
         $numeroSerie = now()->format('Ymd'); 
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(0, 5, utf8_decode('Nº  ' . $numeroSerie), 0, 1, 'R');
 
-        // Letra "R" grande debajo de la línea (si es requerida por la imagen)
         $pdf->Ln(6);
         $pdf->SetFont('Arial', 'B', 14);
-        $pdf->Cell(0, 6, 'R', 0, 1, 'C'); // La R centrada debajo de la línea
+        $pdf->Cell(0, 6, 'R', 0, 1, 'C'); 
 
         $pdf->Ln(4);
 
-        // ==========================================
-        //              TABLA DE DATOS
-        // ==========================================
-
+        // ... (Código de la tabla) ...
+        
+        // (Pega aquí el resto de tu código de tabla que tenías abajo)
+        
         // Configuración de Tabla
         $pdf->SetFillColor(230, 230, 230); // Gris claro
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->SetLineWidth(0.2);
 
-        // Definición de Anchos (Total: 275mm aprox para A4 apaisado)
-        // Ajustado para centrar la tabla en la hoja (A4 width = 297mm - 20mm margen = 277mm útiles)
-        $w = [
-            65, // Nombre y Apellidos
-            10, // Edad
-            30, // Nacionalidad
-            35, // Profesión
-            15, // Estado (1 letra)
-            35, // Procedencia
-            30, // CI / Pasaporte
-            25, // Otorgado
-            20  // Plaza Nº
-        ];
+        $w = [65, 10, 30, 35, 15, 35, 30, 25, 20];
 
         $headers = [
-            'Nombre y Apellidos', 
-            'Edad', 
-            'Nacionalidad', 
-            'Profesión', 
-            'Estado',
-            'Procedencia', 
-            'CI / Pasaporte', 
-            'Otorgado', 
-            'Plaza'
+            'Nombre y Apellidos', 'Edad', 'Nacionalidad', 'Profesión', 
+            'Estado', 'Procedencia', 'CI / Pasaporte', 'Otorgado', 'Plaza'
         ];
 
-        // --- DIBUJAR CABECERA ---
         for($i = 0; $i < count($headers); $i++) {
             $pdf->Cell($w[$i], 8, utf8_decode($headers[$i]), 1, 0, 'C', true);
         }
         $pdf->Ln();
 
-        // --- DIBUJAR FILAS ---
-        $pdf->SetFont('Arial', '', 7); // Letra pequeña para los datos
+        $pdf->SetFont('Arial', '', 7); 
 
         foreach ($checkins as $checkin) {
             $g = $checkin->guest;
-
-            // Cálculos
             $edad = $g->birth_date ? Carbon::parse($g->birth_date)->age : '-';
-            
             $estadoCivilFull = $g->civil_status ?? '-';
             $estadoCivilLetra = strtoupper(substr($estadoCivilFull, 0, 1)); 
-            // Mapeo simple
             if($estadoCivilLetra == 'S') $estadoCivilLetra = 'S'; 
             if($estadoCivilLetra == 'M') $estadoCivilLetra = 'C'; 
             if($estadoCivilLetra == 'W') $estadoCivilLetra = 'V'; 
 
-            // Celdas
             $pdf->Cell($w[0], 6, utf8_decode(substr($g->full_name, 0, 38)), 1, 0, 'L');
             $pdf->Cell($w[1], 6, $edad, 1, 0, 'C');
             $pdf->Cell($w[2], 6, utf8_decode(substr($g->nationality, 0, 18)), 1, 0, 'L');
@@ -181,7 +163,6 @@ class ReportController extends Controller
             $pdf->Ln();
         }
 
-        // Mensaje si está vacío
         if (count($checkins) === 0) {
             $pdf->SetFont('Arial', 'I', 10);
             $pdf->Cell(array_sum($w), 12, utf8_decode('No hay pasajeros registrados en este momento.'), 1, 1, 'C');

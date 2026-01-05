@@ -234,7 +234,7 @@ export default function CheckinModal({
                     identification_number:
                         checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIA',
+                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',

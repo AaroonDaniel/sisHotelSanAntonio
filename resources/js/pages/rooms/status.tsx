@@ -153,6 +153,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
         }
     };
 
+    // --- FILTRADO Y ORDENAMIENTO ---
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch = room.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               (room.room_type?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -161,6 +162,9 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
         const matchesStatus = filterStatus === 'all' || currentStatus === filterStatus;
         
         return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+        // Ordenamiento Alfanumérico Natural (Ej: 1, 2, 10, 10A, 10B)
+        return a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: 'base' });
     });
 
     const getOccupantName = (room: Room) => {
