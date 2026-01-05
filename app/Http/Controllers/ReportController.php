@@ -20,11 +20,11 @@ class ReportController extends Controller
     // Verifica que no haya huéspedes "INCOMPLETE" en habitaciones ocupadas
     public function checkDailyBookStatus()
     {
-        $incompleteCheckins = Checkin::whereHas('room', function($q) {
-                // Buscamos habitaciones en estado ocupado (mayúscula o minúscula)
-                $q->whereIn('status', ['occupied', 'OCUPADO', 'ocupado']);
-            })
-            ->whereHas('guest', function($q) {
+        $incompleteCheckins = Checkin::whereHas('room', function ($q) {
+            // Buscamos habitaciones en estado ocupado (mayúscula o minúscula)
+            $q->whereIn('status', ['occupied', 'OCUPADO', 'ocupado']);
+        })
+            ->whereHas('guest', function ($q) {
                 // Y que tengan el perfil incompleto
                 $q->where('profile_status', 'INCOMPLETE');
             })
@@ -35,7 +35,7 @@ class ReportController extends Controller
             return response()->json([
                 'can_generate' => false,
                 'message' => 'Faltan datos en huéspedes activos.',
-                'details' => $incompleteCheckins->map(function($c) {
+                'details' => $incompleteCheckins->map(function ($c) {
                     return "Hab. " . $c->room->number . " - " . $c->guest->full_name;
                 })
             ]);
@@ -47,129 +47,142 @@ class ReportController extends Controller
     // 2. GENERAR PDF LIBRO DIARIO (El método que te faltaba)
     public function generateDailyBookPdf()
     {
-        // ... (Tu código de consulta de checkins se mantiene igual) ...
+        // ... (Tu consulta de checkins se mantiene igual) ...
         $checkins = Checkin::with(['guest', 'room'])
-            ->whereHas('room', function($q) {
+            ->whereHas('room', function ($q) {
                 $q->whereIn('status', ['occupied', 'OCUPADO', 'ocupado']);
             })
             ->join('rooms', 'checkins.room_id', '=', 'rooms.id')
-            ->orderBy('rooms.number', 'asc') 
+            ->orderBy('rooms.number', 'asc')
             ->select('checkins.*')
             ->get();
 
-        // Configuración PDF: LANDSCAPE (L)
-        $pdf = new \FPDF('L', 'mm', 'A4');
-        $pdf->SetMargins(10, 10, 10);
+        // 1. CONFIGURACIÓN DE PÁGINA Y MÁRGENES
+        // Carta Vertical (P). Margen Izquierdo 20mm, Superior 10mm, Derecho 10mm
+        $pdf = new \FPDF('P', 'mm', 'Letter');
+        $pdf->SetMargins(20, 10, 10);
         $pdf->SetAutoPageBreak(true, 10);
         $pdf->AddPage();
 
         // ==========================================
-        //              CABECERA CON IMAGEN
+        //              CABECERA
         // ==========================================
-        
-        // --- AQUÍ ESTÁ EL CÓDIGO PARA LA IMAGEN ---
-        
-        // 1. Definimos la ruta física de la imagen usando public_path()
-        // Asegúrate de crear la carpeta 'images' dentro de 'public' y poner ahí tu logo
-        $logoPath = public_path('images/logo_camara.png'); 
 
-        // 2. Verificamos que el archivo exista para que no rompa el PDF si falta
+        $logoPath = public_path('images/logo_camara.png');
         if (file_exists($logoPath)) {
-            // Sintaxis: Image(ruta, x, y, ancho, alto, tipo, link)
-            // x=15: Un poco separado del borde izquierdo
-            // y=10: En la parte superior
-            // w=25: Ancho de 25mm (el alto se calcula solo si lo dejas en 0 o nulo)
-            $pdf->Image($logoPath, 15, 10, 20); 
+            // Coordenada X=20 (respetando margen izq), Y=10
+            $pdf->Image($logoPath, 20, 10, 20);
         }
 
-        // 1. TÍTULO PRINCIPAL (Centrado en la página)
-        $pdf->SetFont('Arial', 'B', 16);
-        $pdf->SetTextColor(60, 0, 0); 
-        
-        // Movemos un poco el cursor a la derecha si la imagen es muy ancha para no tapar el título,
-        // pero como el título es centrado ('C'), suele ajustarse bien.
-        $pdf->Cell(0, 8, utf8_decode('Cámara Departamental de Hotelería de Potosí'), 0, 1, 'C');
-        
-        // ... (El resto de tu código sigue igual) ...
-        
-        // 2. CELULAR (A la derecha)
-        $pdf->SetTextColor(0, 0, 0); // Negro
-        $pdf->SetFont('Arial', 'B', 10);
-        $pdf->SetXY(230, 15); 
-        $pdf->Cell(40, 5, 'CEL : 70461010', 0, 1, 'R');
+        // TÍTULO
+        $pdf->SetFont('Arial', 'B', 14);
+        $pdf->SetTextColor(60, 0, 0);
+        // Ajustamos posición para centrar visualmente considerando el margen izq más grande
+        $pdf->SetY(12);
+        $pdf->SetX(45); // Un poco a la derecha del logo
+        $pdf->Cell(120, 8, utf8_decode('Cámara Departamental. de Hotelería de Potosí'), 0, 1, 'C');
 
-        // ... (Resto del código de la cabecera y tabla) ...
-        
-        // 4. "Parte de Pasajeros" y Línea (Izquierda - Centro)
-        $pdf->Ln(10);
-        $pdf->Ln(10);
-        $pdf->SetY(28); 
+        // CELULAR (Alineado a la derecha, margen derecho es 10mm -> termina en 206mm)
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->SetXY(160, 18); // Ajustado para que no se salga
+        $pdf->Cell(45, 5, 'CEL : 70461010', 0, 1, 'R');
+
+        // SUBTÍTULOS
+        $pdf->Ln(8);
+        $pdf->SetX(20); // Retomamos margen izquierdo
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(35, 5, utf8_decode('Parte de Pasajeros'), 0, 0, 'L');
-        $pdf->Cell(120, 5, 'HOTEL  "SAN ANTONIO"', 0, 0, 'L');
+        $pdf->Cell(80, 5, 'HOTEL  "SAN ANTONIO"', 0, 0, 'L');
 
-        $numeroSerie = now()->format('Ymd'); 
+        // NÚMERO DE SERIE
+        $numeroSerie = now()->format('Ymd');
         $pdf->SetFont('Arial', 'B', 12);
+        // Cell(0) llega hasta el margen derecho definido (10mm)
         $pdf->Cell(0, 5, utf8_decode('Nº  ' . $numeroSerie), 0, 1, 'R');
 
-        $pdf->Ln(6);
+        $pdf->Ln(2);
         $pdf->SetFont('Arial', 'B', 14);
-        $pdf->Cell(0, 6, 'R', 0, 1, 'C'); 
+        $pdf->Cell(0, 6, 'R', 0, 1, 'C');
 
         $pdf->Ln(4);
 
-        // ... (Código de la tabla) ...
-        
-        // (Pega aquí el resto de tu código de tabla que tenías abajo)
-        
-        // Configuración de Tabla
-        $pdf->SetFillColor(230, 230, 230); // Gris claro
-        $pdf->SetFont('Arial', 'B', 8);
+        // ==========================================
+        //              TABLA RECALCULADA
+        // ==========================================
+        // ANCHO TOTAL DISPONIBLE: 186 mm
+
+        $pdf->SetFillColor(230, 230, 230);
+        $pdf->SetFont('Arial', 'B', 7);
         $pdf->SetLineWidth(0.2);
 
-        $w = [65, 10, 30, 35, 15, 35, 30, 25, 20];
+        // Definición de anchos para sumar exactamente 186
+        // Nom=46, Ed=7, Nac=20, Prof=22, Est=18, Proc=20, CI=18, Ot=25, Hab=10
+        $w = [46, 7, 20, 22, 18, 20, 18, 25, 10];
 
         $headers = [
-            'Nombre y Apellidos', 'Edad', 'Nacionalidad', 'Profesión', 
-            'Estado', 'Procedencia', 'CI / Pasaporte', 'Otorgado', 'Plaza'
+            'Nombre Completo',
+            'Edad',
+            'Nacionalidad',
+            'Profesión',
+            'Est. Civil',
+            'Procedencia',
+            'CI/Pasap.',
+            'Otorgado',
+            'Hab'
         ];
 
-        for($i = 0; $i < count($headers); $i++) {
+        $pdf->SetX(20); // Asegurar margen izquierdo en la cabecera
+
+        for ($i = 0; $i < count($headers); $i++) {
             $pdf->Cell($w[$i], 8, utf8_decode($headers[$i]), 1, 0, 'C', true);
         }
         $pdf->Ln();
 
-        $pdf->SetFont('Arial', '', 7); 
+        // FUENTE DEL CONTENIDO
+        $pdf->SetFont('Arial', '', 6.5);
 
         foreach ($checkins as $checkin) {
             $g = $checkin->guest;
-            $edad = $g->birth_date ? Carbon::parse($g->birth_date)->age : '-';
-            $estadoCivilFull = $g->civil_status ?? '-';
-            $estadoCivilLetra = strtoupper(substr($estadoCivilFull, 0, 1)); 
-            if($estadoCivilLetra == 'S') $estadoCivilLetra = 'S'; 
-            if($estadoCivilLetra == 'M') $estadoCivilLetra = 'C'; 
-            if($estadoCivilLetra == 'W') $estadoCivilLetra = 'V'; 
+            $edad = $g->birth_date ? \Carbon\Carbon::parse($g->birth_date)->age : '-';
 
-            $pdf->Cell($w[0], 6, utf8_decode(substr($g->full_name, 0, 38)), 1, 0, 'L');
-            $pdf->Cell($w[1], 6, $edad, 1, 0, 'C');
-            $pdf->Cell($w[2], 6, utf8_decode(substr($g->nationality, 0, 18)), 1, 0, 'L');
-            $pdf->Cell($w[3], 6, utf8_decode(substr($g->profession, 0, 20)), 1, 0, 'L');
-            $pdf->Cell($w[4], 6, $estadoCivilLetra, 1, 0, 'C');
-            $pdf->Cell($w[5], 6, utf8_decode(substr($g->origin, 0, 20)), 1, 0, 'L');
-            $pdf->Cell($w[6], 6, $g->identification_number, 1, 0, 'C');
-            $pdf->Cell($w[7], 6, utf8_decode($g->issued_in), 1, 0, 'C');
+            // Lógica Estado Civil (Abreviado para que entre en 18mm)
+            $estadoCivilFull = $g->civil_status ?? '-';
+            $letra = strtoupper(substr($estadoCivilFull, 0, 1));
+
+            // Usamos palabras cortas sin "(A)" para ahorrar espacio horizontal
+            $textoEstado = '-';
+            if (in_array($letra, ['M', 'C'])) $textoEstado = 'CASADO';
+            elseif ($letra == 'S') $textoEstado = 'SOLTERO';
+            elseif ($letra == 'W' || $letra == 'V') $textoEstado = 'VIUDO';
+            elseif ($letra == 'D') $textoEstado = 'DIVORC.';
+            else $textoEstado = substr($estadoCivilFull, 0, 9);
+
+            // Aseguramos margen izquierdo en cada fila
+            $pdf->SetX(20);
+
+            // Rellenado de celdas con recorte (substr) para evitar superposición
+            $pdf->Cell($w[0], 6, utf8_decode(substr($g->full_name, 0, 28)), 1, 0, 'L');
+            $pdf->Cell($w[1], 6, $edad, 1, 0, 'L');
+            $pdf->Cell($w[2], 6, utf8_decode(substr($g->nationality, 0, 11)), 1, 0, 'L'); // Recorte más estricto
+            $pdf->Cell($w[3], 6, utf8_decode(substr($g->profession, 0, 13)), 1, 0, 'L');
+            $pdf->Cell($w[4], 6, utf8_decode($textoEstado), 1, 0, 'C'); // Ahora entra bien
+            $pdf->Cell($w[5], 6, utf8_decode(substr($g->origin, 0, 11)), 1, 0, 'L');
+            $pdf->Cell($w[6], 6, substr($g->identification_number, 0, 10), 1, 0, 'C');
+            $pdf->Cell($w[7], 6, utf8_decode(substr($g->issued_in, 0, 14)), 1, 0, 'C');
             $pdf->Cell($w[8], 6, $checkin->room->number, 1, 0, 'C');
-            
+
             $pdf->Ln();
         }
 
         if (count($checkins) === 0) {
+            $pdf->SetX(20);
             $pdf->SetFont('Arial', 'I', 10);
-            $pdf->Cell(array_sum($w), 12, utf8_decode('No hay pasajeros registrados en este momento.'), 1, 1, 'C');
+            $pdf->Cell(array_sum($w), 12, utf8_decode('No hay pasajeros registrados.'), 1, 1, 'C');
         }
 
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="libro-diario-'.now()->format('Ymd').'.pdf"');
+            ->header('Content-Disposition', 'inline; filename="libro-diario-' . now()->format('Ymd') . '.pdf"');
     }
 }
