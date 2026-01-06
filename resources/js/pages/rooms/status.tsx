@@ -609,7 +609,7 @@ function CheckoutConfirmationModal({
                                 <div className="mb-3 text-center">
                                     <div>
                                         <span className="block text-[20px] font-bold text-red-600 uppercase">
-                                            Plaza °{room.number}
+                                            Habitación {room.number}
                                         </span>
                                     </div>
                                 </div>

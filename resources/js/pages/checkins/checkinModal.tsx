@@ -280,7 +280,7 @@ export default function CheckinModal({
             full_name: guest.full_name,
             identification_number: guest.identification_number || '',
             issued_in: guest.issued_in || '',
-            nationality: guest.nationality || 'BOLIVIA',
+            nationality: guest.nationality || 'BOLIVIANA',
             civil_status: guest.civil_status || '',
             birth_date: guest.birth_date || '',
             profession: guest.profession || '',
@@ -708,7 +708,7 @@ export default function CheckinModal({
                         <div className="space-y-5">
                             <div>
                                 <label className="mb-1.5 flex items-center gap-2 text-sm font-bold text-green-700">
-                                    <BedDouble className="h-4 w-4" /> N° PLAZA /
+                                    <BedDouble className="h-4 w-4" />
                                     HABITACIÓN
                                 </label>
 
@@ -723,7 +723,7 @@ export default function CheckinModal({
                                 >
                                     {rooms.map((room) => (
                                         <option key={room.id} value={room.id}>
-                                            {room.number} ({room.status}) -{' '}
+                                            {room.number} - Costo {' '}
                                             {room.price?.amount} Bs.
                                         </option>
                                     ))}
@@ -745,6 +745,7 @@ export default function CheckinModal({
                                                 e.target.value,
                                             )
                                         }
+                                        disabled={true}
                                         className="w-full rounded-lg border border-gray-400 text-sm text-black"
                                     />
                                 </div>
