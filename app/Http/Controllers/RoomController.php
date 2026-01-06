@@ -156,4 +156,49 @@ class RoomController extends Controller
         ]);
         
     }
+
+    public function getGuestsList()
+    {
+        // 1. Recuperar los checkins activos
+        $checkins = \App\Models\Checkin::with(['guest', 'room.price'])
+            ->where('status', 'activo')
+            ->get();
+
+        $data = $checkins->map(function ($c) {
+            
+            // --- Crear objetos Carbon para manipular fechas ---
+            $ingresoObj = \Carbon\Carbon::parse($c->check_in_date);
+            
+            $salidaObj = $c->check_out_date 
+                ? \Carbon\Carbon::parse($c->check_out_date)
+                : \Carbon\Carbon::parse($c->check_in_date)->addDays($c->duration_days);
+
+            // --- Cálculos Económicos ---
+            $precioDiario = $c->room->price->amount ?? 0;
+            $dias = $c->duration_days > 0 ? $c->duration_days : 1;
+            $totalEstadia = $precioDiario * $dias;
+            $adelanto = $c->advance_payment ?? 0;
+            $totalCancelar = $totalEstadia - $adelanto;
+
+            // --- Estructura con Fecha y Hora SEPARADAS ---
+            return [
+                'plaza'          => $c->room->number,
+                'huesped'        => $c->guest->full_name,
+                'procedencia'    => $c->guest->origin ?? 'SIN PROCEDENCIA',
+                
+                // Campos separados para facilitar el diseño
+                'fecha_ingreso'  => $ingresoObj->format('d/m/Y'), // Ej: 06/01/2026
+                'hora_ingreso'   => $ingresoObj->format('H:i'),   // Ej: 14:30
+                
+                'fecha_salida'   => $salidaObj->format('d/m/Y'),
+                'hora_salida'    => $salidaObj->format('H:i'),
+                
+                'adelanto'       => number_format($adelanto, 2),
+                'total_cancelar' => number_format($totalCancelar, 2),
+                'observaciones'  => $c->notes ?? 'Ninguna',
+            ];
+        });
+
+        return response()->json($data);
+    }
 }

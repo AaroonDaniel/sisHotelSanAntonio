@@ -261,7 +261,7 @@ class CheckinController extends Controller
             'status' => 'finalizado'
         ]);
 
-        return redirect()->back()->with('success', 'Estadía finalizada. Generando Nota de Salida...');
+        return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
     }
 
     // --- GENERACIÓN DE RECIBOS ---
