@@ -268,7 +268,6 @@ class CheckinController extends Controller
     public function generateAssignmentReceipt(Checkin $checkin)
     {
         $checkin->load(['guest', 'room']);
-
         // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150)); 
         $pdf->SetMargins(4, 4, 4);

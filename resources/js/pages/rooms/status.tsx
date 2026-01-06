@@ -566,7 +566,7 @@ function CheckoutConfirmationModal({
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
             {/* El tamaño cambia: pequeño al confirmar, grande al ver PDF */}
             <div
-                className={`w-full animate-in overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 zoom-in-95 ${pdfUrl ? 'h-[80vh] max-w-6xl' : 'max-w-md'}`}
+                className={`w-full animate-in overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 zoom-in-95 ${pdfUrl ? 'h-[80vh] max-w-[450px]' : 'max-w-md'}`}
             >
                 {/* Header */}
                 <div

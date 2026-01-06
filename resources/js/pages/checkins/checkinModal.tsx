@@ -824,46 +824,7 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="mb-2 block text-xs font-bold text-gray-500">
-                                    Servicios Adicionales
-                                </label>
-                                <div className="flex flex-wrap gap-2">
-                                    {servicesList.map((srv) => {
-                                        const active =
-                                            data.selected_services.includes(
-                                                srv.id,
-                                            );
-                                        return (
-                                            <button
-                                                key={srv.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    const newServs = active
-                                                        ? data.selected_services.filter(
-                                                              (id) =>
-                                                                  id !== srv.id,
-                                                          )
-                                                        : [
-                                                              ...data.selected_services,
-                                                              srv.id,
-                                                          ];
-                                                    setData(
-                                                        'selected_services',
-                                                        newServs,
-                                                    );
-                                                }}
-                                                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${active ? 'border-green-500 bg-green-100 font-bold text-green-700' : 'border border-gray-400 bg-white text-gray-600'}`}
-                                            >
-                                                {active && (
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                )}
-                                                {srv.name}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                            
                         </div>
 
                         <div className="mt-8 flex items-center justify-end gap-3">
