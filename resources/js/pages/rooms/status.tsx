@@ -1,24 +1,28 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowLeft,
     BedDouble,
     Brush,
+    CheckCircle2,
     Construction,
+    FileEdit,
     Home,
+    Loader2, // Icono de carga
+    LogOut,
     Search,
     User as UserIcon,
-    AlertTriangle,
-    FileEdit,
-    LogOut,
-    CheckCircle2,
-    X // Importamos X para cerrar el modal
 } from 'lucide-react';
-import { useState, useEffect } from 'react'; // Agregamos useEffect para depuración si es necesario
-import CheckinModal, { Room as ModalRoom, Guest as ModalGuest, CheckinData } from '../checkins/checkinModal';
+import { useState } from 'react'; // Agregamos useEffect para depuración si es necesario
+import CheckinModal, {
+    CheckinData,
+    Guest as ModalGuest,
+    Room as ModalRoom,
+} from '../checkins/checkinModal';
 
 // --- SOLUCIÓN AL ERROR "route is not defined" ---
-declare var route: any; 
+declare var route: any;
 
 // --- INTERFACES ---
 interface User {
@@ -35,7 +39,7 @@ interface RoomType {
 }
 
 interface Guest extends ModalGuest {
-    profile_status?: string; 
+    profile_status?: string;
 }
 
 interface Room extends ModalRoom {
@@ -52,30 +56,39 @@ interface Props {
 export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
-    
+
     // Estado para la habitación seleccionada para acción global
-    const [selectedForAction, setSelectedForAction] = useState<number | null>(null);
+    const [selectedForAction, setSelectedForAction] = useState<number | null>(
+        null,
+    );
 
     // Modal State (Detalles / Edición)
     const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
     const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
-    const [checkinToEdit, setCheckinToEdit] = useState<CheckinData | null>(null);
+    const [checkinToEdit, setCheckinToEdit] = useState<CheckinData | null>(
+        null,
+    );
 
     // --- NUEVO ESTADO PARA MODAL DE CONFIRMACIÓN (CHECKOUT) ---
-    const [confirmCheckoutId, setConfirmCheckoutId] = useState<number | null>(null);
+    const [confirmCheckoutId, setConfirmCheckoutId] = useState<number | null>(
+        null,
+    );
 
     // --- LÓGICA DE ESTADO (CORREGIDA Y REFORZADA) ---
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
-        
+
         // Prioridad 1: Verificar si está ocupada
         if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) {
             // Verificamos si hay un checkin activo
-            const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
-            
+            const activeCheckin =
+                room.checkins && room.checkins.length > 0
+                    ? room.checkins[0]
+                    : null;
+
             if (activeCheckin) {
                 const guest = activeCheckin.guest as Guest | undefined;
-                
+
                 // CRUCIAL: Si el guest existe y su estado es INCOMPLETE, forzamos el estado visual a 'incomplete'
                 if (guest && guest.profile_status === 'INCOMPLETE') {
                     return 'incomplete'; // Devolverá estado Amarillo
@@ -85,17 +98,20 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             return 'occupied';
         }
 
-        if (['available', 'disponible', 'libre'].includes(dbStatus)) return 'available';
-        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus)) return 'cleaning';
-        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus)) return 'maintenance';
-        
+        if (['available', 'disponible', 'libre'].includes(dbStatus))
+            return 'available';
+        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
+            return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus))
+            return 'maintenance';
+
         return 'unknown';
     };
 
     // --- MANEJO DE CLIC EN HABITACIÓN ---
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
-        
+
         // Lógica para estado OCUPADO (Rojo - Datos completos)
         if (status === 'occupied') {
             if (selectedForAction === room.id) {
@@ -114,10 +130,13 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
-        } 
+        }
         // Lógica para estado INCOMPLETO (Amarillo - Completar datos)
         else if (status === 'incomplete') {
-            const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+            const activeCheckin =
+                room.checkins && room.checkins.length > 0
+                    ? room.checkins[0]
+                    : null;
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);
@@ -129,9 +148,9 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     // --- ABRIR MODAL DE CONFIRMACIÓN (GLOBAL) ---
     const handleTopCheckoutTrigger = () => {
         if (!selectedForAction) return;
-        const room = Rooms.find(r => r.id === selectedForAction);
+        const room = Rooms.find((r) => r.id === selectedForAction);
         const activeCheckin = room?.checkins?.[0];
-        
+
         if (activeCheckin) {
             setConfirmCheckoutId(activeCheckin.id);
         }
@@ -144,7 +163,8 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
 
     // --- ABRIR DETALLES SIN SELECCIONAR (PARA BOTÓN "DETALLES") ---
     const handleOpenDetails = (room: Room) => {
-        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+        const activeCheckin =
+            room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
         if (activeCheckin) {
             setCheckinToEdit(activeCheckin);
             setSelectedRoomId(room.id);
@@ -155,16 +175,23 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
 
     // --- FILTRADO Y ORDENAMIENTO ---
     const filteredRooms = Rooms.filter((room) => {
-        const matchesSearch = room.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              (room.room_type?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-        
+        const matchesSearch =
+            room.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (room.room_type?.name || '')
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase());
+
         const currentStatus = getDisplayStatus(room);
-        const matchesStatus = filterStatus === 'all' || currentStatus === filterStatus;
-        
+        const matchesStatus =
+            filterStatus === 'all' || currentStatus === filterStatus;
+
         return matchesSearch && matchesStatus;
     }).sort((a, b) => {
         // Ordenamiento Alfanumérico Natural (Ej: 1, 2, 10, 10A, 10B)
-        return a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: 'base' });
+        return a.number.localeCompare(b.number, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        });
     });
 
     const getOccupantName = (room: Room) => {
@@ -186,12 +213,15 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
         switch (status) {
             case 'available':
                 return {
-                    colorClass: 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
+                    colorClass:
+                        'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
                     borderColor: 'border-emerald-700',
                     label: 'Disponible',
-                    icon: <BedDouble className="h-10 w-10 text-emerald-200/50" />,
+                    icon: (
+                        <BedDouble className="h-10 w-10 text-emerald-200/50" />
+                    ),
                     info: 'Libre',
-                    actionLabel: 'Asignar'
+                    actionLabel: 'Asignar',
                 };
             case 'occupied':
                 return {
@@ -200,16 +230,19 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                     label: 'Ocupado',
                     icon: <UserIcon className="h-10 w-10 text-red-200/50" />,
                     info: getOccupantName(room),
-                    actionLabel: 'Ver / Editar'
+                    actionLabel: 'Ver / Editar',
                 };
             case 'incomplete':
                 return {
-                    colorClass: 'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900',
+                    colorClass:
+                        'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900',
                     borderColor: 'border-amber-600',
                     label: 'Completar Datos', // Etiqueta clara
-                    icon: <AlertTriangle className="h-10 w-10 text-amber-100 animate-pulse" />,
+                    icon: (
+                        <AlertTriangle className="h-10 w-10 animate-pulse text-amber-100" />
+                    ),
                     info: getOccupantName(room),
-                    actionLabel: 'Actualizar Info'
+                    actionLabel: 'Actualizar Info',
                 };
             case 'cleaning':
                 return {
@@ -218,16 +251,18 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                     label: 'Limpieza',
                     icon: <Brush className="h-10 w-10 text-blue-200/50" />,
                     info: 'Limpieza',
-                    actionLabel: '-'
+                    actionLabel: '-',
                 };
             case 'maintenance':
                 return {
                     colorClass: 'bg-gray-600',
                     borderColor: 'border-gray-700',
                     label: 'Mantenimiento',
-                    icon: <Construction className="h-10 w-10 text-gray-300/50" />,
+                    icon: (
+                        <Construction className="h-10 w-10 text-gray-300/50" />
+                    ),
                     info: 'En Reparación',
-                    actionLabel: '-'
+                    actionLabel: '-',
                 };
             default:
                 return {
@@ -236,49 +271,57 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                     label: room.status || 'Desc.',
                     icon: <Home className="h-10 w-10 text-white/50" />,
                     info: '-',
-                    actionLabel: '-'
+                    actionLabel: '-',
                 };
         }
     };
 
-    const countStatus = (targetStatus: string) => Rooms.filter(r => getDisplayStatus(r) === targetStatus).length;
+    const countStatus = (targetStatus: string) =>
+        Rooms.filter((r) => getDisplayStatus(r) === targetStatus).length;
 
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                
                 {/* --- HEADER SUPERIOR --- */}
                 <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-                    
                     {/* TÍTULO Y BOTÓN VOLVER */}
                     <div>
-                        <button onClick={() => window.history.back()} className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white">
+                        <button
+                            onClick={() => window.history.back()}
+                            className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                        >
                             <ArrowLeft className="h-4 w-4" /> Volver
                         </button>
                         <div className="flex items-center gap-4">
-                            <h2 className="text-3xl font-bold text-white">Panel de Habitaciones</h2>
-                            
+                            <h2 className="text-3xl font-bold text-white">
+                                Panel de Habitaciones
+                            </h2>
+
                             {/* BOTÓN SUPERIOR */}
                             <button
                                 onClick={handleTopCheckoutTrigger}
                                 disabled={!selectedForAction}
-                                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold uppercase transition-all
-                                    ${selectedForAction 
-                                        ? 'bg-red-600 text-white shadow-lg hover:bg-red-500 hover:scale-105 animate-bounce' 
-                                        : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
-                                    }`}
+                                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold uppercase transition-all ${
+                                    selectedForAction
+                                        ? 'animate-bounce bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500'
+                                        : 'cursor-not-allowed border border-gray-700 bg-gray-800 text-gray-500'
+                                }`}
                             >
                                 <LogOut className="h-4 w-4" />
                                 Finalizar Estadía
-                                {selectedForAction && <span className="ml-1 bg-white text-red-600 px-1.5 rounded-full text-xs">!</span>}
+                                {selectedForAction && (
+                                    <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">
+                                        !
+                                    </span>
+                                )}
                             </button>
                         </div>
                     </div>
 
                     {/* FILTROS Y BUSCADOR */}
-                    <div className="flex flex-col gap-4 items-end">
+                    <div className="flex flex-col items-end gap-4">
                         <div className="relative w-full max-w-xs">
                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                 <Search className="h-4 w-4 text-gray-400" />
@@ -293,12 +336,48 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                         </div>
 
                         <div className="flex flex-wrap justify-end gap-2">
-                            <Badge count={countStatus('available')} label="Libres" color="bg-emerald-600" onClick={() => setFilterStatus('available')} active={filterStatus === 'available'} />
-                            <Badge count={countStatus('occupied')} label="Ocupadas" color="bg-red-600" onClick={() => setFilterStatus('occupied')} active={filterStatus === 'occupied'} />
-                            <Badge count={countStatus('incomplete')} label="Pendientes" color="bg-amber-500 text-black" onClick={() => setFilterStatus('incomplete')} active={filterStatus === 'incomplete'} />
-                            <Badge count={countStatus('cleaning')} label="Limpieza" color="bg-blue-500" onClick={() => setFilterStatus('cleaning')} active={filterStatus === 'cleaning'} />
-                            <Badge count={countStatus('maintenance')} label="Mant." color="bg-gray-600" onClick={() => setFilterStatus('maintenance')} active={filterStatus === 'maintenance'} />
-                            <Badge count={Rooms.length} label="Todas" color="bg-slate-700" onClick={() => setFilterStatus('all')} active={filterStatus === 'all'} />
+                            <Badge
+                                count={countStatus('available')}
+                                label="Libres"
+                                color="bg-emerald-600"
+                                onClick={() => setFilterStatus('available')}
+                                active={filterStatus === 'available'}
+                            />
+                            <Badge
+                                count={countStatus('occupied')}
+                                label="Ocupadas"
+                                color="bg-red-600"
+                                onClick={() => setFilterStatus('occupied')}
+                                active={filterStatus === 'occupied'}
+                            />
+                            <Badge
+                                count={countStatus('incomplete')}
+                                label="Pendientes"
+                                color="bg-amber-500 text-black"
+                                onClick={() => setFilterStatus('incomplete')}
+                                active={filterStatus === 'incomplete'}
+                            />
+                            <Badge
+                                count={countStatus('cleaning')}
+                                label="Limpieza"
+                                color="bg-blue-500"
+                                onClick={() => setFilterStatus('cleaning')}
+                                active={filterStatus === 'cleaning'}
+                            />
+                            <Badge
+                                count={countStatus('maintenance')}
+                                label="Mant."
+                                color="bg-gray-600"
+                                onClick={() => setFilterStatus('maintenance')}
+                                active={filterStatus === 'maintenance'}
+                            />
+                            <Badge
+                                count={Rooms.length}
+                                label="Todas"
+                                color="bg-slate-700"
+                                onClick={() => setFilterStatus('all')}
+                                active={filterStatus === 'all'}
+                            />
                         </div>
                     </div>
                 </div>
@@ -308,37 +387,42 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                     {filteredRooms.map((room) => {
                         const config = getStatusConfig(room);
                         const displayStatus = getDisplayStatus(room);
-                        
+
                         const isActionable = displayStatus === 'incomplete'; // ¿Es amarillo?
-                        const isOccupied = displayStatus === 'occupied';     // ¿Es rojo?
-                        
-                        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+                        const isOccupied = displayStatus === 'occupied'; // ¿Es rojo?
+
+                        const activeCheckin =
+                            room.checkins && room.checkins.length > 0
+                                ? room.checkins[0]
+                                : null;
                         const isSelected = selectedForAction === room.id;
-                        
+
                         return (
-                            <div 
+                            <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all 
-                                    ${config.colorClass}
-                                    ${isSelected ? 'ring-4 ring-white scale-105 z-10 shadow-2xl' : 'hover:scale-105 hover:shadow-xl'}
-                                `}
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} `}
                             >
                                 {isSelected && (
-                                    <div className="absolute top-2 right-2 z-20 bg-white rounded-full p-1 text-red-600 animate-in zoom-in">
+                                    <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in">
                                         <CheckCircle2 className="h-5 w-5" />
                                     </div>
                                 )}
 
-                                <div className="absolute -right-2 -top-2 opacity-30 rotate-12 transform">
+                                <div className="absolute -top-2 -right-2 rotate-12 transform opacity-30">
                                     {config.icon}
                                 </div>
 
                                 <div className="relative z-10 p-4 text-white">
                                     <div className="flex items-start justify-between">
                                         <div>
-                                            <h3 className="text-2xl font-extrabold tracking-tight">{room.number}</h3>
-                                            <p className="mt-1 text-xs font-bold text-white/90 line-clamp-2" title={String(config.info)}>
+                                            <h3 className="text-2xl font-extrabold tracking-tight">
+                                                {room.number}
+                                            </h3>
+                                            <p
+                                                className="mt-1 line-clamp-2 text-xs font-bold text-white/90"
+                                                title={String(config.info)}
+                                            >
                                                 {config.info}
                                             </p>
                                         </div>
@@ -351,7 +435,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                 </div>
 
                                 {/* LÓGICA DE BOTONES SEGÚN ESTADO */}
-                                
+
                                 {isActionable ? (
                                     // ESTADO INCOMPLETO (Amarillo) -> Botón "Completar Datos"
                                     <button
@@ -359,20 +443,20 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                             e.stopPropagation();
                                             handleRoomClick(room);
                                         }}
-                                        className="flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-amber-800 z-20"
+                                        className="z-20 flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold tracking-wider text-white uppercase transition-colors hover:bg-amber-800"
                                     >
                                         <FileEdit className="h-3 w-3" />
                                         Completar Datos
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
                                     // ESTADO OCUPADO (Rojo) -> Botones Detalles y Finalizar
-                                    <div className="flex border-t border-red-800 z-20">
+                                    <div className="z-20 flex border-t border-red-800">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleOpenDetails(room);
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 bg-red-700 hover:bg-red-800 py-2 text-[10px] font-bold uppercase text-white border-r border-red-800 transition-colors"
+                                            className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-red-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-red-800"
                                         >
                                             <UserIcon className="h-3 w-3" />
                                             Detalles
@@ -380,9 +464,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleDirectCheckoutTrigger(activeCheckin.id);
+                                                handleDirectCheckoutTrigger(
+                                                    activeCheckin.id,
+                                                );
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 bg-gray-900 hover:bg-black py-2 text-[10px] font-bold uppercase text-white transition-colors"
+                                            className="flex flex-1 items-center justify-center gap-1 bg-gray-900 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-black"
                                         >
                                             <LogOut className="h-3 w-3" />
                                             Finalizar
@@ -390,11 +476,15 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                     </div>
                                 ) : (
                                     // OTROS ESTADOS (Verde, Azul, Gris) -> Barra normal
-                                    <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}>
-                                        <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-white">
+                                    <div
+                                        className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}
+                                    >
+                                        <span className="flex items-center gap-1 text-xs font-bold tracking-wider text-white uppercase">
                                             {config.label}
                                         </span>
-                                        <div className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
+                                        <div
+                                            className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}
+                                        ></div>
                                     </div>
                                 )}
                             </div>
@@ -404,7 +494,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             </div>
 
             {/* MODAL DE EDICIÓN / DETALLES */}
-            <CheckinModal 
+            <CheckinModal
                 show={isCheckinModalOpen}
                 onClose={() => {
                     setIsCheckinModalOpen(false);
@@ -418,74 +508,128 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 initialRoomId={selectedRoomId}
             />
 
-            {/* MODAL DE CONFIRMACIÓN (FLOAT) */}
+            {/* MODAL DE CONFIRMACIÓN (FLOAT con VISTA PREVIA) */}
             {confirmCheckoutId && (
-                <CheckoutConfirmationModal 
+                <CheckoutConfirmationModal
                     checkinId={confirmCheckoutId}
-                    onClose={() => setConfirmCheckoutId(null)}
+                    onClose={() => {
+                        setConfirmCheckoutId(null);
+                        setSelectedForAction(null); // <--- CORRECCIÓN: Limpia la selección al cerrar/confirmar
+                    }}
                 />
             )}
-
         </AuthenticatedLayout>
     );
 }
 
-// --- COMPONENTE MODAL DE CONFIRMACIÓN ---
-function CheckoutConfirmationModal({ checkinId, onClose }: { checkinId: number, onClose: () => void }) {
+// --- COMPONENTE MODAL DE CONFIRMACIÓN (MEJORADO CON PREVIEW PDF Y SCROLL) ---
+function CheckoutConfirmationModal({
+    checkinId,
+    onClose,
+}: {
+    checkinId: number;
+    onClose: () => void;
+}) {
     const [processing, setProcessing] = useState(false);
+    const [iframeLoading, setIframeLoading] = useState(true);
+
+    // URL para obtener el recibo.
+    // Asegúrate de que tu backend tenga esta ruta habilitada en 'web.php'
+    const receiptUrl = `/checks/${checkinId}/checkout-receipt`;
 
     const handleConfirm = () => {
         setProcessing(true);
-        // Sin Ziggy: Usamos URL directa
-        router.put(`/checks/${checkinId}/checkout`, {}, {
-            onSuccess: () => {
-                onClose();
-                window.open(`/checks/${checkinId}/checkout-receipt`, '_blank');
+        // Enviamos la petición PUT para cambiar el estado y cerrar la cuenta
+        router.put(
+            `/checks/${checkinId}/checkout`,
+            {},
+            {
+                onSuccess: () => {
+                    onClose();
+                    // Opcional: Descomentar si quieres abrir el PDF en una pestaña nueva tras confirmar automáticamente
+                    // window.open(receiptUrl, '_blank');
+                },
+                onFinish: () => setProcessing(false),
             },
-            onFinish: () => setProcessing(false)
-        });
+        );
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between border-b border-gray-100 bg-red-50 px-6 py-4">
-                    <h3 className="flex items-center gap-2 text-lg font-bold text-red-700">
-                        <AlertTriangle className="h-6 w-6" />
-                        Finalizar Estadía
-                    </h3>
-                    <button onClick={onClose} className="rounded-full p-1 text-gray-400 hover:bg-gray-200 transition">
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-                
-                <div className="p-6 text-center">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
-                        <LogOut className="h-8 w-8 text-red-600" />
-                    </div>
-                    <h4 className="text-xl font-bold text-gray-800">¿Confirmar salida?</h4>
-                    <p className="mt-2 text-sm text-gray-500">
-                        La habitación pasará a estado <strong>LIMPIEZA</strong> y se generará automáticamente el recibo de cobro final.
-                        <br/><br/>
-                        Esta acción cerrará la cuenta actual.
-                    </p>
-                </div>
+        // Contenedor del Modal (Fondo oscuro y desenfoque)
+        <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
+            {/* Contenedor Principal (Tarjeta Grande Dividida) 
+                h-[85vh] fija la altura para que el PDF tenga espacio para scroll dentro de este contenedor */}
+            <div className="flex h-[85vh] w-full max-w-6xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
+                {/* --- PANEL COMPLETO (ANTES COLUMNA IZQUIERDA) --- */}
+                <div className="flex w-full flex-col border-b border-gray-200 bg-gray-50">
+                    {/* Header */}
+                    <div className="border-b border-gray-200 bg-white p-6">
+                        <div className="mb-2 flex items-center gap-3 text-red-600">
+                            <div className="rounded-lg bg-red-100 p-2">
+                                <LogOut className="h-6 w-6" />
+                            </div>
+                            <h3 className="text-xl font-bold">
+                                Finalizar Estadía
+                            </h3>
+                        </div>
 
-                <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
-                    <button 
-                        onClick={onClose} 
-                        className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 transition"
-                        disabled={processing}
-                    >
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={handleConfirm} 
-                        className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-red-700 transition disabled:opacity-50"
-                        disabled={processing}
-                    >
-                        {processing ? 'Procesando...' : 'Sí, Finalizar'}
-                    </button>
+                        <p className="text-sm text-gray-500">
+                            Por favor, revise el recibo antes de procesar la
+                            salida definitiva del huésped.
+                        </p>
+                    </div>
+
+                    {/* --- SECCIÓN PDF (ANTES COLUMNA DERECHA) --- */}
+                    <div className="relative w-full bg-gray-500 h-[52vh]    ">
+                        {/* Loader */}
+                        {iframeLoading && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-600 text-white">
+                                <div className="flex flex-col items-center gap-3">
+                                    <Loader2 className="h-10 w-10 animate-spin text-white/50" />
+                                    <span className="text-sm font-medium text-white/80">
+                                        Generando Vista Previa...
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Iframe PDF */}
+                        <iframe
+                            src={receiptUrl}
+                            className="h-full w-full border-none bg-gray-200"
+                            title="Vista Previa del Recibo"
+                            onLoad={() => setIframeLoading(false)}
+                        />
+                    </div>
+
+                    {/* Footer - Botones */}
+                    <div className="space-y-3 border-t border-gray-200 bg-white p-6">
+                        <button
+                            onClick={handleConfirm}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] hover:bg-red-700 disabled:opacity-50 disabled:hover:scale-100"
+                            disabled={processing}
+                        >
+                            {processing ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Procesando...
+                                </>
+                            ) : (
+                                <>
+                                    <LogOut className="h-4 w-4" />
+                                    Confirmar Salida
+                                </>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={onClose}
+                            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                            disabled={processing}
+                        >
+                            Cancelar
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -494,9 +638,16 @@ function CheckoutConfirmationModal({ checkinId, onClose }: { checkinId: number, 
 
 function Badge({ count, label, color, onClick, active }: any) {
     return (
-        <button onClick={onClick} className={`flex min-w-[90px] flex-col items-center justify-center rounded-xl border p-2 transition-all ${active ? `border-white/50 ${color} shadow-md scale-105 brightness-110` : 'border-gray-700 bg-gray-800 hover:bg-gray-700'}`}>
+        <button
+            onClick={onClick}
+            className={`flex min-w-[90px] flex-col items-center justify-center rounded-xl border p-2 transition-all ${active ? `border-white/50 ${color} scale-105 shadow-md brightness-110` : 'border-gray-700 bg-gray-800 hover:bg-gray-700'}`}
+        >
             <span className="text-xl font-bold text-white">{count}</span>
-            <span className={`text-[10px] uppercase font-bold ${active ? 'text-white' : 'text-gray-400'}`}>{label}</span>
+            <span
+                className={`text-[10px] font-bold uppercase ${active ? 'text-white' : 'text-gray-400'}`}
+            >
+                {label}
+            </span>
         </button>
     );
 }
