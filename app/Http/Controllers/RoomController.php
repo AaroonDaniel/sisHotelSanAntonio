@@ -157,6 +157,7 @@ class RoomController extends Controller
         
     }
 
+    // Vista previa de asignacnion (antes de finalizar la estadia)
     public function getGuestsList()
     {
         // 1. Recuperar los checkins activos

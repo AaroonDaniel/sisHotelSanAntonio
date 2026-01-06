@@ -8,7 +8,6 @@ import {
     Brush,
     CheckCircle2,
     Construction,
-    Download,
     FileEdit,
     Home,
     Loader2,
@@ -283,8 +282,9 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                         </button>
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">
-                                Panel de Habitaciones
+                                Habitaciones
                             </h2>
+                            {/* Boton que se implementara a futuro
                             <button
                                 onClick={handleTopCheckoutTrigger}
                                 disabled={!selectedForAction}
@@ -297,6 +297,7 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                     </span>
                                 )}
                             </button>
+                            */}
                         </div>
                     </div>
                     {/* Filtros omitidos por brevedad, son los mismos */}
@@ -602,8 +603,6 @@ function CheckoutConfirmationModal({
                     {!pdfUrl ? (
                         // --- ESTADO 1: RESUMEN Y CONFIRMACIÓN ---
                         <div className="p-6">
-                            
-
                             {/* Detalle de Datos */}
                             <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 text-sm shadow-inner">
                                 <div className="mb-3 text-center">
@@ -631,7 +630,10 @@ function CheckoutConfirmationModal({
                                     </div>
                                     <div className="text-right">
                                         <span className="font-bold">Hora:</span>{' '}
-                                        {ingreso.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {ingreso.toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })}
                                     </div>
 
                                     <div>
@@ -642,14 +644,17 @@ function CheckoutConfirmationModal({
                                     </div>
                                     <div className="text-right">
                                         <span className="font-bold">Hora:</span>{' '}
-                                        {salida.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {salida.toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })}
                                     </div>
 
                                     <div>
                                         <span className="font-bold">
                                             Permanencia (días):
                                         </span>{' '}
-                                        {diasCobrar} 
+                                        {diasCobrar}
                                     </div>
                                     <br></br>
                                     <div>

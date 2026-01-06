@@ -400,16 +400,6 @@ export default function CheckinModal({
                     </h2>
 
                     <div className="flex items-center gap-2">
-                        {checkinToEdit && (
-                            <button
-                                type="button"
-                                onClick={handleCheckout}
-                                className="mr-2 flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-200"
-                            >
-                                <LogOut className="h-4 w-4" />
-                                Finalizar Estadía
-                            </button>
-                        )}
                         <button
                             onClick={onClose}
                             className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"

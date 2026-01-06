@@ -126,7 +126,7 @@ export default function ServicesIndex({ auth, Services }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID</th>
+                                        
                                         <th className="px-6 py-4">Nombre</th>
                                         <th className="px-6 py-4">Precio</th>
                                         <th className="px-6 py-4">Descripción</th>
@@ -138,7 +138,7 @@ export default function ServicesIndex({ auth, Services }: Props) {
                                     {filteredServices.length > 0 ? (
                                         filteredServices.map((Service) => (
                                             <tr key={Service.id} className={`transition-colors hover:bg-gray-50 ${!Service.is_active ? 'bg-gray-50 opacity-75' : ''}`}>
-                                                <td className="px-6 py-4 font-bold">{Service.id}</td>
+                                                
                                                 
                                                 {/* Nombre */}
                                                 <td className="px-6 py-4 font-bold text-gray-900">
