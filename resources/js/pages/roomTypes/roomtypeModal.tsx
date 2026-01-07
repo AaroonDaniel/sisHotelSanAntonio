@@ -104,7 +104,7 @@ export default function RoomtypeModal({
                                         setData('name', e.target.value.toUpperCase())
                                     }
                                     // CORREGIDO: 'block' en lugar de 'Roomtype'
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: Simple"
                                 />
                             </div>
@@ -134,7 +134,7 @@ export default function RoomtypeModal({
                                         )
                                     }
                                     // CORREGIDO: 'block' en lugar de 'Roomtype'
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: 1"
                                 />
                             </div>
@@ -159,7 +159,7 @@ export default function RoomtypeModal({
                                         setData('description', e.target.value.toUpperCase())
                                     }
                                     rows={3}
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Detalles del tipo de habitación..."
                                 />
                             </div>

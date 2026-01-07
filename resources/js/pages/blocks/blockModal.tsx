@@ -87,7 +87,7 @@ export default function BlockModal({ show, onClose, blockToEdit }: BlockModalPro
                                     type="text"
                                     value={data.code}
                                     onChange={(e) => setData('code', e.target.value.toUpperCase())}
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: B-101"
                                 />
                             </div>
@@ -105,7 +105,8 @@ export default function BlockModal({ show, onClose, blockToEdit }: BlockModalPro
                                     value={data.description}
                                     onChange={(e) => setData('description', e.target.value.toUpperCase())}
                                     rows={3}
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
+
                                     placeholder="Detalles del sector..."
                                 />
                             </div>

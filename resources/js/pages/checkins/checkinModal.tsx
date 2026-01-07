@@ -509,7 +509,7 @@ export default function CheckinModal({
                                 <div className="col-span-1">
                                     <label className="text-xs font-bold text-gray-500">
                                         Carnet (CI)
-                                    </label>
+                                    </label> 
                                     <input
                                         className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300 focus:border-amber-500' : ''}`}
                                         value={data.identification_number}

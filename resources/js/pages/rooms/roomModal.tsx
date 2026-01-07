@@ -200,7 +200,7 @@ export default function RoomModal({ show, onClose, RoomToEdit, roomTypes, blocks
                                     type="text"
                                     value={data.number}
                                     onChange={(e) => setData('number', e.target.value.toUpperCase())}
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-1.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: 101, A-20, Suite Principal"
                                 />
                             </div>

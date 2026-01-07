@@ -94,7 +94,7 @@ export default function BlocksIndex({ auth, blocks }: Props) {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Buscar por código..."
-                                    className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                    className="block w-full rounded-xl border-gray-400 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
 

@@ -83,7 +83,7 @@ export default function FloorModal({ show, onClose, FloorToEdit }: FloorModalPro
                                     value={data.name}
                                     onChange={(e) => setData('name', e.target.value.toUpperCase())}
                                     // CORREGIDO: 'block' en lugar de 'Floor'
-                                    className="uppercase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: Piso 1"
                                 />
                             </div>

@@ -92,7 +92,7 @@ export default function PriceModal({ show, onClose, PriceToEdit, roomTypes }: Pr
                                 <select
                                     value={data.room_type_id}
                                     onChange={(e) => setData('room_type_id', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500 bg-white"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                 >
                                     <option value="" disabled>Seleccionar tipo...</option>
                                     {roomTypes.map((type) => (
@@ -115,7 +115,7 @@ export default function PriceModal({ show, onClose, PriceToEdit, roomTypes }: Pr
                                 <select
                                     value={data.bathroom_type}
                                     onChange={(e) => setData('bathroom_type', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500 bg-white"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                 >
                                     <option value="" disabled>Seleccionar...</option>
                                     <option value="Privado">PRIVADO</option>
@@ -137,7 +137,7 @@ export default function PriceModal({ show, onClose, PriceToEdit, roomTypes }: Pr
                                     step="0.01"
                                     value={data.amount}
                                     onChange={(e) => setData('amount', e.target.value)}
-                                    className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: 50.00"
                                 />
                             </div>

@@ -92,7 +92,7 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                     type="text" 
                                     value={data.name}
                                     onChange={(e) => setData('name', e.target.value.toUpperCase())}
-                                    className="UpperCase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Ej: Lavandería"
                                 />
                             </div>
@@ -113,7 +113,7 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                         step="0.01"
                                         value={data.price}
                                         onChange={(e) => setData('price', e.target.value)}
-                                        className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                        className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                         placeholder="0.00"
                                     />
                                 </div>
@@ -131,7 +131,7 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                         type="number"
                                         value={data.quantity}
                                         onChange={(e) => setData('quantity', e.target.value)}
-                                        className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                        className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                         placeholder="Ej: 1"
                                     />
                                 </div>
@@ -151,7 +151,7 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                     value={data.description}
                                     onChange={(e) => setData('description', e.target.value.toUpperCase())}
                                     rows={3}
-                                    className="UpperCase block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                     placeholder="Detalles del servicio..."
                                 />
                             </div>
