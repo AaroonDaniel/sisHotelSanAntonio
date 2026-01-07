@@ -124,6 +124,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 setIsCheckinModalOpen(true);
             }
         }
+
+        if (status === 'cleaning') {
+            getCleanRoom(room);
+            return;
+        }
     };
 
     const handleTopCheckoutTrigger = () => {
@@ -166,6 +171,21 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             sensitivity: 'base',
         });
     });
+
+    //cambio de estado de la habitacion de limpieza a libre
+    const getCleanRoom = (room: Room) => {
+        if (getDisplayStatus(room) === 'cleaning') {
+            router.put(
+                `/rooms/${room.id}/clean`,
+                {},
+                {
+                    onSuccess: () => {
+                        // Opcional: mostrar alerta o simplemente dejar que se refresque
+                    },
+                },
+            );
+        }
+    };
 
     const getOccupantName = (room: Room) => {
         if (room.checkins && room.checkins.length > 0) {
@@ -219,12 +239,12 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 };
             case 'cleaning':
                 return {
-                    colorClass: 'bg-blue-500',
+                    colorClass: 'bg-blue-500 hover:bg-blue-400 cursor-pointer',
                     borderColor: 'border-blue-600',
                     label: 'Limpieza',
                     icon: <Brush className="h-10 w-10 text-blue-200/50" />,
-                    info: 'Limpieza',
-                    actionLabel: '-',
+                    info: 'Clic para Habilitar',
+                    actionLabel: 'Habilitar',
                 };
             case 'maintenance':
                 return {

@@ -35,6 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
     Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
 
+
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
     Route::post('/pisos', [FloorController::class, 'store'])->name('floors.store');
@@ -50,6 +51,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/tipohabitacion/{roomType}', [RoomTypeController::class, 'destroy'])->name('room_types.destroy');
     Route::patch('/tipohabitacion/{roomType}/toggle', [RoomTypeController::class, 'toggleStatus'])->name('room_types.toggle');
     Route::get('/status', [RoomController::class, 'status'])->name('rooms.status');
+    Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
     
     //Tipos de precios habitaciones
     Route::get('/precios', [PriceController::class, 'index'])->name('prices.index');

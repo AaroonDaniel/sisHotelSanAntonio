@@ -157,6 +157,13 @@ class RoomController extends Controller
         
     }
 
+    // Funcion de limpieza de habitacion (PROVICIONAL)
+    public function markAsClean(Room $room){
+        $room ->update(['status' => 'LIBRE']);
+        return back()->with('success', 'Habitación marcada como limpia y disponible.');
+    }
+    
+
     // Vista previa de asignacnion (antes de finalizar la estadia)
     public function getGuestsList()
     {
