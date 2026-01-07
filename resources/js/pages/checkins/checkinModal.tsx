@@ -814,7 +814,13 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            
+                            <div>
+                                <label className="mb-2 block text-xs font-bold text-gray-500">
+                                    Servicios Adicionales
+                                </label>
+                                
+                            </div>
+
                         </div>
 
                         <div className="mt-8 flex items-center justify-end gap-3">
