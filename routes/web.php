@@ -9,6 +9,7 @@ use App\Http\Controllers\PriceController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\CheckinDetailController;
 use Illuminate\Support\Facades\Route;
 
 use Inertia\Inertia;
@@ -93,17 +94,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
     
-   // 1. Ruta para finalizar la estadía (Checkout) - Usamos PUT
+   // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
-
     // 2. Ruta para el PDF de salida (Checkout Receipt)
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
-
     // 3. Ruta para el PDF de ingreso (Solo asignación)
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);   
-
-    // Estados de Limpieza y Mantenimiento (Reportes visuales)
-
+    
+    // Detalles de asignacion 
+    Route::get('/ckecksdetails', [CheckinDetailController::class, 'index'])->name('ckecksdetails.index');
+    Route::get('/ckecksdetails/crear', [CheckinDetailController::class , 'create'])->name('ckecksdetails.create');
+    Route::post('/ckecksdetails', [CheckinDetailController::class, 'store'])->name('ckecksdetails.store');
+    Route::put('/ckecksdetails/{ckecksdetails}', [CheckinDetailController::class, 'update'])->name('ckecksdetails.update');
+    Route::delete('/ckecksdetails/{ckecksdetails}', [CheckinDetailController::class, 'destroy'])->name('ckecksdetails.destroy');
+    
 
     //Reportes 
     // Página principal de reportes

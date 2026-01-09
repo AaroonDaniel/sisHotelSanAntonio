@@ -16,10 +16,12 @@ import {
     BookDown,
     AlertTriangle, // Icono para modal de error
     X,             // Icono cerrar
-    FileText       // Icono archivo
+    FileText,
+    Briefcase,       // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
+import { url } from 'inspector';
 
 // Interfaces Locales
 interface User {
@@ -57,6 +59,7 @@ const hotelModules = [
         items: [
             { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservations/create' },
             { name: 'Asignación', icon: BedDouble, url: '/checks' },
+            { name: 'Detalles de asignación', icon: Briefcase, url: 'ckecksdetails/'},
             { name: 'Facturación', icon: Receipt, url: '/invoices' },
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
