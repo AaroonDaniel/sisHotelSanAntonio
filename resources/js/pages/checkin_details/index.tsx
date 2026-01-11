@@ -1,191 +1,315 @@
-import { useForm } from '@inertiajs/react';
-import { UtensilsCrossed, Save, X, Hash } from 'lucide-react';
-import { FormEventHandler, useEffect } from 'react';
+import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
+import { Head } from '@inertiajs/react';
+import {
+    ArrowLeft,
+    BedDouble,
+    Clock,
+    FileText,
+    LogIn,
+    Printer,
+    Search,
+    User as UserIcon,
+} from 'lucide-react';
+import { useState } from 'react';
 
-// --- INTERFACES CORREGIDAS ---
+// --- INTERFACES ---
+interface Guest {
+    id: number;
+    full_name: string;
+    identification_number: string;
+}
 
-interface Service { 
-    id: number; 
-    name: string; 
-    // CORRECCIÓN 1: Permitir string o number para evitar el error de tipos
-    price: number | string; 
+interface Room {
+    id: number;
+    number: string;
+    status: string;
+    room_type?: { name: string };
+}
+
+interface Service {
+    id: number;
+    name: string;
+}
+
+interface Checkin {
+    id: number;
+    guest_id: number;
+    room_id: number;
+    check_in_date: string;
+    check_out_date?: string | null;
+    duration_days: number;
+    advance_payment: number;
+    guest?: Guest;
+    room?: Room;
 }
 
 interface CheckinDetail {
-    id?: number;
+    id: number;
+    quantity: number;
     checkin_id: number;
     service_id: number;
-    quantity: number;
+    created_at: string;
+    checkin?: Checkin;
+    service?: Service;
 }
 
-interface CheckindetailModalProps {
-    show: boolean;
-    onClose: () => void;
-    // CORRECCIÓN 2: Usar nombre estándar 'detailToEdit' para coincidir con Index.tsx
-    detailToEdit?: CheckinDetail | null; 
-    // Opcional, por si estamos creando uno nuevo desde una vista general
-    checkinId?: number; 
-    services: Service[]; 
+interface Props {
+    auth: { user: User };
+    checkinDetails: CheckinDetail[];
+    services?: Service[];
 }
 
-export default function CheckindetailModal({
-    show,
-    onClose,
-    detailToEdit, // Renombrado para consistencia
-    checkinId = 0, // Valor por defecto
-    services = [], 
-}: CheckindetailModalProps) {
-    
-    const { data, setData, post, put, processing, errors, reset, clearErrors } =
-        useForm({
-            checkin_id: checkinId,
-            service_id: '',
-            quantity: 1, 
+export default function CheckinDetailsIndex({ auth, checkinDetails }: Props) {
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Protección para evitar errores si llega undefined
+    const dataList = checkinDetails || [];
+
+    // --- LÓGICA DE FILTRADO ---
+    const filteredDetails = dataList.filter((detail) => {
+        const term = searchTerm.toLowerCase();
+
+        const guestName = detail.checkin?.guest
+            ? `${detail.checkin.guest.full_name}`.toLowerCase()
+            : '';
+
+        const roomNumber = detail.checkin?.room
+            ? detail.checkin.room.number.toLowerCase()
+            : '';
+
+        const serviceName = detail.service?.name.toLowerCase() || '';
+
+        return (
+            guestName.includes(term) ||
+            roomNumber.includes(term) ||
+            serviceName.includes(term)
+        );
+    });
+
+    // --- FORMATEO DE FECHA ---
+    const formatDate = (dateString?: string) => {
+        if (!dateString) return '-';
+        return new Date(dateString).toLocaleDateString('es-BO', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
         });
-
-    useEffect(() => {
-        if (show) {
-            if (detailToEdit) {
-                // MODO EDICIÓN: Cargamos datos existentes
-                setData({
-                    checkin_id: detailToEdit.checkin_id,
-                    service_id: detailToEdit.service_id.toString(),
-                    quantity: detailToEdit.quantity,
-                });
-            } else {
-                // MODO CREACIÓN: Reseteamos
-                reset();
-                // Si recibimos un checkinId desde el padre, lo usamos
-                setData({
-                    checkin_id: checkinId,
-                    service_id: '',
-                    quantity: 1,
-                });
-            }
-            clearErrors();
-        }
-    }, [show, detailToEdit, checkinId]);
-
-    const submit: FormEventHandler = (e) => {
-        e.preventDefault();
-
-        const onSuccess = () => {
-            reset();
-            onClose();
-        };
-
-        if (detailToEdit && detailToEdit.id) {
-            // Importante: Asegúrate de que la ruta en Laravel sea la correcta (put)
-            // Usualmente resource usa: /ckecksdetails/{id}
-            put(`/ckecksdetails/${detailToEdit.id}`, { onSuccess });
-        } else {
-            post('/ckecksdetails', { onSuccess });
-        }
     };
 
-    if (!show) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
-            <div className="w-full max-w-lg animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
-                    <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                        <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
-                            <UtensilsCrossed className="h-5 w-5" />
-                        </div>
-                        {detailToEdit ? 'Editar Consumo' : 'Agregar Servicio'}
+        <AuthenticatedLayout user={auth.user}>
+            <Head title="Detalles de Asignación" />
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
+
+                <div>
+                    <h2 className="text-3xl font-bold text-white">
+                        Asignación y Detalles
                     </h2>
-                    <button
-                        onClick={onClose}
-                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
+                    <p className="mt-1 text-gray-400">
+                        Vista detallada de los consumos y servicios en
+                        ocupaciones.
+                    </p>
                 </div>
 
-                {/* Body */}
-                <form onSubmit={submit} className="p-6">
-                    <div className="space-y-4">
-                        
-                        {/* CAMPO OCULTO: ID DEL CHECKIN */}
-                        {/* Si estamos en modo creación general y no hay checkinId, aquí deberías poner un Select de Checkins */}
-                        {/* Por ahora asumimos que checkinId viene del padre o del detalle editado */}
-
-                        {/* CAMPO 1: SELECCIONAR SERVICIO */}
-                        <div>
-                            <label className="text-xs font-bold text-gray-500">
-                                Servicio
-                            </label>
-                            <div className="relative mt-1">
-                                <select
-                                    value={data.service_id}
-                                    onChange={(e) => setData('service_id', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-400 py-2 pl-3 pr-8 text-sm text-black uppercase focus:border-gray-600 focus:ring-0"
-                                >
-                                    <option value="" disabled>-- Seleccione un Servicio --</option>
-                                    {services.map((srv) => (
-                                        <option key={srv.id} value={srv.id}>
-                                            {srv.name} - ${srv.price}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            {errors.service_id && (
-                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.service_id}</p>
-                            )}
-                        </div>
-
-                        {/* CAMPO 2: CANTIDAD */}
-                        <div>
-                            <label className="text-xs font-bold text-gray-500">
-                                Cantidad
-                            </label>
-                            <div className="relative mt-1">
-                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <Hash className="h-4 w-4 text-gray-400" />
+                <div className="py-8">
+                    <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                        {/* Buscador */}
+                        <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:w-96">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
                                 </div>
                                 <input
-                                    type="number"
-                                    min="1"
-                                    value={data.quantity}
-                                    onChange={(e) => setData('quantity', parseInt(e.target.value) || 0)}
-                                    className="w-full rounded-lg border border-gray-400 py-2 pl-10 pr-3 text-sm text-black uppercase focus:border-gray-600 focus:ring-0"
-                                    placeholder="Ej: 1"
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
+                                    placeholder="Buscar por huésped o habitación..."
+                                    className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
-                            {errors.quantity && (
-                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.quantity}</p>
-                            )}
+
+                            <button
+                                // Agregamos esto para probar:
+                                onClick={() =>
+                                    alert('¡El botón funciona correctamente!')
+                                }
+                                className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                            >
+                                <FileText className="h-5 w-5" />
+                                <span>Reporte General</span>
+                            </button>
                         </div>
 
-                    </div>
+                        {/* Tabla */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-gray-600">
+                                <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+                                    <tr>
+                                        <th className="px-6 py-4">
+                                            Habitación
+                                        </th>
+                                        <th className="px-6 py-4">Huésped</th>
+                                        <th className="px-6 py-4">
+                                            Servicio / Detalle
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Fecha Check-in
+                                        </th>
+                                        <th className="px-6 py-4 text-center">
+                                            Estado Hab.
+                                        </th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {filteredDetails.length > 0 ? (
+                                        filteredDetails.map((detail) => (
+                                            <tr
+                                                key={detail.id}
+                                                className="transition-colors hover:bg-gray-50"
+                                            >
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2 font-bold text-gray-900">
+                                                        <div className="rounded bg-green-100 p-1 text-green-600">
+                                                            <BedDouble className="h-4 w-4" />
+                                                        </div>
+                                                        {detail.checkin?.room
+                                                            ?.number || 'S/N'}
+                                                    </div>
+                                                    <span className="ml-7 text-xs text-gray-500">
+                                                        {
+                                                            detail.checkin?.room
+                                                                ?.room_type
+                                                                ?.name
+                                                        }
+                                                    </span>
+                                                </td>
 
-                    {/* Footer */}
-                    <div className="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-4">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
-                        >
-                            {processing ? (
-                                'Guardando...'
-                            ) : (
-                                <>
-                                    <Save className="h-4 w-4" /> Guardar
-                                </>
-                            )}
-                        </button>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <UserIcon className="h-4 w-4 text-gray-400" />
+                                                        <span className="font-medium text-gray-800">
+                                                            {detail.checkin
+                                                                ?.guest
+                                                                ?.full_name ||
+                                                                'Desconocido'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="ml-6 text-xs text-gray-500">
+                                                        CI:{' '}
+                                                        {detail.checkin?.guest
+                                                            ?.identification_number ||
+                                                            '-'}
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-6 py-4">
+                                                    <div className="font-medium text-gray-900">
+                                                        {detail.service?.name ||
+                                                            'Servicio General'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                        Cant: {detail.quantity}
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col gap-1 text-xs">
+                                                        <div className="flex items-center gap-1 text-green-700">
+                                                            <LogIn className="h-3 w-3" />
+                                                            {formatDate(
+                                                                detail.checkin
+                                                                    ?.check_in_date,
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-gray-500">
+                                                            <Clock className="h-3 w-3" />
+                                                            {
+                                                                detail.checkin
+                                                                    ?.duration_days
+                                                            }{' '}
+                                                            días
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-6 py-4 text-center">
+                                                    <span
+                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                            !detail.checkin
+                                                                ?.check_out_date
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : 'bg-gray-100 text-gray-800'
+                                                        }`}
+                                                    >
+                                                        {!detail.checkin
+                                                            ?.check_out_date
+                                                            ? 'Ocupado'
+                                                            : 'Finalizado'}
+                                                    </span>
+                                                </td>
+
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            className="text-gray-400 transition hover:text-blue-600"
+                                                            title="Ver Detalle"
+                                                        >
+                                                            <FileText className="h-4 w-4" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                if (
+                                                                    detail.checkin_id
+                                                                ) {
+                                                                    window.open(
+                                                                        `/checks/${detail.checkin_id}/receipt`,
+                                                                        '_blank',
+                                                                    );
+                                                                }
+                                                            }}
+                                                            className="text-gray-400 transition hover:text-purple-600"
+                                                            title="Imprimir Nota"
+                                                        >
+                                                            <Printer className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td
+                                                colSpan={6}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay detalles registrados.'}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </form>
+                </div>
             </div>
-        </div>
+        </AuthenticatedLayout>
     );
 }

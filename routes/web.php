@@ -17,7 +17,7 @@ use Inertia\Inertia;
 Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    
+
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
     })->name('Inicio');
@@ -43,7 +43,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/pisos/{floor}', [FloorController::class, 'update'])->name('floors.update');
     Route::delete('/pisos/{floor}', [FloorController::class, 'destroy'])->name('floors.destroy');
     Route::patch('/pisos/{floor}/toggle', [FloorController::class, 'toggleStatus'])->name('floors.toggle');
-    
+
     //Tipos de Habitaciones
     Route::get('/tipohabitacion', [RoomTypeController::class, 'index'])->name('room_types.index');
     Route::get('/tipohabitacion/crear', [RoomTypeController::class, 'create'])->name('room_types.create');
@@ -53,7 +53,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/tipohabitacion/{roomType}/toggle', [RoomTypeController::class, 'toggleStatus'])->name('room_types.toggle');
     Route::get('/status', [RoomController::class, 'status'])->name('rooms.status');
     Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
-    
+
     //Tipos de precios habitaciones
     Route::get('/precios', [PriceController::class, 'index'])->name('prices.index');
     Route::get('/precios/crear', [PriceController::class, 'create'])->name('prices.create');
@@ -69,7 +69,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/habitaciones/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::delete('/habitaciones/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
     Route::patch('/habitaciones/{room}/toggle', [RoomController::class, 'toggleStatus'])->name('rooms.toggle');
-    
+
     //Invitados
     Route::get('/invitados', [GuestController::class, 'index'])->name('guests.index');
     Route::get('/invitados/crear', [GuestController::class, 'create'])->name('guests.create');
@@ -77,7 +77,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/invitados/{guest}', [GuestController::class, 'update'])->name('guests.update');
     Route::delete('/invitados/{guest}', [GuestController::class, 'destroy'])->name('guests.destroy');
     Route::patch('/invitados/{guest}/toggle', [GuestController::class, 'toggleStatus'])->name('guests.toggle');
-    
+
     //Servicios
     Route::get('/servicios', [ServiceController::class, 'index'])->name('services.index');
     Route::get('/servicios/crear', [ServiceController::class, 'create'])->name('services.create');
@@ -93,21 +93,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
-    
-   // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
+
+    // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
     // 2. Ruta para el PDF de salida (Checkout Receipt)
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
     // 3. Ruta para el PDF de ingreso (Solo asignación)
-    Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);   
-    
-    // Detalles de asignacion 
-    Route::get('/ckecksdetails', [CheckinDetailController::class, 'index'])->name('ckecksdetails.index');
-    Route::get('/ckecksdetails/crear', [CheckinDetailController::class , 'create'])->name('ckecksdetails.create');
-    Route::post('/ckecksdetails', [CheckinDetailController::class, 'store'])->name('ckecksdetails.store');
-    Route::put('/ckecksdetails/{ckecksdetails}', [CheckinDetailController::class, 'update'])->name('ckecksdetails.update');
-    Route::delete('/ckecksdetails/{ckecksdetails}', [CheckinDetailController::class, 'destroy'])->name('ckecksdetails.destroy');
-    
+    Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
+
+    // Detalle de asignacion
+    Route::get('/checkin-details', [CheckinDetailController::class, 'index'])->name('checkin_details.index');
+    Route::get('/checkin-details/crear', [CheckinDetailController::class, 'create'])->name('checkin_details.create');
+    Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkin_details.store');
+    Route::put('/checkin-details/{checkinDetail}', [CheckinDetailController::class, 'update'])->name('checkin_details.update');
+    Route::delete('/checkin-details/{checkinDetail}', [CheckinDetailController::class, 'destroy'])->name('checkin_details.destroy');
 
     //Reportes 
     // Página principal de reportes
@@ -117,7 +116,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
 
     // Generar PDF Libro Diario
-    Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');    
+    Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');
 
     Route::get('/housekeeping', [RoomController::class, 'housekeeping'])->name('rooms.housekeeping');
     Route::get('/maintenance', [RoomController::class, 'maintenance'])->name('rooms.maintenance');

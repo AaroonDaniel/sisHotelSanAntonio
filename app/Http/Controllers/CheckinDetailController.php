@@ -12,100 +12,66 @@ class CheckinDetailController extends Controller
 {
     /**
      * Display a listing of the resource.
-     * (Generalmente no se usa si cargas los detalles dentro de la vista de Checkin)
      */
     public function index()
     {
-        // Corregí el typo 'intex' a 'Index' por convención
+        // Asegúrate de que la carpeta en resources/js/pages se llame 'checkin_details'
         return Inertia::render('checkin_details/index', [
-            'checkinDetails' => CheckinDetail::with(['service', 'checkin'])->latest()->get(),
+            'checkinDetails' => CheckinDetail::with(['service', 'checkin.room', 'checkin.guest']) // Agregué relaciones útiles para la tabla
+                ->latest()
+                ->get(),
             'services' => Service::where('is_active', true)->get(),
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     * (No suele ser necesario con Modales, pero aquí está la corrección de sintaxis)
-     */
     public function create()
     {
-        return Inertia::render('checkindetail/create', [
+        // Nota: Si usas modales en el index, este método quizás no se use, 
+        // pero si se usa, la ruta debe ser coherente.
+        return Inertia::render('checkin_details/create', [
             'services' => Service::where('is_active', true)->get(),
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        // 1. Validar los datos que vienen del Modal React
         $validated = $request->validate([
             'checkin_id' => 'required|exists:checkins,id',
             'service_id' => 'required|exists:services,id',
             'quantity'   => 'required|integer|min:1',
         ]);
 
-        // 2. Crear el registro
-        // Nota: Ya no calculamos selling_price porque eliminaste la columna.
         CheckinDetail::create([
             'checkin_id' => $validated['checkin_id'],
             'service_id' => $validated['service_id'],
             'quantity'   => $validated['quantity'],
         ]);
 
-        // 3. Redirigir atrás (Mantiene al usuario en la página del Checkin donde abrió el modal)
         return Redirect::back()->with('message', 'Servicio agregado correctamente.');
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(CheckinDetail $checkinDetail)
-    {
-        // Generalmente no se necesita vista individual para un detalle
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(CheckinDetail $checkinDetail)
-    {
-        // Al usar modales, no solemos renderizar una vista de edición aparte.
-        // Los datos se pasan directamente al modal desde el padre.
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
+    // Nota: cambié el parámetro $id a $checkinDetail para usar Route Model Binding si lo prefieres,
+    // pero mantuve tu lógica con $id para no romper lo que ya tienes.
     public function update(Request $request, $id)
     {
-        // Buscamos el detalle por ID
         $checkinDetail = CheckinDetail::findOrFail($id);
 
-        // 1. Validar
         $validated = $request->validate([
             'service_id' => 'required|exists:services,id',
             'quantity'   => 'required|integer|min:1',
         ]);
 
-        // 2. Actualizar
         $checkinDetail->update([
             'service_id' => $validated['service_id'],
             'quantity'   => $validated['quantity'],
         ]);
 
-        // 3. Redirigir
         return Redirect::back()->with('message', 'Consumo actualizado correctamente.');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $checkinDetail = CheckinDetail::findOrFail($id);
-        
         $checkinDetail->delete();
 
         return Redirect::back()->with('message', 'Consumo eliminado correctamente.');
