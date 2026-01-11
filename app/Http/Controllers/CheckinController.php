@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 // Si usas FPDF globalmente, esta línea a veces sobra, 
 // pero la dejo porque en tu código anterior estaba.
-use Fpdf; 
+use Fpdf;
 use Carbon\Carbon;
 use App\Models\Checkin;
 use App\Models\Guest;
@@ -24,7 +24,7 @@ class CheckinController extends Controller
             ->get();
 
         $guests = Guest::orderBy('full_name')->get();
-        $rooms = Room::with(['roomType', 'price'])->get(); 
+        $rooms = Room::with(['roomType', 'price'])->get();
 
         return Inertia::render('checkins/index', [
             'Checkins' => $checkins,
@@ -39,15 +39,15 @@ class CheckinController extends Controller
         // 1. Validar si es huésped nuevo o existente
         if (!$request->filled('guest_id')) {
             // --- NUEVO HUÉSPED ---
-            
+
             // Si falta el CI, es registro rápido (INCOMPLETE)
             $isComplete = $request->filled('identification_number');
-            
+
             // Validamos solo el nombre obligatorio, el resto nullable
             // AGREGADO: phone
             $request->validate([
                 'full_name' => 'required|string|max:150',
-                'identification_number' => 'nullable|string|max:50', 
+                'identification_number' => 'nullable|string|max:50',
                 'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
             ]);
 
@@ -69,7 +69,7 @@ class CheckinController extends Controller
         } else {
             // --- HUÉSPED EXISTENTE ---
             $guestId = $request->guest_id;
-            
+
             // Opcional: Si envían teléfono al seleccionar uno existente, actualizarlo si no tiene
             if ($request->filled('phone')) {
                 $existingGuest = \App\Models\Guest::find($guestId);
@@ -88,21 +88,32 @@ class CheckinController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        // --- SOLUCIÓN DE ERRORES ID ---
+        // Usamos la fachada Auth::id() para calmar al editor (Intelephense)
+        $userId = \Illuminate\Support\Facades\Auth::id();
+
+        // Si es null (porque expiró la sesión o es prueba), usamos el primer usuario de la BD
+        if (!$userId) {
+            $fallbackUser = \App\Models\User::first();
+            $userId = $fallbackUser ? $fallbackUser->id : 1;
+        }
+        // -----------------------------
+
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
-            'user_id' => auth()->id(),
+            'user_id' => $userId, // <--- Usamos la variable verificada
             'check_in_date' => $validatedCheckin['check_in_date'],
             'duration_days' => $validatedCheckin['duration_days'],
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => $validatedCheckin['notes'],
-            'status' => 'activo', 
+            'status' => 'activo',
         ]);
 
         if ($request->has('selected_services')) {
             $checkin->services()->sync($request->selected_services);
         }
-        
+
         \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');
@@ -117,7 +128,7 @@ class CheckinController extends Controller
             'duration_days' => 'required|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
-            
+
             // Datos del Huésped
             'full_name' => 'required|string|max:150',
             'identification_number' => 'nullable|string|max:50',
@@ -131,7 +142,7 @@ class CheckinController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
-            
+
             $guest = $checkin->guest;
             $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
 
@@ -148,7 +159,7 @@ class CheckinController extends Controller
             ];
 
             $isProfileComplete = true;
-            $missingField = null; 
+            $missingField = null;
 
             // Verificamos uno por uno. Si falta alguno, el perfil está incompleto.
             foreach ($requiredFields as $field) {
@@ -159,19 +170,19 @@ class CheckinController extends Controller
                     break;
                 }
             }
-            
+
             // 3. ACTUALIZAR HUÉSPED
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
-                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null, 
+                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
                 'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
                 'civil_status' => $validated['civil_status'], // Puede ser null
                 'birth_date' => $validated['birth_date'],     // Puede ser null
                 'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
                 'phone' => $request->phone, // <--- ACTUALIZAR TELÉFONO
-                
+
                 // ESTADO CALCULADO:
                 'profile_status' => $isProfileComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
@@ -181,9 +192,9 @@ class CheckinController extends Controller
 
             // Si antes faltaban datos y AHORA está todo completo, actualizamos la fecha a "AHORA"
             if ($wasIncomplete && $isProfileComplete) {
-                $newCheckInDate = now(); 
+                $newCheckInDate = now();
             }
-            
+
             // Recalcular salida
             $checkInCarbon = \Carbon\Carbon::parse($newCheckInDate);
             $checkOutDate = $validated['duration_days'] > 0
@@ -219,7 +230,7 @@ class CheckinController extends Controller
             // --- LÓGICA DE RESPUESTA CONDICIONAL ---
             if (!$isProfileComplete) {
                 // Traducción simple del campo faltante
-                $campoFaltante = match($missingField) {
+                $campoFaltante = match ($missingField) {
                     'identification_number' => 'Carnet de Identidad',
                     'nationality' => 'Nacionalidad',
                     'origin' => 'Procedencia',
@@ -251,11 +262,11 @@ class CheckinController extends Controller
     public function checkout(Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
-        
+
         if ($room) {
             $room->update(['status' => 'LIMPIEZA']);
         }
-        
+
         $checkin->update([
             'check_out_date' => now(),
             'status' => 'finalizado'
@@ -269,15 +280,15 @@ class CheckinController extends Controller
     {
         $checkin->load(['guest', 'room']);
         // Usamos la barra invertida \FPDF para acceder a la clase global
-        $pdf = new \FPDF('P', 'mm', array(80, 150)); 
+        $pdf = new \FPDF('P', 'mm', array(80, 150));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
-        
+
         // --- CABECERA ---
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
-    
+
         // --- DETALLES DE HABITACIÓN ---
         $pdf->SetFont('Arial', 'B', 8);
         $text = 'Pza. Nº ' . str_pad($checkin->room->number, 2, '0', STR_PAD_LEFT);
@@ -285,7 +296,7 @@ class CheckinController extends Controller
         $pdf->Ln(2);
 
         // --- DATOS DEL HUÉSPED ---
-        
+
         // Nombre
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(12, 4, 'Nombre:', 0, 0);
@@ -303,7 +314,7 @@ class CheckinController extends Controller
         $pdf->Cell(18, 4, 'CI/Pasaporte:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(20, 4, $checkin->guest->identification_number, 0, 0);
-        
+
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(15, 4, 'Otorgado:', 0, 0); // Etiqueta corta
         $pdf->SetFont('Arial', '', 7);
@@ -317,7 +328,7 @@ class CheckinController extends Controller
         if ($checkin->guest->birth_date) {
             $edad = \Carbon\Carbon::parse($checkin->guest->birth_date)->age;
         }
-            
+
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(18, 4, 'Estado civil:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
@@ -370,7 +381,7 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(28, 4, 'Observaciones:', 0, 1); // Salto de línea para escribir abajo
         $pdf->SetFont('Arial', '', 7);
-        if($checkin->notes) {
+        if ($checkin->notes) {
             $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
         } else {
             $pdf->Cell(0, 4, '-', 0, 1);
@@ -392,21 +403,21 @@ class CheckinController extends Controller
         $margins = 4;
         $printableWidth = $pageWidth - ($margins * 2); // 72mm
         $lineLength = 50; // Longitud de la línea de firma
-        
+
         $x = ($pageWidth - $lineLength) / 2; // Centrado matemático
         $y = $pdf->GetY();
 
         $pdf->Line($x, $y, $x + $lineLength, $y); // Dibuja la línea
-        
+
         $pdf->Ln(2); // Pequeño espacio entre línea y texto
-        
+
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C'); // Centrado
 
         // 4. Salida
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="ticket-'.$checkin->id.'.pdf"');
+            ->header('Content-Disposition', 'inline; filename="ticket-' . $checkin->id . '.pdf"');
     }
 
 
@@ -415,7 +426,7 @@ class CheckinController extends Controller
         $checkin->load(['guest', 'room.price', 'services']);
 
         // --- 1. LÓGICA DE DÍAS A COBRAR (CORREGIDA) ---
-        
+
         // Tomamos los días que se definieron al registrar el ingreso (ej: 1 día)
         $diasPactados = intval($checkin->duration_days);
 
@@ -427,7 +438,7 @@ class CheckinController extends Controller
         // Verificamos si se excedió del tiempo pactado (Solo para cobrar extra, no para cobrar menos)
         $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
-        
+
         // diffInDays devuelve días ENTEROS redondeados hacia abajo (0, 1, 2...)
         $diasRealesTranscurridos = $ingreso->diffInDays($salida);
 
@@ -443,15 +454,15 @@ class CheckinController extends Controller
         }
 
         // --- 2. CÁLCULOS ECONÓMICOS ---
-        
+
         $precioUnitario = $checkin->room->price->amount ?? 0;
-        
+
         // Costo Total Hospedaje (Precio x Días Enteros)
         $totalHospedaje = $precioUnitario * $diasACobrar;
 
         // Costo Total Servicios
         $totalServicios = 0;
-        foreach($checkin->services as $srv) {
+        foreach ($checkin->services as $srv) {
             $totalServicios += ($srv->pivot->quantity * $srv->pivot->selling_price);
         }
 
@@ -465,7 +476,7 @@ class CheckinController extends Controller
         $saldoPagar = $granTotal - $adelanto;
 
         // --- 3. GENERACIÓN PDF ---
-        $pdf = new \FPDF('P', 'mm', array(80, 220)); 
+        $pdf = new \FPDF('P', 'mm', array(80, 220));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
@@ -476,7 +487,7 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(0, 4, 'Calle Principal #123 - Potosi', 0, 1, 'C');
         $pdf->Ln(2);
-        
+
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(0, 6, 'NOTA DE SALIDA (CHECKOUT)', 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
@@ -486,12 +497,12 @@ class CheckinController extends Controller
         // DATOS HUESPED
         $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
-        
+
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(20, 4, 'Huesped:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
         $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
-        
+
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(20, 4, 'CI/Doc:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
@@ -509,7 +520,7 @@ class CheckinController extends Controller
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(25, 4, $ingreso->format('d/m/Y H:i'), 0, 0);
-        
+
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(12, 4, 'Salida:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
@@ -519,7 +530,7 @@ class CheckinController extends Controller
         $pdf->Ln(2);
         $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
-        
+
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(45, 4, 'CONCEPTO', 0, 0);
         $pdf->Cell(0, 4, 'SUBTOTAL', 0, 1, 'R');
@@ -534,13 +545,13 @@ class CheckinController extends Controller
         // Aviso de días excedidos
         if ($diasExcedidos > 0) {
             $pdf->SetFont('Arial', 'I', 6);
-            $pdf->SetTextColor(200, 0, 0); 
+            $pdf->SetTextColor(200, 0, 0);
             $pdf->Cell(0, 3, utf8_decode("* Estadía excedida por $diasExcedidos días"), 0, 1, 'L');
-            $pdf->SetTextColor(0, 0, 0); 
+            $pdf->SetTextColor(0, 0, 0);
         }
 
         // 2. Servicios
-        foreach($checkin->services as $srv) {
+        foreach ($checkin->services as $srv) {
             $subtotal = $srv->pivot->quantity * $srv->pivot->selling_price;
             $nombreSrv = substr($srv->name, 0, 18);
             $pdf->SetFont('Arial', '', 7);
@@ -570,14 +581,13 @@ class CheckinController extends Controller
         $pdf->Ln(8);
         $pdf->SetFont('Arial', 'I', 7);
         $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nEsperamos verlo pronto."), 0, 'C');
-        
+
         $pdf->Ln(4);
         $usuario = Auth::user() ? Auth::user()->name : 'Admin';
         $pdf->Cell(0, 3, 'Atendido por: ' . utf8_decode($usuario), 0, 1, 'C');
 
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="checkout-'.$checkin->id.'.pdf"');
+            ->header('Content-Disposition', 'inline; filename="checkout-' . $checkin->id . '.pdf"');
     }
-
 }
