@@ -102,8 +102,8 @@ class CheckinController extends Controller
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
-            'user_id' => $userId, // <--- Usamos la variable verificada
-            'check_in_date' => $validatedCheckin['check_in_date'],
+            'user_id' => $userId, 
+            'check_in_date' => now()->timezone('America/La_Paz'),
             'duration_days' => $validatedCheckin['duration_days'],
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => $validatedCheckin['notes'],

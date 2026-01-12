@@ -100,6 +100,7 @@ export default function CheckinDetailsIndex({
         setSelectedCheckinId(checkinId);
         setIsModalOpen(true);
     };
+    
 
     // --- FILTRADO DE LA TABLA PRINCIPAL ---
     const filteredDetails = dataList.filter((detail) => {

@@ -173,6 +173,7 @@ export default function Checkin_detailsModal({
                                 </>
                             )}
                         </button>
+                         
                     </div>
                 </form>
             </div>

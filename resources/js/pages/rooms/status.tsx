@@ -24,6 +24,7 @@ import CheckinModal, {
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 
+import CheckinDetailsModal from '../checkin_details/detailcheckin';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -72,6 +73,10 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
     const [confirmCheckoutId, setConfirmCheckoutId] = useState<number | null>(
         null,
     );
+
+    // Detalles de asignacion
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [checkinForDetails, setCheckinForDetails] = useState<any>(null);
 
     // --- LÓGICA DE ESTADO ---
     const getDisplayStatus = (room: Room) => {
@@ -153,6 +158,16 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
             setSelectedForAction(null);
+            setCheckinForDetails({ ...activeCheckin, room: room });
+            setIsDetailsModalOpen(true);
+        }
+    };
+
+    const handleShowCheckinDetails = (checkin: any, room: any) => {
+        if (checkin) {
+            // 2. Aquí combinamos ambos datos
+            setCheckinForDetails({ ...checkin, room: room });
+            setIsDetailsModalOpen(true);
         }
     };
 
@@ -455,12 +470,16 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 // Navega a la ruta index de los detalles
-                                                router.get('/ckecksdetails');
+
+                                                handleShowCheckinDetails(
+                                                    activeCheckin,
+                                                    room,
+                                                );
                                             }}
                                             className="flex flex-1 items-center justify-center gap-1 border-r border-blue-800 bg-blue-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-800"
                                             title="Ver lista de consumos y detalles"
                                         >
-                                            <FileText className="h-3 w-3" />{' '}   
+                                            <FileText className="h-3 w-3" />{' '}
                                         </button>
                                         <button
                                             onClick={(e) => {
@@ -505,6 +524,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
             />
+            <CheckinDetailsModal
+                show={isDetailsModalOpen}
+                onClose={() => setIsDetailsModalOpen(false)}
+                checkin={checkinForDetails}
+            />
 
             {/* MODAL DE CONFIRMACIÓN */}
             {confirmCheckoutId &&
@@ -542,7 +566,7 @@ function CheckoutConfirmationModal({
     const salida = new Date(); // Fecha actual
     const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const diasCobrar = diffDays === 0 ? 1 : diffDays; // Mínimo 1 día
+    const diasCobrar = diffDays === 0 ? 1 : diffDays; 
 
     const precioDia = parseFloat(room.price?.amount || 0);
     const totalHospedaje = diasCobrar * precioDia;
