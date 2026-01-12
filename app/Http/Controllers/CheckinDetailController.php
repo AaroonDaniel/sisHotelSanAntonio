@@ -54,10 +54,13 @@ class CheckinDetailController extends Controller
             'quantity'   => 'required|integer|min:1',
         ]);
 
+        $service = Service::findOrFail($validated['service_id']);
+
         CheckinDetail::create([
             'checkin_id' => $validated['checkin_id'],
             'service_id' => $validated['service_id'],
             'quantity'   => $validated['quantity'],
+            'selling_price' => $service->price,
         ]);
 
         return Redirect::back()->with('message', 'Servicio agregado correctamente.');

@@ -423,60 +423,44 @@ class CheckinController extends Controller
 
     public function generateCheckoutReceipt(Checkin $checkin)
     {
-        $checkin->load(['guest', 'room.price', 'services']);
+        // 1. CARGAR RELACIONES CORRECTAS
+        // Usamos 'checkinDetails.service' para acceder a los consumos y sus nombres
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service']);
 
-        // --- 1. LÓGICA DE DÍAS A COBRAR (CORREGIDA) ---
-
-        // Tomamos los días que se definieron al registrar el ingreso (ej: 1 día)
+        // --- LÓGICA DE DÍAS (Igual que tenías) ---
         $diasPactados = intval($checkin->duration_days);
+        if ($diasPactados < 1) $diasPactados = 1;
 
-        // REGLA DE ORO: Mínimo se cobra 1 día, aunque haya estado 5 minutos.
-        if ($diasPactados < 1) {
-            $diasPactados = 1;
-        }
-
-        // Verificamos si se excedió del tiempo pactado (Solo para cobrar extra, no para cobrar menos)
         $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
 
-        // diffInDays devuelve días ENTEROS redondeados hacia abajo (0, 1, 2...)
         $diasRealesTranscurridos = $ingreso->diffInDays($salida);
-
-        // Definimos los días finales a cobrar:
-        // Si se quedó MENOS o IGUAL a lo pactado -> Cobramos lo pactado ($diasPactados).
-        // Si se quedó MÁS de lo pactado -> Cobramos lo real ($diasRealesTranscurridos).
         $diasACobrar = max($diasPactados, $diasRealesTranscurridos);
 
-        // Calculamos excedente solo informativo
         $diasExcedidos = 0;
         if ($diasRealesTranscurridos > $diasPactados) {
             $diasExcedidos = $diasRealesTranscurridos - $diasPactados;
         }
 
-        // --- 2. CÁLCULOS ECONÓMICOS ---
-
+        // --- CÁLCULOS ECONÓMICOS ---
         $precioUnitario = $checkin->room->price->amount ?? 0;
-
-        // Costo Total Hospedaje (Precio x Días Enteros)
         $totalHospedaje = $precioUnitario * $diasACobrar;
 
-        // Costo Total Servicios
+        // Calcular Servicios usando CheckinDetails
         $totalServicios = 0;
-        foreach ($checkin->services as $srv) {
-            $totalServicios += ($srv->pivot->quantity * $srv->pivot->selling_price);
+        foreach ($checkin->checkinDetails as $detalle) {
+            // Prioridad: Precio Histórico (selling_price) -> Precio Actual (service->price)
+            $precioReal = $detalle->selling_price ?? $detalle->service->price;
+            $totalServicios += ($detalle->quantity * $precioReal);
         }
 
-        // Gran Total
         $granTotal = $totalHospedaje + $totalServicios;
-
-        // Adelanto
         $adelanto = $checkin->advance_payment ?? 0;
-
-        // Saldo a Pagar
         $saldoPagar = $granTotal - $adelanto;
 
-        // --- 3. GENERACIÓN PDF ---
-        $pdf = new \FPDF('P', 'mm', array(80, 220));
+        // --- GENERACIÓN PDF ---
+        // Aumentamos un poco el largo por si hay muchos servicios (240mm)
+        $pdf = new \FPDF('P', 'mm', array(80, 240));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
@@ -489,101 +473,108 @@ class CheckinController extends Controller
         $pdf->Ln(2);
 
         $pdf->SetFont('Arial', 'B', 10);
-        $pdf->Cell(0, 6, 'NOTA DE SALIDA (CHECKOUT)', 0, 1, 'C');
+        $pdf->Cell(0, 6, 'NOTA DE SALIDA', 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(0, 4, 'Nro: ' . str_pad($checkin->id, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
         $pdf->Ln(2);
 
         // DATOS HUESPED
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Cell(0, 0, '-------------------------------------------------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
         $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(20, 4, 'Huesped:', 0, 0);
+        $pdf->Cell(15, 4, 'Cliente:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
         $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
 
         $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(20, 4, 'CI/Doc:', 0, 0);
+        $pdf->Cell(15, 4, 'CI/Doc:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, $checkin->guest->identification_number, 0, 1);
+        $pdf->Cell(25, 4, $checkin->guest->identification_number, 0, 0);
 
         $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(20, 4, utf8_decode('Habitación:'), 0, 0);
+        $pdf->Cell(10, 4, 'Hab:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(0, 4, $checkin->room->number, 0, 1);
 
-        $pdf->Ln(2);
-
-        // FECHAS
+        $pdf->Ln(1);
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(25, 4, $ingreso->format('d/m/Y H:i'), 0, 0);
+        $pdf->Cell(22, 4, $ingreso->format('d/m/y H:i'), 0, 0);
 
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(12, 4, 'Salida:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, $salida->format('d/m/Y H:i'), 0, 1);
+        $pdf->Cell(0, 4, $salida->format('d/m/y H:i'), 0, 1);
 
         // DETALLE ECONÓMICO
         $pdf->Ln(2);
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Cell(0, 0, '-------------------------------------------------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
-        $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(45, 4, 'CONCEPTO', 0, 0);
-        $pdf->Cell(0, 4, 'SUBTOTAL', 0, 1, 'R');
-        $pdf->Ln(2);
+        // Encabezados de Tabla
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(32, 4, 'DESCRIPCION', 0, 0, 'L');
+        $pdf->Cell(10, 4, 'CANT', 0, 0, 'C');
+        $pdf->Cell(15, 4, 'P.UNIT', 0, 0, 'R');
+        $pdf->Cell(15, 4, 'SUBTOT', 0, 1, 'R');
+        $pdf->Ln(1);
 
         // 1. Hospedaje
         $pdf->SetFont('Arial', '', 7);
-        // Mostramos número entero de días
-        $pdf->Cell(45, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0);
-        $pdf->Cell(0, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
+        $pdf->Cell(32, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
+        $pdf->Cell(10, 4, '1', 0, 0, 'C'); // Opcional: mostrar dias aqui
+        $pdf->Cell(15, 4, number_format($totalHospedaje, 2), 0, 0, 'R'); // Precio total por dias
+        $pdf->Cell(15, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
 
-        // Aviso de días excedidos
         if ($diasExcedidos > 0) {
             $pdf->SetFont('Arial', 'I', 6);
-            $pdf->SetTextColor(200, 0, 0);
-            $pdf->Cell(0, 3, utf8_decode("* Estadía excedida por $diasExcedidos días"), 0, 1, 'L');
-            $pdf->SetTextColor(0, 0, 0);
+            $pdf->Cell(0, 3, utf8_decode("(Inc. $diasExcedidos dias extra)"), 0, 1, 'L');
         }
 
-        // 2. Servicios
-        foreach ($checkin->services as $srv) {
-            $subtotal = $srv->pivot->quantity * $srv->pivot->selling_price;
-            $nombreSrv = substr($srv->name, 0, 18);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(45, 4, utf8_decode("$nombreSrv (x{$srv->pivot->quantity})"), 0, 0);
-            $pdf->Cell(0, 4, number_format($subtotal, 2), 0, 1, 'R');
+        // 2. Servicios Adicionales
+        $pdf->SetFont('Arial', '', 7);
+        foreach ($checkin->checkinDetails as $detalle) {
+            // Precio Histórico o Actual
+            $precio = $detalle->selling_price ?? $detalle->service->price;
+            $subtotal = $precio * $detalle->quantity;
+
+            // Cortar nombre si es muy largo
+            $nombreSrv = substr($detalle->service->name, 0, 20);
+
+            $pdf->Cell(32, 4, utf8_decode($nombreSrv), 0, 0, 'L');
+            $pdf->Cell(10, 4, $detalle->quantity, 0, 0, 'C');
+            $pdf->Cell(15, 4, number_format($precio, 2), 0, 0, 'R');
+            $pdf->Cell(15, 4, number_format($subtotal, 2), 0, 1, 'R');
         }
 
         $pdf->Ln(2);
-        $pdf->Cell(0, 0, '---------------------------------------------------', 0, 1, 'C');
+        $pdf->Cell(0, 0, '-------------------------------------------------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
-        // TOTALES
+        // TOTALES FINALES
         $pdf->SetFont('Arial', 'B', 9);
-        $pdf->Cell(50, 5, 'TOTAL CONSUMO:', 0, 0, 'R');
-        $pdf->Cell(0, 5, number_format($granTotal, 2), 0, 1, 'R');
+        $pdf->Cell(50, 5, 'TOTAL GENERAL:', 0, 0, 'R');
+        $pdf->Cell(22, 5, number_format($granTotal, 2), 0, 1, 'R');
 
-        $pdf->SetFont('Arial', '', 9);
-        $pdf->Cell(50, 5, '(-) Adelanto:', 0, 0, 'R');
-        $pdf->Cell(0, 5, number_format($adelanto, 2), 0, 1, 'R');
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(50, 4, 'A cuenta / Adelanto:', 0, 0, 'R');
+        $pdf->Cell(22, 4, '-' . number_format($adelanto, 2), 0, 1, 'R');
 
-        $pdf->Ln(1);
-        $pdf->SetFont('Arial', 'B', 11);
-        $pdf->Cell(50, 6, 'SALDO A PAGAR:', 0, 0, 'R');
-        $pdf->Cell(0, 6, number_format($saldoPagar, 2) . ' Bs', 0, 1, 'R');
+        $pdf->Ln(2);
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(50, 6, 'A PAGAR:', 0, 0, 'R');
+        $pdf->Cell(22, 6, number_format($saldoPagar, 2). ' Bs', 0, 1, 'R');
+        
 
         // PIE
-        $pdf->Ln(8);
+        $pdf->Ln(6);
         $pdf->SetFont('Arial', 'I', 7);
-        $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nEsperamos verlo pronto."), 0, 'C');
+        $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nRevise su cambio antes de retirarse."), 0, 'C');
 
-        $pdf->Ln(4);
-        $usuario = Auth::user() ? Auth::user()->name : 'Admin';
+        $pdf->Ln(3);
+        $usuario = \Illuminate\Support\Facades\Auth::user() ? \Illuminate\Support\Facades\Auth::user()->name : 'Cajero';
         $pdf->Cell(0, 3, 'Atendido por: ' . utf8_decode($usuario), 0, 1, 'C');
 
         return response($pdf->Output('S'), 200)

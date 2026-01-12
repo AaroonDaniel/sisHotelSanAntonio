@@ -129,19 +129,7 @@ export default function ServiceModal({
                                     Filtrar Asignación
                                 </label>
                                 
-                                {/* 1. BUSCADOR */}
-                                <div className="mb-3 relative">
-                                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                        <Search className="h-4 w-4 text-gray-400" />
-                                    </div>
-                                    <input 
-                                        type="text"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder="BUSCAR HUÉSPED O HABITACIÓN..."
-                                        className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-sm text-black uppercase placeholder-gray-400 focus:border-gray-600 focus:ring-0"
-                                    />
-                                </div>
+                                
 
                                 {/* 2. SELECTOR (Muestra resultados filtrados) */}
                                 <div>
