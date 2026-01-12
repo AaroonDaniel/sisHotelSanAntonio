@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     Construction,
     FileEdit,
+    FileText,
     Home,
     Loader2,
     LogOut,
@@ -449,7 +450,17 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                             className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-red-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-red-800"
                                         >
                                             <UserIcon className="h-3 w-3" />{' '}
-                                            Detalles
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                // Navega a la ruta index de los detalles
+                                                router.get('/ckecksdetails');
+                                            }}
+                                            className="flex flex-1 items-center justify-center gap-1 border-r border-blue-800 bg-blue-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-800"
+                                            title="Ver lista de consumos y detalles"
+                                        >
+                                            <FileText className="h-3 w-3" />{' '}   
                                         </button>
                                         <button
                                             onClick={(e) => {
@@ -461,7 +472,6 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                                             className="flex flex-1 items-center justify-center gap-1 bg-gray-900 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-black"
                                         >
                                             <LogOut className="h-3 w-3" />{' '}
-                                            Finalizar
                                         </button>
                                     </div>
                                 ) : (

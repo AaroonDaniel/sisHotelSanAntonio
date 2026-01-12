@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Service;
+use App\Models\Checkin;
 use App\Models\CheckinDetail;
+use App\Models\Room; // <--- 1. IMPORTAMOS ROOM COMO PEDISTE
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Redirect;
@@ -15,19 +17,30 @@ class CheckinDetailController extends Controller
      */
     public function index()
     {
-        // Asegúrate de que la carpeta en resources/js/pages se llame 'checkin_details'
-        return Inertia::render('checkin_details/index', [
-            'checkinDetails' => CheckinDetail::with(['service', 'checkin.room', 'checkin.guest']) // Agregué relaciones útiles para la tabla
+       return Inertia::render('checkin_details/index', [
+            // 1. Historial de consumos (para la tabla principal)
+            'checkinDetails' => CheckinDetail::with(['service', 'checkin.room', 'checkin.guest'])
                 ->latest()
                 ->get(),
+
+            // 2. Servicios disponibles
             'services' => Service::where('is_active', true)->get(),
+
+            // 3. ¡CORRECCIÓN! FILTRO POR ESTADO DE HABITACIÓN (OCUPADO)
+            // Aquí usamos 'whereHas' para entrar a la tabla 'rooms' y ver si dice 'OCUPADO'
+            'activeCheckins' => Checkin::with(['room', 'guest'])
+                ->whereHas('room', function ($query) {
+                    // Filtra basándose en la columna 'status' de tu imagen de BD
+                    $query->whereIn('status', ['OCUPADO', 'ocupado']); 
+                })
+                // Aseguramos que sea el checkin actual (activo) para evitar historiales viejos
+                ->where('status', 'activo') 
+                ->get(),
         ]);
     }
 
     public function create()
     {
-        // Nota: Si usas modales en el index, este método quizás no se use, 
-        // pero si se usa, la ruta debe ser coherente.
         return Inertia::render('checkin_details/create', [
             'services' => Service::where('is_active', true)->get(),
         ]);
@@ -50,8 +63,6 @@ class CheckinDetailController extends Controller
         return Redirect::back()->with('message', 'Servicio agregado correctamente.');
     }
 
-    // Nota: cambié el parámetro $id a $checkinDetail para usar Route Model Binding si lo prefieres,
-    // pero mantuve tu lógica con $id para no romper lo que ya tienes.
     public function update(Request $request, $id)
     {
         $checkinDetail = CheckinDetail::findOrFail($id);

@@ -13,7 +13,13 @@ class CheckinDetail extends Model
         'checkin_id',
         'service_id',
         'quantity',
-        
+        'selling_price',
+    ];
+    
+   
+
+    protected $casts = [
+        'selling_price' => 'decimal:2',
     ];
 
 
@@ -28,10 +34,10 @@ class CheckinDetail extends Model
     {
         return $this->belongsTo(Service::class);
     }
-
-    // --- ACCESSOR (Calculado al vuelo) ---
-
-    // Esto te permite usar $detalle->total para obtener el subtotal
-    // sin necesidad de guardarlo en la base de datos.
-    
+    protected function total(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->quantity * $this->selling_price,
+        );
+    }
 }
