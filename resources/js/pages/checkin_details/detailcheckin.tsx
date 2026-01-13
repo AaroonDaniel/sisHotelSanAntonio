@@ -9,10 +9,9 @@ interface Service {
     price: number;
 }
 
-// 1. SOLUCIÓN AL ERROR DE TYPESCRIPT (Define la estructura exacta del form)
 interface CheckinFormData {
     checkin_id: number;
-    service_id: string; // El select maneja strings inicialmente
+    service_id: string;
     quantity: number;
 }
 
@@ -24,51 +23,57 @@ interface Props {
 }
 
 export default function CheckinDetailsModal({ show, onClose, checkin, services = [] }: Props) {
-    if (!show || !checkin) return null;
-
-    // --- 2. LÓGICA DEL FORMULARIO INTEGRADA ---
-    // Usamos el genérico <CheckinFormData> para evitar el error de recursividad
+    // 1. --- HOOKS SIEMPRE AL PRINCIPIO (Regla de Oro de React) ---
+    
+    // Usamos valores seguros (|| 0 o '') por si checkin es null al inicio
     const { data, setData, post, processing, reset, errors, clearErrors } = useForm<CheckinFormData>({
-        checkin_id: checkin.id,
+        checkin_id: checkin?.id || 0, 
         service_id: '',
         quantity: 1,
     });
 
-    // Actualizar el ID si cambia el checkin seleccionado
+    // 2. useEffect seguro: Dependemos del ID, no de todo el objeto (evita loops)
     useEffect(() => {
-        setData('checkin_id', checkin.id);
-        clearErrors();
-    }, [checkin]);
+        if (checkin?.id) {
+            setData('checkin_id', checkin.id);
+            clearErrors();
+        }
+    }, [checkin?.id]); // Solo se dispara si cambia el ID del checkin
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        post('/checkin-details', {
-            preserveScroll: true, // Evita que el modal salte al inicio
-            onSuccess: () => {
-                reset('service_id', 'quantity');
-                setData('quantity', 1);
-                // Restauramos el ID del checkin por seguridad
-                setData('checkin_id', checkin.id);
-            },
-        });
-    };
-
-    // --- 3. LÓGICA DE FILTRADO (Tu lógica original) ---
+    // 3. Lógica de filtrado (Calculada siempre, es ligera)
     const filteredDetails = useMemo(() => {
-        const details = checkin.checkin_details || [];
+        if (!checkin || !checkin.checkin_details) return [];
+        
+        const details = checkin.checkin_details;
         const ignoredServices = ['GARAGE', 'DESAYUNO'];
 
         return details.filter((detail: any) => {
             const name = detail.service?.name?.toUpperCase() || '';
             return !ignoredServices.some((ignored) => name.includes(ignored));
         });
-    }, [checkin]);
+    }, [checkin?.checkin_details, checkin?.id]); // Dependencias primitivas o seguras
 
-    // Calcular el total filtrado
     const totalConsumo = filteredDetails.reduce((acc: number, item: any) => {
         const price = item.selling_price ?? item.service?.price ?? 0;
         return acc + price * item.quantity;
     }, 0);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        post('/checkin-details', {
+            preserveScroll: true,
+            onSuccess: () => {
+                reset('service_id', 'quantity');
+                setData('quantity', 1);
+                // Aseguramos que el ID se mantenga
+                if (checkin?.id) setData('checkin_id', checkin.id);
+            },
+        });
+    };
+
+    // 4. --- CONDICIONAL DE RENDERIZADO AL FINAL ---
+    // Recién ahora, después de que todos los hooks se han inicializado, decidimos si pintar o no.
+    if (!show || !checkin) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
