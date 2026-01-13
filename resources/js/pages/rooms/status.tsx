@@ -25,6 +25,7 @@ import CheckinModal, {
 } from '../checkins/checkinModal';
 
 import CheckinDetailsModal from '../checkin_details/detailcheckin';
+import services from '@/routes/services';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -56,9 +57,10 @@ interface Props {
     auth: { user: User };
     Rooms: Room[];
     Guests: Guest[];
+    services: any[];
 }
 
-export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
+export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -158,8 +160,6 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
             setSelectedForAction(null);
-            setCheckinForDetails({ ...activeCheckin, room: room });
-            setIsDetailsModalOpen(true);
         }
     };
 
@@ -524,10 +524,11 @@ export default function RoomsStatus({ auth, Rooms, Guests }: Props) {
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
             />
-            <CheckinDetailsModal
+           <CheckinDetailsModal
                 show={isDetailsModalOpen}
                 onClose={() => setIsDetailsModalOpen(false)}
                 checkin={checkinForDetails}
+                services={services} 
             />
 
             {/* MODAL DE CONFIRMACIÓN */}

@@ -8,6 +8,7 @@ use App\Models\RoomType;
 use App\Models\Price;
 use App\Models\Floor;
 use App\Models\Guest;
+use App\Models\Service;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -149,10 +150,12 @@ class RoomController extends Controller
         }])->orderBy('number')->get();
         
         $guests = Guest::all();
+        $services = Service::all();
 
         return Inertia::render('rooms/status', [
             'Rooms' => $rooms,
-            'Guests' => $guests
+            'Guests' => $guests,
+            'services' => $services
         ]);
         
     }

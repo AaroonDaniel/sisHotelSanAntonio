@@ -1,29 +1,70 @@
-import { BedDouble, FileText, ShoppingBag, User, X } from 'lucide-react';
-import React, { useMemo } from 'react';
+import { useForm } from '@inertiajs/react';
+import { BedDouble, FileText, Hash, Plus, Save, ShoppingBag, User, X, Loader2 } from 'lucide-react';
+import React, { useEffect, useMemo } from 'react';
+
+// --- INTERFACES ---
+interface Service {
+    id: number;
+    name: string;
+    price: number;
+}
+
+// 1. SOLUCIÓN AL ERROR DE TYPESCRIPT (Define la estructura exacta del form)
+interface CheckinFormData {
+    checkin_id: number;
+    service_id: string; // El select maneja strings inicialmente
+    quantity: number;
+}
 
 interface Props {
     show: boolean;
     onClose: () => void;
-    checkin: any; // O tu interfaz Checkin completa
+    checkin: any;
+    services: Service[];
 }
 
-export default function CheckinDetailsModal({ show, onClose, checkin }: Props) {
+export default function CheckinDetailsModal({ show, onClose, checkin, services = [] }: Props) {
     if (!show || !checkin) return null;
 
-    // --- LÓGICA DE FILTRADO ---
-    // Filtramos los detalles para excluir Garage y Desayuno (insensible a mayúsculas/minúsculas)
+    // --- 2. LÓGICA DEL FORMULARIO INTEGRADA ---
+    // Usamos el genérico <CheckinFormData> para evitar el error de recursividad
+    const { data, setData, post, processing, reset, errors, clearErrors } = useForm<CheckinFormData>({
+        checkin_id: checkin.id,
+        service_id: '',
+        quantity: 1,
+    });
+
+    // Actualizar el ID si cambia el checkin seleccionado
+    useEffect(() => {
+        setData('checkin_id', checkin.id);
+        clearErrors();
+    }, [checkin]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        post('/checkin-details', {
+            preserveScroll: true, // Evita que el modal salte al inicio
+            onSuccess: () => {
+                reset('service_id', 'quantity');
+                setData('quantity', 1);
+                // Restauramos el ID del checkin por seguridad
+                setData('checkin_id', checkin.id);
+            },
+        });
+    };
+
+    // --- 3. LÓGICA DE FILTRADO (Tu lógica original) ---
     const filteredDetails = useMemo(() => {
         const details = checkin.checkin_details || [];
         const ignoredServices = ['GARAGE', 'DESAYUNO'];
 
         return details.filter((detail: any) => {
             const name = detail.service?.name?.toUpperCase() || '';
-            // Si el nombre contiene alguna de las palabras prohibidas, lo sacamos
             return !ignoredServices.some((ignored) => name.includes(ignored));
         });
     }, [checkin]);
 
-    // Calcular el total SOLO de los items filtrados
+    // Calcular el total filtrado
     const totalConsumo = filteredDetails.reduce((acc: number, item: any) => {
         const price = item.selling_price ?? item.service?.price ?? 0;
         return acc + price * item.quantity;
@@ -33,13 +74,13 @@ export default function CheckinDetailsModal({ show, onClose, checkin }: Props) {
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
             <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
                 
-                {/* HEADER (Mismo estilo que tu referencia) */}
+                {/* HEADER */}
                 <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-blue-100 p-1.5 text-blue-600">
                             <FileText className="h-5 w-5" />
                         </div>
-                        Detalle de Consumos Adicionales
+                        Gestión de Consumos
                     </h2>
 
                     <div className="flex items-center gap-2">
@@ -52,14 +93,13 @@ export default function CheckinDetailsModal({ show, onClose, checkin }: Props) {
                     </div>
                 </div>
 
-                {/* BODY (Estructura de dos columnas similar al formulario de ingreso) */}
+                {/* BODY PRINCIPAL */}
                 <div className="flex flex-col md:flex-row">
                     
-                    {/* IZQUIERDA - DATOS HUÉSPED (Solo Lectura) */}
-                    <div className="relative flex-1 border-r border-gray-100 bg-white p-6">
+                    {/* COLUMNA IZQUIERDA: DATOS HUÉSPED (Solo Lectura) */}
+                    <div className="relative flex-1 border-r border-gray-200 bg-white p-6">
                         <div className="mb-6 space-y-6">
-                            
-                            {/* Tarjeta de Información Principal */}
+                            {/* Tarjeta Info */}
                             <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
                                 <div className="mb-4 flex items-center justify-between">
                                     <span className="block text-[24px] font-bold text-blue-600 uppercase">
@@ -91,58 +131,120 @@ export default function CheckinDetailsModal({ show, onClose, checkin }: Props) {
                                 </div>
                             </div>
 
-                            {/* Resumen Económico Rápido */}
-                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            {/* Resumen Económico */}
+                            <div className="rounded-xl border border-gray-300 bg-gray-100 p-4">
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="text-sm text-gray-600 font-medium">Total Filtrado:</span>
-                                    <span className="text-lg font-bold text-gray-900">{totalConsumo.toFixed(2)} Bs</span>
+                                    <span className="text-sm text-gray-700 font-bold uppercase">Total Filtrado:</span>
+                                    <span className="text-xl font-black text-gray-900">{totalConsumo.toFixed(2)} Bs</span>
                                 </div>
-                                <div className="text-[10px] text-gray-400 italic text-center">
+                                <div className="text-[10px] text-gray-500 italic text-center border-t border-gray-300 pt-2">
                                     * No incluye Garage ni Desayuno
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* DERECHA - LISTA DE DETALLES */}
-                    <div className="flex-[1.5] bg-gray-50 p-6">
-                        <div className="flex items-center justify-between mb-4 border-b border-gray-200 pb-2">
-                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                <ShoppingBag className="h-4 w-4 text-gray-500" />
-                                Lista de Servicios
+                    {/* COLUMNA DERECHA: FORMULARIO Y LISTA */}
+                    <div className="flex-[2] bg-gray-50 p-6 flex flex-col h-[550px]">
+                        
+                        {/* --- FORMULARIO "MÁS OSCURO" INTEGRADO --- */}
+                        <div className="mb-5 rounded-xl border border-gray-300 bg-gray-200/80 p-4 shadow-inner">
+                            <h3 className="mb-3 text-xs font-bold uppercase text-gray-700 flex items-center gap-2">
+                                <Plus className="h-3 w-3" /> Agregar Nuevo Consumo
                             </h3>
-                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">
-                                {filteredDetails.length} items
+                            
+                            <form onSubmit={handleSubmit} className="flex items-start gap-3">
+                                {/* Select Servicio */}
+                                <div className="flex-1">
+                                    <select
+                                        value={data.service_id}
+                                        onChange={(e) => setData('service_id', e.target.value)}
+                                        className="w-full rounded-lg border-gray-400 bg-white py-2 pl-3 pr-8 text-sm font-medium text-gray-900 uppercase focus:border-gray-800 focus:ring-gray-800 shadow-sm"
+                                        required
+                                    >
+                                        <option value="">- SELECCIONAR SERVICIO -</option>
+                                        {services.map((srv) => (
+                                            <option key={srv.id} value={srv.id}>
+                                                {srv.name} ({srv.price} Bs)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {errors.service_id && <p className="mt-1 text-[10px] font-bold text-red-600">{errors.service_id}</p>}
+                                </div>
+
+                                {/* Input Cantidad */}
+                                <div className="w-24">
+                                    <div className="relative">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Hash className="h-3 w-3 text-gray-500" />
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={data.quantity}
+                                            onChange={(e) => setData('quantity', parseInt(e.target.value) || 1)}
+                                            className="w-full rounded-lg border-gray-400 bg-white py-2 pl-8 pr-2 text-sm font-bold text-gray-900 focus:border-gray-800 focus:ring-gray-800 shadow-sm"
+                                        />
+                                    </div>
+                                    {errors.quantity && <p className="mt-1 text-[10px] font-bold text-red-600">{errors.quantity}</p>}
+                                </div>
+                               
+                                {/* Botón Guardar - AZUL Y CELESTE */}
+                                <button
+                                    type="submit"
+                                    disabled={processing || !data.service_id}
+                                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-blue-400 active:scale-95 disabled:opacity-100 h-[38px]"
+                                >
+                                    {processing ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Save className="h-5 w-5" />
+                                            <span className="hidden sm:inline">Agregar</span>
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* --- LISTA DE DETALLES --- */}
+                        <div className="flex items-center justify-between mb-2 border-b border-gray-300 pb-2">
+                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                <ShoppingBag className="h-4 w-4 text-gray-600" />
+                                Historial de Consumos
+                            </h3>
+                            <span className="text-[10px] font-bold text-gray-600 bg-gray-200 px-2 py-1 rounded border border-gray-300">
+                                {filteredDetails.length} ITEMS
                             </span>
                         </div>
 
-                        <div className="h-[350px] overflow-y-auto pr-1">
+                        <div className="flex-1 overflow-y-auto pr-1">
                             {filteredDetails.length > 0 ? (
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-gray-100 text-xs text-gray-500 uppercase sticky top-0">
+                                <table className="w-full text-left text-sm border-separate border-spacing-y-1">
+                                    <thead className="text-xs text-gray-500 uppercase sticky top-0 bg-gray-50 z-10">
                                         <tr>
-                                            <th className="px-3 py-2 rounded-l-lg">Detalle</th>
+                                            <th className="px-3 py-2">Detalle</th>
                                             <th className="px-3 py-2 text-center">Cant.</th>
                                             <th className="px-3 py-2 text-right">P. Unit</th>
-                                            <th className="px-3 py-2 text-right rounded-r-lg">Subtotal</th>
+                                            <th className="px-3 py-2 text-right">Subtotal</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-200">
+                                    <tbody className="text-gray-700">
                                         {filteredDetails.map((detail: any) => {
                                             const price = detail.selling_price ?? detail.service?.price ?? 0;
                                             const subtotal = price * detail.quantity;
                                             return (
-                                                <tr key={detail.id} className="hover:bg-white transition-colors">
-                                                    <td className="px-3 py-3 font-medium text-gray-700">
+                                                <tr key={detail.id} className="group hover:bg-white transition-colors">
+                                                    <td className="rounded-l-lg border-y border-l border-transparent bg-white px-3 py-3 font-medium text-gray-800 group-hover:border-gray-200 shadow-sm">
                                                         {detail.service?.name}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center text-gray-600">
+                                                    <td className="border-y border-transparent bg-white px-3 py-3 text-center text-gray-600 group-hover:border-gray-200 shadow-sm">
                                                         {detail.quantity}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right text-gray-600">
+                                                    <td className="border-y border-transparent bg-white px-3 py-3 text-right text-gray-600 group-hover:border-gray-200 shadow-sm">
                                                         {Number(price).toFixed(2)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-bold text-gray-800">
+                                                    <td className="rounded-r-lg border-y border-r border-transparent bg-white px-3 py-3 text-right font-bold text-gray-900 group-hover:border-gray-200 shadow-sm">
                                                         {subtotal.toFixed(2)}
                                                     </td>
                                                 </tr>
@@ -152,20 +254,20 @@ export default function CheckinDetailsModal({ show, onClose, checkin }: Props) {
                                 </table>
                             ) : (
                                 <div className="flex h-full flex-col items-center justify-center text-gray-400">
-                                    <ShoppingBag className="h-12 w-12 mb-2 opacity-20" />
-                                    <p className="text-sm">No hay consumos extras registrados.</p>
-                                    <p className="text-xs opacity-60">(O fueron filtrados)</p>
+                                    <ShoppingBag className="h-16 w-16 mb-3 opacity-20" />
+                                    <p className="text-sm font-medium">No hay consumos registrados.</p>
+                                    <p className="text-xs">Utiliza el formulario superior para agregar.</p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Footer del Modal */}
-                        <div className="mt-4 flex justify-end pt-4 border-t border-gray-200">
+                        {/* Footer */}
+                        <div className="mt-4 flex justify-end pt-4 border-t border-gray-300">
                             <button
                                 onClick={onClose}
-                                className="rounded-xl bg-gray-800 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-gray-900 active:scale-95"
+                                className="rounded-xl border border-gray-300 bg-white px-6 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95"
                             >
-                                Cerrar
+                                Cerrar Ventana
                             </button>
                         </div>
                     </div>
