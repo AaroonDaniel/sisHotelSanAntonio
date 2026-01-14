@@ -24,7 +24,7 @@ import CheckinModal, {
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 
-import CheckinDetailsModal from '../checkin_details/detailcheckin';
+
 import services from '@/routes/services';
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -524,12 +524,7 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
             />
-           <CheckinDetailsModal
-                show={isDetailsModalOpen}
-                onClose={() => setIsDetailsModalOpen(false)}
-                checkin={checkinForDetails}
-                services={services} 
-            />
+           
 
             {/* MODAL DE CONFIRMACIÓN */}
             {confirmCheckoutId &&

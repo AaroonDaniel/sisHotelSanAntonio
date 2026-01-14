@@ -102,24 +102,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
 
     // Detalle de asignacion
-    Route::get('/checkin-details', [CheckinDetailController::class, 'index'])->name('checkin_details.index');
-    Route::get('/checkin-details/crear', [CheckinDetailController::class, 'create'])->name('checkin_details.create');
-    Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkin_details.store');
-    Route::put('/checkin-details/{checkinDetail}', [CheckinDetailController::class, 'update'])->name('checkin_details.update');
-    Route::delete('/checkin-details/{checkinDetail}', [CheckinDetailController::class, 'destroy'])->name('checkin_details.destroy');
+    
 
     //Reportes 
     // Página principal de reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-
     // Verificar estado para Libro Diario (AJAX)
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
-
     // Generar PDF Libro Diario
     Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');
 
-    Route::get('/housekeeping', [RoomController::class, 'housekeeping'])->name('rooms.housekeeping');
-    Route::get('/maintenance', [RoomController::class, 'maintenance'])->name('rooms.maintenance');
+   
 });
 
 require __DIR__ . '/settings.php';
