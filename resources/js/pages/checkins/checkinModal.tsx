@@ -470,7 +470,7 @@ export default function CheckinModal({
                                     {isDropdownOpen &&
                                         !isExistingGuest &&
                                         filteredGuests.length > 0 && (
-                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border border-gray-400 bg-white shadow-xl">
+                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
                                                 {filteredGuests.map((g) => (
                                                     <div
                                                         key={g.id}

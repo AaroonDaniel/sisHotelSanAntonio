@@ -1,24 +1,19 @@
-import { useForm, router } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import axios from 'axios'; // IMPORTANTE: Importar Axios
 import {
-    UtensilsCrossed,
-    Save,
-    X,
-    Hash,
     BedDouble,
-    User,
-    ShoppingBag,
-    AlertCircle,
-    CheckCircle2,
-    Trash2,
-    Plus,
-    Minus,
     Car,
+    CheckCircle2,
     Coffee,
-    Grid,
-    Loader2
+    Loader2,
+    Minus,
+    Plus,
+    ShoppingBag,
+    Trash2,
+    UtensilsCrossed,
+    X,
 } from 'lucide-react';
-import { FormEventHandler, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // --- INTERFACES ---
 interface Service {
@@ -66,19 +61,19 @@ export default function DetailModal({
     services = [],
     initialCheckinId = null,
 }: DetailModalProps) {
-
     // Configuración del formulario
-    const { data, setData, put, reset, clearErrors } =
-        useForm({
-            checkin_id: '',
-            service_id: '',
-            quantity: 1,
-        });
+    const { data, setData, put, reset, clearErrors } = useForm({
+        checkin_id: '',
+        service_id: '',
+        quantity: 1,
+    });
 
     const [processing, setProcessing] = useState(false); // Estado de carga manual para axios
     const [searchTerm, setSearchTerm] = useState('');
-    const [quickFilter, setQuickFilter] = useState<'ALL' | 'DESAYUNO' | 'GARAJE'>('ALL');
-    
+    const [quickFilter, setQuickFilter] = useState<
+        'ALL' | 'DESAYUNO' | 'GARAJE'
+    >('ALL');
+
     // Lista visual de lo que acabamos de agregar (con IDs reales)
     const [recentlyAdded, setRecentlyAdded] = useState<AddedItem[]>([]);
 
@@ -106,18 +101,24 @@ export default function DetailModal({
     }, [show, detailToEdit, initialCheckinId]);
 
     // Filtrar servicios
-    const filteredServices = services.filter(s => {
+    const filteredServices = services.filter((s) => {
         const nameLower = s.name.toLowerCase();
-        
-        const isExcluded = (nameLower.includes('garaje') || 
-                           nameLower.includes('desayuno') || 
-                           nameLower.includes('estacionamiento')) && quickFilter === 'ALL';
-        
+
+        const isExcluded =
+            (nameLower.includes('garaje') ||
+                nameLower.includes('desayuno') ||
+                nameLower.includes('estacionamiento')) &&
+            quickFilter === 'ALL';
+
         const matchesSearch = nameLower.includes(searchTerm.toLowerCase());
 
         let matchesCategory = true;
-        if (quickFilter === 'DESAYUNO') matchesCategory = nameLower.includes('desayuno');
-        else if (quickFilter === 'GARAJE') matchesCategory = nameLower.includes('garaje') || nameLower.includes('estacionamiento');
+        if (quickFilter === 'DESAYUNO')
+            matchesCategory = nameLower.includes('desayuno');
+        else if (quickFilter === 'GARAJE')
+            matchesCategory =
+                nameLower.includes('garaje') ||
+                nameLower.includes('estacionamiento');
 
         return !isExcluded && matchesSearch && matchesCategory;
     });
@@ -125,20 +126,22 @@ export default function DetailModal({
     // --- FUNCIÓN PARA GUARDAR (USANDO AXIOS PARA OBTENER EL ID) ---
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if(!data.service_id) return;
+        if (!data.service_id) return;
 
         setProcessing(true);
-        const selectedService = services.find(s => s.id.toString() === data.service_id);
+        const selectedService = services.find(
+            (s) => s.id.toString() === data.service_id,
+        );
 
         // Si es edición usamos el método put de Inertia (flujo normal)
         if (detailToEdit && detailToEdit.id) {
-            put(`/checkin-details/${detailToEdit.id}`, { 
+            put(`/checkin-details/${detailToEdit.id}`, {
                 onSuccess: () => {
                     reset();
                     onClose();
                     setProcessing(false);
                 },
-                onError: () => setProcessing(false)
+                onError: () => setProcessing(false),
             });
             return;
         }
@@ -148,23 +151,23 @@ export default function DetailModal({
             const response = await axios.post('/checkin-details', {
                 checkin_id: data.checkin_id,
                 service_id: data.service_id,
-                quantity: data.quantity
+                quantity: data.quantity,
             });
 
             // El backend debe devolver el objeto creado (ver paso 1 del backend)
-            const newDetail = response.data; 
+            const newDetail = response.data;
 
             if (selectedService && newDetail.id) {
                 // Agregamos a la lista visual con el ID REAL de la BD
-                setRecentlyAdded(prev => [
-                    { 
+                setRecentlyAdded((prev) => [
+                    {
                         dbId: newDetail.id, // <--- ID REAL PARA PODER BORRAR LUEGO
-                        serviceId: selectedService.id, 
-                        name: selectedService.name, 
-                        price: selectedService.price, 
+                        serviceId: selectedService.id,
+                        name: selectedService.name,
+                        price: selectedService.price,
                         quantity: data.quantity,
-                    }, 
-                    ...prev 
+                    },
+                    ...prev,
                 ]);
             }
 
@@ -172,11 +175,10 @@ export default function DetailModal({
             router.reload({ only: ['checkindetails', 'checkins'] });
 
             // Reseteamos solo los campos de servicio para seguir agregando
-            setData(prev => ({ ...prev, service_id: '', quantity: 1 }));
-            
+            setData((prev) => ({ ...prev, service_id: '', quantity: 1 }));
         } catch (error) {
-            console.error("Error al guardar", error);
-            alert("Ocurrió un error al guardar el servicio.");
+            console.error('Error al guardar', error);
+            alert('Ocurrió un error al guardar el servicio.');
         } finally {
             setProcessing(false);
         }
@@ -184,52 +186,64 @@ export default function DetailModal({
 
     // --- FUNCIÓN PARA ELIMINAR DE LA BD Y DE LA LISTA ---
     const handleDeleteItem = (dbId: number) => {
-        if(!confirm("¿Eliminar este servicio de la cuenta?")) return;
+        if (!confirm('¿Eliminar este servicio de la cuenta?')) return;
 
         // Usamos router.delete de Inertia para borrar de la BD
         router.delete(`/checkin-details/${dbId}`, {
             preserveScroll: true,
             onSuccess: () => {
                 // Si el backend borró con éxito, lo quitamos de la lista visual
-                setRecentlyAdded(prev => prev.filter(item => item.dbId !== dbId));
+                setRecentlyAdded((prev) =>
+                    prev.filter((item) => item.dbId !== dbId),
+                );
             },
             onError: () => {
-                alert("No se pudo eliminar el servicio.");
-            }
+                alert('No se pudo eliminar el servicio.');
+            },
         });
     };
 
     // Totales visuales
-    const currentService = services.find(s => s.id.toString() === data.service_id);
-    const currentTotal = currentService ? (currentService.price * data.quantity) : 0;
-    const sessionTotal = recentlyAdded.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const currentService = services.find(
+        (s) => s.id.toString() === data.service_id,
+    );
+    const currentTotal = currentService
+        ? currentService.price * data.quantity
+        : 0;
+    const sessionTotal = recentlyAdded.reduce(
+        (acc, item) => acc + item.price * item.quantity,
+        0,
+    );
 
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in zoom-in-95">
-            <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
-                
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 zoom-in-95 fade-in">
+            <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 {/* --- HEADER --- */}
-                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4 shrink-0">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                             <UtensilsCrossed className="h-5 w-5" />
                         </div>
                         {detailToEdit ? 'Editar Consumo' : 'Agregar Consumos'}
                     </h2>
-                    <button onClick={onClose} className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200">
+                    <button
+                        onClick={onClose}
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                    >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="flex flex-col md:flex-row flex-1 overflow-hidden">
-                    
+                <form
+                    onSubmit={handleSubmit}
+                    className="flex flex-1 flex-col overflow-hidden md:flex-row"
+                >
                     {/* --- COLUMNA IZQUIERDA --- */}
-                    <div className="relative w-full md:w-1/3 border-r border-gray-100 bg-gray-50 p-6 flex flex-col min-h-0">
-                        
+                    <div className="relative flex min-h-0 w-full flex-col border-r border-gray-100 bg-gray-50 p-6 md:w-1/3">
                         {/* Selector de Habitación */}
-                        <div className="shrink-0 mb-6">
+                        <div className="mb-6 shrink-0">
                             <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                 Habitación
                             </label>
@@ -239,14 +253,21 @@ export default function DetailModal({
                                 </div>
                                 <select
                                     value={data.checkin_id}
-                                    onChange={(e) => setData('checkin_id', e.target.value)}
-                                    className="w-full rounded-xl border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                    disabled={!!detailToEdit || !!initialCheckinId} 
+                                    onChange={(e) =>
+                                        setData('checkin_id', e.target.value)
+                                    }
+                                    className="w-full rounded-xl border-gray-300 bg-white py-2.5 pr-4 pl-10 text-sm font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                    disabled={
+                                        !!detailToEdit || !!initialCheckinId
+                                    }
                                 >
-                                    <option value="" disabled>-- Seleccionar --</option>
+                                    <option value="" disabled>
+                                        -- Seleccionar --
+                                    </option>
                                     {checkins.map((chk) => (
                                         <option key={chk.id} value={chk.id}>
-                                            Hab: {chk.room.number} - {chk.guest.full_name}
+                                            Hab: {chk.room.number} -{' '}
+                                            {chk.guest.full_name}
                                         </option>
                                     ))}
                                 </select>
@@ -254,33 +275,47 @@ export default function DetailModal({
                         </div>
 
                         {/* LISTA DE AGREGADOS (CON SCROLL Y DELETE REAL) */}
-                        <div className="flex-1 flex flex-col min-h-0 border-t border-gray-200 pt-4">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 flex justify-between items-center shrink-0">
+                        <div className="flex min-h-0 flex-1 flex-col border-t border-gray-200 pt-4">
+                            <h3 className="mb-3 flex shrink-0 items-center justify-between text-xs font-bold text-gray-500 uppercase">
                                 <span>Agregados ahora</span>
-                                <span className="text-green-600">Total: Bs. {sessionTotal.toFixed(2)}</span>
+                                <span className="text-green-600">
+                                    Total: Bs. {sessionTotal.toFixed(2)}
+                                </span>
                             </h3>
 
-                            <div className="flex-1 overflow-y-auto pr-2 space-y-2 min-h-0">
+                            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
                                 {recentlyAdded.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl min-h-[100px]">
-                                        <ShoppingBag className="h-8 w-8 mb-2 opacity-20" />
-                                        <p className="text-[10px] text-center">Lista vacía</p>
+                                    <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
+                                        <ShoppingBag className="mb-2 h-8 w-8 opacity-20" />
+                                        <p className="text-center text-[10px]">
+                                            Lista vacía
+                                        </p>
                                     </div>
                                 ) : (
                                     recentlyAdded.map((item) => (
-                                        <div key={item.dbId} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm animate-in slide-in-from-left-2 fade-in duration-200">
+                                        <div
+                                            key={item.dbId}
+                                            className="flex animate-in items-center justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm duration-200 fade-in slide-in-from-left-2"
+                                        >
                                             <div>
-                                                <p className="text-sm font-bold text-gray-800 leading-tight">{item.name}</p>
+                                                <p className="text-sm leading-tight font-bold text-gray-800">
+                                                    {item.name}
+                                                </p>
                                                 <p className="text-xs text-gray-500">
-                                                    {item.quantity} x {item.price} Bs.
+                                                    {item.quantity} x{' '}
+                                                    {item.price} Bs.
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <span className="font-mono font-bold text-green-600 text-sm">
-                                                    {(item.quantity * item.price).toFixed(2)}
+                                                <span className="font-mono text-sm font-bold text-green-600">
+                                                    {(
+                                                        item.quantity *
+                                                        item.price
+                                                    ).toFixed(2)}
                                                 </span>
-                                                
-                                                {/* BOTÓN ELIMINAR REAL */}
+
+                                                {/* BOTÓN ELIMINAR (Opcional) */}
+                                                {/*Opcional}
                                                 <button 
                                                     type="button"
                                                     onClick={() => handleDeleteItem(item.dbId)}
@@ -288,7 +323,7 @@ export default function DetailModal({
                                                     title="Eliminar de la base de datos"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
-                                                </button>
+                                                </button>*/}
                                             </div>
                                         </div>
                                     ))
@@ -297,76 +332,119 @@ export default function DetailModal({
                         </div>
 
                         {/* Botón Guardar */}
-                        <div className="mt-4 pt-4 border-t border-gray-200 shrink-0">
-                            <div className="flex justify-between items-end mb-2">
-                                <span className="text-xs font-bold text-gray-500 uppercase">Item Actual</span>
-                                <span className="text-xl font-bold text-green-700">Bs. {currentTotal.toFixed(2)}</span>
+                        <div className="mt-4 shrink-0 border-t border-gray-200 pt-4">
+                            <div className="mb-2 flex items-end justify-between">
+                                <span className="text-xs font-bold text-gray-500 uppercase">
+                                    Item Actual
+                                </span>
+                                <span className="text-xl font-bold text-green-700">
+                                    Bs. {currentTotal.toFixed(2)}
+                                </span>
                             </div>
-                            <button
-                                type="submit"
-                                disabled={processing || !data.service_id}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-green-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {processing ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                                    <>
-                                        <Plus className="h-5 w-5" /> 
-                                        {detailToEdit ? 'Actualizar' : 'Agregar a la Cuenta'}
-                                    </>
-                                )}
-                            </button>
+
+                            <div className="mt-8 flex items-center justify-end gap-3">
+                                <button
+                                    type="submit"
+                                    disabled={processing || !data.service_id}
+                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {processing ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Plus className="h-5 w-5" />
+                                            {detailToEdit
+                                                ? 'Actualizar'
+                                                : 'Agregar a la Cuenta'}
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     {/* --- COLUMNA DERECHA --- */}
-                    <div className="w-full md:w-2/3 bg-white p-6 flex flex-col min-h-0">
+                    <div className="flex min-h-0 w-full flex-col bg-white p-6 md:w-2/3">
                         {/* Filtros */}
-                        <div className="mb-4 border-b border-gray-200 pb-4 shrink-0">
+                        <div className="mb-4 shrink-0 border-b border-gray-200 pb-4">
                             <div className="flex flex-col gap-3">
-                                <span className="text-xs font-bold text-gray-500 uppercase">Buscador</span>
-                                <input 
-                                    type="text" 
-                                    placeholder="Buscar productos..." 
-                                    className="w-full rounded-xl border-gray-200 bg-gray-50 py-2.5 pl-10 text-sm focus:border-green-500 focus:ring-green-500 transition-all"
+                                <span className="text-xs font-bold text-gray-500 uppercase">
+                                    Buscador
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar productos..."
+                                    className="w-full rounded-xl border-gray-400 bg-gray-50 py-2.5 pl-10 text-sm transition-all focus:border-green-500 focus:ring-green-500"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     autoFocus
                                 />
                             </div>
                         </div>
 
                         {/* Grid Productos */}
-                        <div className="flex-1 overflow-y-auto pr-2 pb-2 min-h-0">
+                        <div className="min-h-0 flex-1 overflow-y-auto pr-2 pb-2">
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                                 {filteredServices.map((service) => {
-                                    const isSelected = data.service_id === service.id.toString();
+                                    const isSelected =
+                                        data.service_id ===
+                                        service.id.toString();
                                     return (
-                                        <div 
+                                        <div
                                             key={service.id}
-                                            onClick={() => setData('service_id', service.id.toString())}
-                                            className={`group cursor-pointer relative flex flex-col justify-between rounded-xl border p-3 transition-all active:scale-95 ${
-                                                isSelected 
-                                                    ? 'border-green-500 bg-green-50/50 ring-2 ring-green-500 shadow-md' 
+                                            onClick={() =>
+                                                setData(
+                                                    'service_id',
+                                                    service.id.toString(),
+                                                )
+                                            }
+                                            className={`group relative flex cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all active:scale-95 ${
+                                                isSelected
+                                                    ? 'border-green-500 bg-green-50/50 shadow-md ring-2 ring-green-500'
                                                     : 'border-gray-100 bg-white hover:border-green-400 hover:shadow-md'
                                             }`}
                                         >
                                             <div className="mb-3 flex items-center justify-center">
-                                                <div className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${isSelected ? 'bg-green-200 text-green-700' : 'bg-gray-100 text-gray-400 group-hover:bg-green-100 group-hover:text-green-600'}`}>
-                                                    {service.name.toLowerCase().includes('garaje') ? <Car className="h-6 w-6"/> : 
-                                                     service.name.toLowerCase().includes('desayuno') ? <Coffee className="h-6 w-6"/> : 
-                                                     <UtensilsCrossed className="h-6 w-6" />}
+                                                <div
+                                                    className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${isSelected ? 'bg-green-200 text-green-700' : 'bg-gray-100 text-gray-400 group-hover:bg-green-100 group-hover:text-green-600'}`}
+                                                >
+                                                    {service.name
+                                                        .toLowerCase()
+                                                        .includes('garaje') ? (
+                                                        <Car className="h-6 w-6" />
+                                                    ) : service.name
+                                                          .toLowerCase()
+                                                          .includes(
+                                                              'desayuno',
+                                                          ) ? (
+                                                        <Coffee className="h-6 w-6" />
+                                                    ) : (
+                                                        <UtensilsCrossed className="h-6 w-6" />
+                                                    )}
                                                 </div>
                                             </div>
-                                            
+
                                             <div className="text-center">
-                                                <h4 className={`text-xs font-bold leading-tight mb-1 ${isSelected ? 'text-green-900' : 'text-gray-700'}`}>
+                                                <h4
+                                                    className={`mb-1 text-xs leading-tight font-bold ${isSelected ? 'text-green-900' : 'text-gray-700'}`}
+                                                >
                                                     {service.name}
                                                 </h4>
-                                                <span className="inline-block rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm border border-gray-100">
+                                                <span className="inline-block rounded-md border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm">
                                                     Bs. {service.price}
                                                 </span>
                                             </div>
                                             {isSelected && (
-                                                <div className="absolute top-2 right-2 text-green-600 animate-in zoom-in">
+                                                <div className="absolute top-2 right-2 animate-in text-green-600 zoom-in">
                                                     <CheckCircle2 className="h-5 w-5 fill-white" />
                                                 </div>
                                             )}
@@ -375,43 +453,68 @@ export default function DetailModal({
                                 })}
                             </div>
                             {filteredServices.length === 0 && (
-                                <div className="h-full flex flex-col items-center justify-center text-gray-400 min-h-[150px]">
-                                    <p className="text-sm">No se encontraron productos.</p>
+                                <div className="flex h-full min-h-[150px] flex-col items-center justify-center text-gray-400">
+                                    <p className="text-sm">
+                                        No se encontraron productos.
+                                    </p>
                                 </div>
                             )}
                         </div>
 
                         {/* Cantidad Flotante */}
                         {data.service_id && (
-                            <div className="mt-4 shrink-0 animate-in slide-in-from-bottom-4 fade-in duration-300">
+                            <div className="mt-4 shrink-0 animate-in duration-300 fade-in slide-in-from-bottom-4">
                                 <div className="flex items-center justify-between rounded-xl bg-gray-900 p-2 text-white shadow-lg">
                                     <div className="flex items-center gap-3 px-2">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setData('quantity', Math.max(1, data.quantity - 1))}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 transition"
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setData(
+                                                    'quantity',
+                                                    Math.max(
+                                                        1,
+                                                        data.quantity - 1,
+                                                    ),
+                                                )
+                                            }
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 transition hover:bg-gray-600"
                                         >
                                             <Minus className="h-4 w-4" />
                                         </button>
-                                        
-                                        <div className="text-center min-w-[3rem]">
-                                            <span className="block text-xs text-gray-400 uppercase font-bold">Cant.</span>
-                                            <span className="text-lg font-bold leading-none">{data.quantity}</span>
+
+                                        <div className="min-w-[3rem] text-center">
+                                            <span className="block text-xs font-bold text-gray-400 uppercase">
+                                                Cant.
+                                            </span>
+                                            <span className="text-lg leading-none font-bold">
+                                                {data.quantity}
+                                            </span>
                                         </div>
 
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setData('quantity', data.quantity + 1)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 transition"
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setData(
+                                                    'quantity',
+                                                    data.quantity + 1,
+                                                )
+                                            }
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 transition hover:bg-gray-600"
                                         >
                                             <Plus className="h-4 w-4" />
                                         </button>
                                     </div>
 
-                                    <button 
+                                    <button
                                         type="button"
-                                        onClick={() => setData(prev => ({ ...prev, service_id: '', quantity: 1 }))}
-                                        className="mr-2 rounded-lg p-2 text-gray-400 hover:bg-gray-800 hover:text-red-400 transition"
+                                        onClick={() =>
+                                            setData((prev) => ({
+                                                ...prev,
+                                                service_id: '',
+                                                quantity: 1,
+                                            }))
+                                        }
+                                        className="mr-2 rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-red-400"
                                         title="Cancelar selección"
                                     >
                                         <Trash2 className="h-5 w-5" />
