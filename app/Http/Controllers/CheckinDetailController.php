@@ -52,13 +52,20 @@ class CheckinDetailController extends Controller
 
         $service = Service::findOrFail($validated['service_id']);
 
-        CheckinDetail::create([
+        // 1. Guardamos el registro en una variable
+        $detail = CheckinDetail::create([
             'checkin_id' => $validated['checkin_id'],
             'service_id' => $validated['service_id'],
             'quantity' => $validated['quantity'],
             'selling_price' => $service->price
         ]);
 
+        // 2. Si la petición quiere JSON (Axios), devolvemos el objeto con su ID
+        if ($request->wantsJson()) {
+            return response()->json($detail, 201);
+        }
+
+        // Retorno normal para Inertia (si se usara submit normal)
         return Redirect::back()->with('success', 'Servicio agregado correctamente.');
     }
     public function update(Request $request, $id)

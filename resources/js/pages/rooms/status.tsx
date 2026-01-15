@@ -484,8 +484,8 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                                             title="Ver lista de consumos y detalles"
                                         >
                                             <ShoppingCart className="h-3 w-3" />
-                                            <span>Consumos</span>
-                                        </button>
+                                            
+                                        </button> 
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
