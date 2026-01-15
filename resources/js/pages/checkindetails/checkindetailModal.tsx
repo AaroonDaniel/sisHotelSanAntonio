@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { UtensilsCrossed, Save, X, Hash } from 'lucide-react';
+import { UtensilsCrossed, Save, X, Hash, BedDouble, User } from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
 
 // --- INTERFACES ---
@@ -7,6 +7,12 @@ interface Service {
     id: number; 
     name: string; 
     price: number; 
+}
+
+interface Checkin {
+    id: number;
+    guest: { full_name: string };
+    room: { number: string };
 }
 
 interface CheckinDetail {
@@ -20,50 +26,43 @@ interface CheckinDetailModalProps {
     show: boolean;
     onClose: () => void;
     detailToEdit?: CheckinDetail | null;
-    checkinId: number; // El ID del Checkin al que estamos agregando cosas
-    services: Service[]; // Lista de servicios para el Select
+    checkins: Checkin[]; // Lista de habitaciones ocupadas para el Select
+    services: Service[]; // Lista de servicios
 }
 
 export default function CheckinDetailModal({
     show,
     onClose,
     detailToEdit,
-    checkinId,
+    checkins = [],
     services = [], 
 }: CheckinDetailModalProps) {
     
-    // Configuración del formulario de Inertia
+    // Configuración del formulario
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({
-            checkin_id: checkinId,
-            service_id: '', // Inicializamos vacío (string para el select)
+            checkin_id: '', // Ahora inicia vacío para que el usuario elija
+            service_id: '',
             quantity: 1,
         });
 
-    // Efecto para cargar datos al abrir o cambiar modo (Edición vs Creación)
     useEffect(() => {
         if (show) {
             if (detailToEdit) {
                 // MODO EDICIÓN: Cargar datos existentes
                 setData({
-                    checkin_id: detailToEdit.checkin_id,
-                    service_id: detailToEdit.service_id.toString(), // Convertir a string para que el select lo detecte
+                    checkin_id: detailToEdit.checkin_id.toString(),
+                    service_id: detailToEdit.service_id.toString(),
                     quantity: detailToEdit.quantity,
                 });
             } else {
-                // MODO CREACIÓN: Resetear formulario
+                // MODO CREACIÓN: Limpiar
                 reset();
-                setData({
-                    checkin_id: checkinId,
-                    service_id: '',
-                    quantity: 1,
-                });
+                clearErrors();
             }
-            clearErrors();
         }
-    }, [show, detailToEdit, checkinId]);
+    }, [show, detailToEdit]);
 
-    // Función de envío del formulario
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
@@ -72,17 +71,10 @@ export default function CheckinDetailModal({
             onClose();
         };
 
-        // --- LÓGICA SIN ZIGGY (Rutas Manuales) ---
         if (detailToEdit && detailToEdit.id) {
-            // EDITAR: PUT /checkin-details/{id}
-            put(`/checkin-details/${detailToEdit.id}`, { 
-                onSuccess 
-            });
+            put(`/checkin-details/${detailToEdit.id}`, { onSuccess });
         } else {
-            // CREAR: POST /checkin-details
-            post('/checkin-details', { 
-                onSuccess 
-            });
+            post('/checkin-details', { onSuccess });
         }
     };
 
@@ -98,7 +90,7 @@ export default function CheckinDetailModal({
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                             <UtensilsCrossed className="h-5 w-5" />
                         </div>
-                        {detailToEdit ? 'Editar Consumo' : 'Agregar Servicio'}
+                        {detailToEdit ? 'Editar Consumo' : 'Agregar Consumo'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -108,16 +100,45 @@ export default function CheckinDetailModal({
                     </button>
                 </div>
 
-                {/* --- BODY (FORMULARIO) --- */}
+                {/* --- FORMULARIO --- */}
                 <form onSubmit={submit} className="p-6">
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         
-                        {/* CAMPO 1: SELECCIONAR SERVICIO */}
+                        {/* CAMPO 1: SELECCIONAR HABITACIÓN / HUÉSPED (NUEVO) */}
                         <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-                                Servicio
+                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                Habitación / Huésped
                             </label>
-                            <div className="relative mt-1">
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                    <BedDouble className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <select
+                                    value={data.checkin_id}
+                                    onChange={(e) => setData('checkin_id', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-400 py-2.5 pl-10 pr-4 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
+                                    // Si estamos editando, usualmente no cambiamos el huésped, pero si quieres permitirlo quita el disabled
+                                    disabled={!!detailToEdit} 
+                                >
+                                    <option value="" disabled>-- Seleccione Habitación --</option>
+                                    {checkins.map((chk) => (
+                                        <option key={chk.id} value={chk.id}>
+                                            Hab: {chk.room.number} - {chk.guest.full_name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            {errors.checkin_id && (
+                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.checkin_id}</p>
+                            )}
+                        </div>
+
+                        {/* CAMPO 2: SELECCIONAR SERVICIO */}
+                        <div>
+                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                Servicio a Agregar
+                            </label>
+                            <div className="relative">
                                 <select
                                     value={data.service_id}
                                     onChange={(e) => setData('service_id', e.target.value)}
@@ -126,7 +147,7 @@ export default function CheckinDetailModal({
                                     <option value="" disabled>-- Seleccione un Servicio --</option>
                                     {services.map((srv) => (
                                         <option key={srv.id} value={srv.id}>
-                                            {srv.name} - ${srv.price}
+                                            {srv.name} - Bs. {srv.price}
                                         </option>
                                     ))}
                                 </select>
@@ -136,12 +157,12 @@ export default function CheckinDetailModal({
                             )}
                         </div>
 
-                        {/* CAMPO 2: CANTIDAD */}
+                        {/* CAMPO 3: CANTIDAD */}
                         <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
                                 Cantidad
                             </label>
-                            <div className="relative mt-1">
+                            <div className="relative">
                                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                     <Hash className="h-4 w-4 text-gray-400" />
                                 </div>
@@ -161,8 +182,8 @@ export default function CheckinDetailModal({
 
                     </div>
 
-                    {/* --- FOOTER (BOTONES) --- */}
-                    <div className="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-4">
+                    {/* --- FOOTER --- */}
+                    <div className="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-4">
                         <button
                             type="button"
                             onClick={onClose}
@@ -175,9 +196,7 @@ export default function CheckinDetailModal({
                             disabled={processing}
                             className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {processing ? (
-                                'Guardando...'
-                            ) : (
+                            {processing ? 'Guardando...' : (
                                 <>
                                     <Save className="h-4 w-4" /> Guardar
                                 </>

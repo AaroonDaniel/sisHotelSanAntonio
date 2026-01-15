@@ -14,14 +14,11 @@ export default function DeleteModal({ show, onClose, checkindetailId }: DeleteMo
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (checkindetailId) {
-            // ELIMINAR (DELETE)
-            // Ruta manual: /asignaciondetalle/{id}
-            destroy(`/asignaciondetalle/${checkindetailId}`, {
+            destroy(`/checkin-details/${checkindetailId}`, {
                 onSuccess: () => onClose(),
             });
         }
     };
-
     if (!show) return null;
 
     return (

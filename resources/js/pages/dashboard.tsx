@@ -17,7 +17,7 @@ import {
     AlertTriangle, // Icono para modal de error
     X,             // Icono cerrar
     FileText,
-    Briefcase,       // Icono archivo
+    Briefcase,      // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición

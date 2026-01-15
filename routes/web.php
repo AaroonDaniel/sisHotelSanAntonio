@@ -102,6 +102,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
+    Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
+    Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
+    Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
+
+
 
     //Reportes 
     // Página principal de reportes
