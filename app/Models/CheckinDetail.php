@@ -17,7 +17,6 @@ class CheckinDetail extends Model
     ];
     
    
-
     protected $casts = [
         'selling_price' => 'decimal:2',
     ];

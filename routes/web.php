@@ -93,7 +93,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
-
     // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
     // 2. Ruta para el PDF de salida (Checkout Receipt)
@@ -102,7 +101,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
 
     // Detalle de asignacion
-    
+    Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
 
     //Reportes 
     // Página principal de reportes
@@ -111,8 +110,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
     // Generar PDF Libro Diario
     Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');
-
-   
 });
 
 require __DIR__ . '/settings.php';
