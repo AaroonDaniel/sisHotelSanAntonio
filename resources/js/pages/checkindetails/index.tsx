@@ -1,16 +1,16 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
-import { 
-    ArrowLeft, 
-    Plus, 
-    Search, 
-    Trash2, 
-    Pencil, 
-    ShoppingCart, 
-    Calendar,
+import {
+    ArrowLeft,
     BedDouble,
+    Calendar,
+    DollarSign,
+    Pencil,
+    Plus,
+    Search,
+    ShoppingCart,
+    Trash2,
     User as UserIcon,
-    DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinDetailModal from './checkindetailModal';
@@ -59,21 +59,32 @@ interface Props {
     services: Service[];
 }
 
-export default function CheckinDetailsIndex({ auth, checkindetails, checkins, services }: Props) {
+export default function CheckinDetailsIndex({
+    auth,
+    checkindetails,
+    checkins,
+    services,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [detailToEdit, setDetailToEdit] = useState<CheckinDetail | null>(null);
+    const [detailToEdit, setDetailToEdit] = useState<CheckinDetail | null>(
+        null,
+    );
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [detailToDeleteId, setDetailToDeleteId] = useState<number | null>(null);
+    const [detailToDeleteId, setDetailToDeleteId] = useState<number | null>(
+        null,
+    );
 
     // --- FILTRADO ---
     const filteredDetails = checkindetails.filter((detail) => {
         const searchLower = searchTerm.toLowerCase();
         return (
             detail.service.name.toLowerCase().includes(searchLower) ||
-            detail.checkin.guest.full_name.toLowerCase().includes(searchLower) ||
+            detail.checkin.guest.full_name
+                .toLowerCase()
+                .includes(searchLower) ||
             detail.checkin.room.number.toString().includes(searchLower)
         );
     });
@@ -108,7 +119,6 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
         <AuthenticatedLayout user={auth.user}>
             <Head title="Detalle de Consumos" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                
                 {/* Botón Volver */}
                 <button
                     onClick={() => window.history.back()}
@@ -122,16 +132,14 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
 
                 <div>
                     <h2 className="text-3xl font-bold text-white">
-                        Gestión de Consumos / Frigobar
+                        Gestión de Consumos
                     </h2>
                 </div>
 
                 <div className="py-12">
                     <div className="mx-auto w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                         {/* Header: Buscador y Botón Agregar (Sin select externo) */}
                         <div className="flex flex-col gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
-                            
                             {/* Buscador */}
                             <div className="relative w-full sm:w-96">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -140,7 +148,9 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar servicio, huésped o habitación..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
@@ -161,34 +171,40 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">Fecha</th>
-                                        <th className="px-6 py-4">Habitación</th>
+                                        <th className="px-6 py-4">
+                                            Habitación
+                                        </th>
                                         <th className="px-6 py-4">Huésped</th>
                                         <th className="px-6 py-4">Servicio</th>
-                                        <th className="px-6 py-4 text-center">Cant.</th>
-                                        <th className="px-6 py-4 text-right">Total</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4 text-center">
+                                            Cantidad
+                                        </th>
+                                        <th className="px-6 py-4 text-right">
+                                            Total
+                                        </th>
+                                        <th className="px-6 py-4">Fecha</th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredDetails.length > 0 ? (
                                         filteredDetails.map((detail) => (
-                                            <tr key={detail.id} className="transition-colors hover:bg-gray-50">
-                                                {/* Fecha */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-1 text-gray-500">
-                                                        <Calendar className="h-3 w-3" />
-                                                        {formatDate(detail.created_at)}
-                                                    </div>
-                                                </td>
-
+                                            <tr
+                                                key={detail.id}
+                                                className="transition-colors hover:bg-gray-50"
+                                            >
                                                 {/* Habitación */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2 font-bold text-gray-900">
                                                         <div className="rounded bg-green-100 p-1 text-green-600">
                                                             <BedDouble className="h-4 w-4" />
                                                         </div>
-                                                        {detail.checkin.room.number}
+                                                        {
+                                                            detail.checkin.room
+                                                                .number
+                                                        }
                                                     </div>
                                                 </td>
 
@@ -197,7 +213,11 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
                                                     <div className="flex items-center gap-2">
                                                         <UserIcon className="h-4 w-4 text-gray-400" />
                                                         <span className="font-medium text-gray-800">
-                                                            {detail.checkin.guest.full_name}
+                                                            {
+                                                                detail.checkin
+                                                                    .guest
+                                                                    .full_name
+                                                            }
                                                         </span>
                                                     </div>
                                                 </td>
@@ -221,22 +241,43 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
                                                 <td className="px-6 py-4 text-right font-mono font-bold text-green-700">
                                                     <div className="flex items-center justify-end gap-1">
                                                         <DollarSign className="h-3 w-3" />
-                                                        {(detail.quantity * detail.selling_price).toFixed(2)}
+                                                        {(
+                                                            detail.quantity *
+                                                            detail.selling_price
+                                                        ).toFixed(2)}
+                                                    </div>
+                                                </td>
+
+                                                {/* Fecha */}
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-1 text-gray-500">
+                                                        <Calendar className="h-3 w-3" />
+                                                        {formatDate(
+                                                            detail.created_at,
+                                                        )}
                                                     </div>
                                                 </td>
 
                                                 {/* Acciones */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        <button 
-                                                            onClick={() => openEditModal(detail)}
+                                                        <button
+                                                            onClick={() =>
+                                                                openEditModal(
+                                                                    detail,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-blue-600"
                                                             title="Editar"
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
-                                                        <button 
-                                                            onClick={() => openDeleteModal(detail.id)}
+                                                        <button
+                                                            onClick={() =>
+                                                                openDeleteModal(
+                                                                    detail.id,
+                                                                )
+                                                            }
                                                             className="text-gray-400 transition hover:text-red-600"
                                                             title="Eliminar"
                                                         >
@@ -248,8 +289,13 @@ export default function CheckinDetailsIndex({ auth, checkindetails, checkins, se
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={7} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay consumos registrados.'}
+                                            <td
+                                                colSpan={7}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay consumos registrados.'}
                                             </td>
                                         </tr>
                                     )}

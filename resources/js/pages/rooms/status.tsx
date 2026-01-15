@@ -9,13 +9,13 @@ import {
     CheckCircle2,
     Construction,
     FileEdit,
-    FileText,
     Home,
     Loader2,
     LogOut,
     Search,
     User as UserIcon,
     X,
+    ShoppingCart,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import CheckinModal, {
@@ -23,9 +23,8 @@ import CheckinModal, {
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
+import DetailModal from '../checkindetails/detailModal';
 
-
-import services from '@/routes/services';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -302,6 +301,13 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
 
     const checkoutData = getCheckoutData();
 
+    const allActiveCheckins = Rooms.flatMap((room) =>
+        (room.checkins || []).map((checkin) => ({
+            ...checkin,
+            room: room, // <--- ESTO ES LO QUE FALTABA
+            guest: checkin.guest || { full_name: 'Desconocido' } // Aseguramos que guest exista
+        }))
+    );
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
@@ -469,17 +475,16 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                // Navega a la ruta index de los detalles
-
                                                 handleShowCheckinDetails(
                                                     activeCheckin,
                                                     room,
                                                 );
                                             }}
-                                            className="flex flex-1 items-center justify-center gap-1 border-r border-blue-800 bg-blue-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-800"
+                                            className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-blue-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-700"
                                             title="Ver lista de consumos y detalles"
                                         >
-                                            <FileText className="h-3 w-3" />{' '}
+                                            <ShoppingCart className="h-3 w-3" />
+                                            <span>Consumos</span>
                                         </button>
                                         <button
                                             onClick={(e) => {
@@ -524,7 +529,19 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
             />
-           
+
+            
+            <DetailModal
+                show={isDetailsModalOpen}
+                onClose={() => {
+                    setIsDetailsModalOpen(false);
+                    setCheckinForDetails(null);
+                }}
+                detailToEdit={null} // Es un consumo nuevo
+                checkins={allActiveCheckins} // Lista para el dropdown
+                services={services} // Lista de servicios (viene de tus props)
+                initialCheckinId={checkinForDetails?.id} // El ID para preseleccionar la habitación
+            />
 
             {/* MODAL DE CONFIRMACIÓN */}
             {confirmCheckoutId &&
@@ -562,7 +579,7 @@ function CheckoutConfirmationModal({
     const salida = new Date(); // Fecha actual
     const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const diasCobrar = diffDays === 0 ? 1 : diffDays; 
+    const diasCobrar = diffDays === 0 ? 1 : diffDays;
 
     const precioDia = parseFloat(room.price?.amount || 0);
     const totalHospedaje = diasCobrar * precioDia;
