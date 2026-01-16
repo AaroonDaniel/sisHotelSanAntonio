@@ -13,18 +13,17 @@ import {
     Loader2,
     LogOut,
     Search,
+    ShoppingCart,
     User as UserIcon,
     X,
-    ShoppingCart,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
-import DetailModal from '../checkindetails/detailModal';
-import checkindetails from '@/routes/checkindetails';
 
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -47,10 +46,24 @@ interface Guest extends ModalGuest {
     profile_status?: string;
 }
 
+interface Block {
+    id: number;
+    code: string;
+    description: string;
+}
+
+interface Price {
+    id: number;
+    bathroom_type: string;
+    room_type: number;
+}
+
 interface Room extends ModalRoom {
     room_type?: RoomType;
     checkins?: CheckinData[];
-    price?: { amount: number };
+    price?: { amount: number; bathroom_type: string };
+    block?: Block;
+    block_id?: number;
 }
 
 interface Props {
@@ -58,9 +71,16 @@ interface Props {
     Rooms: Room[];
     Guests: Guest[];
     services: any[];
+    Blocks: Block[];
 }
 
-export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
+export default function RoomsStatus({
+    auth,
+    Rooms,
+    Guests,
+    services,
+    Blocks,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -171,6 +191,9 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
         }
     };
 
+    const [selectedBlock, setSelectedBlock] = useState('');
+    const [selectedBathroom, setSelectedBathroom] = useState('');
+
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch =
             room.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -180,7 +203,16 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
         const currentStatus = getDisplayStatus(room);
         const matchesStatus =
             filterStatus === 'all' || currentStatus === filterStatus;
-        return matchesSearch && matchesStatus;
+        const matchesBlock = selectedBlock
+            ? room.block_id?.toString() === selectedBlock
+            : true;
+
+        const matchesBathroom = selectedBathroom
+            ? room.price?.bathroom_type === selectedBathroom
+            : true;
+        return (
+            matchesSearch && matchesStatus && matchesBlock && matchesBathroom
+        );
     }).sort((a, b) => {
         return a.number.localeCompare(b.number, undefined, {
             numeric: true,
@@ -288,6 +320,12 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
     const countStatus = (targetStatus: string) =>
         Rooms.filter((r) => getDisplayStatus(r) === targetStatus).length;
 
+    const countBlock = (blockId: number) =>
+        Rooms.filter((r) => r.block_id === blockId).length;
+
+    const countBathroom = (type: string) =>
+        Rooms.filter((r) => r.price?.bathroom_type === type).length;
+
     // --- HELPER PARA OBTENER EL OBJETO COMPLETO DE CHECKIN Y ROOM ---
     const getCheckoutData = () => {
         if (!confirmCheckoutId) return null;
@@ -306,12 +344,12 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
         (room.checkins || []).map((checkin) => ({
             ...checkin,
             room: room, // <--- ESTO ES LO QUE FALTABA
-            guest: checkin.guest || { full_name: 'Desconocido' } // Aseguramos que guest exista
-        }))
+            guest: checkin.guest || { full_name: 'Desconocido' }, // Aseguramos que guest exista
+        })),
     );
 
     //Detalles de nota previa de asignacion
-    
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
@@ -346,21 +384,75 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                             */}
                         </div>
                     </div>
-                    {/* Filtros omitidos por brevedad, son los mismos */}
+                   
+                    {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-4">
-                        <div className="relative w-full max-w-xs">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <Search className="h-4 w-4 text-gray-400" />
+                        <div className="flex flex-row items-center justify-end gap-2">
+                            {/* Selector de Bloques */}
+                            <div className="relative">
+                                <select
+                                    value={selectedBlock}
+                                    onChange={(e) =>
+                                        setSelectedBlock(e.target.value)
+                                    }
+                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                >
+                                    <option value="">Todos los Bloques</option>
+                                    {Blocks?.map((block) => (
+                                        <option key={block.id} value={block.id}>
+                                            {block.description} (
+                                            {countBlock(block.id)})
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
-                                placeholder="Buscar habitación..."
-                            />
+
+                            {/* Barra de Búsqueda */}
+                            <div className="relative w-full max-w-xs">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
+                                    className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
+                                    placeholder="Buscar habitación..."
+                                />
+                            </div>
                         </div>
+
                         <div className="flex flex-wrap justify-end gap-2">
+                            <Badge
+                                count={countBathroom('private')}
+                                label="Baño Privado"
+                                // Usamos color Teal para características
+                                color="bg-emerald-600"
+                                active={selectedBathroom === 'private'}
+                                onClick={() =>
+                                    setSelectedBathroom(
+                                        selectedBathroom === 'private'
+                                            ? ''
+                                            : 'private',
+                                    )
+                                }
+                            />
+                            <Badge
+                                count={countBathroom('shared')}
+                                label="Baño Compartido"
+                                color="bg-emerald-600"
+                                active={selectedBathroom === 'shared'}
+                                onClick={() =>
+                                    setSelectedBathroom(
+                                        selectedBathroom === 'shared'
+                                            ? ''
+                                            : 'shared',
+                                    )
+                                }
+                            />
+
                             <Badge
                                 count={countStatus('available')}
                                 label="Libres"
@@ -488,8 +580,7 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                                             title="Ver lista de consumos y detalles"
                                         >
                                             <ShoppingCart className="h-3 w-3" />
-                                            
-                                        </button> 
+                                        </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -534,7 +625,6 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
                 initialRoomId={selectedRoomId}
             />
 
-            
             <DetailModal
                 show={isDetailsModalOpen}
                 onClose={() => {
@@ -746,10 +836,6 @@ function CheckoutConfirmationModal({
                                 <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
                                     Obs: {checkin.notes || 'Sin observaciones'}
                                 </div>
-
-                                
-
-                                
                             </div>
 
                             <div className="mb-6 text-center">
