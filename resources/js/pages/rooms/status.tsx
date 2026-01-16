@@ -24,6 +24,7 @@ import CheckinModal, {
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 import DetailModal from '../checkindetails/detailModal';
+import checkindetails from '@/routes/checkindetails';
 
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -308,6 +309,9 @@ export default function RoomsStatus({ auth, Rooms, Guests, services }: Props) {
             guest: checkin.guest || { full_name: 'Desconocido' } // Aseguramos que guest exista
         }))
     );
+
+    //Detalles de nota previa de asignacion
+    
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
@@ -742,6 +746,10 @@ function CheckoutConfirmationModal({
                                 <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
                                     Obs: {checkin.notes || 'Sin observaciones'}
                                 </div>
+
+                                
+
+                                
                             </div>
 
                             <div className="mb-6 text-center">

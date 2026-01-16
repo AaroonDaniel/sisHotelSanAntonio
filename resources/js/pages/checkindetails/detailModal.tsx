@@ -12,6 +12,8 @@ import {
     Trash2,
     UtensilsCrossed,
     X,
+    Store,
+    ShoppingBasket,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -224,7 +226,7 @@ export default function DetailModal({
                 <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
-                            <UtensilsCrossed className="h-5 w-5" />
+                            <Store className="h-5 w-5" />
                         </div>
                         {detailToEdit ? 'Editar Consumo' : 'Agregar Consumos'}
                     </h2>
@@ -428,7 +430,7 @@ export default function DetailModal({
                                                           ) ? (
                                                         <Coffee className="h-6 w-6" />
                                                     ) : (
-                                                        <UtensilsCrossed className="h-6 w-6" />
+                                                        <ShoppingBasket className="h-6 w-6" />
                                                     )}
                                                 </div>
                                             </div>

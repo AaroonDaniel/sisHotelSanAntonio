@@ -7,11 +7,10 @@ import {
     Clock,
     FileText,
     Globe,
-    LogOut,
+    Phone,
     Printer,
     Save,
     User,
-    Phone,
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
@@ -26,52 +25,83 @@ const civilStatusOptions = [
 ];
 
 const countries = [
-    'BOLIVIANA', 'ARGENTINA', 'BRASILERA', 'CHILENA', 'COLOMBIANA', 'PERÚANA', 'ECUATORIANA',
-    'PARAGUAYA', 'URUGUAYA', 'VENEZOLANA', 'MÉXICANA', 'ESTADOUNIDENSE', 'ESPAÑOLA',
-    'FRANCESA', 'ALEMANA', 'ITALIANA', 'CHINA', 'JAPÓNESA', 'RUSA', 'CANADIENSE',
-    'INGLESA', 'PORTUGUESA', 'INDIA', 'AUSTRALIANA', 'CUBANA', 'DOMINICANA',
-    'GUATEMALTECA', 'HONDUREÑA', 'SALVADOREÑA', 'NICARAGÜENSE', 'COSTARRICENSE',
-    'PANAMEÑA', 'PUERTORRIQUEÑA', 'HAITIANA', 'TRINITARIA', 'JAMAICANA', 'OTRO',
+    'BOLIVIANA',
+    'ARGENTINA',
+    'BRASILERA',
+    'CHILENA',
+    'COLOMBIANA',
+    'PERÚANA',
+    'ECUATORIANA',
+    'PARAGUAYA',
+    'URUGUAYA',
+    'VENEZOLANA',
+    'MÉXICANA',
+    'ESTADOUNIDENSE',
+    'ESPAÑOLA',
+    'FRANCESA',
+    'ALEMANA',
+    'ITALIANA',
+    'CHINA',
+    'JAPÓNESA',
+    'RUSA',
+    'CANADIENSE',
+    'INGLESA',
+    'PORTUGUESA',
+    'INDIA',
+    'AUSTRALIANA',
+    'CUBANA',
+    'DOMINICANA',
+    'GUATEMALTECA',
+    'HONDUREÑA',
+    'SALVADOREÑA',
+    'NICARAGÜENSE',
+    'COSTARRICENSE',
+    'PANAMEÑA',
+    'PUERTORRIQUEÑA',
+    'HAITIANA',
+    'TRINITARIA',
+    'JAMAICANA',
+    'OTRO',
 ];
 
 const countryCodes: { [key: string]: string } = {
-    'BOLIVIANA': '+591',
-    'ARGENTINA': '+54',
-    'BRASILERA': '+55',
-    'CHILENA': '+56',
-    'COLOMBIANA': '+57',
-    'PERÚANA': '+51',
-    'ECUATORIANA': '+593',
-    'PARAGUAYA': '+595',
-    'URUGUAYA': '+598',
-    'VENEZOLANA': '+58',
-    'MÉXICANA': '+52',
-    'ESTADOUNIDENSE': '+1',
-    'ESPAÑOLA': '+34',
-    'FRANCESA': '+33',
-    'ALEMANA': '+49',
-    'ITALIANA': '+39',
-    'CHINA': '+86',
-    'JAPÓNESA': '+81',
-    'RUSA': '+7',
-    'CANADIENSE': '+1',
-    'INGLESA': '+44',
-    'PORTUGUESA': '+351',
-    'INDIA': '+91',
-    'AUSTRALIANA': '+61',
-    'CUBANA': '+53',
-    'DOMINICANA': '+1',
-    'GUATEMALTECA': '+502',
-    'HONDUREÑA': '+504',
-    'SALVADOREÑA': '+503',
-    'NICARAGÜENSE': '+505',
-    'COSTARRICENSE': '+506',
-    'PANAMEÑA': '+507',
-    'PUERTORRIQUEÑA': '+1',
-    'HAITIANA': '+509',
-    'TRINITARIA': '+1',
-    'JAMAICANA': '+1',
-    'OTRO': ''
+    BOLIVIANA: '+591',
+    ARGENTINA: '+54',
+    BRASILERA: '+55',
+    CHILENA: '+56',
+    COLOMBIANA: '+57',
+    PERÚANA: '+51',
+    ECUATORIANA: '+593',
+    PARAGUAYA: '+595',
+    URUGUAYA: '+598',
+    VENEZOLANA: '+58',
+    MÉXICANA: '+52',
+    ESTADOUNIDENSE: '+1',
+    ESPAÑOLA: '+34',
+    FRANCESA: '+33',
+    ALEMANA: '+49',
+    ITALIANA: '+39',
+    CHINA: '+86',
+    JAPÓNESA: '+81',
+    RUSA: '+7',
+    CANADIENSE: '+1',
+    INGLESA: '+44',
+    PORTUGUESA: '+351',
+    INDIA: '+91',
+    AUSTRALIANA: '+61',
+    CUBANA: '+53',
+    DOMINICANA: '+1',
+    GUATEMALTECA: '+502',
+    HONDUREÑA: '+504',
+    SALVADOREÑA: '+503',
+    NICARAGÜENSE: '+505',
+    COSTARRICENSE: '+506',
+    PANAMEÑA: '+507',
+    PUERTORRIQUEÑA: '+1',
+    HAITIANA: '+509',
+    TRINITARIA: '+1',
+    JAMAICANA: '+1',
+    OTRO: '',
 };
 
 const calculateAge = (dateString: string) => {
@@ -147,9 +177,9 @@ export default function CheckinModal({
 }: CheckinModalProps) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
-    
+
     // REFS PARA DETECTAR CLICS FUERA
-    const dropdownRef = useRef<HTMLDivElement>(null);   // Para el buscador de nombre
+    const dropdownRef = useRef<HTMLDivElement>(null); // Para el buscador de nombre
     const nationalityRef = useRef<HTMLDivElement>(null); // Para el buscador de nacionalidad (NUEVO)
 
     const [displayAge, setDisplayAge] = useState<number | string>('');
@@ -175,7 +205,7 @@ export default function CheckinModal({
             birth_date: '' as string,
             profession: '',
             origin: '',
-            phone: '', 
+            phone: '',
         });
 
     // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
@@ -234,12 +264,13 @@ export default function CheckinModal({
                     identification_number:
                         checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    nationality:
+                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
-                    phone: checkinToEdit.guest?.phone || '', 
+                    phone: checkinToEdit.guest?.phone || '',
                 });
             } else {
                 reset();
@@ -285,32 +316,36 @@ export default function CheckinModal({
             birth_date: guest.birth_date || '',
             profession: guest.profession || '',
             origin: guest.origin || '',
-            phone: guest.phone || '', 
+            phone: guest.phone || '',
         }));
     };
 
     // --- LOGICA DE ACTUALIZACIÓN (NACIONALIDAD -> TELÉFONO) ---
     const updateNationalityAndPhone = (nationalityValue: string) => {
         const upperValue = nationalityValue.toUpperCase();
-        
+
         let newPhone = data.phone;
         const code = countryCodes[upperValue];
 
         const currentPhoneClean = data.phone ? data.phone.trim() : '';
-        const isJustCode = Object.values(countryCodes).some(c => c === currentPhoneClean);
+        const isJustCode = Object.values(countryCodes).some(
+            (c) => c === currentPhoneClean,
+        );
 
         if (code && (data.phone === '' || isJustCode)) {
             newPhone = code + ' ';
         }
 
-        setData(prev => ({
+        setData((prev) => ({
             ...prev,
             nationality: upperValue,
-            phone: newPhone
+            phone: newPhone,
         }));
 
         if (upperValue.length > 0) {
-            setFilteredCountries(countries.filter((c) => c.includes(upperValue)));
+            setFilteredCountries(
+                countries.filter((c) => c.includes(upperValue)),
+            );
             setShowCountrySuggestions(true);
         } else {
             setShowCountrySuggestions(false);
@@ -377,9 +412,14 @@ export default function CheckinModal({
             : 'Indefinido';
 
     const servicesList = [
-        { id: '1', name: 'Desayuno', price: 35 },
-        { id: '2', name: 'Lavandería', price: 20 },
-        { id: '3', name: 'Limpieza', price: 50 },
+        { id: '2', name: 'Garaje', price: 0 },
+        /*
+        {
+            
+            { id: '3', name: 'Desayuno', price: 0 },
+            
+        },
+        */
     ];
 
     if (!show) return null;
@@ -463,7 +503,6 @@ export default function CheckinModal({
                                             if (data.full_name.length > 1)
                                                 setIsDropdownOpen(true);
                                         }}
-                                        
                                         required
                                         autoComplete="off"
                                     />
@@ -509,7 +548,7 @@ export default function CheckinModal({
                                 <div className="col-span-1">
                                     <label className="text-xs font-bold text-gray-500">
                                         Carnet (CI)
-                                    </label> 
+                                    </label>
                                     <input
                                         className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300 focus:border-amber-500' : ''}`}
                                         value={data.identification_number}
@@ -538,7 +577,10 @@ export default function CheckinModal({
                                         placeholder="LP"
                                     />
                                 </div>
-                                <div className="relative col-span-1" ref={nationalityRef}>
+                                <div
+                                    className="relative col-span-1"
+                                    ref={nationalityRef}
+                                >
                                     <label className="text-xs font-bold text-gray-500">
                                         Nacionalidad
                                     </label>
@@ -562,8 +604,12 @@ export default function CheckinModal({
                                                     key={c}
                                                     onClick={() => {
                                                         // USAMOS LA NUEVA LÓGICA AQUÍ
-                                                        updateNationalityAndPhone(c);
-                                                        setShowCountrySuggestions(false); // <--- CERRAMOS LA LISTA
+                                                        updateNationalityAndPhone(
+                                                            c,
+                                                        );
+                                                        setShowCountrySuggestions(
+                                                            false,
+                                                        ); // <--- CERRAMOS LA LISTA
                                                     }}
                                                     className="cursor-pointer px-2 py-1 text-xs text-black hover:bg-gray-100"
                                                 >
@@ -664,7 +710,7 @@ export default function CheckinModal({
                                         />
                                     </div>
                                 </div>
-                                
+
                                 {/* CAMPO TELÉFONO CON ICONO PHONE */}
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">
@@ -681,7 +727,7 @@ export default function CheckinModal({
                                                 setData('phone', e.target.value)
                                             }
                                             disabled={!data.nationality}
-                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                                             placeholder="#### ####"
                                         />
                                     </div>
@@ -708,18 +754,17 @@ export default function CheckinModal({
                                     onChange={(e) =>
                                         setData('room_id', e.target.value)
                                     }
-                                    disabled={true} 
+                                    disabled={true}
                                     className="block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
                                 >
                                     {rooms.map((room) => (
                                         <option key={room.id} value={room.id}>
-                                            {room.number} - Costo {' '}
+                                            {room.number} - Costo{' '}
                                             {room.price?.amount} Bs.
                                         </option>
                                     ))}
                                 </select>
                             </div>
-
                             {/* --- CORRECCIÓN DISEÑO FECHA INGRESO Y ESTADÍA --- */}
                             <div className="flex gap-3">
                                 <div className="flex-grow">
@@ -758,7 +803,6 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
-
                             <div className="-mt-3 text-right">
                                 <span
                                     className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
@@ -766,7 +810,6 @@ export default function CheckinModal({
                                     Salida: {checkoutString}
                                 </span>
                             </div>
-
                             <div>
                                 <label className="text-xs font-bold text-gray-500">
                                     Adelanto (Bs)
@@ -792,7 +835,6 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
-
                             <div>
                                 <label className="text-xs font-bold text-gray-500">
                                     Observaciones
@@ -816,11 +858,59 @@ export default function CheckinModal({
 
                             <div>
                                 <label className="mb-2 block text-xs font-bold text-gray-500">
-                                    Servicios Adicionales
+                                    Servicios
                                 </label>
-                                
-                            </div>
 
+                                {/* INICIO DEL CÓDIGO A AGREGAR */}
+                                <div className="flex flex-wrap gap-2">
+                                    {servicesList.map((srv) => {
+                                        const active =
+                                            data.selected_services.includes(
+                                                srv.id,
+                                            );
+                                        return (
+                                            <button
+                                                key={srv.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    const newServs = active
+                                                        ? data.selected_services.filter(
+                                                              (id) =>
+                                                                  id !== srv.id,
+                                                          )
+                                                        : [
+                                                              ...data.selected_services,
+                                                              srv.id,
+                                                          ];
+                                                    setData(
+                                                        'selected_services',
+                                                        newServs,
+                                                    );
+                                                }}
+                                                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+                                                    active
+                                                        ? 'border-green-500 bg-green-100 font-bold text-green-700'
+                                                        : 'border border-gray-400 bg-white text-gray-600'
+                                                }`}
+                                            >
+                                                {active && (
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                )}
+                                                {srv.name}
+                                            </button>
+                                        );
+                                    })}
+                                    <button
+                                        type="button"
+                                        disabled={true}
+                                        className="flex items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700 transition"
+                                    >
+                                        Desayuno
+                                    </button>
+                                </div>
+
+                                {/* FIN DEL CÓDIGO A AGREGAR */}
+                            </div>
                         </div>
 
                         <div className="mt-8 flex items-center justify-end gap-3">
