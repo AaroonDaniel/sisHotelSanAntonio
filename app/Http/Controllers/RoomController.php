@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 
-class RoomController extends Controller
+class RoomController 
 {
     public function index()
     {
@@ -135,7 +135,7 @@ class RoomController extends Controller
     {
         $room->delete();
         return redirect()->route('rooms.index');
-    }
+    } 
 
     public function toggleStatus(Room $room)
     {
@@ -168,7 +168,6 @@ class RoomController extends Controller
         return back()->with('success', 'Habitación marcada como limpia y disponible.');
     }
     
-
     // Vista previa de asignacnion (antes de finalizar la estadia)
     public function getGuestsList()
     {
@@ -214,4 +213,6 @@ class RoomController extends Controller
 
         return response()->json($data);
     }
+
+    
 }

@@ -32,7 +32,6 @@ class CheckinController extends Controller
             'Rooms' => $rooms,
         ]);
     }
-
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
@@ -102,7 +101,7 @@ class CheckinController extends Controller
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
-            'user_id' => $userId, 
+            'user_id' => $userId,
             'check_in_date' => now()->timezone('America/La_Paz'),
             'duration_days' => $validatedCheckin['duration_days'],
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
@@ -420,7 +419,6 @@ class CheckinController extends Controller
             ->header('Content-Disposition', 'inline; filename="ticket-' . $checkin->id . '.pdf"');
     }
 
-
     public function generateCheckoutReceipt(Checkin $checkin)
     {
         // 1. CARGAR RELACIONES CORRECTAS
@@ -565,8 +563,8 @@ class CheckinController extends Controller
         $pdf->Ln(2);
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(50, 6, 'A PAGAR:', 0, 0, 'R');
-        $pdf->Cell(22, 6, number_format($saldoPagar, 2). ' Bs', 0, 1, 'R');
-        
+        $pdf->Cell(22, 6, number_format($saldoPagar, 2) . ' Bs', 0, 1, 'R');
+
 
         // PIE
         $pdf->Ln(6);
@@ -580,5 +578,50 @@ class CheckinController extends Controller
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="checkout-' . $checkin->id . '.pdf"');
+    }
+
+    public function generateViewDetail(Request $request) // <--- Nombre corregido (generate)
+    {
+        // Verificación del huesped
+        if (!$request->filled('guest_id')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El ID del huesped es obligatorio'
+            ], 400);
+        }
+
+        $checkin = \App\Models\Checkin::with(['checkinDetails.service', 'room', 'guest'])
+            ->where('guest_id', $request->guest_id)
+            ->where('status', 'activo')
+            ->first();
+
+        if (!$checkin) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se encontró una estadía activa para este huésped'
+            ], 404);
+        }
+
+        // CORRECCIÓN: Usar la propiedad sin paréntesis ->checkinDetails
+        $detailAdd = $checkin->checkinDetails->map(function ($detail) {
+            return [
+                'id' => $detail->id,
+                'service' => $detail->service->name ?? 'Servicio Eliminado',
+                'count' => $detail->quantity, // <--- Corregido 'quiantity' a 'quantity'
+                'unit_price' => (float) $detail->selling_price,
+                'subtotal' => (float) ($detail->quantity * $detail->selling_price),
+            ];
+        });
+
+        // CORRECCIÓN: La clave debe coincidir exactamente con la del array ('subtotal')
+        $total = $detailAdd->sum('subtotal');
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'servicios' => $detailAdd,
+                'total_adicional' => $total,
+            ]
+        ]);
     }
 }

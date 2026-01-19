@@ -100,14 +100,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 3. Ruta para el PDF de ingreso (Solo asignación)
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
 
-    // Detalle de asignacion
+    // Detalle de asignacionb
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
     Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
     Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
-
-
-
+    Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])
+    ->name('guests.view_detail');
     //Reportes 
     // Página principal de reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');

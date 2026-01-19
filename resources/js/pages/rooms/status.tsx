@@ -258,6 +258,7 @@ export default function RoomsStatus({
                         'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
                     borderColor: 'border-emerald-700',
                     label: 'Disponible',
+
                     icon: (
                         <BedDouble className="h-10 w-10 text-emerald-200/50" />
                     ),
@@ -384,7 +385,7 @@ export default function RoomsStatus({
                             */}
                         </div>
                     </div>
-                   
+
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-4">
                         <div className="flex flex-row items-center justify-end gap-2">
@@ -400,8 +401,7 @@ export default function RoomsStatus({
                                     <option value="">Todos los Bloques</option>
                                     {Blocks?.map((block) => (
                                         <option key={block.id} value={block.id}>
-                                            {block.description} (
-                                            {countBlock(block.id)})
+                                            {block.description}{' '}
                                         </option>
                                     ))}
                                 </select>
@@ -680,6 +680,15 @@ function CheckoutConfirmationModal({
     const adelanto = parseFloat(checkin.advance_payment || 0);
     const saldoEstimado = totalHospedaje - adelanto;
 
+    // Detalles de asignacion en la vista previa
+    const servicios = checkin.checkin_details || [];
+
+    const totalServicios = servicios.reduce((acc: number, item: any) => {
+        const cantidad = parseFloat(item.quantity || 0);
+        const precioUnitario = parseFloat(item.selling_price || 0);
+        return acc + cantidad * precioUnitario;
+    }, 0);
+
     // Limpieza de memoria
     useEffect(() => {
         return () => {
@@ -836,9 +845,14 @@ function CheckoutConfirmationModal({
                                 <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
                                     Obs: {checkin.notes || 'Sin observaciones'}
                                 </div>
+                                <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
+                                    <p>Hola como estas?</p>
+                                </div>
+                                
+                                
                             </div>
 
-                            <div className="mb-6 text-center">
+                            <div className="mt-4 mb-6 text-center">
                                 <h4 className="text-xl font-bold text-gray-800">
                                     ¿Confirmar salida?
                                 </h4>
@@ -863,7 +877,6 @@ function CheckoutConfirmationModal({
                         </div>
                     )}
                 </div>
-
                 {/* Footer de Botones */}
                 <div className="flex justify-end gap-3 border-t border-gray-100 bg-white px-6 py-4">
                     {!pdfUrl ? (
