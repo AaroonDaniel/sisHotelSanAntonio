@@ -687,7 +687,7 @@ function CheckoutConfirmationModal({
     const totalHospedaje = diasCobrar * precioDia;
     const adelanto = parseFloat(checkin.advance_payment || 0);
     const totalServicio = extraDetails.total;
-    const saldoEstimado = (totalHospedaje + totalServicio) - adelanto;
+    const saldoEstimado = totalHospedaje + totalServicio - adelanto;
 
     // Limpieza de memoria
     // EFECTO 1: Cargar detalles del huésped
@@ -720,8 +720,6 @@ function CheckoutConfirmationModal({
             if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
         };
     }, [pdfUrl]);
-
-
 
     const handleConfirmAndPreview = async () => {
         setProcessing(true);
@@ -819,58 +817,66 @@ function CheckoutConfirmationModal({
                                 </div>
 
                                 <div className="mb-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                    <div>
-                                        <span className="font-bold">
-                                            Ingreso:
-                                        </span>{' '}
-                                        {ingreso.toLocaleDateString()}
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="font-bold">Hora:</span>{' '}
-                                        {ingreso.toLocaleTimeString([], {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        })}
-                                    </div>
+    {/* --- FILA 1: INGRESO --- */}
+    <div>
+        <span className="font-bold">Ingreso:</span>{' '}
+        {ingreso.toLocaleDateString()}
+    </div>
+    <div className="text-right">
+        <span className="font-bold">Hora:</span>{' '}
+        {ingreso.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+    </div>
 
-                                    <div>
-                                        <span className="font-bold">
-                                            Salida:
-                                        </span>{' '}
-                                        {salida.toLocaleDateString()}
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="font-bold">Hora:</span>{' '}
-                                        {salida.toLocaleTimeString([], {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        })}
-                                    </div>
+    {/* --- FILA 2: SALIDA --- */}
+    <div>
+        <span className="font-bold">Salida:</span>{' '}
+        {salida.toLocaleDateString()}
+    </div>
+    <div className="text-right">
+        <span className="font-bold">Hora:</span>{' '}
+        {salida.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+    </div>
 
-                                    <div>
-                                        <span className="font-bold">
-                                            Permanencia (días):
-                                        </span>{' '}
-                                        {diasCobrar}
-                                    </div>
-                                    <br></br>
-                                    <div>
-                                        <span className="font-bold">
-                                            Adelanto:
-                                        </span>{' '}
-                                        {adelanto.toFixed(2)} Bs
-                                    </div>
-                                    <br></br>
-                                    <div>
-                                        <span className="font-bold text-sm text-gray-800">
-                                            Total a cancelar:
-                                        </span>{' '}
-                                        <span className='font-bold text-sm text-gray-800'>
-                                            {saldoEstimado.toFixed(2)} Bs
-                                        </span>
-                                        
-                                    </div>
-                                </div>
+    {/* --- FILA 3: PERMANENCIA --- */}
+    <div>
+        <span className="font-bold">Permanencia (días):</span>{' '}
+        {diasCobrar}
+    </div>
+    <div>{/* Espacio vacío para llenar la columna derecha de esta fila */}</div>
+
+    {/* --- SEPARADOR (Ocupa las 2 columnas) --- */}
+    <div className="col-span-2 my-1 border-t border-dashed border-gray-300"></div>
+
+    {/* --- FILA 4: HOSPEDAJE --- */}
+    <div>
+        <span>Hospedaje:</span>
+    </div>
+    <div className="text-right">
+        {totalHospedaje.toFixed(2)} Bs
+    </div>
+
+    {/* --- FILA 5: EXTRAS (Condicional) --- */}
+    {extraDetails.total > 0 && (
+        <>
+            <div>
+                <span>Extras:</span>
+            </div>
+            <div className="text-right">
+                {extraDetails.total.toFixed(2)} Bs
+            </div>
+        </>
+    )}
+
+    {/* --- FILA 6: TOTAL GENERAL --- */}
+    <div>
+        <span className="font-bold text-gray-700">Total General:</span>
+    </div>
+    <div className="text-right">
+        <span className="font-bold text-gray-700">
+            {(totalHospedaje + extraDetails.total).toFixed(2)} Bs
+        </span>
+    </div>
+</div>
 
                                 <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
                                     Obs: {checkin.notes || 'Sin observaciones'}

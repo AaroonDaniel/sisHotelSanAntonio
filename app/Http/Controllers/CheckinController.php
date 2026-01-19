@@ -580,7 +580,7 @@ class CheckinController extends Controller
             ->header('Content-Disposition', 'inline; filename="checkout-' . $checkin->id . '.pdf"');
     }
 
-    public function generateViewDetail(Request $request) // <--- Nombre corregido (generate)
+    public function generateViewDetail(Request $request)
     {
         // Verificación del huesped
         if (!$request->filled('guest_id')) {
