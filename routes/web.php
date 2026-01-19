@@ -18,6 +18,10 @@ Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
+    // Vista previa de servicios adicionales huesped
+    Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
+
+
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
     })->name('Inicio');
@@ -105,8 +109,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
     Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
-    Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])
-    ->name('guests.view_detail');
+    // Vista previa de servicios adicionales huesped
+    Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
+
     //Reportes 
     // Página principal de reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');

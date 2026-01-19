@@ -668,6 +668,14 @@ function CheckoutConfirmationModal({
     const [processing, setProcessing] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+    const [extraDetails, setExtraDetails] = useState<{
+        servicios: any[];
+        total: number;
+    }>({
+        servicios: [],
+        total: 0,
+    });
+
     // CÁLCULOS
     const ingreso = new Date(checkin.check_in_date);
     const salida = new Date(); // Fecha actual
@@ -678,23 +686,42 @@ function CheckoutConfirmationModal({
     const precioDia = parseFloat(room.price?.amount || 0);
     const totalHospedaje = diasCobrar * precioDia;
     const adelanto = parseFloat(checkin.advance_payment || 0);
-    const saldoEstimado = totalHospedaje - adelanto;
-
-    // Detalles de asignacion en la vista previa
-    const servicios = checkin.checkin_details || [];
-
-    const totalServicios = servicios.reduce((acc: number, item: any) => {
-        const cantidad = parseFloat(item.quantity || 0);
-        const precioUnitario = parseFloat(item.selling_price || 0);
-        return acc + cantidad * precioUnitario;
-    }, 0);
+    const totalServicio = extraDetails.total;
+    const saldoEstimado = (totalHospedaje + totalServicio) - adelanto;
 
     // Limpieza de memoria
+    // EFECTO 1: Cargar detalles del huésped
+    useEffect(() => {
+        // Validación de seguridad: Si no hay ID, no hacemos nada
+        if (!checkin || !checkin.guest_id) return;
+        //console.log("Consultando detalles para Guest ID:", checkin.guest_id);
+        axios
+            .get('/guests/view-detail', {
+                params: { guest_id: checkin.guest_id },
+            })
+            .then((response) => {
+                if (response.data.status === 'success') {
+                    //console.log("Datos encontrados:", response.data.data);
+                    setExtraDetails({
+                        servicios: response.data.data.servicios,
+                        total: response.data.data.total_adicional,
+                    });
+                }
+            })
+            .catch((error) => {
+                console.error('Error cargando detalles:', error);
+                // Opcional: Mostrar alerta si es un error diferente a 404
+            });
+    }, [checkin.guest_id]); // Solo se ejecuta si cambia el ID del huesped
+
+    // EFECTO 2: Limpieza de memoria del PDF
     useEffect(() => {
         return () => {
             if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
         };
     }, [pdfUrl]);
+
+
 
     const handleConfirmAndPreview = async () => {
         setProcessing(true);
@@ -835,21 +862,66 @@ function CheckoutConfirmationModal({
                                     </div>
                                     <br></br>
                                     <div>
-                                        <span className="font-bold">
+                                        <span className="font-bold text-sm text-gray-800">
                                             Total a cancelar:
                                         </span>{' '}
-                                        {saldoEstimado.toFixed(2)} Bs
+                                        <span className='font-bold text-sm text-gray-800'>
+                                            {saldoEstimado.toFixed(2)} Bs
+                                        </span>
+                                        
                                     </div>
                                 </div>
 
                                 <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
                                     Obs: {checkin.notes || 'Sin observaciones'}
                                 </div>
-                                <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
-                                    <p>Hola como estas?</p>
+                                <div className="border-t border-red-500/50 pt-2 text-xs text-gray-500 italic">
+                                    {extraDetails.servicios.length > 0 && (
+                                        <div className="mt-2 border-t border-red-200/50 pt-2">
+                                            <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
+                                                Consumos Extra
+                                            </span>
+
+                                            {/* Lista con scroll */}
+                                            <div className="flex max-h-28 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
+                                                {extraDetails.servicios.map(
+                                                    (item: any) => (
+                                                        <div
+                                                            key={item.id}
+                                                            className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
+                                                        >
+                                                            <span>
+                                                                {item.count} x{' '}
+                                                                {item.service}
+                                                            </span>
+                                                            <span className="font-medium">
+                                                                {/* CORRECCIÓN 2: Usamos item.subtotal directo del JSON */}
+                                                                {parseFloat(
+                                                                    item.subtotal,
+                                                                ).toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        </div>
+                                                    ),
+                                                )}
+                                            </div>
+
+                                            {/* Subtotal */}
+                                            <div className="mt-1 flex justify-end pt-1">
+                                                <span className="text-[10px] font-bold text-gray-600">
+                                                    {/* CORRECCIÓN 3: Usamos extraDetails.total */}
+                                                    Subtotal Servicios:{' '}
+                                                    {extraDetails.total.toFixed(
+                                                        2,
+                                                    )}{' '}
+                                                    Bs
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                
-                                
                             </div>
 
                             <div className="mt-4 mb-6 text-center">
