@@ -76,11 +76,18 @@ class Checkin extends Model
         return $this->hasMany(Invoice::class);
     }
 
-
+    // Relacion con los servicios consumidos durante la estadía
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'checkin_details')
                     ->withPivot('quantity', 'selling_price') // Campos extra de la tabla intermedia
+                    ->withTimestamps();
+    }
+    //Relacion con los acompañantes de la estadia
+    public function companions(): BelongsToMany
+    {
+        return $this->belongsToMany(Guest::class, 'checkin_guests')
+                    ->withPivot('relationship') // Campo extra de la tabla intermedia
                     ->withTimestamps();
     }
 }

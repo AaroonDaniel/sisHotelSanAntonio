@@ -4,12 +4,15 @@ import {
     AlertTriangle,
     BedDouble,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     Clock,
     FileText,
     Globe,
     Phone,
     Printer,
     Save,
+    Trash2,
     User,
     X,
 } from 'lucide-react';
@@ -154,7 +157,7 @@ export interface Room {
     number: string;
     status: string;
     price?: { amount: number };
-    room_type?: { name: string };
+    room_type?: { name: string; capacity: number };
     checkins?: CheckinData[];
 }
 
@@ -167,6 +170,41 @@ interface CheckinModalProps {
     initialRoomId?: number | null;
 }
 
+interface CompanionData {
+    full_name: string;
+    identification_number: string;
+    relationship: string;
+    nationality: string;
+    issued_in: string;
+    civil_status: string;
+    birth_date: string;
+    profession: string;
+    origin: string;
+    phone: string;
+}
+
+interface CheckinFormData {
+    guest_id: string | null;
+    room_id: string;
+    check_in_date: string;
+    duration_days: number | string;
+    advance_payment: number;
+    notes: string;
+    selected_services: string[];
+    // Campos del Titular (Index 0)
+    full_name: string;
+    identification_number: string;
+    issued_in: string;
+    nationality: string;
+    civil_status: string;
+    birth_date: string;
+    profession: string;
+    origin: string;
+    phone: string;
+    // Lista de Acompañantes (Index 1..N)
+    companions: CompanionData[];
+}
+
 export default function CheckinModal({
     show,
     onClose,
@@ -175,12 +213,16 @@ export default function CheckinModal({
     rooms,
     initialRoomId,
 }: CheckinModalProps) {
+    // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
 
+    // [NUEVO] Estado para la navegación del carrusel (0 = Titular)
+    const [currentIndex, setCurrentIndex] = useState(0);
+
     // REFS PARA DETECTAR CLICS FUERA
-    const dropdownRef = useRef<HTMLDivElement>(null); // Para el buscador de nombre
-    const nationalityRef = useRef<HTMLDivElement>(null); // Para el buscador de nacionalidad (NUEVO)
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const nationalityRef = useRef<HTMLDivElement>(null);
 
     const [displayAge, setDisplayAge] = useState<number | string>('');
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
@@ -188,24 +230,26 @@ export default function CheckinModal({
 
     const now = new Date().toISOString().slice(0, 16);
 
+    // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
-        useForm({
+        useForm<CheckinFormData>({
             guest_id: '' as string | null,
             room_id: '',
             check_in_date: now,
-            duration_days: 1 as number | string,
+            duration_days: 1,
             advance_payment: 0,
             notes: '',
-            selected_services: [] as string[],
+            selected_services: [],
             full_name: '',
             identification_number: '',
             issued_in: '',
             nationality: 'BOLIVIANA',
             civil_status: '',
-            birth_date: '' as string,
+            birth_date: '',
             profession: '',
             origin: '',
             phone: '',
+            companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
         });
 
     // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
@@ -285,23 +329,141 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit, initialRoomId]);
 
-    const isProfileIncomplete =
-        !isExistingGuest &&
-        (!data.identification_number || data.identification_number.length < 3);
+    // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
-    const filteredGuests =
-        data.full_name && data.full_name.length > 1
-            ? guests.filter((g) => {
-                  const term = data.full_name.toLowerCase();
-                  const fullName = g.full_name.toLowerCase();
-                  return (
-                      fullName.includes(term) ||
-                      g.identification_number?.toLowerCase().includes(term)
-                  );
-              })
-            : [];
+    // A. Variables calculadas
+    const companionsList = data.companions || []; // Evita error "possibly undefined"
+    const totalPeople = 1 + companionsList.length;
+    const isTitular = currentIndex === 0;
+
+    
+
+    // B. OBJETO PROXY: ¿Qué datos muestro en los inputs AHORA?
+    const currentPerson = isTitular
+        ? {
+              // Datos directos del Titular
+              full_name: data.full_name,
+              identification_number: data.identification_number,
+              issued_in: data.issued_in,
+              nationality: data.nationality,
+              civil_status: data.civil_status,
+              birth_date: data.birth_date,
+              profession: data.profession,
+              origin: data.origin,
+              phone: data.phone,
+              relationship: 'TITULAR',
+          }
+        : {
+              // Datos del Acompañante (con valores por defecto seguros)
+              ...companionsList[currentIndex - 1],
+              full_name: companionsList[currentIndex - 1]?.full_name || '',
+              identification_number:
+                  companionsList[currentIndex - 1]?.identification_number || '',
+              nationality:
+                  companionsList[currentIndex - 1]?.nationality || 'BOLIVIANA',
+              phone: companionsList[currentIndex - 1]?.phone || '',
+              origin: companionsList[currentIndex - 1]?.origin || '',
+              profession: companionsList[currentIndex - 1]?.profession || '',
+              relationship:
+                  companionsList[currentIndex - 1]?.relationship || '',
+              issued_in: companionsList[currentIndex - 1]?.issued_in || '',
+              civil_status:
+                  companionsList[currentIndex - 1]?.civil_status || '',
+              birth_date: companionsList[currentIndex - 1]?.birth_date || '',
+          };
+
+    // C. ACTUALIZAR EDAD VISUAL (Reemplaza al useEffect viejo)
+    useEffect(() => {
+        if (currentPerson.birth_date) {
+            setDisplayAge(calculateAge(currentPerson.birth_date));
+        } else {
+            setDisplayAge('');
+        }
+    }, [currentPerson.birth_date, currentIndex]);
+
+    // D. MANEJADOR DE CAMBIOS UNIFICADO
+    const handleFieldChange = (field: string, value: string) => {
+        if (isTitular) {
+            setData(field as any, value);
+        } else {
+            const newCompanions = [...companionsList];
+            if (!newCompanions[currentIndex - 1]) return;
+            (newCompanions[currentIndex - 1] as any)[field] = value;
+            setData('companions', newCompanions);
+        }
+    };
+
+    // E. NAVEGACIÓN (Siguiente / Anterior / Borrar)
+    const handleNext = () => {
+        if (currentIndex < totalPeople - 1) {
+            setCurrentIndex((prev) => prev + 1);
+        } else {
+            // Crear nuevo acompañante vacío
+            setData('companions', [
+                ...companionsList,
+                {
+                    full_name: '',
+                    identification_number: '',
+                    relationship: '',
+                    nationality: 'BOLIVIANA',
+                    issued_in: '',
+                    civil_status: '',
+                    birth_date: '',
+                    profession: '',
+                    origin: '',
+                    phone: '',
+                },
+            ]);
+            setCurrentIndex((prev) => prev + 1);
+        }
+    };
+
+    const handlePrev = () => {
+        if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
+    };
+
+    const handleDeleteCurrent = () => {
+        if (isTitular) return;
+        const newCompanions = [...companionsList];
+        newCompanions.splice(currentIndex - 1, 1);
+        setData('companions', newCompanions);
+        setCurrentIndex((prev) => Math.max(0, prev - 1));
+    };
+
+    // F. LÓGICA ESPECÍFICA (Nacionalidad y Autocompletado)
+    const updateNationalityAndPhone = (nationalityValue: string) => {
+        const upperValue = nationalityValue.toUpperCase();
+        const code = countryCodes[upperValue];
+        let newPhone = currentPerson.phone;
+
+        const currentPhoneClean = newPhone ? newPhone.trim() : '';
+        const isJustCode = Object.values(countryCodes).some(
+            (c) => c === currentPhoneClean,
+        );
+
+        if (code && (newPhone === '' || isJustCode)) {
+            newPhone = code + ' ';
+        }
+
+        handleFieldChange('nationality', upperValue);
+        handleFieldChange('phone', newPhone);
+
+        if (upperValue.length > 0) {
+            setFilteredCountries(
+                countries.filter((c) => c.includes(upperValue)),
+            );
+            setShowCountrySuggestions(true);
+        } else {
+            setShowCountrySuggestions(false);
+        }
+    };
+
+    const handleNationalityChange = (val: string) => {
+        updateNationalityAndPhone(val);
+    };
 
     const handleSelectGuest = (guest: Guest) => {
+        if (!isTitular) return;
         setIsExistingGuest(true);
         setIsDropdownOpen(false);
         clearErrors();
@@ -320,41 +482,23 @@ export default function CheckinModal({
         }));
     };
 
-    // --- LOGICA DE ACTUALIZACIÓN (NACIONALIDAD -> TELÉFONO) ---
-    const updateNationalityAndPhone = (nationalityValue: string) => {
-        const upperValue = nationalityValue.toUpperCase();
+    // Filtros y Validaciones
+    const filteredGuests =
+        isTitular && data.full_name && data.full_name.length > 1
+            ? guests.filter((g) => {
+                  const term = data.full_name.toLowerCase();
+                  const fullName = g.full_name.toLowerCase();
+                  return (
+                      fullName.includes(term) ||
+                      g.identification_number?.toLowerCase().includes(term)
+                  );
+              })
+            : [];
 
-        let newPhone = data.phone;
-        const code = countryCodes[upperValue];
-
-        const currentPhoneClean = data.phone ? data.phone.trim() : '';
-        const isJustCode = Object.values(countryCodes).some(
-            (c) => c === currentPhoneClean,
-        );
-
-        if (code && (data.phone === '' || isJustCode)) {
-            newPhone = code + ' ';
-        }
-
-        setData((prev) => ({
-            ...prev,
-            nationality: upperValue,
-            phone: newPhone,
-        }));
-
-        if (upperValue.length > 0) {
-            setFilteredCountries(
-                countries.filter((c) => c.includes(upperValue)),
-            );
-            setShowCountrySuggestions(true);
-        } else {
-            setShowCountrySuggestions(false);
-        }
-    };
-
-    const handleNationalityChange = (val: string) => {
-        updateNationalityAndPhone(val);
-    };
+    const isProfileIncomplete =
+        isTitular &&
+        !isExistingGuest &&
+        (!data.identification_number || data.identification_number.length < 3);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -459,23 +603,90 @@ export default function CheckinModal({
                 )}
 
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
-                    {/* IZQUIERDA - DATOS HUÉSPED */}
+                    {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
                     <div className="relative flex-1 border-r border-gray-100 bg-white p-6">
-                        {isProfileIncomplete && data.full_name.length > 3 && (
-                            <div className="absolute top-0 right-0 left-0 z-10 flex animate-in items-center justify-between border-b border-amber-100 bg-amber-50 px-6 py-2 slide-in-from-top-2">
-                                <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    PERFIL PENDIENTE: Se guardará solo con el
-                                    nombre.
+                        {/* A. BARRA DE NAVEGACIÓN (EL "MAGO") */}
+                        <div className="mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
+                            {/* Contador: 1 de X */}
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
+                                    {isTitular
+                                        ? 'Editando Titular'
+                                        : 'Editando Acompañante'}
+                                </span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-black text-blue-900">
+                                        {currentIndex + 1}
+                                    </span>
+                                    <span className="text-sm font-bold text-blue-400">
+                                        de {totalPeople}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Info Habitación (Solo visual) */}
+                            <div className="hidden border-r border-l border-blue-200 px-4 text-center sm:block">
+                                <span className="block text-[10px] font-bold text-blue-400 uppercase">
+                                    Habitación
+                                </span>
+                                <span className="font-bold text-blue-800">
+                                    {rooms.find(
+                                        (r) => r.id === Number(data.room_id),
+                                    )?.room_type?.name || 'ESTÁNDAR'}
                                 </span>
                             </div>
-                        )}
-                        <div
-                            className={`${isProfileIncomplete && data.full_name.length > 3 ? 'mt-8' : ''} transition-all`}
-                        ></div>
 
-                        <div className="mb-6 space-y-4">
-                            {/* NOMBRE COMPLETO */}
+                            {/* Botones: Borrar | Atrás | Siguiente */}
+                            <div className="flex items-center gap-2">
+                                {!isTitular && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDeleteCurrent}
+                                        className="mr-2 rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                                        title="Eliminar a esta persona"
+                                    >
+                                        <Trash2 className="h-5 w-5" />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handlePrev}
+                                    disabled={currentIndex === 0}
+                                    className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700 shadow-sm hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="h-5 w-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNext}
+                                    className="flex items-center gap-1 rounded-lg border border-blue-600 bg-blue-600 p-2 text-white shadow-md hover:bg-blue-700"
+                                >
+                                    {/* Signo + si es el último paso */}
+                                    {currentIndex === totalPeople - 1 && (
+                                        <span className="px-1 text-xs font-bold">
+                                            +
+                                        </span>
+                                    )}
+                                    <ChevronRight className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* B. ALERTA DE PERFIL PENDIENTE (Solo visible para Titular) */}
+                        {isTitular &&
+                            isProfileIncomplete &&
+                            data.full_name.length > 3 && (
+                                <div className="mb-4 flex animate-in items-center justify-between rounded-lg border-b border-amber-100 bg-amber-50 px-6 py-2 slide-in-from-top-2">
+                                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        PERFIL PENDIENTE: Se guardará solo con
+                                        el nombre.
+                                    </span>
+                                </div>
+                            )}
+
+                        <div className="space-y-4">
+                            {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
                             <div className="relative" ref={dropdownRef}>
                                 <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                     Nombre Completo
@@ -487,26 +698,36 @@ export default function CheckinModal({
                                     <input
                                         type="text"
                                         className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500 disabled:bg-gray-50"
-                                        placeholder="Escribe para buscar..."
-                                        value={data.full_name}
+                                        placeholder="ESCRIBE PARA BUSCAR..."
+                                        // IMPORTANTE: Usamos currentPerson, NO data directo
+                                        value={currentPerson.full_name}
                                         onChange={(e) => {
-                                            setData((prev) => ({
-                                                ...prev,
-                                                full_name:
-                                                    e.target.value.toUpperCase(),
-                                                guest_id: null,
-                                            }));
-                                            setIsExistingGuest(false);
-                                            setIsDropdownOpen(true);
+                                            handleFieldChange(
+                                                'full_name',
+                                                e.target.value.toUpperCase(),
+                                            );
+                                            // Solo activamos búsqueda si es titular
+                                            if (isTitular) {
+                                                setData('guest_id', null);
+                                                setIsExistingGuest(false);
+                                                setIsDropdownOpen(true);
+                                            }
                                         }}
                                         onFocus={() => {
-                                            if (data.full_name.length > 1)
+                                            if (
+                                                isTitular &&
+                                                currentPerson.full_name.length >
+                                                    1
+                                            )
                                                 setIsDropdownOpen(true);
                                         }}
                                         required
                                         autoComplete="off"
                                     />
-                                    {isDropdownOpen &&
+
+                                    {/* Dropdown de Búsqueda (Solo Titular) */}
+                                    {isTitular &&
+                                        isDropdownOpen &&
                                         !isExistingGuest &&
                                         filteredGuests.length > 0 && (
                                             <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
@@ -516,25 +737,15 @@ export default function CheckinModal({
                                                         onClick={() =>
                                                             handleSelectGuest(g)
                                                         }
-                                                        className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm text-black last:border-0 hover:bg-green-50"
+                                                        className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm hover:bg-green-50"
                                                     >
                                                         <div className="font-bold text-gray-800">
                                                             {g.full_name}
                                                         </div>
-                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                            <span className="rounded bg-gray-100 px-1.5 py-0.5">
-                                                                CI:{' '}
-                                                                {g.identification_number ||
-                                                                    'S/N'}
-                                                            </span>
-                                                            {g.nationality && (
-                                                                <span>
-                                                                    •{' '}
-                                                                    {
-                                                                        g.nationality
-                                                                    }
-                                                                </span>
-                                                            )}
+                                                        <div className="text-xs text-gray-500">
+                                                            CI:{' '}
+                                                            {g.identification_number ||
+                                                                'S/N'}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -543,17 +754,19 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            {/* CAMPOS DE HUÉSPED */}
+                            {/* D. FILA CARNET Y NACIONALIDAD */}
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="col-span-1">
+                                <div>
                                     <label className="text-xs font-bold text-gray-500">
                                         Carnet (CI)
                                     </label>
                                     <input
-                                        className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300 focus:border-amber-500' : ''}`}
-                                        value={data.identification_number}
+                                        className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300' : ''}`}
+                                        value={
+                                            currentPerson.identification_number
+                                        }
                                         onChange={(e) =>
-                                            setData(
+                                            handleFieldChange(
                                                 'identification_number',
                                                 e.target.value.toUpperCase(),
                                             )
@@ -561,15 +774,15 @@ export default function CheckinModal({
                                         placeholder="123456"
                                     />
                                 </div>
-                                <div className="col-span-1">
+                                <div>
                                     <label className="text-xs font-bold text-gray-500">
                                         Expedido
                                     </label>
                                     <input
                                         className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
-                                        value={data.issued_in}
+                                        value={currentPerson.issued_in}
                                         onChange={(e) =>
-                                            setData(
+                                            handleFieldChange(
                                                 'issued_in',
                                                 e.target.value.toUpperCase(),
                                             )
@@ -577,25 +790,21 @@ export default function CheckinModal({
                                         placeholder="LP"
                                     />
                                 </div>
-                                <div
-                                    className="relative col-span-1"
-                                    ref={nationalityRef}
-                                >
+                                <div className="relative" ref={nationalityRef}>
                                     <label className="text-xs font-bold text-gray-500">
                                         Nacionalidad
                                     </label>
                                     <input
                                         className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
-                                        value={data.nationality}
+                                        value={currentPerson.nationality}
                                         onChange={(e) =>
-                                            handleNationalityChange(
+                                            updateNationalityAndPhone(
                                                 e.target.value,
                                             )
                                         }
                                         onFocus={() =>
                                             setShowCountrySuggestions(true)
                                         }
-                                        autoComplete="off"
                                     />
                                     {showCountrySuggestions && (
                                         <div className="absolute z-10 mt-1 max-h-32 w-full overflow-y-auto rounded-md border bg-white shadow-lg">
@@ -603,15 +812,14 @@ export default function CheckinModal({
                                                 <div
                                                     key={c}
                                                     onClick={() => {
-                                                        // USAMOS LA NUEVA LÓGICA AQUÍ
                                                         updateNationalityAndPhone(
                                                             c,
                                                         );
                                                         setShowCountrySuggestions(
                                                             false,
-                                                        ); // <--- CERRAMOS LA LISTA
+                                                        );
                                                     }}
-                                                    className="cursor-pointer px-2 py-1 text-xs text-black hover:bg-gray-100"
+                                                    className="cursor-pointer px-2 py-1 text-xs hover:bg-gray-100"
                                                 >
                                                     {c}
                                                 </div>
@@ -621,6 +829,7 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
+                            {/* E. FILA ESTADO CIVIL Y FECHA */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">
@@ -628,9 +837,9 @@ export default function CheckinModal({
                                     </label>
                                     <select
                                         className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
-                                        value={data.civil_status}
+                                        value={currentPerson.civil_status}
                                         onChange={(e) =>
-                                            setData(
+                                            handleFieldChange(
                                                 'civil_status',
                                                 e.target.value,
                                             )
@@ -647,8 +856,6 @@ export default function CheckinModal({
                                         ))}
                                     </select>
                                 </div>
-
-                                {/* --- CORRECCIÓN ESPACIO FECHA NAC. --- */}
                                 <div className="col-span-2 flex gap-2">
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500">
@@ -657,15 +864,15 @@ export default function CheckinModal({
                                         <input
                                             type="date"
                                             className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
-                                            value={data.birth_date}
+                                            value={currentPerson.birth_date}
                                             onChange={(e) =>
-                                                setData(
+                                                handleFieldChange(
                                                     'birth_date',
                                                     e.target.value,
                                                 )
                                             }
                                         />
-                                        <span className="text-sm font-bold text-gray-700">
+                                        <span className="pl-1 text-xs font-bold text-gray-700">
                                             {displayAge
                                                 ? `Edad: ${displayAge}`
                                                 : ''}
@@ -676,10 +883,10 @@ export default function CheckinModal({
                                             Profesión
                                         </label>
                                         <input
-                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-gray-600 focus:ring-0"
-                                            value={data.profession}
+                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
+                                            value={currentPerson.profession}
                                             onChange={(e) =>
-                                                setData(
+                                                handleFieldChange(
                                                     'profession',
                                                     e.target.value.toUpperCase(),
                                                 )
@@ -689,7 +896,7 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            {/* --- FILA DE PROCEDENCIA Y TELÉFONO --- */}
+                            {/* F. FILA PROCEDENCIA Y TELÉFONO */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">
@@ -699,19 +906,17 @@ export default function CheckinModal({
                                         <Globe className="absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
                                         <input
                                             className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm text-black uppercase"
-                                            value={data.origin}
+                                            value={currentPerson.origin}
                                             onChange={(e) =>
-                                                setData(
+                                                handleFieldChange(
                                                     'origin',
                                                     e.target.value.toUpperCase(),
                                                 )
                                             }
-                                            placeholder="CIUDAD DE ORIGEN"
+                                            placeholder="CIUDAD"
                                         />
                                     </div>
                                 </div>
-
-                                {/* CAMPO TELÉFONO CON ICONO PHONE */}
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">
                                         Teléfono
@@ -722,20 +927,41 @@ export default function CheckinModal({
                                         </div>
                                         <input
                                             type="text"
-                                            value={data.phone}
+                                            value={currentPerson.phone}
                                             onChange={(e) =>
-                                                setData('phone', e.target.value)
+                                                handleFieldChange(
+                                                    'phone',
+                                                    e.target.value,
+                                                )
                                             }
-                                            disabled={!data.nationality}
-                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black"
                                             placeholder="#### ####"
                                         />
                                     </div>
                                 </div>
                             </div>
+
+                            {/* G. PARENTESCO (Solo visible si NO es titular) */}
+                            {!isTitular && (
+                                <div className="mt-2 animate-in rounded-lg border border-blue-100 bg-blue-50 p-2 fade-in">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">
+                                        Parentesco con el Titular
+                                    </label>
+                                    <input
+                                        className="mt-1 w-full rounded-lg border border-blue-300 px-3 py-2 text-sm font-bold text-blue-900 uppercase focus:ring-blue-500"
+                                        value={currentPerson.relationship}
+                                        onChange={(e) =>
+                                            handleFieldChange(
+                                                'relationship',
+                                                e.target.value.toUpperCase(),
+                                            )
+                                        }
+                                        placeholder="EJ. ESPOSA, HIJO"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
-
                     {/* DERECHA - ASIGNACIÓN */}
                     <div className="flex-1 bg-gray-50 p-6">
                         <h3 className="mb-4 border-b border-gray-200 pb-1 text-sm font-bold text-gray-800">

@@ -117,7 +117,7 @@ class CheckinController extends Controller
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');
     }
-
+     
     public function update(Request $request, Checkin $checkin)
     {
         // 1. Validaciones (Todos son nullable para permitir borrarlos temporalmente)
@@ -138,6 +138,13 @@ class CheckinController extends Controller
             'birth_date' => 'nullable|date',
             'issued_in' => 'nullable|string',
             'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
+
+            // Validación de Acompañantes
+            'companions' => 'nullable|array',
+            'companions.*.full_name' => 'required|string|max:150',
+            'companions.*.identification_number' => 'nullable|string|max:50',
+            'companions.*.relationship' => 'nullable|string|max:50',
+            'companions.*.nationality' => 'nullable|string|max:50',
         ]);
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
@@ -185,6 +192,43 @@ class CheckinController extends Controller
                 // ESTADO CALCULADO:
                 'profile_status' => $isProfileComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
+
+            // 3.5 Actualizar Acompañantes 
+            if ($request->has('companions')) {
+                $idsParaSincronizar = [];
+
+                foreach ($request->companions as $compData) {
+                    // 1. Buscamos si la persona ya existe por su carnet (si tiene)
+                    $companion = null;
+                    if (!empty($compData['identification_number'])) {
+                        $companion = \App\Models\Guest::where('identification_number', $compData['identification_number'])->first();
+                    }
+
+                    // 2. Si no existe, lo creamos
+                    if (!$companion) {
+                        $companion = \App\Models\Guest::create([
+                            'full_name' => strtoupper($compData['full_name']),
+                            'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
+                            'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
+                            'profile_status' => 'INCOMPLETE' // Acompañantes suelen ser incompletos
+                        ]);
+                    } else {
+                        // Opcional: Actualizar nombre si cambió
+                        $companion->update(['full_name' => strtoupper($compData['full_name'])]);
+                    }
+
+                    // 3. Preparamos para sincronizar (ID + Parentesco)
+                    // Evitamos agregarnos a nosotros mismos (el titular) como acompañante por error
+                    if ($companion->id !== $guest->id) {
+                        $idsParaSincronizar[$companion->id] = [
+                            'relationship' => !empty($compData['relationship']) ? strtoupper($compData['relationship']) : 'ACOMPAÑANTE'
+                        ];
+                    }
+                }
+
+                // 4. SYNC: Borra los que quitaste de la lista y agrega los nuevos
+                $checkin->companions()->sync($idsParaSincronizar);
+            }
 
             // 4. LÓGICA DE FECHAS INTELIGENTE
             $newCheckInDate = $validated['check_in_date'];
