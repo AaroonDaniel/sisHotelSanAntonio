@@ -19,10 +19,11 @@ class CheckinController extends Controller
 {
     public function index()
     {
-        $checkins = Checkin::with(['guest', 'room.roomType'])
+       
+        $checkins = Checkin::with(['guest', 'room.roomType', 'companions'])
             ->orderBy('created_at', 'desc')
             ->get();
-
+ 
         $guests = Guest::orderBy('full_name')->get();
         $rooms = Room::with(['roomType', 'price'])->get();
 
@@ -35,22 +36,17 @@ class CheckinController extends Controller
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
-        // 1. Validar si es huésped nuevo o existente
+        // 1. Validar y Crear/Actualizar al Huésped TITULAR
         if (!$request->filled('guest_id')) {
-            // --- NUEVO HUÉSPED ---
-
-            // Si falta el CI, es registro rápido (INCOMPLETE)
+            // --- NUEVO TITULAR ---
             $isComplete = $request->filled('identification_number');
-
-            // Validamos solo el nombre obligatorio, el resto nullable
-            // AGREGADO: phone
+            
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50',
-                'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
+                'phone' => 'nullable|string|max:20', 
             ]);
 
-            // Crear huésped
             $guest = \App\Models\Guest::create([
                 'full_name' => strtoupper($request->full_name),
                 'identification_number' => $request->identification_number ? strtoupper($request->identification_number) : null,
@@ -60,16 +56,14 @@ class CheckinController extends Controller
                 'profession' => $request->profession ? strtoupper($request->profession) : null,
                 'origin' => $request->origin ? strtoupper($request->origin) : null,
                 'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
-                'phone' => $request->phone, // <--- GUARDAR TELÉFONO
+                'phone' => $request->phone,
                 'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
             ]);
-
             $guestId = $guest->id;
         } else {
-            // --- HUÉSPED EXISTENTE ---
+            // --- TITULAR EXISTENTE ---
             $guestId = $request->guest_id;
-
-            // Opcional: Si envían teléfono al seleccionar uno existente, actualizarlo si no tiene
+            // Actualizar teléfono si se envió uno nuevo
             if ($request->filled('phone')) {
                 $existingGuest = \App\Models\Guest::find($guestId);
                 if ($existingGuest) {
@@ -78,26 +72,21 @@ class CheckinController extends Controller
             }
         }
 
-        // 2. Crear Checkin (Igual que antes)
+        // 2. Validar datos del Checkin
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
             'duration_days' => 'required|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
+            // Validar array de acompañantes
+            'companions' => 'nullable|array',
         ]);
 
-        // --- SOLUCIÓN DE ERRORES ID ---
-        // Usamos la fachada Auth::id() para calmar al editor (Intelephense)
-        $userId = \Illuminate\Support\Facades\Auth::id();
+        // Usuario actual (fallback si no hay sesión)
+        $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // Si es null (porque expiró la sesión o es prueba), usamos el primer usuario de la BD
-        if (!$userId) {
-            $fallbackUser = \App\Models\User::first();
-            $userId = $fallbackUser ? $fallbackUser->id : 1;
-        }
-        // -----------------------------
-
+        // 3. Crear el Checkin Principal
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
@@ -105,14 +94,62 @@ class CheckinController extends Controller
             'check_in_date' => now()->timezone('America/La_Paz'),
             'duration_days' => $validatedCheckin['duration_days'],
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-            'notes' => $validatedCheckin['notes'],
+            'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
             'status' => 'activo',
         ]);
 
+        // 4. --- LÓGICA DE ACOMPAÑANTES (NUEVO) ---
+        if ($request->has('companions') && is_array($request->companions)) {
+            $idsParaSincronizar = [];
+
+            foreach ($request->companions as $compData) {
+                // Si el nombre está vacío, saltar
+                if (empty($compData['full_name'])) continue;
+
+                // A. Buscar si ya existe por CI (si tiene CI)
+                $companion = null;
+                if (!empty($compData['identification_number'])) {
+                    $companion = \App\Models\Guest::where('identification_number', $compData['identification_number'])->first();
+                }
+
+                // B. Crear o usar existente
+                if (!$companion) {
+                    $companion = \App\Models\Guest::create([
+                        'full_name' => strtoupper($compData['full_name']),
+                        'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
+                        'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
+                        // Otros campos opcionales
+                        'civil_status' => $compData['civil_status'] ?? null,
+                        'birth_date' => $compData['birth_date'] ?? null,
+                        'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                        'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
+                        'phone' => $compData['phone'] ?? null,
+                        'profile_status' => 'INCOMPLETE' // Acompañantes suelen ser incompletos al inicio
+                    ]);
+                }
+
+                // C. Preparar relación (ID y Parentesco)
+                // Evitamos que el titular se agregue a sí mismo como acompañante
+                if ($companion->id !== $guestId) {
+                    $idsParaSincronizar[$companion->id] = [
+                        'relationship' => !empty($compData['relationship']) ? strtoupper($compData['relationship']) : 'ACOMPAÑANTE'
+                    ];
+                }
+            }
+
+            // D. Guardar en tabla intermedia
+            if (!empty($idsParaSincronizar)) {
+                $checkin->companions()->sync($idsParaSincronizar);
+            }
+        }
+        // ------------------------------------------
+
+        // 5. Guardar Servicios opcionales
         if ($request->has('selected_services')) {
             $checkin->services()->sync($request->selected_services);
         }
 
+        // 6. Actualizar Estado Habitación
         \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');

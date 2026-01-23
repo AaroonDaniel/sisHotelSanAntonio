@@ -12,6 +12,7 @@ import {
     Search,
     Trash2,
     User as UserIcon,
+    Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinModal from './checkinModal';
@@ -27,7 +28,10 @@ interface Room {
     id: number;
     number: string;
     status: string;
-    room_type?: { name: string };
+    room_type?: { 
+        name: string; 
+        capacity: number; 
+    };
     price?: { amount: number };
 }
 
@@ -42,6 +46,7 @@ interface Checkin {
     notes?: string;
     guest?: Guest;
     room?: Room;
+    companions?: Guest[]; // Aseguramos que use la interfaz Guest
 }
 
 interface Props {
@@ -67,16 +72,32 @@ export default function CheckinsIndex({
         null,
     );
 
-    // --- 1. LÓGICA DE FILTRADO ---
+    // --- 1. LÓGICA DE FILTRADO MEJORADA ---
+    // Ahora busca también en los nombres de los acompañantes
     const filteredCheckins = Checkins.filter((checkin) => {
         const term = searchTerm.toLowerCase();
+        
+        // Buscar por titular
         const guestName = checkin.guest
             ? `${checkin.guest.full_name}`.toLowerCase()
             : '';
+        const guestCi = checkin.guest?.identification_number.toLowerCase() || '';
+
+        // Buscar por habitación
         const roomNumber = checkin.room
             ? checkin.room.number.toLowerCase()
             : '';
-        return guestName.includes(term) || roomNumber.includes(term);
+
+        // Buscar por acompañantes (NUEVO)
+        const companionsMatch = checkin.companions?.some(comp => 
+            comp.full_name.toLowerCase().includes(term) ||
+            comp.identification_number.toLowerCase().includes(term)
+        );
+
+        return guestName.includes(term) || 
+               guestCi.includes(term) || 
+               roomNumber.includes(term) || 
+               companionsMatch;
     });
 
     // --- 2. ACCIONES ---
@@ -105,7 +126,7 @@ export default function CheckinsIndex({
     };
 
     const openDeleteModal = (id: number) => {
-        setDeletingCheckinId(id); 
+        setDeletingCheckinId(id);
         setIsDeleteModalOpen(true);
     };
 
@@ -118,6 +139,114 @@ export default function CheckinsIndex({
             minute: '2-digit',
         });
     };
+
+    // --- 3. HELPER PARA RENDERIZAR FILAS (Row Renderer) ---
+    // Esto renderiza una fila idéntica sea titular o acompañante
+    const RenderRow = ({ 
+        checkin, 
+        person, 
+        type 
+    }: { 
+        checkin: Checkin, 
+        person: Guest | undefined, 
+        type: 'TITULAR' | 'ACOMPAÑANTE' 
+    }) => (
+        <tr className="transition-colors hover:bg-gray-50 border-b border-gray-100 last:border-0">
+            {/* Habitación */}
+            <td className="px-6 py-4">
+                <div className="flex items-center gap-2 font-bold text-gray-900">
+                    <div className="rounded bg-green-100 p-1 text-green-600">
+                        <BedDouble className="h-4 w-4" />
+                    </div>
+                    {checkin.room?.number || 'S/N'}
+                </div>
+                <span className="ml-7 text-xs text-gray-500 uppercase">
+                    {checkin.room?.room_type?.name}
+                </span>
+            </td>
+
+            {/* Huésped (Persona Individual) */}
+            <td className="px-6 py-4">
+                <div className="flex items-center gap-2">
+                    {type === 'TITULAR' ? (
+                        <UserIcon className="h-4 w-4 text-blue-500" />
+                    ) : (
+                        <Users className="h-4 w-4 text-gray-400" />
+                    )}
+                    <span className="font-bold text-gray-800 uppercase">
+                        {person?.full_name}
+                    </span>
+                </div>
+                <div className="ml-6 flex flex-col">
+                    <span className="text-xs text-gray-500">
+                        CI: {person?.identification_number || 'S/N'}
+                    </span>
+                    {/* Etiqueta pequeña para identificar rol */}
+                    <span className={`text-[10px] font-bold mt-1 ${type === 'TITULAR' ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {type}
+                    </span>
+                </div>
+            </td>
+
+            {/* Fechas */}
+            <td className="px-6 py-4">
+                <div className="flex flex-col gap-1 text-xs">
+                    <div className="flex items-center gap-1 text-green-700">
+                        <LogIn className="h-3 w-3" />
+                        {formatDate(checkin.check_in_date)}
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-500">
+                        <Clock className="h-3 w-3" />
+                        {checkin.duration_days} días
+                    </div>
+                </div>
+            </td>
+
+            {/* Pago */}
+            <td className="px-6 py-4 font-mono font-medium text-green-700">
+                Bs. {Number(checkin.advance_payment).toFixed(2)}
+            </td>
+
+            {/* Acciones (Siempre visibles para todos los ocupantes de la habitación) */}
+            <td className="px-6 py-4 text-right">
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={() => window.open(`/checks/${checkin.id}/receipt`, '_blank')}
+                        className="text-gray-400 transition hover:text-purple-600"
+                        title="Imprimir Recibo"
+                    >
+                        <Printer className="h-4 w-4" />
+                    </button>
+
+                    {!checkin.check_out_date && (
+                        <button
+                            onClick={() => handleCheckout(checkin)}
+                            title="Finalizar Estadía (Check-out)"
+                            className="text-green-600 transition hover:text-green-800"
+                        >
+                            <LogOut className="h-4 w-4" />
+                        </button>
+                    )}
+
+                    <button
+                        onClick={() => openEditModal(checkin)}
+                        className="text-gray-400 transition hover:text-blue-600"
+                        title="Editar Check-in"
+                    >
+                        <Pencil className="h-4 w-4" />
+                    </button>
+
+                    <button
+                        onClick={() => openDeleteModal(checkin.id)}
+                        className="text-gray-400 transition hover:text-red-600"
+                        title="Eliminar Registro"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                </div>
+            </td>
+        </tr>
+    );
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -151,18 +280,14 @@ export default function CheckinsIndex({
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) =>
-                                        setSearchTerm(e.target.value)
-                                    }
-                                    placeholder="Buscar huésped o habitación..."
-                                    // CAMBIO: Estilos verdes para coincidir con FloorsIndex
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Buscar huésped, acompañante o habitación..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
 
                             <button
                                 onClick={openCreateModal}
-                                // CAMBIO: Botón verde para coincidir con FloorsIndex
                                 className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
                             >
                                 <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
@@ -175,167 +300,47 @@ export default function CheckinsIndex({
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">
-                                            Habitación
-                                        </th>
+                                        <th className="px-6 py-4">Habitación</th>
                                         <th className="px-6 py-4">Huésped</th>
-                                        <th className="px-6 py-4">
-                                            Entrada / Salida
-                                        </th>
+                                        <th className="px-6 py-4">Entrada / Salida</th>
                                         <th className="px-6 py-4">Adelanto</th>
-                                        <th className="px-6 py-4 text-right">
-                                            Acciones
-                                        </th>
+                                        <th className="px-6 py-4 text-right">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                    {filteredCheckins.length > 0 ? (
-                                        filteredCheckins.map((checkin) => (
-                                            <tr
-                                                key={checkin.id}
-                                                className="transition-colors hover:bg-gray-50"
-                                            >
-                                                {/* Habitación */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-2 font-bold text-gray-900">
-                                                        {/* CAMBIO: Icono con fondo verde */}
-                                                        <div className="rounded bg-green-100 p-1 text-green-600">
-                                                            <BedDouble className="h-4 w-4" />
-                                                        </div>
-                                                        {checkin.room?.number ||
-                                                            'S/N'}
-                                                    </div>
-                                                    <span className="ml-7 text-xs text-gray-500">
-                                                        {
-                                                            checkin.room
-                                                                ?.room_type
-                                                                ?.name
-                                                        }
-                                                    </span>
-                                                </td>
+                                
+                                {/* Aquí empieza la magia: Múltiples TBODY */}
+                                {filteredCheckins.length > 0 ? (
+                                    filteredCheckins.map((checkin) => (
+                                        <tbody key={checkin.id} className="border-b border-gray-200 hover:bg-gray-50/30">
+                                            {/* 1. Fila del Titular */}
+                                            <RenderRow 
+                                                checkin={checkin} 
+                                                person={checkin.guest} 
+                                                type="TITULAR" 
+                                            />
 
-                                                {/* Huésped */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <UserIcon className="h-4 w-4 text-gray-400" />
-                                                        <span className="font-medium text-gray-800">
-                                                           
-                                                            {
-                                                                checkin.guest
-                                                                    ?.full_name
-                                                            }
-                                                        </span>
-                                                    </div>
-                                                    <div className="ml-6 text-xs text-gray-500">
-                                                        CI:{' '}
-                                                        {
-                                                            checkin.guest
-                                                                ?.identification_number
-                                                        }
-                                                    </div>
-                                                </td>
-
-                                                {/* Fechas */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-1 text-xs">
-                                                        {/* CAMBIO: Texto verde para la fecha */}
-                                                        <div className="flex items-center gap-1 text-green-700">
-                                                            <LogIn className="h-3 w-3" />
-                                                            {formatDate(
-                                                                checkin.check_in_date,
-                                                            )}
-                                                        </div>
-                                                        <div className="flex items-center gap-1 text-gray-500">
-                                                            <Clock className="h-3 w-3" />
-                                                            {
-                                                                checkin.duration_days
-                                                            }{' '}
-                                                            días
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Pago */}
-                                                <td className="px-6 py-4 font-mono font-medium text-green-700">
-                                                    Bs.{' '}
-                                                    {checkin.advance_payment}
-                                                </td>
-
-                                                {/* Acciones */}
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        {/* Botón Imprimir Recibo */}
-                                                        <button
-                                                            onClick={() =>
-                                                                window.open(
-                                                                    `/checks/${checkin.id}/receipt`,
-                                                                    '_blank',
-                                                                )
-                                                            }
-                                                            className="text-gray-400 transition hover:text-purple-600"
-                                                            title="Imprimir Recibo"
-                                                        >
-                                                            <Printer className="h-4 w-4" />
-                                                        </button>
-
-                                                        {/* Botón Checkout */}
-                                                        {!checkin.check_out_date && (
-                                                            <button
-                                                                onClick={() =>
-                                                                    handleCheckout(
-                                                                        checkin,
-                                                                    )
-                                                                }
-                                                                title="Finalizar Estadía (Check-out)"
-                                                                // CAMBIO: Verde para acción principal
-                                                                className="text-green-600 transition hover:text-green-800"
-                                                            >
-                                                                <LogOut className="h-4 w-4" />
-                                                            </button>
-                                                        )}
-
-                                                        {/* Botón Editar */}
-                                                        <button
-                                                            onClick={() =>
-                                                                openEditModal(
-                                                                    checkin,
-                                                                )
-                                                            }
-                                                            className="text-gray-400 transition hover:text-blue-600"
-                                                            title="Editar Check-in"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-
-                                                        {/* Botón Eliminar */}
-                                                        <button
-                                                            onClick={() =>
-                                                                openDeleteModal(
-                                                                    checkin.id,
-                                                                )
-                                                            }
-                                                            className="text-gray-400 transition hover:text-red-600"
-                                                            title="Eliminar Registro"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
+                                            {/* 2. Filas de Acompañantes (si existen) */}
+                                            {checkin.companions?.map((companion) => (
+                                                <RenderRow 
+                                                    key={companion.id}
+                                                    checkin={checkin} 
+                                                    person={companion} 
+                                                    type="ACOMPAÑANTE" 
+                                                />
+                                            ))}
+                                        </tbody>
+                                    ))
+                                ) : (
+                                    <tbody>
                                         <tr>
-                                            <td
-                                                colSpan={6}
-                                                className="p-8 text-center text-gray-500"
-                                            >
+                                            <td colSpan={5} className="p-8 text-center text-gray-500">
                                                 {searchTerm
                                                     ? 'No se encontraron resultados.'
                                                     : 'No hay registros activos.'}
                                             </td>
                                         </tr>
-                                    )}
-                                </tbody>
+                                    </tbody>
+                                )}
                             </table>
                         </div>
                     </div>
