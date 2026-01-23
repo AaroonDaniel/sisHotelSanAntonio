@@ -336,7 +336,11 @@ export default function CheckinModal({
     const totalPeople = 1 + companionsList.length;
     const isTitular = currentIndex === 0;
 
-    
+    const currentRoom = rooms.find((r) => r.id === Number(data.room_id));
+    const maxCapacity = currentRoom?.room_type?.capacity || 4;
+
+    // Bandera: ¿Ya llegamos al límite de esta habitación?
+    const isFull = totalPeople >= maxCapacity;
 
     // B. OBJETO PROXY: ¿Qué datos muestro en los inputs AHORA?
     const currentPerson = isTitular
@@ -397,23 +401,20 @@ export default function CheckinModal({
     const handleNext = () => {
         if (currentIndex < totalPeople - 1) {
             setCurrentIndex((prev) => prev + 1);
-        } else {
-            // Crear nuevo acompañante vacío
-            setData('companions', [
-                ...companionsList,
-                {
-                    full_name: '',
-                    identification_number: '',
-                    relationship: '',
-                    nationality: 'BOLIVIANA',
-                    issued_in: '',
-                    civil_status: '',
-                    birth_date: '',
-                    profession: '',
-                    origin: '',
-                    phone: '',
-                },
-            ]);
+        } else if (totalPeople < maxCapacity) {
+            const newCompanion: CompanionData = {
+                full_name: '',
+                identification_number: '',
+                relationship: '',
+                nationality: 'BOLIVIANA',
+                issued_in: '',
+                civil_status: '',
+                birth_date: '',
+                profession: '',
+                origin: '',
+                phone: '',
+            };
+            setData('companions', [...companionsList, newCompanion]);
             setCurrentIndex((prev) => prev + 1);
         }
     };
@@ -458,40 +459,60 @@ export default function CheckinModal({
         }
     };
 
-    const handleNationalityChange = (val: string) => {
-        updateNationalityAndPhone(val);
-    };
-
     const handleSelectGuest = (guest: Guest) => {
-        if (!isTitular) return;
         setIsExistingGuest(true);
         setIsDropdownOpen(false);
         clearErrors();
-        setData((prev) => ({
-            ...prev,
-            guest_id: guest.id.toString(),
-            full_name: guest.full_name,
-            identification_number: guest.identification_number || '',
-            issued_in: guest.issued_in || '',
-            nationality: guest.nationality || 'BOLIVIANA',
-            civil_status: guest.civil_status || '',
-            birth_date: guest.birth_date || '',
-            profession: guest.profession || '',
-            origin: guest.origin || '',
-            phone: guest.phone || '',
-        }));
+
+        if (isTitular) {
+            // A. SI ES TITULAR: Actualizamos las variables raíz
+            setData(prev => ({
+                ...prev,
+                guest_id: guest.id.toString(),
+                full_name: guest.full_name,
+                identification_number: guest.identification_number || '',
+                issued_in: guest.issued_in || '',
+                nationality: guest.nationality || 'BOLIVIANA',
+                civil_status: guest.civil_status || '',
+                birth_date: guest.birth_date || '',
+                profession: guest.profession || '',
+                origin: guest.origin || '',
+                phone: guest.phone || '',
+            }));
+        } else {
+            // B. SI ES ACOMPAÑANTE: Actualizamos el array 'companions'
+            const newCompanions = [...companionsList];
+            const idx = currentIndex - 1; // Posición en el array
+
+            // Si la ficha existe (debería), la actualizamos
+            if (newCompanions[idx]) {
+                newCompanions[idx] = {
+                    ...newCompanions[idx], // Mantenemos parentesco actual
+                    full_name: guest.full_name,
+                    identification_number: guest.identification_number || '',
+                    nationality: guest.nationality || 'BOLIVIANA',
+                    issued_in: guest.issued_in || '',
+                    civil_status: guest.civil_status || '',
+                    birth_date: guest.birth_date || '',
+                    profession: guest.profession || '',
+                    origin: guest.origin || '',
+                    phone: guest.phone || '',
+                };
+                setData('companions', newCompanions);
+            }
+        }
     };
 
     // Filtros y Validaciones
-    const filteredGuests =
-        isTitular && data.full_name && data.full_name.length > 1
+    // BUSCADOR UNIVERSAL (Funciona para Titular y Acompañantes)
+    // Usamos currentPerson.full_name para filtrar, sin importar quién sea
+    const filteredGuests = 
+        currentPerson.full_name && currentPerson.full_name.length > 1
             ? guests.filter((g) => {
-                  const term = data.full_name.toLowerCase();
+                  const term = currentPerson.full_name.toLowerCase();
                   const fullName = g.full_name.toLowerCase();
-                  return (
-                      fullName.includes(term) ||
-                      g.identification_number?.toLowerCase().includes(term)
-                  );
+                  const ci = g.identification_number ? g.identification_number.toLowerCase() : '';
+                  return fullName.includes(term) || ci.includes(term);
               })
             : [];
 
@@ -610,16 +631,18 @@ export default function CheckinModal({
                             {/* Contador: 1 de X */}
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
-                                    {isTitular
-                                        ? 'Editando Titular'
-                                        : 'Editando Acompañante'}
+                                    {isTitular ? 'TITULAR' : 'ACOMPAÑANTE'}
                                 </span>
                                 <div className="flex items-baseline gap-1">
                                     <span className="text-2xl font-black text-blue-900">
                                         {currentIndex + 1}
                                     </span>
                                     <span className="text-sm font-bold text-blue-400">
-                                        de {totalPeople}
+                                        {/* Aquí mostramos la capacidad real que jalamos de la BD */}
+                                        de {totalPeople}{' '}
+                                        <span className="ml-1 text-[10px] text-blue-300">
+                                            (Cap. Máx {maxCapacity})
+                                        </span>
                                     </span>
                                 </div>
                             </div>
@@ -659,14 +682,25 @@ export default function CheckinModal({
                                 <button
                                     type="button"
                                     onClick={handleNext}
-                                    className="flex items-center gap-1 rounded-lg border border-blue-600 bg-blue-600 p-2 text-white shadow-md hover:bg-blue-700"
+                                    // BLOQUEO INTELIGENTE:
+                                    disabled={
+                                        currentIndex === totalPeople - 1 &&
+                                        isFull
+                                    }
+                                    className={`flex items-center gap-1 rounded-lg border p-2 shadow-md transition ${
+                                        currentIndex === totalPeople - 1 &&
+                                        isFull
+                                            ? 'cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400 shadow-none'
+                                            : 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
                                 >
-                                    {/* Signo + si es el último paso */}
-                                    {currentIndex === totalPeople - 1 && (
-                                        <span className="px-1 text-xs font-bold">
-                                            +
-                                        </span>
-                                    )}
+                                    {/* Solo muestra "+" si hay espacio real */}
+                                    {currentIndex === totalPeople - 1 &&
+                                        !isFull && (
+                                            <span className="px-1 text-xs font-bold">
+                                                +
+                                            </span>
+                                        )}
                                     <ChevronRight className="h-5 w-5" />
                                 </button>
                             </div>
@@ -687,6 +721,7 @@ export default function CheckinModal({
 
                         <div className="space-y-4">
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
+                            {/* CAMPO NOMBRE CON BUSCADOR UNIVERSAL (CORREGIDO) */}
                             <div className="relative" ref={dropdownRef}>
                                 <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                     Nombre Completo
@@ -699,58 +734,50 @@ export default function CheckinModal({
                                         type="text"
                                         className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500 disabled:bg-gray-50"
                                         placeholder="ESCRIBE PARA BUSCAR..."
-                                        // IMPORTANTE: Usamos currentPerson, NO data directo
+                                        // IMPORTANTE: Usamos currentPerson para que funcione en el carrusel
                                         value={currentPerson.full_name}
                                         onChange={(e) => {
-                                            handleFieldChange(
-                                                'full_name',
-                                                e.target.value.toUpperCase(),
-                                            );
-                                            // Solo activamos búsqueda si es titular
+                                            handleFieldChange('full_name', e.target.value.toUpperCase());
+                                            
+                                            // 1. Activamos el dropdown para CUALQUIERA (Titular o Acompañante)
+                                            setIsDropdownOpen(true); 
+
+                                            // 2. Solo si es Titular reseteamos el ID principal
                                             if (isTitular) {
                                                 setData('guest_id', null);
                                                 setIsExistingGuest(false);
-                                                setIsDropdownOpen(true);
                                             }
                                         }}
-                                        onFocus={() => {
-                                            if (
-                                                isTitular &&
-                                                currentPerson.full_name.length >
-                                                    1
-                                            )
-                                                setIsDropdownOpen(true);
+                                        onFocus={() => { 
+                                            // Activamos dropdown para CUALQUIERA si hay texto
+                                            if (currentPerson.full_name.length > 1) setIsDropdownOpen(true);
                                         }}
                                         required
                                         autoComplete="off"
                                     />
 
-                                    {/* Dropdown de Búsqueda (Solo Titular) */}
-                                    {isTitular &&
-                                        isDropdownOpen &&
-                                        !isExistingGuest &&
-                                        filteredGuests.length > 0 && (
-                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                {filteredGuests.map((g) => (
-                                                    <div
-                                                        key={g.id}
-                                                        onClick={() =>
-                                                            handleSelectGuest(g)
-                                                        }
-                                                        className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm hover:bg-green-50"
-                                                    >
-                                                        <div className="font-bold text-gray-800">
-                                                            {g.full_name}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500">
-                                                            CI:{' '}
-                                                            {g.identification_number ||
-                                                                'S/N'}
-                                                        </div>
+                                    {/* Dropdown de Búsqueda (Visible para TODOS) */}
+                                    {isDropdownOpen && filteredGuests.length > 0 && (
+                                        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                            {filteredGuests.map((g) => (
+                                                <div 
+                                                    key={g.id} 
+                                                    onClick={() => handleSelectGuest(g)} 
+                                                    className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm hover:bg-green-50 last:border-0"
+                                                >
+                                                    <div className="font-bold text-gray-800">{g.full_name}</div>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                        <span className="rounded bg-gray-100 px-1.5 py-0.5">
+                                                            CI: {g.identification_number || 'S/N'}
+                                                        </span>
+                                                        {g.nationality && (
+                                                            <span>• {g.nationality}</span>
+                                                        )}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
