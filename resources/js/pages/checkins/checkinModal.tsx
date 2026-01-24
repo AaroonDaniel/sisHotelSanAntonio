@@ -287,6 +287,7 @@ export default function CheckinModal({
     useEffect(() => {
         if (show) {
             clearErrors();
+            setCurrentIndex(0); // Resetea al Titular al abrir
             if (checkinToEdit) {
                 setIsExistingGuest(true);
                 const isIncomplete =
@@ -1007,7 +1008,7 @@ export default function CheckinModal({
                                     onChange={(e) =>
                                         setData('room_id', e.target.value)
                                     }
-                                    disabled={true}
+                                    disabled={!!checkinToEdit || !!initialRoomId}
                                     className="block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
                                 >
                                     {rooms.map((room) => (
