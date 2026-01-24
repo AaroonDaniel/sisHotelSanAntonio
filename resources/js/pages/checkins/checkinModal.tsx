@@ -150,6 +150,8 @@ export interface CheckinData {
     notes?: string;
     services?: string[];
     guest?: Guest;
+    companions?: CompanionData[];
+    
 }
 
 export interface Room {
@@ -165,12 +167,14 @@ interface CheckinModalProps {
     show: boolean;
     onClose: () => void;
     checkinToEdit?: CheckinData | null;
+    targetGuestId?: number | null;
     guests: Guest[];
     rooms: Room[];
     initialRoomId?: number | null;
 }
 
 interface CompanionData {
+    id?: number;
     full_name: string;
     identification_number: string;
     relationship: string;
@@ -209,6 +213,7 @@ export default function CheckinModal({
     show,
     onClose,
     checkinToEdit,
+    targetGuestId,
     guests,
     rooms,
     initialRoomId,
@@ -284,17 +289,33 @@ export default function CheckinModal({
     }, [data.birth_date]);
 
     // --- CARGA DE DATOS ---
+    // --- CARGA DE DATOS ---
     useEffect(() => {
         if (show) {
             clearErrors();
-            setCurrentIndex(0); // Resetea al Titular al abrir
+            
+            // 1. LÓGICA DE ENFOQUE INTELIGENTE (Determinar índice inicial)
+            let startAt = 0;
+            if (checkinToEdit && targetGuestId) {
+                // Caso A: Es el titular
+                if (Number(checkinToEdit.guest_id) === Number(targetGuestId)) {
+                    startAt = 0;
+                } 
+                // Caso B: Es un acompañante
+                else if (checkinToEdit.companions) {
+                    const compIndex = checkinToEdit.companions.findIndex((c: any) => c.id === Number(targetGuestId));
+                    if (compIndex !== -1) {
+                        startAt = compIndex + 1; // +1 porque el índice 0 es el titular
+                    }
+                }
+            }
+            setCurrentIndex(startAt); // Aplicamos el índice calculado
+
+            // 2. CARGA DE DATOS AL FORMULARIO
             if (checkinToEdit) {
                 setIsExistingGuest(true);
-                const isIncomplete =
-                    checkinToEdit.guest?.profile_status === 'INCOMPLETE';
-                const initialDate = isIncomplete
-                    ? now
-                    : formatDateForInput(checkinToEdit.check_in_date);
+                const isIncomplete = checkinToEdit.guest?.profile_status === 'INCOMPLETE';
+                const initialDate = isIncomplete ? now : formatDateForInput(checkinToEdit.check_in_date);
 
                 setData({
                     ...data,
@@ -305,19 +326,35 @@ export default function CheckinModal({
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     selected_services: checkinToEdit.services || [],
+                    
+                    // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
-                    identification_number:
-                        checkinToEdit.guest?.identification_number || '',
+                    identification_number: checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality:
-                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
                     phone: checkinToEdit.guest?.phone || '',
+
+                    // Datos Acompañantes (Mapeo importante)
+                    companions: checkinToEdit.companions ? checkinToEdit.companions.map((c: any) => ({
+                        id: c.id,
+                        full_name: c.full_name,
+                        identification_number: c.identification_number || '',
+                        relationship: c.pivot?.relationship || 'ACOMPAÑANTE',
+                        nationality: c.nationality || 'BOLIVIANA',
+                        issued_in: c.issued_in || '',
+                        civil_status: c.civil_status || '',
+                        birth_date: c.birth_date || '',
+                        profession: c.profession || '',
+                        origin: c.origin || '',
+                        phone: c.phone || '',
+                    })) : [],
                 });
             } else {
+                // CASO NUEVO REGISTRO
                 reset();
                 setIsExistingGuest(false);
                 if (initialRoomId) {
@@ -328,8 +365,7 @@ export default function CheckinModal({
                 }
             }
         }
-    }, [show, checkinToEdit, initialRoomId]);
-
+    }, [show, checkinToEdit, initialRoomId, targetGuestId]);
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
     // A. Variables calculadas

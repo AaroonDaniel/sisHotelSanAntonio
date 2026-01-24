@@ -28,9 +28,9 @@ interface Room {
     id: number;
     number: string;
     status: string;
-    room_type?: { 
-        name: string; 
-        capacity: number; 
+    room_type?: {
+        name: string;
+        capacity: number;
     };
     price?: { amount: number };
 }
@@ -68,6 +68,10 @@ export default function CheckinsIndex({
     const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
     const [editingCheckin, setEditingCheckin] = useState<Checkin | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+    //Variable para editar el usuario
+    const [targetGuestId, setTargetGuestId] = useState<number | null>(null);
+
     const [deletingCheckinId, setDeletingCheckinId] = useState<number | null>(
         null,
     );
@@ -76,12 +80,13 @@ export default function CheckinsIndex({
     // Ahora busca también en los nombres de los acompañantes
     const filteredCheckins = Checkins.filter((checkin) => {
         const term = searchTerm.toLowerCase();
-        
+
         // Buscar por titular
         const guestName = checkin.guest
             ? `${checkin.guest.full_name}`.toLowerCase()
             : '';
-        const guestCi = checkin.guest?.identification_number.toLowerCase() || '';
+        const guestCi =
+            checkin.guest?.identification_number.toLowerCase() || '';
 
         // Buscar por habitación
         const roomNumber = checkin.room
@@ -89,15 +94,18 @@ export default function CheckinsIndex({
             : '';
 
         // Buscar por acompañantes (NUEVO)
-        const companionsMatch = checkin.companions?.some(comp => 
-            comp.full_name.toLowerCase().includes(term) ||
-            comp.identification_number.toLowerCase().includes(term)
+        const companionsMatch = checkin.companions?.some(
+            (comp) =>
+                comp.full_name.toLowerCase().includes(term) ||
+                comp.identification_number.toLowerCase().includes(term),
         );
 
-        return guestName.includes(term) || 
-               guestCi.includes(term) || 
-               roomNumber.includes(term) || 
-               companionsMatch;
+        return (
+            guestName.includes(term) ||
+            guestCi.includes(term) ||
+            roomNumber.includes(term) ||
+            companionsMatch
+        );
     });
 
     // --- 2. ACCIONES ---
@@ -120,8 +128,9 @@ export default function CheckinsIndex({
         setIsCheckinModalOpen(true);
     };
 
-    const openEditModal = (checkin: Checkin) => {
+    const openEditModal = (checkin: Checkin, guestIdToFocus?: number) => {
         setEditingCheckin(checkin);
+        setTargetGuestId(guestIdToFocus || null); // Guardamos a quién se hizo clic
         setIsCheckinModalOpen(true);
     };
 
@@ -142,16 +151,16 @@ export default function CheckinsIndex({
 
     // --- 3. HELPER PARA RENDERIZAR FILAS (Row Renderer) ---
     // Esto renderiza una fila idéntica sea titular o acompañante
-    const RenderRow = ({ 
-        checkin, 
-        person, 
-        type 
-    }: { 
-        checkin: Checkin, 
-        person: Guest | undefined, 
-        type: 'TITULAR' | 'ACOMPAÑANTE' 
+    const RenderRow = ({
+        checkin,
+        person,
+        type,
+    }: {
+        checkin: Checkin;
+        person: Guest | undefined;
+        type: 'TITULAR' | 'ACOMPAÑANTE';
     }) => (
-        <tr className="transition-colors hover:bg-gray-50 border-b border-gray-100 last:border-0">
+        <tr className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50">
             {/* Habitación */}
             <td className="px-6 py-4">
                 <div className="flex items-center gap-2 font-bold text-gray-900">
@@ -182,7 +191,9 @@ export default function CheckinsIndex({
                         CI: {person?.identification_number || 'S/N'}
                     </span>
                     {/* Etiqueta pequeña para identificar rol */}
-                    <span className={`text-[10px] font-bold mt-1 ${type === 'TITULAR' ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <span
+                        className={`mt-1 text-[10px] font-bold ${type === 'TITULAR' ? 'text-blue-600' : 'text-gray-400'}`}
+                    >
                         {type}
                     </span>
                 </div>
@@ -211,7 +222,12 @@ export default function CheckinsIndex({
             <td className="px-6 py-4 text-right">
                 <div className="flex justify-end gap-2">
                     <button
-                        onClick={() => window.open(`/checks/${checkin.id}/receipt`, '_blank')}
+                        onClick={() =>
+                            window.open(
+                                `/checks/${checkin.id}/receipt`,
+                                '_blank',
+                            )
+                        }
                         className="text-gray-400 transition hover:text-purple-600"
                         title="Imprimir Recibo"
                     >
@@ -229,9 +245,9 @@ export default function CheckinsIndex({
                     )}
 
                     <button
-                        onClick={() => openEditModal(checkin)}
+                        onClick={() => openEditModal(checkin, person?.id)}
                         className="text-gray-400 transition hover:text-blue-600"
-                        title="Editar Check-in"
+                        title={`Editar ${type === 'TITULAR' ? 'Titular' : 'Acompañante'}`}
                     >
                         <Pencil className="h-4 w-4" />
                     </button>
@@ -280,7 +296,9 @@ export default function CheckinsIndex({
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar huésped, acompañante o habitación..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
@@ -300,40 +318,54 @@ export default function CheckinsIndex({
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">Habitación</th>
+                                        <th className="px-6 py-4">
+                                            Habitación
+                                        </th>
                                         <th className="px-6 py-4">Huésped</th>
-                                        <th className="px-6 py-4">Entrada / Salida</th>
+                                        <th className="px-6 py-4">
+                                            Entrada / Salida
+                                        </th>
                                         <th className="px-6 py-4">Adelanto</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
-                                
+
                                 {/* Aquí empieza la magia: Múltiples TBODY */}
                                 {filteredCheckins.length > 0 ? (
                                     filteredCheckins.map((checkin) => (
-                                        <tbody key={checkin.id} className="border-b border-gray-200 hover:bg-gray-50/30">
+                                        <tbody
+                                            key={checkin.id}
+                                            className="border-b border-gray-200 hover:bg-gray-50/30"
+                                        >
                                             {/* 1. Fila del Titular */}
-                                            <RenderRow 
-                                                checkin={checkin} 
-                                                person={checkin.guest} 
-                                                type="TITULAR" 
+                                            <RenderRow
+                                                checkin={checkin}
+                                                person={checkin.guest}
+                                                type="TITULAR"
                                             />
 
                                             {/* 2. Filas de Acompañantes (si existen) */}
-                                            {checkin.companions?.map((companion) => (
-                                                <RenderRow 
-                                                    key={companion.id}
-                                                    checkin={checkin} 
-                                                    person={companion} 
-                                                    type="ACOMPAÑANTE" 
-                                                />
-                                            ))}
+                                            {checkin.companions?.map(
+                                                (companion) => (
+                                                    <RenderRow
+                                                        key={companion.id}
+                                                        checkin={checkin}
+                                                        person={companion}
+                                                        type="ACOMPAÑANTE"
+                                                    />
+                                                ),
+                                            )}
                                         </tbody>
                                     ))
                                 ) : (
                                     <tbody>
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-gray-500">
+                                            <td
+                                                colSpan={5}
+                                                className="p-8 text-center text-gray-500"
+                                            >
                                                 {searchTerm
                                                     ? 'No se encontraron resultados.'
                                                     : 'No hay registros activos.'}
