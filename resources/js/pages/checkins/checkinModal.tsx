@@ -151,7 +151,6 @@ export interface CheckinData {
     services?: string[];
     guest?: Guest;
     companions?: any[];
-
 }
 
 export interface Room {
@@ -293,17 +292,19 @@ export default function CheckinModal({
     useEffect(() => {
         if (show) {
             clearErrors();
-            
+
             // 1. LÓGICA DE ENFOQUE INTELIGENTE (Determinar índice inicial)
             let startAt = 0;
             if (checkinToEdit && targetGuestId) {
                 // Caso A: Es el titular
                 if (Number(checkinToEdit.guest_id) === Number(targetGuestId)) {
                     startAt = 0;
-                } 
+                }
                 // Caso B: Es un acompañante
                 else if (checkinToEdit.companions) {
-                    const compIndex = checkinToEdit.companions.findIndex((c: any) => c.id === Number(targetGuestId));
+                    const compIndex = checkinToEdit.companions.findIndex(
+                        (c: any) => c.id === Number(targetGuestId),
+                    );
                     if (compIndex !== -1) {
                         startAt = compIndex + 1; // +1 porque el índice 0 es el titular
                     }
@@ -314,8 +315,11 @@ export default function CheckinModal({
             // 2. CARGA DE DATOS AL FORMULARIO
             if (checkinToEdit) {
                 setIsExistingGuest(true);
-                const isIncomplete = checkinToEdit.guest?.profile_status === 'INCOMPLETE';
-                const initialDate = isIncomplete ? now : formatDateForInput(checkinToEdit.check_in_date);
+                const isIncomplete =
+                    checkinToEdit.guest?.profile_status === 'INCOMPLETE';
+                const initialDate = isIncomplete
+                    ? now
+                    : formatDateForInput(checkinToEdit.check_in_date);
 
                 setData({
                     ...data,
@@ -326,12 +330,14 @@ export default function CheckinModal({
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     selected_services: checkinToEdit.services || [],
-                    
+
                     // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
-                    identification_number: checkinToEdit.guest?.identification_number || '',
+                    identification_number:
+                        checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    nationality:
+                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
@@ -339,19 +345,23 @@ export default function CheckinModal({
                     phone: checkinToEdit.guest?.phone || '',
 
                     // Datos Acompañantes (Mapeo importante)
-                    companions: checkinToEdit.companions ? checkinToEdit.companions.map((c: any) => ({
-                        id: c.id,
-                        full_name: c.full_name, // Nombre completo
-                        identification_number: c.identification_number || '', // CI
-                        relationship: c.pivot?.relationship || 'ACOMPAÑANTE', // Parentesco (viene del pivot)
-                        nationality: c.nationality || 'BOLIVIANA',
-                        issued_in: c.issued_in || '',
-                        civil_status: c.civil_status || '',
-                        birth_date: c.birth_date || '',
-                        profession: c.profession || '',
-                        origin: c.origin || '',
-                        phone: c.phone || '', 
-                    })) : [],
+                    companions: checkinToEdit.companions
+                        ? checkinToEdit.companions.map((c: any) => ({
+                              id: c.id,
+                              full_name: c.full_name, // Nombre completo
+                              identification_number:
+                                  c.identification_number || '', // CI
+                              relationship:
+                                  c.pivot?.relationship || 'ACOMPAÑANTE', // Parentesco (viene del pivot)
+                              nationality: c.nationality || 'BOLIVIANA',
+                              issued_in: c.issued_in || '',
+                              civil_status: c.civil_status || '',
+                              birth_date: c.birth_date || '',
+                              profession: c.profession || '',
+                              origin: c.origin || '',
+                              phone: c.phone || '',
+                          }))
+                        : [],
                 });
             } else {
                 // CASO NUEVO REGISTRO
@@ -503,7 +513,7 @@ export default function CheckinModal({
 
         if (isTitular) {
             // A. SI ES TITULAR: Actualizamos las variables raíz
-            setData(prev => ({
+            setData((prev) => ({
                 ...prev,
                 guest_id: guest.id.toString(),
                 full_name: guest.full_name,
@@ -543,12 +553,14 @@ export default function CheckinModal({
     // Filtros y Validaciones
     // BUSCADOR UNIVERSAL (Funciona para Titular y Acompañantes)
     // Usamos currentPerson.full_name para filtrar, sin importar quién sea
-    const filteredGuests = 
+    const filteredGuests =
         currentPerson.full_name && currentPerson.full_name.length > 1
             ? guests.filter((g) => {
                   const term = currentPerson.full_name.toLowerCase();
                   const fullName = g.full_name.toLowerCase();
-                  const ci = g.identification_number ? g.identification_number.toLowerCase() : '';
+                  const ci = g.identification_number
+                      ? g.identification_number.toLowerCase()
+                      : '';
                   return fullName.includes(term) || ci.includes(term);
               })
             : [];
@@ -774,10 +786,13 @@ export default function CheckinModal({
                                         // IMPORTANTE: Usamos currentPerson para que funcione en el carrusel
                                         value={currentPerson.full_name}
                                         onChange={(e) => {
-                                            handleFieldChange('full_name', e.target.value.toUpperCase());
-                                            
+                                            handleFieldChange(
+                                                'full_name',
+                                                e.target.value.toUpperCase(),
+                                            );
+
                                             // 1. Activamos el dropdown para CUALQUIERA (Titular o Acompañante)
-                                            setIsDropdownOpen(true); 
+                                            setIsDropdownOpen(true);
 
                                             // 2. Solo si es Titular reseteamos el ID principal
                                             if (isTitular) {
@@ -785,36 +800,52 @@ export default function CheckinModal({
                                                 setIsExistingGuest(false);
                                             }
                                         }}
-                                        onFocus={() => { 
+                                        onFocus={() => {
                                             // Activamos dropdown para CUALQUIERA si hay texto
-                                            if (currentPerson.full_name.length > 1) setIsDropdownOpen(true);
+                                            if (
+                                                currentPerson.full_name.length >
+                                                1
+                                            )
+                                                setIsDropdownOpen(true);
                                         }}
                                         required
                                         autoComplete="off"
                                     />
 
                                     {/* Dropdown de Búsqueda (Visible para TODOS) */}
-                                    {isDropdownOpen && filteredGuests.length > 0 && (
-                                        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                            {filteredGuests.map((g) => (
-                                                <div 
-                                                    key={g.id} 
-                                                    onClick={() => handleSelectGuest(g)} 
-                                                    className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm hover:bg-green-50 last:border-0"
-                                                >
-                                                    <div className="font-bold text-gray-800">{g.full_name}</div>
-                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                        <span className="rounded bg-gray-100 px-1.5 py-0.5">
-                                                            CI: {g.identification_number || 'S/N'}
-                                                        </span>
-                                                        {g.nationality && (
-                                                            <span>• {g.nationality}</span>
-                                                        )}
+                                    {isDropdownOpen &&
+                                        filteredGuests.length > 0 && (
+                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                {filteredGuests.map((g) => (
+                                                    <div
+                                                        key={g.id}
+                                                        onClick={() =>
+                                                            handleSelectGuest(g)
+                                                        }
+                                                        className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm last:border-0 hover:bg-green-50"
+                                                    >
+                                                        <div className="font-bold text-gray-800">
+                                                            {g.full_name}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                            <span className="rounded bg-gray-100 px-1.5 py-0.5">
+                                                                CI:{' '}
+                                                                {g.identification_number ||
+                                                                    'S/N'}
+                                                            </span>
+                                                            {g.nationality && (
+                                                                <span>
+                                                                    •{' '}
+                                                                    {
+                                                                        g.nationality
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                                ))}
+                                            </div>
+                                        )}
                                 </div>
                             </div>
 
@@ -1044,7 +1075,9 @@ export default function CheckinModal({
                                     onChange={(e) =>
                                         setData('room_id', e.target.value)
                                     }
-                                    disabled={!!checkinToEdit || !!initialRoomId}
+                                    disabled={
+                                        !!checkinToEdit || !!initialRoomId
+                                    }
                                     className="block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
                                 >
                                     {rooms.map((room) => (
@@ -1101,29 +1134,34 @@ export default function CheckinModal({
                                 </span>
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-500">
-                                    Adelanto (Bs)
-                                </label>
+                                {isTitular && (
+                                    <div className="animate-in duration-300 fade-in slide-in-from-top-1">
+                                        <label className="text-xs font-bold text-gray-500">
+                                            Adelanto (Bs)
+                                        </label>
 
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-3 flex items-center font-bold text-green-600">
-                                        Bs
-                                    </span>
+                                        <div className="relative">
+                                            <span className="absolute inset-y-0 left-3 flex items-center font-bold text-green-600">
+                                                Bs
+                                            </span>
 
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        value={data.advance_payment}
-                                        onChange={(e) =>
-                                            setData(
-                                                'advance_payment',
-                                                Number(e.target.value),
-                                            )
-                                        }
-                                        className="w-full rounded-lg border border-gray-400 pl-12 text-sm font-bold text-green-700"
-                                    />
-                                </div>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={data.advance_payment}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'advance_payment',
+                                                        Number(e.target.value),
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-400 pl-12 text-sm font-bold text-green-700 focus:border-green-500 focus:ring-green-500"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                {/* ------------------------------------------------ */}
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-gray-500">

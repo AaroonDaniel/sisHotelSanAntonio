@@ -179,110 +179,136 @@ export default function CheckinsIndex({
         checkin: Checkin;
         person: Guest | undefined;
         type: 'TITULAR' | 'ACOMPAÑANTE';
-    }) => (
-        <tr className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50">
-            {/* Habitación */}
-            <td className="px-6 py-4">
-                <div className="flex items-center gap-2 font-bold text-gray-900">
-                    <div className="rounded bg-green-100 p-1 text-green-600">
-                        <BedDouble className="h-4 w-4" />
-                    </div>
-                    {checkin.room?.number || 'S/N'}
-                </div>
-                <span className="ml-7 text-xs text-gray-500 uppercase">
-                    {checkin.room?.room_type?.name}
-                </span>
-            </td>
+    }) => {
+        // Variable auxiliar para simplificar condiciones
+        const isTitular = type === 'TITULAR';
 
-            {/* Huésped (Persona Individual) */}
-            <td className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                    {type === 'TITULAR' ? (
-                        <UserIcon className="h-4 w-4 text-blue-500" />
-                    ) : (
-                        <Users className="h-4 w-4 text-gray-400" />
+        return (
+            <tr className={`border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50 ${!isTitular ? 'bg-gray-50/30' : ''}`}>
+                
+                {/* 1. Habitación (SOLO TITULAR) */}
+                <td className="px-6 py-4">
+                    {isTitular && (
+                        <>
+                            <div className="flex items-center gap-2 font-bold text-gray-900">
+                                <div className="rounded bg-green-100 p-1 text-green-600">
+                                    <BedDouble className="h-4 w-4" />
+                                </div>
+                                {checkin.room?.number || 'S/N'}
+                            </div>
+                            <span className="ml-7 text-xs text-gray-500 uppercase">
+                                {checkin.room?.room_type?.name}
+                            </span>
+                        </>
                     )}
-                    <span className="font-bold text-gray-800 uppercase">
-                        {person?.full_name}
-                    </span>
-                </div>
-                <div className="ml-6 flex flex-col">
-                    <span className="text-xs text-gray-500">
-                        CI: {person?.identification_number || 'S/N'}
-                    </span>
-                    {/* Etiqueta pequeña para identificar rol */}
-                    <span
-                        className={`mt-1 text-[10px] font-bold ${type === 'TITULAR' ? 'text-blue-600' : 'text-gray-400'}`}
-                    >
-                        {type}
-                    </span>
-                </div>
-            </td>
+                </td>
 
-            {/* Fechas */}
-            <td className="px-6 py-4">
-                <div className="flex flex-col gap-1 text-xs">
-                    <div className="flex items-center gap-1 text-green-700">
-                        <LogIn className="h-3 w-3" />
-                        {formatDate(checkin.check_in_date)}
+                {/* 2. Huésped (SIEMPRE VISIBLE) */}
+                <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                        {isTitular ? (
+                            <UserIcon className="h-4 w-4 text-blue-500" />
+                        ) : (
+                            // Pequeña sangría visual para acompañantes
+                            <div className="ml-4 flex items-center gap-2">
+                                <Users className="h-4 w-4 text-gray-400" />
+                            </div>
+                        )}
+                        <span className={`uppercase ${isTitular ? 'font-bold text-gray-800' : 'text-sm font-medium text-gray-600'}`}>
+                            {person?.full_name}
+                        </span>
                     </div>
-                    <div className="flex items-center gap-1 text-gray-500">
-                        <Clock className="h-3 w-3" />
-                        {checkin.duration_days} días
-                    </div>
-                </div>
-            </td>
-
-            {/* Pago */}
-            <td className="px-6 py-4 font-mono font-medium text-green-700">
-                Bs. {Number(checkin.advance_payment).toFixed(2)}
-            </td>
-
-            {/* Acciones (Siempre visibles para todos los ocupantes de la habitación) */}
-            <td className="px-6 py-4 text-right">
-                <div className="flex justify-end gap-2">
-                    <button
-                        onClick={() =>
-                            window.open(
-                                `/checks/${checkin.id}/receipt`,
-                                '_blank',
-                            )
-                        }
-                        className="text-gray-400 transition hover:text-purple-600"
-                        title="Imprimir Recibo"
-                    >
-                        <Printer className="h-4 w-4" />
-                    </button>
-
-                    {!checkin.check_out_date && (
-                        <button
-                            onClick={() => handleCheckout(checkin)}
-                            title="Finalizar Estadía (Check-out)"
-                            className="text-green-600 transition hover:text-green-800"
+                    <div className={`${isTitular ? 'ml-6' : 'ml-10'} flex flex-col`}>
+                        <span className="text-xs text-gray-500">
+                            CI: {person?.identification_number || 'S/N'}
+                        </span>
+                        <span
+                            className={`mt-1 text-[10px] font-bold ${isTitular ? 'text-blue-600' : 'text-gray-400'}`}
                         >
-                            <LogOut className="h-4 w-4" />
-                        </button>
+                            {type}
+                        </span>
+                    </div>
+                </td>
+
+                {/* 3. Fechas (SOLO TITULAR) */}
+                <td className="px-6 py-4">
+                    {isTitular && (
+                        <div className="flex flex-col gap-1 text-xs">
+                            <div className="flex items-center gap-1 text-green-700">
+                                <LogIn className="h-3 w-3" />
+                                {formatDate(checkin.check_in_date)}
+                            </div>
+                            <div className="flex items-center gap-1 text-gray-500">
+                                <Clock className="h-3 w-3" />
+                                {checkin.duration_days} días
+                            </div>
+                        </div>
                     )}
+                </td>
 
-                    <button
-                        onClick={() => openEditModal(checkin, person?.id)}
-                        className="text-gray-400 transition hover:text-blue-600"
-                        title={`Editar ${type === 'TITULAR' ? 'Titular' : 'Acompañante'}`}
-                    >
-                        <Pencil className="h-4 w-4" />
-                    </button>
+                {/* 4. Pago (SOLO TITULAR) */}
+                <td className="px-6 py-4 font-mono font-medium text-green-700">
+                    {isTitular && (
+                        <>Bs. {Number(checkin.advance_payment).toFixed(2)}</>
+                    )}
+                </td>
 
-                    <button
-                        onClick={() => openDeleteModal(checkin.id)}
-                        className="text-gray-400 transition hover:text-red-600"
-                        title="Eliminar Registro"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
-                </div>
-            </td>
-        </tr>
-    );
+                {/* 5. Acciones */}
+                <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                        
+                        {/* Botones Globales (Imprimir/Checkout) SOLO TITULAR */}
+                        {isTitular && (
+                            <>
+                                <button
+                                    onClick={() =>
+                                        window.open(
+                                            `/checks/${checkin.id}/receipt`,
+                                            '_blank',
+                                        )
+                                    }
+                                    className="text-gray-400 transition hover:text-purple-600"
+                                    title="Imprimir Recibo"
+                                >
+                                    <Printer className="h-4 w-4" />
+                                </button>
+
+                                {!checkin.check_out_date && (
+                                    <button
+                                        onClick={() => handleCheckout(checkin)}
+                                        title="Finalizar Estadía (Check-out)"
+                                        className="text-green-600 transition hover:text-green-800"
+                                    >
+                                        <LogOut className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </>
+                        )}
+
+                        {/* Botón Editar (SIEMPRE VISIBLE) */}
+                        <button
+                            onClick={() => openEditModal(checkin, person?.id)}
+                            className="text-gray-400 transition hover:text-blue-600"
+                            title={`Editar ${isTitular ? 'Titular' : 'Acompañante'}`}
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+
+                        {/* Botón Borrar Registro (SOLO TITULAR) */}
+                        {isTitular && (
+                            <button
+                                onClick={() => openDeleteModal(checkin.id)}
+                                className="text-gray-400 transition hover:text-red-600"
+                                title="Eliminar Registro Completo"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                </td>
+            </tr>
+        );
+    };
 
     return (
         <AuthenticatedLayout user={auth.user}>

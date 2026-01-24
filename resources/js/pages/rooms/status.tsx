@@ -113,7 +113,12 @@ export default function RoomsStatus({
                     : null;
             if (activeCheckin) {
                 const guest = activeCheckin.guest as Guest | undefined;
-                if (guest && guest.profile_status === 'INCOMPLETE') {
+                const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
+                const companions = activeCheckin.companions as Guest[] | undefined;
+                const isAnyCompanionIncomplete = companions?.some(
+                    (c) => c.profile_status === 'INCOMPLETE'
+                )
+                if (isTitularIncomplete || isAnyCompanionIncomplete) {
                     return 'incomplete';
                 }
             }
