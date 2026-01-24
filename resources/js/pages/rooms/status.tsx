@@ -41,6 +41,7 @@ interface User {
 interface RoomType {
     id: number;
     name: string;
+    capacity: number;
 }
 
 interface Guest extends ModalGuest {

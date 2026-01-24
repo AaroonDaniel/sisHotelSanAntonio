@@ -146,7 +146,7 @@ class RoomController
     {
         // Cargamos 'price' para el modal y enviamos 'Guests'
         $rooms = Room::with(['roomType', 'price', 'checkins' => function($q) {
-            $q->with('guest')->latest('id'); 
+            $q->with(['guest', 'companions'])->latest('id'); 
         }])->orderBy('number')->get();
         
         $guests = Guest::all();
