@@ -150,8 +150,8 @@ export interface CheckinData {
     notes?: string;
     services?: string[];
     guest?: Guest;
-    companions?: CompanionData[];
-    
+    companions?: any[];
+
 }
 
 export interface Room {
@@ -341,16 +341,16 @@ export default function CheckinModal({
                     // Datos Acompañantes (Mapeo importante)
                     companions: checkinToEdit.companions ? checkinToEdit.companions.map((c: any) => ({
                         id: c.id,
-                        full_name: c.full_name,
-                        identification_number: c.identification_number || '',
-                        relationship: c.pivot?.relationship || 'ACOMPAÑANTE',
+                        full_name: c.full_name, // Nombre completo
+                        identification_number: c.identification_number || '', // CI
+                        relationship: c.pivot?.relationship || 'ACOMPAÑANTE', // Parentesco (viene del pivot)
                         nationality: c.nationality || 'BOLIVIANA',
                         issued_in: c.issued_in || '',
                         civil_status: c.civil_status || '',
                         birth_date: c.birth_date || '',
                         profession: c.profession || '',
                         origin: c.origin || '',
-                        phone: c.phone || '',
+                        phone: c.phone || '', 
                     })) : [],
                 });
             } else {

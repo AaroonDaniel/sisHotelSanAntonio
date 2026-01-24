@@ -19,11 +19,11 @@ class CheckinController extends Controller
 {
     public function index()
     {
-       
+
         $checkins = Checkin::with(['guest', 'room.roomType', 'companions'])
             ->orderBy('created_at', 'desc')
             ->get();
- 
+
         $guests = Guest::orderBy('full_name')->get();
         $rooms = Room::with(['roomType', 'price'])->get();
 
@@ -40,11 +40,11 @@ class CheckinController extends Controller
         if (!$request->filled('guest_id')) {
             // --- NUEVO TITULAR ---
             $isComplete = $request->filled('identification_number');
-            
+
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50',
-                'phone' => 'nullable|string|max:20', 
+                'phone' => 'nullable|string|max:20',
             ]);
 
             $guest = \App\Models\Guest::create([
@@ -154,10 +154,10 @@ class CheckinController extends Controller
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');
     }
-     
+
     public function update(Request $request, Checkin $checkin)
     {
-        // 1. Validaciones (Todos son nullable para permitir borrarlos temporalmente)
+        // 1. Validaciones
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -165,7 +165,7 @@ class CheckinController extends Controller
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
 
-            // Datos del Huésped
+            // Datos del Huésped Titular
             'full_name' => 'required|string|max:150',
             'identification_number' => 'nullable|string|max:50',
             'nationality' => 'nullable|string',
@@ -174,14 +174,20 @@ class CheckinController extends Controller
             'civil_status' => 'nullable|string',
             'birth_date' => 'nullable|date',
             'issued_in' => 'nullable|string',
-            'phone' => 'nullable|string|max:20', // <--- Validación Teléfono
+            'phone' => 'nullable|string|max:20',
 
-            // Validación de Acompañantes
+            // Validación de Acompañantes (Extendida para permitir todos los campos)
             'companions' => 'nullable|array',
             'companions.*.full_name' => 'required|string|max:150',
             'companions.*.identification_number' => 'nullable|string|max:50',
             'companions.*.relationship' => 'nullable|string|max:50',
             'companions.*.nationality' => 'nullable|string|max:50',
+            'companions.*.profession' => 'nullable|string|max:100', // Agregado
+            'companions.*.origin' => 'nullable|string|max:100',      // Agregado
+            'companions.*.civil_status' => 'nullable|string',        // Agregado
+            'companions.*.birth_date' => 'nullable|date',   
+            'companions.*.issued_in' => 'nullable|string',         // Agregado
+            'companions.*.phone' => 'nullable|string|max:20',        // Agregado
         ]);
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
@@ -189,24 +195,12 @@ class CheckinController extends Controller
             $guest = $checkin->guest;
             $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
 
-            // 2. LÓGICA DE COMPLETITUD (NUEVO)
-            // Definimos qué campos son OBLIGATORIOS para que el estado sea 'COMPLETE'
-            $requiredFields = [
-                'identification_number',
-                'nationality',
-                'origin',
-                'profession',
-                'civil_status',
-                'birth_date',
-                'issued_in'
-            ];
-
+            // 2. LÓGICA DE COMPLETITUD
+            $requiredFields = ['identification_number', 'nationality', 'origin', 'profession', 'civil_status', 'birth_date', 'issued_in'];
             $isProfileComplete = true;
             $missingField = null;
 
-            // Verificamos uno por uno. Si falta alguno, el perfil está incompleto.
             foreach ($requiredFields as $field) {
-                // Usamos 'filled' para verificar que no sea null ni string vacío ("")
                 if (!$request->filled($field)) {
                     $isProfileComplete = false;
                     $missingField = $field;
@@ -214,48 +208,56 @@ class CheckinController extends Controller
                 }
             }
 
-            // 3. ACTUALIZAR HUÉSPED
+            // 3. ACTUALIZAR HUÉSPED TITULAR
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
                 'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
                 'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
-                'civil_status' => $validated['civil_status'], // Puede ser null
-                'birth_date' => $validated['birth_date'],     // Puede ser null
+                'civil_status' => $validated['civil_status'],
+                'birth_date' => $validated['birth_date'],
                 'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
-                'phone' => $request->phone, // <--- ACTUALIZAR TELÉFONO
-
-                // ESTADO CALCULADO:
+                'phone' => $request->phone,
                 'profile_status' => $isProfileComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
 
-            // 3.5 Actualizar Acompañantes 
+            // 3.5 ACTUALIZAR ACOMPAÑANTES (Lógica Corregida)
             if ($request->has('companions')) {
                 $idsParaSincronizar = [];
 
                 foreach ($request->companions as $compData) {
-                    // 1. Buscamos si la persona ya existe por su carnet (si tiene)
+                    // Preparar todos los datos del acompañante en un array limpio
+                    $datosCompanion = [
+                        'full_name' => strtoupper($compData['full_name']),
+                        'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
+                        'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
+                        'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                        'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
+                        'civil_status' => $compData['civil_status'] ?? null,
+                        'birth_date' => $compData['birth_date'] ?? null,
+                        'phone' => $compData['phone'] ?? null,
+                        'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
+                        'profile_status' => 'INCOMPLETE' // Por defecto
+                    ];
+
                     $companion = null;
-                    if (!empty($compData['identification_number'])) {
-                        $companion = \App\Models\Guest::where('identification_number', $compData['identification_number'])->first();
+
+                    // A. Intentar encontrar existente por CI
+                    if (!empty($datosCompanion['identification_number'])) {
+                        $companion = \App\Models\Guest::where('identification_number', $datosCompanion['identification_number'])->first();
                     }
 
-                    // 2. Si no existe, lo creamos
+                    // B. Crear o Actualizar
                     if (!$companion) {
-                        $companion = \App\Models\Guest::create([
-                            'full_name' => strtoupper($compData['full_name']),
-                            'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
-                            'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
-                            'profile_status' => 'INCOMPLETE' // Acompañantes suelen ser incompletos
-                        ]);
+                        // Si no existe, creamos
+                        $companion = \App\Models\Guest::create($datosCompanion);
                     } else {
-                        // Opcional: Actualizar nombre si cambió
-                        $companion->update(['full_name' => strtoupper($compData['full_name'])]);
+                        // Si existe, ACTUALIZAMOS TODOS LOS DATOS (Esto es lo que fallaba antes)
+                        $companion->update($datosCompanion);
                     }
 
-                    // 3. Preparamos para sincronizar (ID + Parentesco)
-                    // Evitamos agregarnos a nosotros mismos (el titular) como acompañante por error
+                    // C. Evitar vincular al titular consigo mismo
                     if ($companion->id !== $guest->id) {
                         $idsParaSincronizar[$companion->id] = [
                             'relationship' => !empty($compData['relationship']) ? strtoupper($compData['relationship']) : 'ACOMPAÑANTE'
@@ -263,31 +265,31 @@ class CheckinController extends Controller
                     }
                 }
 
-                // 4. SYNC: Borra los que quitaste de la lista y agrega los nuevos
+                // D. Sincronizar (Elimina los que no estén en la lista y agrega/actualiza los nuevos)
                 $checkin->companions()->sync($idsParaSincronizar);
+            } else {
+                // Si envían un array vacío o null, desvinculamos todos
+                $checkin->companions()->detach();
             }
 
-            // 4. LÓGICA DE FECHAS INTELIGENTE
+            // 4. FECHAS Y ESTADO DE CHECKIN
             $newCheckInDate = $validated['check_in_date'];
-
-            // Si antes faltaban datos y AHORA está todo completo, actualizamos la fecha a "AHORA"
             if ($wasIncomplete && $isProfileComplete) {
                 $newCheckInDate = now();
             }
 
-            // Recalcular salida
             $checkInCarbon = \Carbon\Carbon::parse($newCheckInDate);
             $checkOutDate = $validated['duration_days'] > 0
                 ? $checkInCarbon->copy()->addDays($validated['duration_days'])
                 : null;
 
-            // 5. Gestionar cambio de habitación si aplica
+            // 5. CAMBIO DE HABITACIÓN
             if ($checkin->room_id != $validated['room_id']) {
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
                 \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
             }
 
-            // 6. Actualizar Checkin
+            // 6. ACTUALIZAR CHECKIN
             $checkin->update([
                 'room_id' => $validated['room_id'],
                 'check_in_date' => $newCheckInDate,
@@ -297,7 +299,7 @@ class CheckinController extends Controller
                 'notes' => strtoupper($validated['notes'] ?? ''),
             ]);
 
-            // 7. Servicios
+            // 7. SERVICIOS
             if ($request->has('selected_services')) {
                 $services = \App\Models\Service::whereIn('id', $request->selected_services)->get();
                 $syncData = [];
@@ -307,9 +309,8 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-            // --- LÓGICA DE RESPUESTA CONDICIONAL ---
+            // 8. RESPUESTA
             if (!$isProfileComplete) {
-                // Traducción simple del campo faltante
                 $campoFaltante = match ($missingField) {
                     'identification_number' => 'Carnet de Identidad',
                     'nationality' => 'Nacionalidad',
@@ -320,11 +321,10 @@ class CheckinController extends Controller
                     'issued_in' => 'Lugar de Expedición',
                     default => 'algún dato obligatorio'
                 };
-
                 return redirect()->back()->with('error', 'Falta completar: ' . $campoFaltante . '. La habitación sigue PENDIENTE.');
             }
 
-            return redirect()->back()->with('success', 'Datos actualizados. Estado del huésped recalculado.');
+            return redirect()->back()->with('success', 'Datos actualizados correctamente.');
         });
     }
 

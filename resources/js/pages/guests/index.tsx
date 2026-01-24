@@ -81,10 +81,10 @@ export default function GuestsIndex({ auth, Guests }: Props) {
     const filteredGuests = Guests.filter((guest) => {
         const term = searchTerm.toLowerCase();
         const fullName = ` ${guest.full_name}`.toLowerCase();
-        
+        const idNumber = (guest.identification_number || '').toLowerCase();
         return (
             fullName.includes(term) ||
-            guest.identification_number.includes(term) ||
+            idNumber.includes(term) ||
             (guest.nationality && guest.nationality.toLowerCase().includes(term)) ||
             (guest.profession && guest.profession.toLowerCase().includes(term))
         );

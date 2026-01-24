@@ -239,13 +239,37 @@ export default function RoomsStatus({
 
     const getOccupantName = (room: Room) => {
         if (room.checkins && room.checkins.length > 0) {
-            const guest = room.checkins[0].guest as Guest | undefined;
+            // Tomamos el checkin activo (el primero)
+            const checkin = room.checkins[0];
+            const guest = checkin.guest as Guest | undefined;
+            
             if (guest) {
+                let text = guest.full_name;
+
+                // 1. Verificar perfil incompleto del titular
                 if (guest.profile_status === 'INCOMPLETE') {
-                    return `${guest.full_name} (Faltan Datos)`;
+                    text += " (Faltan Datos)";
+                } 
+                // 2. Agregar procedencia si existe
+                else if (guest.origin) {
+                    text += ` (${guest.origin})`;
                 }
-                const originText = guest.origin ? ` (${guest.origin})` : '';
-                return `${guest.full_name}${originText}`;
+
+                // 3. --- AGREGAR ACOMPAÑANTES (NUEVO) ---
+                // Verificamos si el array companions existe y tiene datos
+                if (checkin.companions && checkin.companions.length > 0) {
+                    // Mapeamos para obtener los nombres. 
+                    // .split(' ')[0] toma solo el primer nombre para ahorrar espacio.
+                    // Si prefieres el nombre completo, quita el .split
+                    const companionNames = checkin.companions
+                        .map(c => c.full_name.split(' ')[0]) 
+                        .join(', ');
+                    
+                    text += ` + ${companionNames}`;
+                }
+                // ----------------------------------------
+
+                return text;
             }
         }
         return 'Huésped';

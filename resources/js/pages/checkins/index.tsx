@@ -56,6 +56,26 @@ interface Props {
     Rooms: Room[];
 }
 
+export interface CheckinData {
+    id: number;
+    guest_id: number;
+    room_id: number;
+    check_in_date: string;
+    duration_days: number;
+    advance_payment: number;
+    notes?: string;
+    services?: string[];
+    guest?: Guest;
+    
+    // --- CAMBIO CLAVE AQUÍ ---
+    // Cambia esto:
+    // companions?: CompanionData[]; 
+    
+    // Por esto:
+    companions?: any[]; 
+}
+
+
 export default function CheckinsIndex({
     auth,
     Checkins,
@@ -85,9 +105,9 @@ export default function CheckinsIndex({
         const guestName = checkin.guest
             ? `${checkin.guest.full_name}`.toLowerCase()
             : '';
-        const guestCi =
-            checkin.guest?.identification_number.toLowerCase() || '';
-
+        const guestCi = (
+            checkin.guest?.identification_number || ''
+        ).toLowerCase();
         // Buscar por habitación
         const roomNumber = checkin.room
             ? checkin.room.number.toLowerCase()
