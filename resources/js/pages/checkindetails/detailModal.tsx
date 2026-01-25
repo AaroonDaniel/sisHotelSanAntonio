@@ -79,11 +79,22 @@ export default function DetailModal({
     // Lista visual de lo que acabamos de agregar (con IDs reales)
     const [recentlyAdded, setRecentlyAdded] = useState<AddedItem[]>([]);
 
+    // --- 2. EFECTO AL ABRIR EL MODAL (Tu lógica original + Carga inicial) ---
     useEffect(() => {
         if (show) {
             setSearchTerm('');
             setQuickFilter('ALL');
-            setRecentlyAdded([]); // Limpiamos la lista al abrir
+            setRecentlyAdded([]); // Limpiamos la lista visualmente al abrir
+            
+            // A. Identificar si hay un ID de habitación para cargar sus datos YA
+            const targetId = detailToEdit ? detailToEdit.checkin_id : initialCheckinId;
+            
+            if (targetId) {
+                // Si abrimos editar o "agregar" desde una habitación específica, cargamos su lista
+                fetchExistingDetails(targetId.toString());
+            }
+
+            // B. Configurar el formulario (Tu lógica original intacta)
             if (detailToEdit) {
                 // MODO EDICIÓN
                 setData({
@@ -101,6 +112,14 @@ export default function DetailModal({
             }
         }
     }, [show, detailToEdit, initialCheckinId]);
+
+    // --- 3. EFECTO AL CAMBIAR EL SELECT DE HABITACIÓN ---
+    useEffect(() => {
+        // Si el modal está abierto y hay un ID seleccionado en el formulario
+        if (show && data.checkin_id) {
+            fetchExistingDetails(data.checkin_id);
+        }
+    }, [data.checkin_id, show]);
 
     // Filtrar servicios
     const filteredServices = services.filter((s) => {
@@ -203,6 +222,30 @@ export default function DetailModal({
                 alert('No se pudo eliminar el servicio.');
             },
         });
+    };
+
+    // Lista de los servicios agregados recientemente
+    // --- NUEVA FUNCIÓN: CARGAR DATOS EXISTENTES ---
+    const fetchExistingDetails = async (checkinId: string) => {
+        if (!checkinId) return;
+        try {
+            // Llama a la ruta API dedicada que creamos
+            const response = await axios.get(`/api/checkin-details/${checkinId}`);
+            
+            // Transforma los datos que llegan del backend al formato visual de la lista
+            const formattedItems: AddedItem[] = response.data.map((det: any) => ({
+                dbId: det.id,
+                serviceId: det.service_id,
+                name: det.service?.name || 'Servicio',
+                // Usa el precio guardado (selling_price) o el del servicio si no hay histórico
+                price: Number(det.selling_price || det.service?.price || 0),
+                quantity: det.quantity
+            }));
+
+            setRecentlyAdded(formattedItems);
+        } catch (error) {
+            console.error("Error al cargar detalles:", error);
+        }
     };
 
     // Totales visuales
@@ -317,7 +360,7 @@ export default function DetailModal({
                                                 </span>
 
                                                 {/* BOTÓN ELIMINAR (Opcional) */}
-                                                {/*Opcional}
+                                                
                                                 <button 
                                                     type="button"
                                                     onClick={() => handleDeleteItem(item.dbId)}
@@ -325,7 +368,7 @@ export default function DetailModal({
                                                     title="Eliminar de la base de datos"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
-                                                </button>*/}
+                                                </button>
                                             </div>
                                         </div>
                                     ))

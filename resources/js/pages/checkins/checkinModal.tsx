@@ -890,7 +890,7 @@ export default function CheckinModal({
                                         Nacionalidad
                                     </label>
                                     <input
-                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
+                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase" // Changed text-black to text-gray-900 font-medium
                                         value={currentPerson.nationality}
                                         onChange={(e) =>
                                             updateNationalityAndPhone(
@@ -914,7 +914,7 @@ export default function CheckinModal({
                                                             false,
                                                         );
                                                     }}
-                                                    className="cursor-pointer px-2 py-1 text-xs hover:bg-gray-100"
+                                                    className="cursor-pointer px-2 py-1 text-xs font-medium text-gray-900 hover:bg-gray-100" // Added text-gray-900 and font-medium
                                                 >
                                                     {c}
                                                 </div>
@@ -1037,6 +1037,7 @@ export default function CheckinModal({
                             </div>
 
                             {/* G. PARENTESCO (Solo visible si NO es titular) */}
+                            {/*}
                             {!isTitular && (
                                 <div className="mt-2 animate-in rounded-lg border border-blue-100 bg-blue-50 p-2 fade-in">
                                     <label className="text-xs font-bold text-blue-600 uppercase">
@@ -1054,7 +1055,7 @@ export default function CheckinModal({
                                         placeholder="EJ. ESPOSA, HIJO"
                                     />
                                 </div>
-                            )}
+                            )}{*/}
                         </div>
                     </div>
                     {/* DERECHA - ASIGNACIÓN */}

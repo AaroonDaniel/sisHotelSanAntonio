@@ -111,7 +111,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
     // Vista previa de servicios adicionales huesped
     Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
-
+    Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
+    
     //Reportes 
     // Página principal de reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');

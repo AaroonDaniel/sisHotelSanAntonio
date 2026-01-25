@@ -292,18 +292,21 @@ export default function RoomsStatus({
                     icon: (
                         <BedDouble className="h-10 w-10 text-emerald-200/50" />
                     ),
-                    info: room.room_type?.name|| 'Libre',
+                    info: room.room_type?.name || 'Libre',
                     actionLabel: 'Asignar',
                 };
+
             case 'occupied':
+                // CAMBIO: CELESTE (Cyan/Sky)
                 return {
-                    colorClass: 'bg-red-600 hover:bg-red-500 cursor-pointer',
-                    borderColor: 'border-red-700',
+                    colorClass: 'bg-cyan-600 hover:bg-cyan-500 cursor-pointer',
+                    borderColor: 'border-cyan-700',
                     label: 'Ocupado',
-                    icon: <UserIcon className="h-10 w-10 text-red-200/50" />,
+                    icon: <UserIcon className="h-10 w-10 text-cyan-200/50" />,
                     info: getOccupantName(room),
                     actionLabel: 'Ver / Editar',
                 };
+
             case 'incomplete':
                 return {
                     colorClass:
@@ -316,26 +319,31 @@ export default function RoomsStatus({
                     info: getOccupantName(room),
                     actionLabel: 'Actualizar Info',
                 };
+
             case 'cleaning':
+                // CAMBIO: PLOMO (Gray)
                 return {
-                    colorClass: 'bg-blue-500 hover:bg-blue-400 cursor-pointer',
-                    borderColor: 'border-blue-600',
+                    colorClass: 'bg-gray-500 hover:bg-gray-400 cursor-pointer',
+                    borderColor: 'border-gray-600',
                     label: 'Limpieza',
-                    icon: <Brush className="h-10 w-10 text-blue-200/50" />,
+                    icon: <Brush className="h-10 w-10 text-gray-200/50" />,
                     info: 'Clic para Habilitar',
                     actionLabel: 'Habilitar',
                 };
+
             case 'maintenance':
+                // CAMBIO: ROJO (Red)
                 return {
-                    colorClass: 'bg-gray-600',
-                    borderColor: 'border-gray-700',
+                    colorClass: 'bg-red-600',
+                    borderColor: 'border-red-700',
                     label: 'Mantenimiento',
                     icon: (
-                        <Construction className="h-10 w-10 text-gray-300/50" />
+                        <Construction className="h-10 w-10 text-red-200/50" />
                     ),
                     info: 'En Reparación',
                     actionLabel: '-',
                 };
+
             default:
                 return {
                     colorClass: 'bg-slate-500',

@@ -101,4 +101,15 @@ class CheckinDetailController extends Controller
 
         return Redirect::back()->with('success', 'Consumo eliminado.');
     }
+
+    // Lista los consumos de un check-in específico en formato JSON
+    public function listByCheckin($checkin_id)
+    {
+        $details = CheckinDetail::with('service')
+            ->where('checkin_id', $checkin_id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($details);
+    }
 }
