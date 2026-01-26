@@ -530,7 +530,7 @@ class CheckinController extends Controller
         // Usamos 'checkinDetails.service' para acceder a los consumos y sus nombres
         $checkin->load(['guest', 'room.price', 'checkinDetails.service']);
 
-        // --- LÓGICA DE DÍAS (Igual que tenías) ---
+        // --- LÓGICA DE DÍAS ---
         $diasPactados = intval($checkin->duration_days);
         if ($diasPactados < 1) $diasPactados = 1;
 

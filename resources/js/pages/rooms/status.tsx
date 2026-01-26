@@ -136,11 +136,7 @@ export default function RoomsStatus({
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
         if (status === 'occupied') {
-            if (selectedForAction === room.id) {
-                setSelectedForAction(null);
-            } else {
-                setSelectedForAction(room.id);
-            }
+            handleOpenDetails(room);
             return;
         }
         setSelectedForAction(null);
@@ -421,6 +417,7 @@ export default function RoomsStatus({
                                 )}
                             </button>
                             */}
+                            
                         </div>
                     </div>
 
@@ -598,15 +595,20 @@ export default function RoomsStatus({
                                         Completar Datos
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
-                                    <div className="z-20 flex border-t border-red-800">
+                                    <div className="z-20 flex border-t border-cyan-700">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleOpenDetails(room);
                                             }}
-                                            className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-red-700 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-red-800"
+                                            title='Datos del usuario'
+                                            className="flex flex-1 items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500 cursor-pointer"
                                         >
                                             <UserIcon className="h-3 w-3" />{' '}
+                                        </button>
+                                        <button
+                                        >
+
                                         </button>
                                         <button
                                             onClick={(e) => {

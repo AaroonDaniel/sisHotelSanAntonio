@@ -2,7 +2,7 @@ import { router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
     AlertTriangle,
-    BedDouble,
+    Bed,
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
@@ -287,7 +287,6 @@ export default function CheckinModal({
         }
     }, [data.birth_date]);
 
-    // --- CARGA DE DATOS ---
     // --- CARGA DE DATOS ---
     useEffect(() => {
         if (show) {
@@ -650,7 +649,7 @@ export default function CheckinModal({
                         </div>
                         {checkinToEdit
                             ? `Asignación: Hab. ${rooms.find((r) => r.id === Number(data.room_id))?.number || ''}`
-                            : 'Nuevo Ingreso'}
+                            : 'Asignación'}
                     </h2>
 
                     <div className="flex items-center gap-2">
@@ -675,86 +674,6 @@ export default function CheckinModal({
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
                     {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
                     <div className="relative flex-1 border-r border-gray-100 bg-white p-6">
-                        {/* A. BARRA DE NAVEGACIÓN (EL "MAGO") */}
-                        <div className="mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
-                            {/* Contador: 1 de X */}
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
-                                    {isTitular ? 'TITULAR' : 'ACOMPAÑANTE'}
-                                </span>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-blue-900">
-                                        {currentIndex + 1}
-                                    </span>
-                                    <span className="text-sm font-bold text-blue-400">
-                                        {/* Aquí mostramos la capacidad real que jalamos de la BD */}
-                                        de {totalPeople}{' '}
-                                        <span className="ml-1 text-[10px] text-blue-300">
-                                            (Cap. Máx {maxCapacity})
-                                        </span>
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Info Habitación (Solo visual) */}
-                            <div className="hidden border-r border-l border-blue-200 px-4 text-center sm:block">
-                                <span className="block text-[10px] font-bold text-blue-400 uppercase">
-                                    Habitación
-                                </span>
-                                <span className="font-bold text-blue-800">
-                                    {rooms.find(
-                                        (r) => r.id === Number(data.room_id),
-                                    )?.room_type?.name || 'ESTÁNDAR'}
-                                </span>
-                            </div>
-
-                            {/* Botones: Borrar | Atrás | Siguiente */}
-                            <div className="flex items-center gap-2">
-                                {!isTitular && (
-                                    <button
-                                        type="button"
-                                        onClick={handleDeleteCurrent}
-                                        className="mr-2 rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
-                                        title="Eliminar a esta persona"
-                                    >
-                                        <Trash2 className="h-5 w-5" />
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={handlePrev}
-                                    disabled={currentIndex === 0}
-                                    className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700 shadow-sm hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-30"
-                                >
-                                    <ChevronLeft className="h-5 w-5" />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleNext}
-                                    // BLOQUEO INTELIGENTE:
-                                    disabled={
-                                        currentIndex === totalPeople - 1 &&
-                                        isFull
-                                    }
-                                    className={`flex items-center gap-1 rounded-lg border p-2 shadow-md transition ${
-                                        currentIndex === totalPeople - 1 &&
-                                        isFull
-                                            ? 'cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400 shadow-none'
-                                            : 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}
-                                >
-                                    {/* Solo muestra "+" si hay espacio real */}
-                                    {currentIndex === totalPeople - 1 &&
-                                        !isFull && (
-                                            <span className="px-1 text-xs font-bold">
-                                                +
-                                            </span>
-                                        )}
-                                    <ChevronRight className="h-5 w-5" />
-                                </button>
-                            </div>
-                        </div>
-
                         {/* B. ALERTA DE PERFIL PENDIENTE (Solo visible para Titular) */}
                         {isTitular &&
                             isProfileIncomplete &&
@@ -772,6 +691,10 @@ export default function CheckinModal({
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
                             {/* CAMPO NOMBRE CON BUSCADOR UNIVERSAL (CORREGIDO) */}
                             <div className="relative" ref={dropdownRef}>
+                                <label className="mb-1.5 block text-center text-base font-bold text-red-700 uppercase">
+                                    DATOS DEL HUESPED {currentIndex + 1}
+                                </label>
+
                                 <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                     Nombre Completo
                                 </label>
@@ -1057,17 +980,97 @@ export default function CheckinModal({
                                 </div>
                             )}{*/}
                         </div>
+
+                        {/* A. BARRA DE NAVEGACIÓN  */}
+                        <div className="mb-5 mt-10 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
+                            {/* Contador: 1 de X */}
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
+                                    {isTitular ? 'TITULAR' : 'ACOMPAÑANTE'}
+                                </span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-black text-blue-900">
+                                        {currentIndex + 1}
+                                    </span>
+                                    <span className="text-sm font-bold text-blue-400">
+                                        {/* Aquí mostramos la capacidad real que jalamos de la BD */}
+                                        de {totalPeople}{' '}
+                                        <span className="ml-1 text-[10px] text-blue-300">
+                                            (Cap. Máx {maxCapacity})
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Info Habitación (Solo visual) */}
+                            <div className="hidden border-r border-l border-blue-200 px-4 text-center sm:block">
+                                <span className="block text-[10px] font-bold text-blue-400 uppercase">
+                                    Habitación
+                                </span>
+                                <span className="font-bold text-blue-800">
+                                    {rooms.find(
+                                        (r) => r.id === Number(data.room_id),
+                                    )?.room_type?.name || 'ESTÁNDAR'}
+                                </span>
+                            </div>
+
+                            {/* Botones: Borrar | Atrás | Siguiente */}
+                            <div className="flex items-center gap-2">
+                                {!isTitular && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDeleteCurrent}
+                                        className="mr-2 rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                                        title="Eliminar a esta persona"
+                                    >
+                                        <Trash2 className="h-5 w-5" />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handlePrev}
+                                    disabled={currentIndex === 0}
+                                    className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700 shadow-sm hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="h-5 w-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNext}
+                                    // BLOQUEO INTELIGENTE:
+                                    disabled={
+                                        currentIndex === totalPeople - 1 &&
+                                        isFull
+                                    }
+                                    className={`flex items-center gap-1 rounded-lg border p-2 shadow-md transition ${
+                                        currentIndex === totalPeople - 1 &&
+                                        isFull
+                                            ? 'cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400 shadow-none'
+                                            : 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                                >
+                                    {/* Solo muestra "+" si hay espacio real */}
+                                    {currentIndex === totalPeople - 1 &&
+                                        !isFull && (
+                                            <span className="px-1 text-xs font-bold">
+                                                +
+                                            </span>
+                                        )}
+                                    <ChevronRight className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     {/* DERECHA - ASIGNACIÓN */}
                     <div className="flex-1 bg-gray-50 p-6">
-                        <h3 className="mb-4 border-b border-gray-200 pb-1 text-sm font-bold text-gray-800">
-                            Detalles de Asignación
-                        </h3>
                         <div className="space-y-5">
                             <div>
-                                <label className="mb-1.5 flex items-center gap-2 text-sm font-bold text-green-700">
-                                    <BedDouble className="h-4 w-4" />
-                                    HABITACIÓN
+                                <label className="mb-1.5 flex items-center gap-2 text-base font-bold text-green-700">
+                                    <Bed className="h-4 w-4" />
+                                    HABITACIÓN{' '}
+                                    <span className="text-black">
+                                        {data.room_id}
+                                    </span>
                                 </label>
 
                                 {/* --- CAMPO BLOQUEADO (DISABLED) --- */}
