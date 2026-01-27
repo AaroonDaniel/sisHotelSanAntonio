@@ -152,12 +152,14 @@ class RoomController
         $guests = Guest::all();
         $services = Service::all();
         $block = Block::all();
+        $roomTypes = RoomType::all();
 
         return Inertia::render('rooms/status', [
             'Rooms' => $rooms,
             'Guests' => $guests,
             'services' => $services,
             'Blocks' => $block,
+            'RoomTypes' => $roomTypes,
         ]);
         
     }

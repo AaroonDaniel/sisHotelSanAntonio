@@ -4,7 +4,6 @@ import axios from 'axios'; // Importante para la petición del PDF sin recarga
 import {
     AlertTriangle,
     ArrowLeft,
-    Bed,
     BedDouble,
     Brush,
     CheckCircle2,
@@ -74,6 +73,7 @@ interface Props {
     Guests: Guest[];
     services: any[];
     Blocks: Block[];
+    RoomTypes: RoomType[];
 }
 
 export default function RoomsStatus({
@@ -82,9 +82,11 @@ export default function RoomsStatus({
     Guests,
     services,
     Blocks,
+    RoomTypes,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [selectedRoomType, setSelectedRoomType] = useState('');
 
     const [selectedForAction, setSelectedForAction] = useState<number | null>(
         null,
@@ -113,11 +115,14 @@ export default function RoomsStatus({
                     : null;
             if (activeCheckin) {
                 const guest = activeCheckin.guest as Guest | undefined;
-                const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
-                const companions = activeCheckin.companions as Guest[] | undefined;
+                const isTitularIncomplete =
+                    guest?.profile_status === 'INCOMPLETE';
+                const companions = activeCheckin.companions as
+                    | Guest[]
+                    | undefined;
                 const isAnyCompanionIncomplete = companions?.some(
-                    (c) => c.profile_status === 'INCOMPLETE'
-                )
+                    (c) => c.profile_status === 'INCOMPLETE',
+                );
                 if (isTitularIncomplete || isAnyCompanionIncomplete) {
                     return 'incomplete';
                 }
@@ -209,12 +214,18 @@ export default function RoomsStatus({
         const matchesBlock = selectedBlock
             ? room.block_id?.toString() === selectedBlock
             : true;
-
         const matchesBathroom = selectedBathroom
             ? room.price?.bathroom_type === selectedBathroom
             : true;
+        const matchesRoomType = selectedRoomType
+            ? room.room_type?.id.toString() === selectedRoomType
+            : true;
         return (
-            matchesSearch && matchesStatus && matchesBlock && matchesBathroom
+            matchesSearch &&
+            matchesStatus &&
+            matchesBlock &&
+            matchesBathroom &&
+            matchesRoomType
         );
     }).sort((a, b) => {
         return a.number.localeCompare(b.number, undefined, {
@@ -243,14 +254,14 @@ export default function RoomsStatus({
             // Tomamos el checkin activo (el primero)
             const checkin = room.checkins[0];
             const guest = checkin.guest as Guest | undefined;
-            
+
             if (guest) {
                 let text = guest.full_name;
 
                 // 1. Verificar perfil incompleto del titular
                 if (guest.profile_status === 'INCOMPLETE') {
-                    text += " (Faltan Datos)";
-                } 
+                    text += ' (Faltan Datos)';
+                }
                 // 2. Agregar procedencia si existe
                 else if (guest.origin) {
                     text += ` (${guest.origin})`;
@@ -259,13 +270,13 @@ export default function RoomsStatus({
                 // 3. --- AGREGAR ACOMPAÑANTES (NUEVO) ---
                 // Verificamos si el array companions existe y tiene datos
                 if (checkin.companions && checkin.companions.length > 0) {
-                    // Mapeamos para obtener los nombres. 
+                    // Mapeamos para obtener los nombres.
                     // .split(' ')[0] toma solo el primer nombre para ahorrar espacio.
                     // Si prefieres el nombre completo, quita el .split
                     const companionNames = checkin.companions
-                        .map(c => c.full_name.split(' ')[0]) 
+                        .map((c) => c.full_name.split(' ')[0])
                         .join(', ');
-                    
+
                     text += ` + ${companionNames}`;
                 }
                 // ----------------------------------------
@@ -417,13 +428,29 @@ export default function RoomsStatus({
                                 )}
                             </button>
                             */}
-                            
                         </div>
                     </div>
 
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-4">
                         <div className="flex flex-row items-center justify-end gap-2">
+                            {/* Selector de Tipo de Habitación */}
+                            <div className="relative">
+                                <select
+                                    value={selectedRoomType}
+                                    onChange={(e) =>
+                                        setSelectedRoomType(e.target.value)
+                                    }
+                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                >
+                                    <option value="">Tipo de habitación</option>
+                                    {RoomTypes?.map((type) => (
+                                        <option key={type.id} value={type.id}>
+                                            {type.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                             {/* Selector de Bloques */}
                             <div className="relative">
                                 <select
@@ -495,13 +522,16 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('available')}
                                 active={filterStatus === 'available'}
                             />
+                            
+                            {/* CAMBIO: De Rojo a Cian para coincidir con la tarjeta */}
                             <Badge
                                 count={countStatus('occupied')}
                                 label="Ocupadas"
-                                color="bg-red-600"
+                                color="bg-cyan-600" 
                                 onClick={() => setFilterStatus('occupied')}
                                 active={filterStatus === 'occupied'}
                             />
+
                             <Badge
                                 count={countStatus('incomplete')}
                                 label="Pendientes"
@@ -509,20 +539,25 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('incomplete')}
                                 active={filterStatus === 'incomplete'}
                             />
+
+                            {/* CAMBIO: De Azul a Gris para coincidir con la tarjeta */}
                             <Badge
                                 count={countStatus('cleaning')}
                                 label="Limpieza"
-                                color="bg-blue-500"
+                                color="bg-gray-500"
                                 onClick={() => setFilterStatus('cleaning')}
                                 active={filterStatus === 'cleaning'}
                             />
+
+                            {/* CAMBIO: De Gris a Rojo (Semántica de Alerta/Atención) */}
                             <Badge
                                 count={countStatus('maintenance')}
                                 label="Mant."
-                                color="bg-gray-600"
+                                color="bg-red-600"
                                 onClick={() => setFilterStatus('maintenance')}
                                 active={filterStatus === 'maintenance'}
                             />
+
                             <Badge
                                 count={Rooms.length}
                                 label="Todas"
@@ -601,15 +636,12 @@ export default function RoomsStatus({
                                                 e.stopPropagation();
                                                 handleOpenDetails(room);
                                             }}
-                                            title='Datos del usuario'
-                                            className="flex flex-1 items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500 cursor-pointer"
+                                            title="Datos del usuario"
+                                            className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
                                         >
                                             <UserIcon className="h-3 w-3" />{' '}
                                         </button>
-                                        <button
-                                        >
-
-                                        </button>
+                                        <button></button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();

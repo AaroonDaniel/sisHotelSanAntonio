@@ -328,7 +328,7 @@ export default function DetailModal({
                                 </span>
                             </h3>
 
-                            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
+                            <div className="max-h-[300px] flex-1 space-y-2 overflow-y-auto pr-2">
                                 {recentlyAdded.length === 0 ? (
                                     <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
                                         <ShoppingBag className="mb-2 h-8 w-8 opacity-20" />
