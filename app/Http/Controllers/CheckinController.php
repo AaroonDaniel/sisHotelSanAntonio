@@ -638,18 +638,41 @@ class CheckinController extends Controller
 
         // 2. Servicios Adicionales
         $pdf->SetFont('Arial', '', 7);
-        foreach ($checkin->checkinDetails as $detalle) {
-            // Precio Histórico o Actual
-            $precio = $detalle->selling_price ?? $detalle->service->price;
-            $subtotal = $precio * $detalle->quantity;
 
-            // Cortar nombre si es muy largo
-            $nombreSrv = substr($detalle->service->name, 0, 20);
+        $serviciosAgrupados = [];
+
+        foreach ($checkin->checkinDetails as $detalle) {
+           
+            $nombre = $detalle->service->name ?? 'Servicio Eliminado';
+            $precio = $detalle->selling_price ?? $detalle->service->price ?? 0;
+            
+            //Agrupamos los servicios por nombre y cantidad
+            if (!isset($serviciosAgrupados[$nombre])) {
+                $serviciosAgrupados[$nombre] = [
+                    'nombre'   => $nombre,
+                    'cantidad' => 0,
+                    'subtotal' => 0,
+                ];
+            }
+            $serviciosAgrupados[$nombre]['cantidad'] += $detalle->quantity;
+            $serviciosAgrupados[$nombre]['subtotal'] += ($detalle->quantity * $precio);
+        }
+
+        // B) LUEGO RECORREMOS LA LISTA AGRUPADA PARA PINTAR EL PDF
+        foreach ($serviciosAgrupados as $item) {
+            // Calculamos el precio unitario promedio (Total / Cantidad)
+            // Esto es útil por si vendiste el mismo producto a precios diferentes
+            $precioUnitario = $item['cantidad'] > 0 
+                ? $item['subtotal'] / $item['cantidad'] 
+                : 0;
+
+            // Cortar nombre si es muy largo (limite 20 caracteres)
+            $nombreSrv = substr($item['nombre'], 0, 20);
 
             $pdf->Cell(32, 4, utf8_decode($nombreSrv), 0, 0, 'L');
-            $pdf->Cell(10, 4, $detalle->quantity, 0, 0, 'C');
-            $pdf->Cell(15, 4, number_format($precio, 2), 0, 0, 'R');
-            $pdf->Cell(15, 4, number_format($subtotal, 2), 0, 1, 'R');
+            $pdf->Cell(10, 4, $item['cantidad'], 0, 0, 'C');
+            $pdf->Cell(15, 4, number_format($precioUnitario, 2), 0, 0, 'R');
+            $pdf->Cell(15, 4, number_format($item['subtotal'], 2), 0, 1, 'R');
         }
 
         $pdf->Ln(2);

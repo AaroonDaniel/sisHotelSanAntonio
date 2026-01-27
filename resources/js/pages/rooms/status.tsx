@@ -522,12 +522,12 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('available')}
                                 active={filterStatus === 'available'}
                             />
-                            
+
                             {/* CAMBIO: De Rojo a Cian para coincidir con la tarjeta */}
                             <Badge
                                 count={countStatus('occupied')}
                                 label="Ocupadas"
-                                color="bg-cyan-600" 
+                                color="bg-cyan-600"
                                 onClick={() => setFilterStatus('occupied')}
                                 active={filterStatus === 'occupied'}
                             />
@@ -832,6 +832,23 @@ function CheckoutConfirmationModal({
         router.reload();
     };
 
+    const serviceGrouped = Object.values(
+        extraDetails.servicios.reduce((acc: any, item: any) => {
+            const key = item.service;
+            if (!acc[key]) {
+                acc[key] = {
+                    ...item,
+                    count: 0,
+                    subtotal: 0,
+                };
+            }
+            acc[key].count += parseInt(item.count || 0);
+            acc[key].subtotal += parseFloat(item.subtotal || 0);
+
+            return acc;
+        }, {}),
+    );
+
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
             {/* El tamaño cambia: pequeño al confirmar, grande al ver PDF */}
@@ -985,21 +1002,23 @@ function CheckoutConfirmationModal({
 
                                             {/* Lista con scroll */}
                                             <div className="flex max-h-28 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
-                                                {extraDetails.servicios.map(
-                                                    (item: any) => (
+                                                {serviceGrouped.map(
+                                                    (
+                                                        item: any,
+                                                        index: number,
+                                                    ) => (
                                                         <div
-                                                            key={item.id}
+                                                            key={index} // Usamos index porque el ID puede ser confuso al agrupar
                                                             className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
                                                         >
-                                                            <span>
+                                                            <span className="font-medium text-gray-600">
+                                                                {/* Muestra la cantidad acumulada (ej. 2 x CHOCOLATE...) */}
                                                                 {item.count} x{' '}
                                                                 {item.service}
                                                             </span>
-                                                            <span className="font-medium">
-                                                                {/* CORRECCIÓN 2: Usamos item.subtotal directo del JSON */}
-                                                                {parseFloat(
-                                                                    item.subtotal,
-                                                                ).toFixed(
+                                                            <span className="font-bold text-gray-900">
+                                                                {/* Muestra el subtotal acumulado formateado */}
+                                                                {item.subtotal.toFixed(
                                                                     2,
                                                                 )}{' '}
                                                                 Bs
