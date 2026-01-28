@@ -87,7 +87,7 @@ class Checkin extends Model
     public function companions(): BelongsToMany
     {
         return $this->belongsToMany(Guest::class, 'checkin_guests')
-                    ->withPivot('relationship') // Campo extra de la tabla intermedia
+                    
                     ->withTimestamps();
     }
 }

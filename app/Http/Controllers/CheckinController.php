@@ -131,9 +131,7 @@ class CheckinController extends Controller
                 // C. Preparar relación (ID y Parentesco)
                 // Evitamos que el titular se agregue a sí mismo como acompañante
                 if ($companion->id !== $guestId) {
-                    $idsParaSincronizar[$companion->id] = [
-                        'relationship' => !empty($compData['relationship']) ? strtoupper($compData['relationship']) : 'ACOMPAÑANTE'
-                    ];
+                    $idsParaSincronizar[$companion->id] = [];
                 }
             }
 
@@ -271,9 +269,7 @@ class CheckinController extends Controller
                     }
 
                     if ($companion->id !== $guest->id) {
-                        $idsParaSincronizar[$companion->id] = [
-                            'relationship' => !empty($compData['relationship']) ? strtoupper($compData['relationship']) : 'ACOMPAÑANTE'
-                        ];
+                        $idsParaSincronizar[$companion->id] = [];
                     }
                 }
 

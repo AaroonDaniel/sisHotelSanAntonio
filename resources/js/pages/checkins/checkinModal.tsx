@@ -10,7 +10,6 @@ import {
     FileText,
     Globe,
     Phone,
-    Printer,
     Save,
     Trash2,
     User,
@@ -177,7 +176,6 @@ interface CompanionData {
     id?: number;
     full_name: string;
     identification_number: string;
-    relationship: string;
     nationality: string;
     issued_in: string;
     civil_status: string;
@@ -364,8 +362,6 @@ export default function CheckinModal({
                               full_name: c.full_name, // Nombre completo
                               identification_number:
                                   c.identification_number || '', // CI
-                              relationship:
-                                  c.pivot?.relationship || 'ACOMPAÑANTE', // Parentesco (viene del pivot)
                               nationality: c.nationality || 'BOLIVIANA',
                               issued_in: c.issued_in || '',
                               civil_status: c.civil_status || '',
@@ -415,7 +411,6 @@ export default function CheckinModal({
               profession: data.profession,
               origin: data.origin,
               phone: data.phone,
-              relationship: 'TITULAR',
           }
         : {
               // Datos del Acompañante (con valores por defecto seguros)
@@ -428,8 +423,6 @@ export default function CheckinModal({
               phone: companionsList[currentIndex - 1]?.phone || '',
               origin: companionsList[currentIndex - 1]?.origin || '',
               profession: companionsList[currentIndex - 1]?.profession || '',
-              relationship:
-                  companionsList[currentIndex - 1]?.relationship || '',
               issued_in: companionsList[currentIndex - 1]?.issued_in || '',
               civil_status:
                   companionsList[currentIndex - 1]?.civil_status || '',
@@ -465,7 +458,6 @@ export default function CheckinModal({
             const newCompanion: CompanionData = {
                 full_name: '',
                 identification_number: '',
-                relationship: '',
                 nationality: 'BOLIVIANA',
                 issued_in: '',
                 civil_status: '',
@@ -979,35 +971,14 @@ export default function CheckinModal({
                                     </div>
                                 </div>
                             </div>
-
-                            {/* G. PARENTESCO (Solo visible si NO es titular) */}
-                            {/*}
-                            {!isTitular && (
-                                <div className="mt-2 animate-in rounded-lg border border-blue-100 bg-blue-50 p-2 fade-in">
-                                    <label className="text-xs font-bold text-blue-600 uppercase">
-                                        Parentesco con el Titular
-                                    </label>
-                                    <input
-                                        className="mt-1 w-full rounded-lg border border-blue-300 px-3 py-2 text-sm font-bold text-blue-900 uppercase focus:ring-blue-500"
-                                        value={currentPerson.relationship}
-                                        onChange={(e) =>
-                                            handleFieldChange(
-                                                'relationship',
-                                                e.target.value.toUpperCase(),
-                                            )
-                                        }
-                                        placeholder="EJ. ESPOSA, HIJO"
-                                    />
-                                </div>
-                            )}{*/}
                         </div>
 
                         {/* A. BARRA DE NAVEGACIÓN  */}
-                        <div className="mb-5 mt-10 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
+                        <div className="mt-10 mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
                             {/* Contador: 1 de X */}
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
-                                    {isTitular ? 'TITULAR' : 'ACOMPAÑANTE'}
+                                    HUESPED
                                 </span>
                                 <div className="flex items-baseline gap-1">
                                     <span className="text-2xl font-black text-blue-900">
@@ -1158,36 +1129,42 @@ export default function CheckinModal({
                                     Salida: {checkoutString}
                                 </span>
                             </div>
+                            
+                            {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
                             <div>
-                                {isTitular && (
-                                    <div className="animate-in duration-300 fade-in slide-in-from-top-1">
-                                        <label className="text-xs font-bold text-gray-500">
-                                            Adelanto (Bs)
-                                        </label>
+                                {/* ELIMINADA LA CONDICIÓN isTitular && AQUÍ */}
+                                <div className="animate-in duration-300 fade-in slide-in-from-top-1">
+                                    <label className="text-xs font-bold text-gray-500">
+                                        Adelanto (Bs)
+                                    </label>
 
-                                        <div className="relative">
-                                            <span className="absolute inset-y-0 left-3 flex items-center font-bold text-green-600">
-                                                Bs
-                                            </span>
+                                    <div className="relative">
+                                        <span
+                                            className={`absolute inset-y-0 left-3 flex items-center font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
+                                        >
+                                            Bs
+                                        </span>
 
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={data.advance_payment}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'advance_payment',
-                                                        Number(e.target.value),
-                                                    )
-                                                }
-                                                className="w-full rounded-lg border border-gray-400 pl-12 text-sm font-bold text-green-700 focus:border-green-500 focus:ring-green-500"
-                                            />
-                                        </div>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={data.advance_payment}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'advance_payment',
+                                                    Number(e.target.value),
+                                                )
+                                            }
+                                            // Si no es titular, se deshabilita pero SE MANTIENE VISIBLE
+                                            disabled={!isTitular}
+                                            className="w-full rounded-lg border border-gray-400 pl-12 text-sm font-bold text-green-700 focus:border-green-500 focus:ring-green-500 disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                                        />
                                     </div>
-                                )}
-                                {/* ------------------------------------------------ */}
+                                </div>
+                                {/* ELIMINADA LA LLAVE DE CIERRE AQUÍ */}
                             </div>
+
                             <div>
                                 <label className="text-xs font-bold text-gray-500">
                                     Observaciones
@@ -1261,29 +1238,30 @@ export default function CheckinModal({
                                         Desayuno
                                     </button>
                                 </div>
-
+                                <div className="mt-2 text-center text-base font-medium text-gray-800"></div>
                                 {/* FIN DEL CÓDIGO A AGREGAR */}
                             </div>
                         </div>
 
                         <div className="mt-8 flex items-center justify-end gap-3">
-                            {checkinToEdit && (
-                                canCancel() ? (
+                            {checkinToEdit &&
+                                (canCancel() ? (
                                     <button
                                         type="button"
                                         onClick={() => setShowCancelModal(true)}
                                         className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100"
                                     >
                                         <Trash2 className="h-4 w-4" />
-                                        <span className="hidden sm:inline">Cancelar Asignación</span>
+                                        <span className="hidden sm:inline">
+                                            Cancelar Asignación
+                                        </span>
                                     </button>
                                 ) : (
                                     <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
                                         <AlertCircle className="h-3 w-3" />
                                         <span>Asignación confirmada</span>
                                     </div>
-                                )
-                            )}
+                                ))}
                             <button
                                 type="button"
                                 onClick={onClose}
@@ -1313,10 +1291,10 @@ export default function CheckinModal({
                     </div>
                 </form>
             </div>
-            <CancelAssignmentModal 
+            <CancelAssignmentModal
                 show={showCancelModal}
                 onClose={() => setShowCancelModal(false)}
-                onConfirm={onClose} // <--- ¡AQUÍ ESTÁ LA MAGIA! Cierra todo al terminar
+                onConfirm={onClose}
                 checkinId={checkinToEdit?.id || null}
             />
         </div>

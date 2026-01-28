@@ -222,11 +222,7 @@ export default function CheckinsIndex({
                         <span className="text-xs text-gray-500">
                             CI: {person?.identification_number || 'S/N'}
                         </span>
-                        <span
-                            className={`mt-1 text-[10px] font-bold ${isTitular ? 'text-blue-600' : 'text-gray-400'}`}
-                        >
-                            {type}
-                        </span>
+                        
                     </div>
                 </td>
 
@@ -289,7 +285,7 @@ export default function CheckinsIndex({
                         <button
                             onClick={() => openEditModal(checkin, person?.id)}
                             className="text-gray-400 transition hover:text-blue-600"
-                            title={`Editar ${isTitular ? 'Titular' : 'Acompañante'}`}
+                            title="Editar Huésped"
                         >
                             <Pencil className="h-4 w-4" />
                         </button>
