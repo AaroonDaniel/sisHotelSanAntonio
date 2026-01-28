@@ -379,6 +379,35 @@ class CheckinController extends Controller
         return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
     }
 
+    // --- FUNCIÓN DE CANCELACIÓN (Solo primeros 10 minutos) ---
+    public function cancelAssignment(Checkin $checkin)
+    {
+        // 1. Validar tiempo (10 minutos de tolerancia)
+        $diffMinutes = $checkin->created_at->diffInMinutes(now());
+        
+        if ($diffMinutes > 10) {
+            return redirect()->back()->with('error', 'El tiempo de cancelación (10 min) ha expirado. Debes realizar un Checkout normal.');
+        }
+
+        DB::transaction(function () use ($checkin) {
+            // 2. Liberar la habitación directamente a 'LIBRE' 
+            $room = Room::find($checkin->room_id);
+            if ($room) {
+                $room->update(['status' => 'LIBRE']);
+            }
+            
+            // 3. Eliminar relaciones (Limpieza de datos)
+            $checkin->companions()->detach(); 
+            $checkin->services()->detach();
+            $checkin->checkinDetails()->delete();
+            
+            // 4. Eliminar el registro permanentemente
+            $checkin->delete();
+        });
+
+        return redirect()->back()->with('success', 'Asignación cancelada. La habitación está LIBRE.');
+    }
+
     // --- GENERACIÓN DE RECIBOS ---
     public function generateAssignmentReceipt(Checkin $checkin)
     {

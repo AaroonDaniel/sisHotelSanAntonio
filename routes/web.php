@@ -103,6 +103,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
     // 3. Ruta para el PDF de ingreso (Solo asignación)
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
+    // Ruta para cancelar asignación (Agregar debajo de checks.destroy)
+    Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
 
     // Detalle de asignacionb
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');

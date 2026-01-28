@@ -17,7 +17,7 @@ import {
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
-
+import CancelAssignmentModal from './cancelAssignmentModal';
 // --- DICCIONARIOS Y FUNCIONES ---
 const civilStatusOptions = [
     { value: 'SINGLE', label: 'SOLTERO(A)' },
@@ -151,6 +151,7 @@ export interface CheckinData {
     services?: string[];
     guest?: Guest;
     companions?: any[];
+    created_at?: string;
 }
 
 export interface Room {
@@ -217,6 +218,9 @@ export default function CheckinModal({
     rooms,
     initialRoomId,
 }: CheckinModalProps) {
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
     // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
@@ -286,6 +290,16 @@ export default function CheckinModal({
             setDisplayAge('');
         }
     }, [data.birth_date]);
+
+    //Reloj actualiza cada 5 segundos para saber si ya pasaron los 10 minutos
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (show) {
+            setCurrentTime(Date.now());
+            interval = setInterval(() => setCurrentTime(Date.now()), 5000);
+        }
+        return () => clearInterval(interval);
+    }, [show]);
 
     // --- CARGA DE DATOS ---
     useEffect(() => {
@@ -634,6 +648,13 @@ export default function CheckinModal({
         },
         */
     ];
+
+    const canCancel = () => {
+        if (!checkinToEdit || !checkinToEdit.created_at) return false;
+        const createdAt = new Date(checkinToEdit.created_at).getTime();
+        const diffMinutes = (currentTime - createdAt) / 60000;
+        return diffMinutes <= 10;
+    };
 
     if (!show) return null;
     const hasErrors = Object.keys(errors).length > 0;
@@ -1247,16 +1268,21 @@ export default function CheckinModal({
 
                         <div className="mt-8 flex items-center justify-end gap-3">
                             {checkinToEdit && (
-                                <button
-                                    type="button"
-                                    onClick={handlePrint}
-                                    className="mr-auto flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-sm font-bold text-blue-600 transition hover:bg-blue-100"
-                                >
-                                    <Printer className="h-4 w-4" />
-                                    <span className="hidden sm:inline">
-                                        Imprimir
-                                    </span>
-                                </button>
+                                canCancel() ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCancelModal(true)}
+                                        className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        <span className="hidden sm:inline">Cancelar Asignación</span>
+                                    </button>
+                                ) : (
+                                    <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>Asignación confirmada</span>
+                                    </div>
+                                )
                             )}
                             <button
                                 type="button"
@@ -1287,6 +1313,12 @@ export default function CheckinModal({
                     </div>
                 </form>
             </div>
+            <CancelAssignmentModal 
+                show={showCancelModal}
+                onClose={() => setShowCancelModal(false)}
+                onConfirm={onClose} // <--- ¡AQUÍ ESTÁ LA MAGIA! Cierra todo al terminar
+                checkinId={checkinToEdit?.id || null}
+            />
         </div>
     );
 }
