@@ -76,7 +76,7 @@ class CheckinController extends Controller
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
-            'duration_days' => 'required|integer|min:0',
+            'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
             // Validar array de acompañantes
@@ -92,7 +92,7 @@ class CheckinController extends Controller
             'room_id' => $validatedCheckin['room_id'],
             'user_id' => $userId,
             'check_in_date' => now()->timezone('America/La_Paz'),
-            'duration_days' => $validatedCheckin['duration_days'],
+            'duration_days' => $validatedCheckin['duration_days'] ?? 0,
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
             'status' => 'activo',
@@ -159,7 +159,7 @@ class CheckinController extends Controller
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
-            'duration_days' => 'required|integer|min:0',
+            'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
 
@@ -211,6 +211,7 @@ class CheckinController extends Controller
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
+                'duration_days' => $validated['duration_days'] ?? 0,
                 'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
                 'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,

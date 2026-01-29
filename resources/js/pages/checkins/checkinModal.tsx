@@ -234,7 +234,17 @@ export default function CheckinModal({
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
     const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
 
-    const now = new Date().toISOString().slice(0, 16);
+    //Hora actual
+    const now = (() => {
+        const date = new Date();
+        // Obtenemos el desfase horario (en Bolivia son 240 minutos)
+        const offset = date.getTimezoneOffset() * 60000;
+        // Restamos el desfase para que al convertir a ISO se mantenga tu hora local
+        const localISOTime = new Date(date.getTime() - offset)
+            .toISOString()
+            .slice(0, 16);
+        return localISOTime;
+    })();
 
     // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
@@ -242,7 +252,7 @@ export default function CheckinModal({
             guest_id: '' as string | null,
             room_id: '',
             check_in_date: now,
-            duration_days: 1,
+            duration_days: '',
             advance_payment: 0,
             notes: '',
             selected_services: [],
@@ -618,9 +628,9 @@ export default function CheckinModal({
     };
 
     // Visuales
-    const durationVal = Number(data.duration_days);
+    const durationVal = Number(data.duration_days) || 0;
     const estimatedCheckout = new Date(data.check_in_date);
-    estimatedCheckout.setDate(estimatedCheckout.getDate() + (durationVal || 0));
+    estimatedCheckout.setDate(estimatedCheckout.getDate() + durationVal);
     const checkoutString =
         durationVal > 0
             ? estimatedCheckout.toLocaleDateString('es-BO', {
@@ -634,9 +644,7 @@ export default function CheckinModal({
         { id: '2', name: 'Garaje', price: 0 },
         /*
         {
-            
-            { id: '3', name: 'Desayuno', price: 0 },
-            
+            { id: '3', name: 'Desayuno', price: 0 },         
         },
         */
     ];
@@ -702,7 +710,6 @@ export default function CheckinModal({
 
                         <div className="space-y-4">
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
-                            {/* CAMPO NOMBRE CON BUSCADOR UNIVERSAL (CORREGIDO) */}
                             <div className="relative" ref={dropdownRef}>
                                 <label className="mb-1.5 block text-center text-base font-bold text-red-700 uppercase">
                                     DATOS DEL HUESPED {currentIndex + 1}
@@ -1129,7 +1136,7 @@ export default function CheckinModal({
                                     Salida: {checkoutString}
                                 </span>
                             </div>
-                            
+
                             {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
                             <div>
                                 {/* ELIMINADA LA CONDICIÓN isTitular && AQUÍ */}
