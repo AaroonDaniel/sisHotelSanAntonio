@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 
-class RoomController 
+class RoomController
 {
     public function index()
     {
@@ -104,7 +104,7 @@ class RoomController
             'maintenance' => 'mantenimiento',
             'disabled' => 'inhabilitado'
         ];
-        
+
 
         if (isset($mapStatus[$validated['status']])) {
             $validated['status'] = $mapStatus[$validated['status']];
@@ -135,7 +135,7 @@ class RoomController
     {
         $room->delete();
         return redirect()->route('rooms.index');
-    } 
+    }
 
     public function toggleStatus(Room $room)
     {
@@ -144,32 +144,33 @@ class RoomController
     }
     public function status()
     {
-        // Cargamos 'price' para el modal y enviamos 'Guests'
-        $rooms = Room::with(['roomType', 'price', 'checkins' => function($q) {
-            $q->with(['guest', 'companions'])->latest('id'); 
+        // 1. Cargamos las habitaciones con sus relaciones y los detalles de consumo
+        $rooms = Room::with(['roomType', 'price', 'checkins' => function ($q) {
+            $q->with(['guest', 'companions', 'checkinDetails.service'])->latest('id');
         }])->orderBy('number')->get();
-        
-        $guests = Guest::all();
-        $services = Service::all();
-        $block = Block::all();
-        $roomTypes = RoomType::all();
 
-        return Inertia::render('rooms/status', [
-            'Rooms' => $rooms,
-            'Guests' => $guests,
-            'services' => $services,
-            'Blocks' => $block,
-            'RoomTypes' => $roomTypes,
+        // 2. Obtenemos todos los checkins activos para la búsqueda global en el modal
+        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room'])
+            ->where('status', 'activo')
+            ->get();
+
+        return \Inertia\Inertia::render('rooms/status', [
+            'Rooms'     => $rooms,
+            'Checkins'  => $activeCheckins, // Propiedad necesaria para el nuevo modal
+            'Guests'    => \App\Models\Guest::all(),
+            'services'  => \App\Models\Service::all(),
+            'Blocks'    => \App\Models\Block::all(),
+            'RoomTypes' => \App\Models\RoomType::all(),
         ]);
-        
     }
 
     // Funcion de limpieza de habitacion (PROVICIONAL)
-    public function markAsClean(Room $room){
-        $room ->update(['status' => 'LIBRE']);
+    public function markAsClean(Room $room)
+    {
+        $room->update(['status' => 'LIBRE']);
         return back()->with('success', 'Habitación marcada como limpia y disponible.');
     }
-    
+
     // Vista previa de asignacnion (antes de finalizar la estadia)
     public function getGuestsList()
     {
@@ -179,11 +180,11 @@ class RoomController
             ->get();
 
         $data = $checkins->map(function ($c) {
-            
+
             // --- Crear objetos Carbon para manipular fechas ---
             $ingresoObj = \Carbon\Carbon::parse($c->check_in_date);
-            
-            $salidaObj = $c->check_out_date 
+
+            $salidaObj = $c->check_out_date
                 ? \Carbon\Carbon::parse($c->check_out_date)
                 : \Carbon\Carbon::parse($c->check_in_date)->addDays($c->duration_days);
 
@@ -199,14 +200,14 @@ class RoomController
                 'plaza'          => $c->room->number,
                 'huesped'        => $c->guest->full_name,
                 'procedencia'    => $c->guest->origin ?? 'SIN PROCEDENCIA',
-                
+
                 // Campos separados para facilitar el diseño
                 'fecha_ingreso'  => $ingresoObj->format('d/m/Y'), // Ej: 06/01/2026
                 'hora_ingreso'   => $ingresoObj->format('H:i'),   // Ej: 14:30
-                
+
                 'fecha_salida'   => $salidaObj->format('d/m/Y'),
                 'hora_salida'    => $salidaObj->format('H:i'),
-                
+
                 'adelanto'       => number_format($adelanto, 2),
                 'total_cancelar' => number_format($totalCancelar, 2),
                 'observaciones'  => $c->notes ?? 'Ninguna',
@@ -215,6 +216,4 @@ class RoomController
 
         return response()->json($data);
     }
-
-    
 }

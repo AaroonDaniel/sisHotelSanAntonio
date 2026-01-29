@@ -19,6 +19,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import DetailModal from '../checkindetails/detailModal';
+import OccupiedRoomModal from './occupiedRoomModal'; //
+
+
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
@@ -74,6 +77,7 @@ interface Props {
     services: any[];
     Blocks: Block[];
     RoomTypes: RoomType[];
+    Checkins: any[];
 }
 
 export default function RoomsStatus({
@@ -83,6 +87,7 @@ export default function RoomsStatus({
     services,
     Blocks,
     RoomTypes,
+    Checkins,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -103,6 +108,10 @@ export default function RoomsStatus({
     // Detalles de asignacion
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [checkinForDetails, setCheckinForDetails] = useState<any>(null);
+
+    // Detalles de una nueva vista para los datos del usuario
+    const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
+    const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
 
     // --- LÓGICA DE ESTADO ---
     const getDisplayStatus = (room: Room) => {
@@ -140,10 +149,29 @@ export default function RoomsStatus({
 
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
+
+        // --- NUEVO: Lógica para Ocupado (Vista de Resumen) ---
         if (status === 'occupied') {
-            handleOpenDetails(room);
+            // Buscamos el checkin con todos sus detalles en la lista global
+            const fullCheckinData = Checkins.find(
+                (c) => c.room_id === room.id && c.status === 'activo',
+            );
+
+            if (fullCheckinData) {
+                setOccupiedCheckinData({ ...fullCheckinData, room });
+                setIsOccupiedModalOpen(true);
+            } else {
+                // Fallback si no está en la lista global
+                const localCheckin = room.checkins?.[0];
+                if (localCheckin) {
+                    setOccupiedCheckinData({ ...localCheckin, room });
+                    setIsOccupiedModalOpen(true);
+                }
+            }
             return;
         }
+
+        // --- ESTRUCTURA ORIGINAL MANTENIDA ---
         setSelectedForAction(null);
         if (status === 'available') {
             setCheckinToEdit(null);
@@ -725,6 +753,13 @@ export default function RoomsStatus({
                         }}
                     />
                 )}
+            
+            {/* INTEGRACIÓN DEL NUEVO MODAL */}
+            <OccupiedRoomModal 
+                show={isOccupiedModalOpen}
+                onClose={() => setIsOccupiedModalOpen(false)}
+                checkin={occupiedCheckinData}
+            />
         </AuthenticatedLayout>
     );
 }
