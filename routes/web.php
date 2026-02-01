@@ -99,8 +99,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
     // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
-    // 2. Ruta para el PDF de salida (Checkout Receipt)
+    // 2. Ruta para el PDF de salida (vista de recibo)
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
+    // 3. Rruta para el PDF de salida (vista de factura)
+    Route::get('/checks/{checkin}/checkout-invoice', [CheckinController::class, 'generateCheckoutInvoice']);
     // 3. Ruta para el PDF de ingreso (Solo asignación)
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
     // Ruta para cancelar asignación (Agregar debajo de checks.destroy)

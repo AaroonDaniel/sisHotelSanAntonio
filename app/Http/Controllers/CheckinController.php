@@ -381,7 +381,7 @@ class CheckinController extends Controller
     {
         // 1. Validar tiempo (10 minutos de tolerancia)
         $diffMinutes = $checkin->created_at->diffInMinutes(now());
-        
+
         if ($diffMinutes > 10) {
             return redirect()->back()->with('error', 'El tiempo de cancelación (10 min) ha expirado. Debes realizar un Checkout normal.');
         }
@@ -392,12 +392,12 @@ class CheckinController extends Controller
             if ($room) {
                 $room->update(['status' => 'LIBRE']);
             }
-            
+
             // 3. Eliminar relaciones (Limpieza de datos)
-            $checkin->companions()->detach(); 
+            $checkin->companions()->detach();
             $checkin->services()->detach();
             $checkin->checkinDetails()->delete();
-            
+
             // 4. Eliminar el registro permanentemente
             $checkin->delete();
         });
@@ -668,10 +668,10 @@ class CheckinController extends Controller
         $serviciosAgrupados = [];
 
         foreach ($checkin->checkinDetails as $detalle) {
-           
+
             $nombre = $detalle->service->name ?? 'Servicio Eliminado';
             $precio = $detalle->selling_price ?? $detalle->service->price ?? 0;
-            
+
             //Agrupamos los servicios por nombre y cantidad
             if (!isset($serviciosAgrupados[$nombre])) {
                 $serviciosAgrupados[$nombre] = [
@@ -688,8 +688,8 @@ class CheckinController extends Controller
         foreach ($serviciosAgrupados as $item) {
             // Calculamos el precio unitario promedio (Total / Cantidad)
             // Esto es útil por si vendiste el mismo producto a precios diferentes
-            $precioUnitario = $item['cantidad'] > 0 
-                ? $item['subtotal'] / $item['cantidad'] 
+            $precioUnitario = $item['cantidad'] > 0
+                ? $item['subtotal'] / $item['cantidad']
                 : 0;
 
             // Cortar nombre si es muy largo (limite 20 caracteres)
@@ -732,6 +732,260 @@ class CheckinController extends Controller
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="checkout-' . $checkin->id . '.pdf"');
+    }
+
+    // --GENERACION DE FACTURA
+
+    public function generateCheckoutInvoice(Checkin $checkin)
+    {
+        try {
+            $checkin->load(['guest', 'room.price', 'checkinDetails.service']);
+
+            // --- CÁLCULOS ---
+            $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
+            $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
+
+            // Lógica de días: al menos 1 día, redondeo hacia arriba si pasó la hora límite (opcional, aqui uso diferencia simple)
+            $diasReales = max(1, $ingreso->diffInDays($salida));
+
+            $precioUnitario = $checkin->room->price->amount ?? 0;
+            $totalHospedaje = $precioUnitario * $diasReales;
+
+            $totalServicios = 0;
+            foreach ($checkin->checkinDetails as $detalle) {
+                // Validación segura de precio
+                $precio = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                $totalServicios += ($detalle->quantity * $precio);
+            }
+            $granTotal = $totalHospedaje + $totalServicios;
+
+            // --- CONFIGURACIÓN PDF (80mm ancho) ---
+            // Asegúrate de que FPDF esté importado o usa la barra invertida
+            $pdf = new \FPDF('P', 'mm', array(80, 260));
+            $pdf->SetMargins(4, 4, 4);
+            $pdf->SetAutoPageBreak(true, 2);
+            $pdf->AddPage();
+
+            // 1. ENCABEZADO
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 6);
+            $pdf->Cell(0, 3, 'No. Punto de Venta 0', 0, 1, 'C');
+            $pdf->Cell(0, 3, 'Calle Principal #123 - Potosi', 0, 1, 'C');
+            $pdf->Cell(0, 3, utf8_decode('Teléfono: 72578583'), 0, 1, 'C');
+            $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
+
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 6);
+            $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+
+            $pdf->Ln(2);
+            // DATOS DE FACTURACIÓN
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(30, 3, 'NIT:', 0, 0, 'R');
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(35, 3, '3327479013', 0, 1, 'L');
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(30, 3, utf8_decode('FACTURA N°:'), 0, 0, 'R');
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(35, 3, str_pad($checkin->id, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(35, 3, '456123ABC', 0, 1, 'L');
+            $pdf->Ln(2);
+
+            // 2. DATOS DEL CLIENTE
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(1);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Fecha:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, now()->format('d/m/Y H:i:s'), 0, 1);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Nom/Razon:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'NIT/CI/CEX:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            // Validación null safe
+            $docId = $checkin->guest->identification_number ?? '0';
+            $pdf->Cell(0, 4, $docId, 0, 1);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Cod. Cliente:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, $checkin->guest->id, 0, 1);
+
+            $pdf->Ln(1);
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            // 3. DETALLE
+            $pdf->SetFont('Arial', 'B', 6);
+            $pdf->Cell(8, 3, 'CNT', 0, 0, 'C'); // Ancho reducido
+            $pdf->Cell(34, 3, 'DETALLE', 0, 0, 'L');
+            $pdf->Cell(12, 3, 'P.UNIT', 0, 0, 'R');
+            $pdf->Cell(18, 3, 'SUBTOT', 0, 1, 'R');
+            $pdf->Ln(3);
+
+            $pdf->SetFont('Arial', '', 6);
+
+            // A. Hospedaje
+            $pdf->Cell(8, 3, '1', 0, 0, 'C');
+            $pdf->Cell(34, 3, utf8_decode("Hospedaje ($diasReales d)"), 0, 0, 'L');
+            $pdf->Cell(12, 3, number_format($totalHospedaje, 2), 0, 0, 'R');
+            $pdf->Cell(18, 3, number_format($totalHospedaje, 2), 0, 1, 'R');
+
+            // B. Servicios
+            $serviciosAgrupados = [];
+            if ($checkin->checkinDetails) {
+                foreach ($checkin->checkinDetails as $detalle) {
+                    $nombre = $detalle->service->name ?? 'Servicio';
+                    $precio = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+
+                    if (!isset($serviciosAgrupados[$nombre])) {
+                        $serviciosAgrupados[$nombre] = ['qty' => 0, 'total' => 0];
+                    }
+                    $serviciosAgrupados[$nombre]['qty'] += $detalle->quantity;
+                    $serviciosAgrupados[$nombre]['total'] += ($detalle->quantity * $precio);
+                }
+            }
+
+            foreach ($serviciosAgrupados as $name => $data) {
+                $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
+                $pdf->Cell(8, 3, $data['qty'], 0, 0, 'C');
+                // Cortar nombre si es muy largo
+                $pdf->Cell(34, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
+                $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
+                $pdf->Cell(18, 3, number_format($data['total'], 2), 0, 1, 'R');
+            }
+
+            $pdf->Ln(2);
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            // 4. TOTALES
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(50, 4, 'SUBTOTAL Bs', 0, 0, 'R');
+            $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
+
+            $pdf->Cell(50, 4, 'DESCUENTO Bs', 0, 0, 'R');
+            $pdf->Cell(22, 4, '0.00', 0, 1, 'R');
+
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->Cell(50, 5, 'TOTAL A PAGAR Bs', 0, 0, 'R');
+            $pdf->Cell(22, 5, number_format($granTotal, 2), 0, 1, 'R');
+
+            // 5. MONTO EN LETRAS (Usando función manual)
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', '', 7);
+
+            // Llamada a la nueva función robusta
+            $montoLetras = $this->convertirNumeroALetras($granTotal);
+            $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
+
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 6);
+            $pdf->Cell(35, 3, utf8_decode('IMPORTE BASE CRÉDITO FISCAL:'), 0, 0, 'L');
+            $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
+
+            // 6. CÓDIGO DE CONTROL Y QR
+            $pdf->Ln(2);
+            $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            $x = $pdf->GetX() + 25;
+            $y = $pdf->GetY();
+            $pdf->Rect($x, $y, 22, 22);
+            $pdf->SetXY($x, $y + 8);
+            $pdf->SetFont('Arial', 'B', 6);
+            $pdf->Cell(22, 3, 'QR', 0, 0, 'C');
+            $pdf->SetXY(4, $y + 24);
+
+            // 7. LEYENDAS
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 5);
+            $pdf->MultiCell(0, 2.5, utf8_decode('"ESTA FACTURA CONTRIBUYE AL DESARROLLO DEL PAÍS, EL USO ILÍCITO SERÁ SANCIONADO PENALMENTE DE ACUERDO A LEY"'), 0, 'C');
+            $pdf->Ln(1);
+            $pdf->SetFont('Arial', '', 5);
+            $pdf->MultiCell(0, 2.5, utf8_decode('Ley N° 453: Tienes derecho a recibir información correcta, veraz, oportuna y completa sobre las características y contenidos de los productos que compras.'), 0, 'C');
+
+            return response($pdf->Output('S'), 200)
+                ->header('Content-Type', 'application/pdf')
+                ->header('Content-Disposition', 'inline; filename="factura-' . $checkin->id . '.pdf"');
+        } catch (\Exception $e) {
+            // Esto imprimirá el error real en el navegador en lugar del 500 generico
+            return response()->json(['error' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
+        }
+    }
+    // --- FUNCIÓN MANUAL PARA NÚMERO A LETRAS (SIN DEPENDENCIAS) ---
+    private function convertirNumeroALetras($monto)
+    {
+        $monto = floatval($monto);
+        $entero = floor($monto);
+        $centavos = round(($monto - $entero) * 100);
+
+        $letras = $this->enteroALetras($entero);
+
+        return ucfirst($letras) . ' ' . str_pad($centavos, 2, '0', STR_PAD_LEFT) . '/100 Bolivianos';
+    }
+
+    private function enteroALetras($num)
+    {
+        if ($num == 0) return 'cero';
+
+        $unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+        $decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+        $diez_y = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve'];
+        $veinti = ['veinte', 'veintiuno', 'veintidos', 'veintitres', 'veinticuatro', 'veinticinco', 'veintiseis', 'veintisiete', 'veintiocho', 'veintinueve'];
+        $centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+
+        if ($num < 10) return $unidades[$num];
+
+        if ($num < 20) return $diez_y[$num - 10];
+
+        if ($num < 30) return $veinti[$num - 20];
+
+        if ($num < 100) {
+            $d = floor($num / 10);
+            $u = $num % 10;
+            return $decenas[$d] . ($u > 0 ? ' y ' . $unidades[$u] : '');
+        }
+
+        if ($num == 100) return 'cien';
+
+        if ($num < 1000) {
+            $c = floor($num / 100);
+            $resto = $num % 100;
+            return $centenas[$c] . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
+        }
+
+        if ($num == 1000) return 'mil';
+
+        if ($num < 2000) {
+            return 'mil ' . $this->enteroALetras($num % 1000);
+        }
+
+        if ($num < 1000000) {
+            $m = floor($num / 1000);
+            $resto = $num % 1000;
+            // Caso especial para "un mil" -> "mil"
+            $miles = ($m == 1) ? 'mil' : $this->enteroALetras($m) . ' mil';
+            return $miles . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
+        }
+
+        return 'numero grande'; // Simplificado para este caso
     }
 
     public function generateViewDetail(Request $request)

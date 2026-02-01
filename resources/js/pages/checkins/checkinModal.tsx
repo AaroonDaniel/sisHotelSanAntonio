@@ -252,7 +252,7 @@ export default function CheckinModal({
             guest_id: '' as string | null,
             room_id: '',
             check_in_date: now,
-            duration_days: '',
+            duration_days: 1,
             advance_payment: 0,
             notes: '',
             selected_services: [],
@@ -389,6 +389,7 @@ export default function CheckinModal({
                 if (initialRoomId) {
                     setData((prev) => ({
                         ...prev,
+                        duration_days: 1,
                         room_id: String(initialRoomId),
                     }));
                 }

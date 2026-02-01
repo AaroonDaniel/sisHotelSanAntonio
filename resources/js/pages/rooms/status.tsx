@@ -21,7 +21,6 @@ import { useEffect, useState } from 'react';
 import DetailModal from '../checkindetails/detailModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 
-
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
@@ -417,7 +416,7 @@ export default function RoomsStatus({
     const allActiveCheckins = Rooms.flatMap((room) =>
         (room.checkins || []).map((checkin) => ({
             ...checkin,
-            room: room, // <--- ESTO ES LO QUE FALTABA
+            room: room,
             guest: checkin.guest || { full_name: 'Desconocido' }, // Aseguramos que guest exista
         })),
     );
@@ -753,9 +752,9 @@ export default function RoomsStatus({
                         }}
                     />
                 )}
-            
+
             {/* INTEGRACIÓN DEL NUEVO MODAL */}
-            <OccupiedRoomModal 
+            <OccupiedRoomModal
                 show={isOccupiedModalOpen}
                 onClose={() => setIsOccupiedModalOpen(false)}
                 checkin={occupiedCheckinData}
@@ -798,6 +797,12 @@ function CheckoutConfirmationModal({
     const totalServicio = extraDetails.total;
     const saldoEstimado = totalHospedaje + totalServicio - adelanto;
 
+    // Detalles de tipo de factura con o sin factura
+    // Inicializa en null
+    const [tipoDocumento, setTipoDocumento] = useState<
+        'factura' | 'recibo' | null
+    >(null);
+
     // Limpieza de memoria
     // EFECTO 1: Cargar detalles del huésped
     useEffect(() => {
@@ -833,27 +838,37 @@ function CheckoutConfirmationModal({
     const handleConfirmAndPreview = async () => {
         setProcessing(true);
         try {
-            // 1. Usar ruta PUT correcta
-            await axios.put(`/checks/${checkin.id}/checkout`);
+            // 1. Enviamos la petición de salida (Checkout) para actualizar la BD
+            await axios.put(`/checks/${checkin.id}/checkout`, {
+                tipo_documento: tipoDocumento,
+            });
 
-            // 2. Obtener PDF
-            const response = await axios.get(
-                `/checks/${checkin.id}/checkout-receipt`,
-                {
-                    responseType: 'blob',
-                },
-            );
+            // 2. Definimos qué PDF vamos a pedir según la selección
+            let endpoint = '';
+            
+            if (tipoDocumento === 'recibo') {
+                // Ruta para el recibo simple
+                endpoint = `/checks/${checkin.id}/checkout-receipt`;
+            } else {
+                // Ruta para la FACTURA (formato pequeño)
+                endpoint = `/checks/${checkin.id}/checkout-invoice`;
+            }
 
+            // 3. Hacemos la petición del PDF (sirve para ambos casos)
+            const response = await axios.get(endpoint, {
+                responseType: 'blob',
+            });
+
+            // 4. Generamos la URL temporal y la mostramos en el modal
             const url = window.URL.createObjectURL(
                 new Blob([response.data], { type: 'application/pdf' }),
             );
-            setPdfUrl(url);
+            setPdfUrl(url); // Esto activa la vista del PDF
+
         } catch (error: any) {
             console.error('Error al finalizar:', error);
             if (error.response?.status === 405) {
-                alert(
-                    'Error 405: El servidor no permitió la solicitud. Asegúrese de haber actualizado CheckinController.php para retornar JSON.',
-                );
+                alert('Error 405: Revise que la ruta checkout-invoice exista en web.php.');
             } else {
                 alert('Hubo un error al procesar la salida.');
             }
@@ -1083,10 +1098,57 @@ function CheckoutConfirmationModal({
                                 <h4 className="text-xl font-bold text-gray-800">
                                     ¿Confirmar salida?
                                 </h4>
-                                <p className="mt-2 text-sm text-gray-500">
-                                    La habitación pasará a estado{' '}
-                                    <strong>LIMPIEZA</strong> y se generará
-                                    automáticamente el recibo de cobro final.
+
+                                {/* NUEVA SECCIÓN DE BOTONES DE SELECCIÓN */}
+                                <div className="mt-4 flex justify-center gap-4">
+                                    <button
+                                        onClick={() =>
+                                            setTipoDocumento('recibo')
+                                        }
+                                        className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${
+                                            tipoDocumento === 'recibo'
+                                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm'
+                                                : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <div
+                                            className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                        >
+                                            {tipoDocumento === 'recibo' && (
+                                                <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                                            )}
+                                        </div>
+                                        <span className="text-sm font-bold uppercase">
+                                            Sin Factura
+                                        </span>
+                                    </button>
+
+                                    <button
+                                        onClick={() =>
+                                            setTipoDocumento('factura')
+                                        }
+                                        className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${
+                                            tipoDocumento === 'factura'
+                                                ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm'
+                                                : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <div
+                                            className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                        >
+                                            {tipoDocumento === 'factura' && (
+                                                <div className="h-2 w-2 rounded-full bg-blue-600" />
+                                            )}
+                                        </div>
+                                        <span className="text-sm font-bold uppercase">
+                                            Con Factura
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <p className="mt-4 text-[11px] text-gray-400 italic">
+                                    La habitación pasará automáticamente a
+                                    estado <strong>LIMPIEZA</strong>.
                                 </p>
                             </div>
                         </div>
@@ -1118,7 +1180,7 @@ function CheckoutConfirmationModal({
                             <button
                                 onClick={handleConfirmAndPreview}
                                 className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50"
-                                disabled={processing}
+                                disabled={processing || !tipoDocumento}
                             >
                                 {processing ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
