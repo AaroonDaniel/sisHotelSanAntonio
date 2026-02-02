@@ -773,8 +773,8 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
             $pdf->SetFont('Arial', '', 6);
             $pdf->Cell(0, 3, 'No. Punto de Venta 0', 0, 1, 'C');
-            $pdf->Cell(0, 3, 'Calle Principal #123 - Potosi', 0, 1, 'C');
-            $pdf->Cell(0, 3, utf8_decode('Teléfono: 72578583'), 0, 1, 'C');
+            $pdf->Cell(0, 3, 'Calle 9 - Potosi', 0, 1, 'C');
+            $pdf->Cell(0, 3, utf8_decode('Teléfono: 70461010'), 0, 1, 'C');
             $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
 
             $pdf->Ln(2);
@@ -810,10 +810,16 @@ class CheckinController extends Controller
             $pdf->SetFont('Arial', '', 7);
             $pdf->Cell(0, 4, now()->format('d/m/Y H:i:s'), 0, 1);
 
+            // Etiqueta en NEGRILLA
             $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'Nom/Razon:', 0, 0);
+            $etiqueta = utf8_decode('Nombre/Razón Social: ');
+            $anchoEtiqueta = $pdf->GetStringWidth($etiqueta) + 2;
+            $pdf->Cell($anchoEtiqueta, 4, $etiqueta, 0, 0, 'L');
+
+            // Valor en fuente normal
             $pdf->SetFont('Arial', '', 7);
             $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
+
 
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(20, 4, 'NIT/CI/CEX:', 0, 0);
@@ -901,17 +907,38 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
 
             // 6. CÓDIGO DE CONTROL Y QR
+            // ... (código anterior de totales y monto literal) ...
+
+            // 6. CÓDIGO DE CONTROL Y QR
             $pdf->Ln(2);
             $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
             $pdf->Ln(2);
 
-            $x = $pdf->GetX() + 25;
-            $y = $pdf->GetY();
-            $pdf->Rect($x, $y, 22, 22);
-            $pdf->SetXY($x, $y + 8);
-            $pdf->SetFont('Arial', 'B', 6);
-            $pdf->Cell(22, 3, 'QR', 0, 0, 'C');
-            $pdf->SetXY(4, $y + 24);
+            // Definimos la ruta y tamaño
+            $logoPath = public_path('images/qrCop.png');
+            $qrSize = 22; // Tamaño en mm (igual que el cuadro anterior)
+
+            if (file_exists($logoPath)) {
+                // CENTRADO DINÁMICO:
+                // Ancho Página (80) - Tamaño QR (22) = 58 / 2 = 29
+                $x = (80 - $qrSize) / 2;
+                $y = $pdf->GetY();
+
+                // Insertamos la imagen en la posición calculada
+                $pdf->Image($logoPath, $x, $y, $qrSize, $qrSize);
+
+                // Movemos el cursor hacia abajo (alto de imagen + margen)
+                $pdf->SetY($y + $qrSize + 2);
+            } else {
+                // FALLBACK: Si no existe la imagen, mantiene el cuadro vacío para evitar errores
+                $x = (80 - 22) / 2; // Centrado manual
+                $y = $pdf->GetY();
+                $pdf->Rect($x, $y, 22, 22);
+                $pdf->SetXY($x, $y + 8);
+                $pdf->SetFont('Arial', 'B', 6);
+                $pdf->Cell(22, 3, 'QR', 0, 0, 'C'); // Texto "QR" si falla la imagen
+                $pdf->SetY($y + 24);
+            }
 
             // 7. LEYENDAS
             $pdf->Ln(2);
