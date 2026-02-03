@@ -2,6 +2,7 @@ import { router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
     AlertTriangle,
+    ArrowRightCircle,
     Bed,
     CheckCircle2,
     ChevronLeft,
@@ -169,6 +170,7 @@ interface CheckinModalProps {
     targetGuestId?: number | null;
     guests: Guest[];
     rooms: Room[];
+    schedules: Schedule[];
     initialRoomId?: number | null;
 }
 
@@ -184,10 +186,17 @@ interface CompanionData {
     origin: string;
     phone: string;
 }
+interface Schedule {
+    id: number;
+    name: string;
+    check_in_time: string;
+    check_out_time: string;
+}
 
 interface CheckinFormData {
     guest_id: string | null;
     room_id: string;
+    schedule_id?: string;
     check_in_date: string;
     duration_days: number | string;
     advance_payment: number;
@@ -214,6 +223,7 @@ export default function CheckinModal({
     targetGuestId,
     guests,
     rooms,
+    schedules = [],
     initialRoomId,
 }: CheckinModalProps) {
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -251,6 +261,7 @@ export default function CheckinModal({
         useForm<CheckinFormData>({
             guest_id: '' as string | null,
             room_id: '',
+            schedule_id: '',
             check_in_date: now,
             duration_days: 1,
             advance_payment: 0,
@@ -659,6 +670,39 @@ export default function CheckinModal({
 
     if (!show) return null;
     const hasErrors = Object.keys(errors).length > 0;
+
+    // Funcion de TOLERANCIA
+
+    const handleApplyTolerance = () => {
+        // 1. Verificar si hay un horario seleccionado
+        if (!data.schedule_id) return;
+
+        // 2. Buscar los datos del horario (para sacar la hora 06:00)
+        const selectedSchedule = schedules.find(
+            (s) => String(s.id) === data.schedule_id,
+        );
+        if (!selectedSchedule) return;
+
+        // 3. Tomar la fecha que está puesta actualmente en el input (ej: 03:40)
+        const currentInputDate = new Date(data.check_in_date);
+
+        // 4. Extraer SOLO LA FECHA (Año-Mes-Día) respetando la zona horaria local
+        // (Esto es vital para que no te cambie de día por error de zona horaria)
+        const offset = currentInputDate.getTimezoneOffset() * 60000;
+        const localISODate = new Date(currentInputDate.getTime() - offset)
+            .toISOString()
+            .slice(0, 10);
+
+        // 5. Obtener la HORA OFICIAL del horario (Cortamos segundos: "06:00:00" -> "06:00")
+        const officialTime = selectedSchedule.check_in_time.substring(0, 5);
+
+        // 6. "Completar" la fecha: Unimos el Día actual + La Hora Oficial
+        // Resultado: Si era "2026-02-03 03:40", ahora será "2026-02-03 06:00"
+        const newDateTime = `${localISODate}T${officialTime}`;
+
+        // 7. Actualizar el input visualmente
+        setData('check_in_date', newDateTime);
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
@@ -1092,27 +1136,43 @@ export default function CheckinModal({
                                     ))}
                                 </select>
                             </div>
-                            {/* --- CORRECCIÓN DISEÑO FECHA INGRESO Y ESTADÍA --- */}
                             <div className="flex gap-3">
-                                <div className="flex-grow">
-                                    <label className="text-xs font-bold text-gray-500">
+                                {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
+                                <div className="flex-grow flex flex-col">
+                                    <label className="text-xs font-bold text-gray-500 mb-1">
                                         Fecha Ingreso
                                     </label>
                                     <input
                                         type="datetime-local"
                                         value={data.check_in_date}
-                                        onChange={(e) =>
-                                            setData(
-                                                'check_in_date',
-                                                e.target.value,
-                                            )
-                                        }
-                                        disabled={true}
+                                        onChange={(e) => setData('check_in_date', e.target.value)}
+                                        // disabled={true} // Quitar o mantener según preferencia
                                         className="w-full rounded-lg border border-gray-400 text-sm text-black"
                                     />
+
+                                    {/* BOTÓN DE TOLERANCIA (JUSTO DEBAJO Y A LA IZQUIERDA) */}
+                                    <div className="mt-2 flex justify-start"> {/* justify-start alinea a la izq */}
+                                        <button
+                                            type="button"
+                                            // Si no hay horario seleccionado, no hace nada pero se muestra (para pruebas visuales)
+                                            onClick={handleApplyTolerance}
+                                            className="group flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-bold text-green-700 uppercase transition-colors hover:border-green-300 hover:bg-green-100 active:scale-95"
+                                            title="Ajustar hora a la entrada oficial del turno"
+                                        >
+                                            <ArrowRightCircle className="h-3.5 w-3.5" />
+                                            <span>
+                                                Tolerancia ({
+                                                    schedules?.find((s) => String(s.id) === data.schedule_id)
+                                                        ?.check_in_time.substring(0, 5) || '06:00'
+                                                })
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="w-24">
-                                    <label className="text-xs font-bold text-gray-500">
+
+                                {/* COLUMNA DERECHA: ESTADÍA + SALIDA ESTIMADA */}
+                                <div className="w-24 flex flex-col">
+                                    <label className="text-xs font-bold text-gray-500 mb-1">
                                         Estadía
                                     </label>
                                     <input
@@ -1121,21 +1181,18 @@ export default function CheckinModal({
                                         value={data.duration_days}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            setData(
-                                                'duration_days',
-                                                val === '' ? '' : Number(val),
-                                            );
+                                            setData('duration_days', val === '' ? '' : Number(val));
                                         }}
                                         className="w-full rounded-lg border border-gray-400 text-right text-sm text-black"
                                     />
+                                    
+                                    {/* TEXTO SALIDA (JUSTO DEBAJO Y A LA DERECHA) */}
+                                    <div className="mt-2 text-right">
+                                        <span className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}>
+                                            Salida: {checkoutString}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="-mt-3 text-right">
-                                <span
-                                    className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
-                                >
-                                    Salida: {checkoutString}
-                                </span>
                             </div>
 
                             {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}

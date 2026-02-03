@@ -22,7 +22,8 @@ class Checkin extends Model
         'check_out_date',
         'notes',
         'advance_payment',
-        'status'
+        'status',
+        'schedule_id',
     ];
 
     protected $uppercaseFields = [
@@ -89,5 +90,10 @@ class Checkin extends Model
         return $this->belongsToMany(Guest::class, 'checkin_guests')
                     
                     ->withTimestamps();
+    }
+
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(Schedule::class);
     }
 }

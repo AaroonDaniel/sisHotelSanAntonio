@@ -31,4 +31,6 @@ class Schedule extends Model
     {
         return $this->hasMany(Checkin::class);
     }
+
+    
 }

@@ -54,6 +54,7 @@ interface Props {
     Checkins: Checkin[];
     Guests: Guest[];
     Rooms: Room[];
+    Schedules: any[]; 
 }
 
 export interface CheckinData {
@@ -81,6 +82,7 @@ export default function CheckinsIndex({
     Checkins,
     Guests,
     Rooms,
+    Schedules,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -427,6 +429,7 @@ export default function CheckinsIndex({
                     checkinToEdit={editingCheckin}
                     guests={Guests}
                     rooms={Rooms}
+                    schedules={Schedules}
                 />
 
                 <DeleteModal

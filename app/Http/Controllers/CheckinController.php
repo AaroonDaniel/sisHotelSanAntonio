@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
+use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -20,17 +21,18 @@ class CheckinController extends Controller
     public function index()
     {
 
-        $checkins = Checkin::with(['guest', 'room.roomType', 'companions'])
+        $checkins = Checkin::with(['guest', 'room.roomType', 'companions', 'schedule'])
             ->orderBy('created_at', 'desc')
             ->get();
 
         $guests = Guest::orderBy('full_name')->get();
         $rooms = Room::with(['roomType', 'price'])->get();
-
+        $schedules = \App\Models\Schedule::where('is_active', true)->get();
         return Inertia::render('checkins/index', [
             'Checkins' => $checkins,
             'Guests' => $guests,
             'Rooms' => $rooms,
+            'Schedules' => $schedules,
         ]);
     }
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
@@ -550,32 +552,28 @@ class CheckinController extends Controller
             ->header('Content-Disposition', 'inline; filename="ticket-' . $checkin->id . '.pdf"');
     }
 
+
+    // --GENERACION DE BOLETA --
     public function generateCheckoutReceipt(Checkin $checkin)
     {
-        // 1. CARGAR RELACIONES CORRECTAS
-        // Usamos 'checkinDetails.service' para acceder a los consumos y sus nombres
-        $checkin->load(['guest', 'room.price', 'checkinDetails.service']);
+        // 1. CARGAR RELACIONES CORRECTAS (Agregamos 'schedule' para la nueva lógica)
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
 
-        // --- LÓGICA DE DÍAS ---
-        $diasPactados = intval($checkin->duration_days);
-        if ($diasPactados < 1) $diasPactados = 1;
-
-        $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
+        // --- LÓGICA DE DÍAS (NUEVA: Usando tolerancias) ---
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
 
-        $diasRealesTranscurridos = $ingreso->diffInDays($salida);
-        $diasACobrar = max($diasPactados, $diasRealesTranscurridos);
+        // AQUÍ LLAMAMOS A TU NUEVA FUNCIÓN PRIVADA
+        $diasACobrar = $this->calculateBillableDays($checkin, $salida);
 
-        $diasExcedidos = 0;
-        if ($diasRealesTranscurridos > $diasPactados) {
-            $diasExcedidos = $diasRealesTranscurridos - $diasPactados;
-        }
+        // Calcular días excedidos solo para mostrar en el PDF (Opcional)
+        $diasExcedidos = $diasACobrar - max(1, intval($checkin->duration_days));
+        if ($diasExcedidos < 0) $diasExcedidos = 0;
 
         // --- CÁLCULOS ECONÓMICOS ---
         $precioUnitario = $checkin->room->price->amount ?? 0;
-        $totalHospedaje = $precioUnitario * $diasACobrar;
+        $totalHospedaje = $precioUnitario * $diasACobrar; // Usamos el cálculo inteligente
 
-        // Calcular Servicios usando CheckinDetails
+        // Calcular Servicios usando CheckinDetails (Lógica original intacta)
         $totalServicios = 0;
         foreach ($checkin->checkinDetails as $detalle) {
             // Prioridad: Precio Histórico (selling_price) -> Precio Actual (service->price)
@@ -587,7 +585,7 @@ class CheckinController extends Controller
         $adelanto = $checkin->advance_payment ?? 0;
         $saldoPagar = $granTotal - $adelanto;
 
-        // --- GENERACIÓN PDF ---
+        // --- GENERACIÓN PDF (Tu código original) ---
         // Aumentamos un poco el largo por si hay muchos servicios (240mm)
         $pdf = new \FPDF('P', 'mm', array(80, 240));
         $pdf->SetMargins(4, 4, 4);
@@ -627,10 +625,12 @@ class CheckinController extends Controller
         $pdf->Cell(0, 4, $checkin->room->number, 0, 1);
 
         $pdf->Ln(1);
+        $ingresoVisual = \Carbon\Carbon::parse($checkin->check_in_date); // Solo para mostrar
+        
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(22, 4, $ingreso->format('d/m/y H:i'), 0, 0);
+        $pdf->Cell(22, 4, $ingresoVisual->format('d/m/y H:i'), 0, 0);
 
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(12, 4, 'Salida:', 0, 0);
@@ -650,29 +650,27 @@ class CheckinController extends Controller
         $pdf->Cell(15, 4, 'SUBTOT', 0, 1, 'R');
         $pdf->Ln(1);
 
-        // 1. Hospedaje
+        // 1. Hospedaje (Aquí usamos $diasACobrar calculado inteligentemente)
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(32, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
-        $pdf->Cell(10, 4, '1', 0, 0, 'C'); // Opcional: mostrar dias aqui
-        $pdf->Cell(15, 4, number_format($totalHospedaje, 2), 0, 0, 'R'); // Precio total por dias
+        $pdf->Cell(10, 4, $diasACobrar, 0, 0, 'C'); // Mostramos días calculados
+        $pdf->Cell(15, 4, number_format($precioUnitario, 2), 0, 0, 'R');
         $pdf->Cell(15, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
 
         if ($diasExcedidos > 0) {
             $pdf->SetFont('Arial', 'I', 6);
-            $pdf->Cell(0, 3, utf8_decode("(Inc. $diasExcedidos dias extra)"), 0, 1, 'L');
+            $pdf->Cell(0, 3, utf8_decode("(Inc. $diasExcedidos dias extra por horario)"), 0, 1, 'L');
         }
 
-        // 2. Servicios Adicionales
+        // 2. Servicios Adicionales (Tu lógica intacta)
         $pdf->SetFont('Arial', '', 7);
 
         $serviciosAgrupados = [];
 
         foreach ($checkin->checkinDetails as $detalle) {
-
             $nombre = $detalle->service->name ?? 'Servicio Eliminado';
             $precio = $detalle->selling_price ?? $detalle->service->price ?? 0;
 
-            //Agrupamos los servicios por nombre y cantidad
             if (!isset($serviciosAgrupados[$nombre])) {
                 $serviciosAgrupados[$nombre] = [
                     'nombre'   => $nombre,
@@ -684,20 +682,16 @@ class CheckinController extends Controller
             $serviciosAgrupados[$nombre]['subtotal'] += ($detalle->quantity * $precio);
         }
 
-        // B) LUEGO RECORREMOS LA LISTA AGRUPADA PARA PINTAR EL PDF
         foreach ($serviciosAgrupados as $item) {
-            // Calculamos el precio unitario promedio (Total / Cantidad)
-            // Esto es útil por si vendiste el mismo producto a precios diferentes
-            $precioUnitario = $item['cantidad'] > 0
+            $precioUnitarioSrv = $item['cantidad'] > 0
                 ? $item['subtotal'] / $item['cantidad']
                 : 0;
 
-            // Cortar nombre si es muy largo (limite 20 caracteres)
             $nombreSrv = substr($item['nombre'], 0, 20);
 
             $pdf->Cell(32, 4, utf8_decode($nombreSrv), 0, 0, 'L');
             $pdf->Cell(10, 4, $item['cantidad'], 0, 0, 'C');
-            $pdf->Cell(15, 4, number_format($precioUnitario, 2), 0, 0, 'R');
+            $pdf->Cell(15, 4, number_format($precioUnitarioSrv, 2), 0, 0, 'R');
             $pdf->Cell(15, 4, number_format($item['subtotal'], 2), 0, 1, 'R');
         }
 
@@ -719,7 +713,6 @@ class CheckinController extends Controller
         $pdf->Cell(50, 6, 'A PAGAR:', 0, 0, 'R');
         $pdf->Cell(22, 6, number_format($saldoPagar, 2) . ' Bs', 0, 1, 'R');
 
-
         // PIE
         $pdf->Ln(6);
         $pdf->SetFont('Arial', 'I', 7);
@@ -734,19 +727,20 @@ class CheckinController extends Controller
             ->header('Content-Disposition', 'inline; filename="checkout-' . $checkin->id . '.pdf"');
     }
 
-    // --GENERACION DE FACTURA
-
+    // --GENERACION DE FACTURA --
     public function generateCheckoutInvoice(Checkin $checkin)
     {
         try {
-            $checkin->load(['guest', 'room.price', 'checkinDetails.service']);
+            // 1. CARGAR RELACIONES (Agregamos 'schedule' para que funcione la tolerancia)
+            $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
 
-            // --- CÁLCULOS ---
+            // --- CÁLCULOS CON TOLERANCIA ---
             $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
             $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
 
-            // Lógica de días: al menos 1 día, redondeo hacia arriba si pasó la hora límite (opcional, aqui uso diferencia simple)
-            $diasReales = max(1, $ingreso->diffInDays($salida));
+            // AQUÍ LA MAGIA: Usamos la función inteligente en lugar del cálculo simple
+            // Esto respetará si ajustaste la entrada con el botón o si salió dentro del margen
+            $diasReales = $this->calculateBillableDays($checkin, $salida);
 
             $precioUnitario = $checkin->room->price->amount ?? 0;
             $totalHospedaje = $precioUnitario * $diasReales;
@@ -760,7 +754,6 @@ class CheckinController extends Controller
             $granTotal = $totalHospedaje + $totalServicios;
 
             // --- CONFIGURACIÓN PDF (80mm ancho) ---
-            // Asegúrate de que FPDF esté importado o usa la barra invertida
             $pdf = new \FPDF('P', 'mm', array(80, 260));
             $pdf->SetMargins(4, 4, 4);
             $pdf->SetAutoPageBreak(true, 2);
@@ -820,11 +813,9 @@ class CheckinController extends Controller
             $pdf->SetFont('Arial', '', 7);
             $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
 
-
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(20, 4, 'NIT/CI/CEX:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
-            // Validación null safe
             $docId = $checkin->guest->identification_number ?? '0';
             $pdf->Cell(0, 4, $docId, 0, 1);
 
@@ -839,7 +830,7 @@ class CheckinController extends Controller
 
             // 3. DETALLE
             $pdf->SetFont('Arial', 'B', 6);
-            $pdf->Cell(8, 3, 'CNT', 0, 0, 'C'); // Ancho reducido
+            $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
             $pdf->Cell(34, 3, 'DETALLE', 0, 0, 'L');
             $pdf->Cell(12, 3, 'P.UNIT', 0, 0, 'R');
             $pdf->Cell(18, 3, 'SUBTOT', 0, 1, 'R');
@@ -849,6 +840,7 @@ class CheckinController extends Controller
 
             // A. Hospedaje
             $pdf->Cell(8, 3, '1', 0, 0, 'C');
+            // Mostramos los días reales calculados por tu lógica inteligente
             $pdf->Cell(34, 3, utf8_decode("Hospedaje ($diasReales d)"), 0, 0, 'L');
             $pdf->Cell(12, 3, number_format($totalHospedaje, 2), 0, 0, 'R');
             $pdf->Cell(18, 3, number_format($totalHospedaje, 2), 0, 1, 'R');
@@ -871,7 +863,6 @@ class CheckinController extends Controller
             foreach ($serviciosAgrupados as $name => $data) {
                 $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
                 $pdf->Cell(8, 3, $data['qty'], 0, 0, 'C');
-                // Cortar nombre si es muy largo
                 $pdf->Cell(34, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
                 $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
                 $pdf->Cell(18, 3, number_format($data['total'], 2), 0, 1, 'R');
@@ -893,12 +884,10 @@ class CheckinController extends Controller
             $pdf->Cell(50, 5, 'TOTAL A PAGAR Bs', 0, 0, 'R');
             $pdf->Cell(22, 5, number_format($granTotal, 2), 0, 1, 'R');
 
-            // 5. MONTO EN LETRAS (Usando función manual)
+            // 5. MONTO EN LETRAS
             $pdf->Ln(2);
             $pdf->SetFont('Arial', '', 7);
-
-            // Llamada a la nueva función robusta
-            $montoLetras = $this->convertirNumeroALetras($granTotal);
+            $montoLetras = $this->convertirNumeroALetras($granTotal); // Asegúrate de tener esta función
             $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
 
             $pdf->Ln(2);
@@ -907,36 +896,25 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
 
             // 6. CÓDIGO DE CONTROL Y QR
-            // ... (código anterior de totales y monto literal) ...
-
-            // 6. CÓDIGO DE CONTROL Y QR
             $pdf->Ln(2);
             $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // Definimos la ruta y tamaño
             $logoPath = public_path('images/qrCop.png');
-            $qrSize = 22; // Tamaño en mm (igual que el cuadro anterior)
+            $qrSize = 22;
 
             if (file_exists($logoPath)) {
-                // CENTRADO DINÁMICO:
-                // Ancho Página (80) - Tamaño QR (22) = 58 / 2 = 29
                 $x = (80 - $qrSize) / 2;
                 $y = $pdf->GetY();
-
-                // Insertamos la imagen en la posición calculada
                 $pdf->Image($logoPath, $x, $y, $qrSize, $qrSize);
-
-                // Movemos el cursor hacia abajo (alto de imagen + margen)
                 $pdf->SetY($y + $qrSize + 2);
             } else {
-                // FALLBACK: Si no existe la imagen, mantiene el cuadro vacío para evitar errores
-                $x = (80 - 22) / 2; // Centrado manual
+                $x = (80 - 22) / 2;
                 $y = $pdf->GetY();
                 $pdf->Rect($x, $y, 22, 22);
                 $pdf->SetXY($x, $y + 8);
                 $pdf->SetFont('Arial', 'B', 6);
-                $pdf->Cell(22, 3, 'QR', 0, 0, 'C'); // Texto "QR" si falla la imagen
+                $pdf->Cell(22, 3, 'QR', 0, 0, 'C');
                 $pdf->SetY($y + 24);
             }
 
@@ -951,8 +929,8 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="factura-' . $checkin->id . '.pdf"');
+                
         } catch (\Exception $e) {
-            // Esto imprimirá el error real en el navegador en lugar del 500 generico
             return response()->json(['error' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
         }
     }
@@ -1058,5 +1036,53 @@ class CheckinController extends Controller
                 'total_adicional' => $total,
             ]
         ]);
+    }
+
+    // --- LÓGICA DE TOLERANCIA INTELIGENTE ---
+    private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal)
+    {
+        $diasPactados = intval($checkin->duration_days);
+        if ($diasPactados < 1) $diasPactados = 1;
+
+        // Si no tiene horario asignado, usamos lógica simple
+        if (!$checkin->schedule) {
+            $ingreso = Carbon::parse($checkin->check_in_date);
+            $diasReales = $ingreso->diffInDays($fechaSalidaReal);
+            return max($diasPactados, ceil($diasReales)); 
+        }
+
+        $horario = $checkin->schedule;
+        
+        // A. AJUSTE DE ENTRADA (Early Check-in)
+        // Si llegó a las 5:30 y la entrada es 6:00, movemos el reloj a las 6:00
+        $fechaEntradaReal = Carbon::parse($checkin->check_in_date);
+        $horaOficialEntrada = Carbon::parse($fechaEntradaReal->format('Y-m-d') . ' ' . $horario->check_in_time);
+        $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($horario->entry_tolerance_minutes);
+
+        $fechaEntradaCalculo = $fechaEntradaReal;
+        
+        if ($fechaEntradaReal->between($inicioTolerancia, $horaOficialEntrada)) {
+            $fechaEntradaCalculo = $horaOficialEntrada; 
+        }
+
+        // B. AJUSTE DE SALIDA (Late Check-out)
+        // Calculamos cuándo debería salir
+        $fechaSalidaIdeal = $fechaEntradaCalculo->copy()->addDays($diasPactados);
+        
+        // Fijamos hora límite oficial
+        $limiteSalidaOficial = Carbon::parse($fechaSalidaIdeal->format('Y-m-d') . ' ' . $horario->check_out_time);
+        $limiteConTolerancia = $limiteSalidaOficial->copy()->addMinutes($horario->exit_tolerance_minutes);
+
+        // C. DECISIÓN FINAL
+        if ($fechaSalidaReal->lessThanOrEqualTo($limiteConTolerancia)) {
+            return $diasPactados; // Dentro del margen, cobramos lo pactado
+        } else {
+            // Se pasó: Cobramos diferencia real
+            $diasTotales = $fechaEntradaCalculo->diffInDays($fechaSalidaReal);
+            if ($diasTotales > $diasPactados) {
+                 return ceil($diasTotales);
+            }
+            return $diasPactados + 1;
+        }
     }
 }
