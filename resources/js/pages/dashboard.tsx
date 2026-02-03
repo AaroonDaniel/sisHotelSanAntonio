@@ -17,7 +17,8 @@ import {
     AlertTriangle, // Icono para modal de error
     X,             // Icono cerrar
     FileText,
-    Briefcase,      // Icono archivo
+    Briefcase,
+    Clock,      // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
@@ -51,6 +52,7 @@ const hotelModules = [
             { name: 'Habitaciones', icon: Hotel, url: '/habitaciones' },
             { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
             { name: 'Huéspedes', icon: Users, url: '/invitados' },
+            { name: 'Horarios', icon: Clock, url: '/horarios' },
         ],
     },
     {

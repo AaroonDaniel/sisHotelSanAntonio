@@ -10,6 +10,7 @@ use App\Http\Controllers\RoomController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\CheckinDetailController;
+use App\Http\Controllers\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
 use Inertia\Inertia;
@@ -116,7 +117,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Vista previa de servicios adicionales huesped
     Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
     Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
-    
+
+    // Horarios
+    Route::get('/horarios', [ScheduleController::class, 'index'])->name('schedules.index');
+    Route::post('/horarios', [ScheduleController::class, 'store'])->name('schedules.store');
+    Route::put('/horarios/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
+    Route::delete('/horarios/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
+    Route::patch('/horarios/{schedule}/toggle', [ScheduleController::class, 'toggleStatus'])->name('schedules.toggle');
+
     //Reportes 
     // Página principal de reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
