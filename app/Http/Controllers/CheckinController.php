@@ -78,11 +78,14 @@ class CheckinController extends Controller
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
+            'actual_arrival_date' => 'nullable|date',
+            'schedule_id' => 'nullable|exists:schedules,id',
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
             // Validar array de acompañantes
             'companions' => 'nullable|array',
+            'selected_services' => 'nullable|array',
         ]);
 
         // Usuario actual (fallback si no hay sesión)
@@ -93,7 +96,11 @@ class CheckinController extends Controller
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
             'user_id' => $userId,
-            'check_in_date' => now()->timezone('America/La_Paz'),
+            
+            'check_in_date' => $validatedCheckin['check_in_date'],
+            'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
+            'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
+
             'duration_days' => $validatedCheckin['duration_days'] ?? 0,
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
@@ -362,7 +369,7 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Registro eliminado.');
     }
 
-    public function checkout(Checkin $checkin)
+    public function checkout(Request $request, Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
 
@@ -370,8 +377,12 @@ class CheckinController extends Controller
             $room->update(['status' => 'LIMPIEZA']);
         }
 
+        $checkOutDate = $request->input('check_out_date') 
+            ? \Carbon\Carbon::parse($request->input('check_out_date')) 
+            : now();
+
         $checkin->update([
-            'check_out_date' => now(),
+            'check_out_date' => $checkOutDate,
             'status' => 'finalizado'
         ]);
 

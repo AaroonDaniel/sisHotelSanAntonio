@@ -24,6 +24,7 @@ class Checkin extends Model
         'advance_payment',
         'status',
         'schedule_id',
+        'actual_arrival_date',
     ];
 
     protected $uppercaseFields = [
@@ -35,6 +36,7 @@ class Checkin extends Model
         'check_in_date' => 'datetime',
         'check_out_date' => 'datetime',
         'advance_payment' => 'decimal:2',
+        'actual_arrival_date' => 'datetime',
     ];
 
     // --- RELACIONES (BelongsTo) ---

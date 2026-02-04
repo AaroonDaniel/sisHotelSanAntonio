@@ -77,6 +77,7 @@ interface Props {
     Blocks: Block[];
     RoomTypes: RoomType[];
     Checkins: any[];
+    Schedules: any[];
 }
 
 export default function RoomsStatus({
@@ -87,6 +88,7 @@ export default function RoomsStatus({
     Blocks,
     RoomTypes,
     Checkins,
+    Schedules,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -724,6 +726,9 @@ export default function RoomsStatus({
                 guests={Guests}
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
+                
+                // --- AGREGAR ESTA LÍNEA ---
+                schedules={Schedules} 
             />
 
             <DetailModal

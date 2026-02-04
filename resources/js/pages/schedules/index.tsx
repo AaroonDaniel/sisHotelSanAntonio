@@ -1,7 +1,16 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Clock, Hourglass, Pencil, Plus, Power, Search, Trash2, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
+import { 
+    ArrowLeft, 
+    Pencil, 
+    Plus, 
+    Power, 
+    Search, 
+    Trash2, 
+    Play,           // Ícono para "Aplicar"
+    CheckCircle2    // Ícono para "Aplicado"
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
 import DeleteModal from './deleteModal';
 import ScheduleModal from './scheduleModal';
 
@@ -35,6 +44,22 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
 
+    // --- NUEVO: ESTADO DEL HORARIO APLICADO ---
+    const [appliedScheduleId, setAppliedScheduleId] = useState<number | null>(null);
+
+    // Al cargar la página, verificamos si hay un horario "Aplicado" (Guardado en LocalStorage)
+    useEffect(() => {
+        const storedSchedule = localStorage.getItem('hotel_active_schedule');
+        if (storedSchedule) {
+            try {
+                const parsed = JSON.parse(storedSchedule);
+                setAppliedScheduleId(parsed.id);
+            } catch (e) {
+                console.error("Error leyendo horario activo", e);
+            }
+        }
+    }, []);
+
     // --- 2. LÓGICA DE FILTRADO ---
     const filteredSchedules = Schedules.filter((schedule) =>
         schedule.name.toLowerCase().includes(searchTerm.toLowerCase()),
@@ -43,6 +68,17 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
     // --- 3. FUNCIÓN PARA CAMBIAR ESTADO ---
     const toggleStatus = (schedule: Schedule) => {
         router.patch(`/horarios/${schedule.id}/toggle`);
+    };
+
+    // --- 4. NUEVO: FUNCIÓN APLICAR HORARIO ---
+    // Esta función "manda la señal" guardando los datos para que el Modal de Asignación los lea
+    const applySchedule = (schedule: Schedule) => {
+        // Guardamos todo el objeto schedule para tener las tolerancias disponibles
+        localStorage.setItem('hotel_active_schedule', JSON.stringify(schedule));
+        setAppliedScheduleId(schedule.id);
+        
+        // Opcional: Feedback visual o redirección
+        // alert(`Horario "${schedule.name}" aplicado correctamente para futuras asignaciones.`);
     };
 
     // Funciones Helper
@@ -67,7 +103,7 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
             
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 
-                {/* --- BOTÓN VOLVER (Idéntico a Floors) --- */}
+                {/* --- BOTÓN VOLVER --- */}
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
@@ -78,11 +114,14 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                     <span>Volver</span>
                 </button>
 
-                {/* --- TÍTULO PRINCIPAL (Idéntico a Floors) --- */}
+                {/* --- TÍTULO PRINCIPAL --- */}
                 <div>
                     <h2 className="text-3xl font-bold text-white">
                         Lista de Horarios
                     </h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                        Selecciona y "Aplica" un horario para activar las tolerancias automáticas en Recepción.
+                    </p>
                 </div>
 
                 <div className="py-12">
@@ -117,6 +156,8 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
+                                        {/* Columna nueva para indicar activo */}
+                                        <th className="px-4 py-4 text-center">Uso</th> 
                                         <th className="px-6 py-4">Nombre Turno</th>
                                         <th className="px-6 py-4 text-center">Entrada</th>
                                         <th className="px-6 py-4 text-center">Salida</th>
@@ -127,14 +168,38 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredSchedules.length > 0 ? (
-                                        filteredSchedules.map((schedule) => (
+                                        filteredSchedules.map((schedule) => {
+                                            const isApplied = appliedScheduleId === schedule.id;
+                                            
+                                            return (
                                             <tr
                                                 key={schedule.id}
-                                                className={`transition-colors hover:bg-gray-50 ${!schedule.is_active ? 'bg-gray-50' : ''}`}
+                                                className={`transition-colors hover:bg-gray-50 ${!schedule.is_active ? 'bg-gray-50 opacity-75' : ''} ${isApplied ? 'bg-indigo-50 hover:bg-indigo-100' : ''}`}
                                             >
+                                                {/* Botón Aplicar */}
+                                                <td className="px-4 py-4 text-center">
+                                                    <button
+                                                        onClick={() => applySchedule(schedule)}
+                                                        disabled={!schedule.is_active}
+                                                        title={isApplied ? "Horario actualmente en uso" : "Aplicar este horario para asignaciones"}
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${
+                                                            isApplied 
+                                                                ? 'bg-indigo-600 text-white shadow-md cursor-default'
+                                                                : 'bg-white border border-gray-300 text-gray-400 hover:border-indigo-500 hover:text-indigo-600'
+                                                        }`}
+                                                    >
+                                                        {isApplied ? (
+                                                            <CheckCircle2 className="h-5 w-5" />
+                                                        ) : (
+                                                            <Play className="h-4 w-4 ml-0.5" />
+                                                        )}
+                                                    </button>
+                                                </td>
+
                                                 {/* Nombre */}
                                                 <td className="px-6 py-4 font-bold text-gray-900">
                                                     {schedule.name}
+                                                    {isApplied && <span className="ml-2 text-xs text-indigo-600 font-normal">(En uso)</span>}
                                                 </td>
 
                                                 {/* Hora Entrada */}
@@ -147,7 +212,7 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                     {schedule.check_out_time.substring(0, 5)}
                                                 </td>
 
-                                                {/* Tolerancias (Combinadas visualmente) */}
+                                                {/* Tolerancias */}
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
@@ -160,7 +225,7 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                     </div>
                                                 </td>
 
-                                                {/* Estado Badge (Idéntico a Floors) */}
+                                                {/* Estado Badge */}
                                                 <td className="px-6 py-4 text-center">
                                                     <span
                                                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -176,7 +241,6 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                 {/* Acciones */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        {/* Botón Power */}
                                                         <button
                                                             onClick={() => toggleStatus(schedule)}
                                                             title={schedule.is_active ? 'Desactivar' : 'Activar'}
@@ -189,7 +253,6 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                             <Power className="h-4 w-4" />
                                                         </button>
 
-                                                        {/* Botón Editar */}
                                                         <button
                                                             onClick={() => openEditModal(schedule)}
                                                             className="text-gray-400 transition hover:text-blue-600"
@@ -197,7 +260,6 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
 
-                                                        {/* Botón Eliminar */}
                                                         <button
                                                             onClick={() => openDeleteModal(schedule.id)}
                                                             className="text-gray-400 transition hover:text-red-600"
@@ -207,11 +269,11 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))
+                                        )})
                                     ) : (
                                         <tr>
                                             <td
-                                                colSpan={6}
+                                                colSpan={7}
                                                 className="p-8 text-center text-gray-500"
                                             >
                                                 {searchTerm

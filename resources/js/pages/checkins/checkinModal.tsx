@@ -197,6 +197,7 @@ interface CheckinFormData {
     guest_id: string | null;
     room_id: string;
     schedule_id?: string;
+    actual_arrival_date?: string;
     check_in_date: string;
     duration_days: number | string;
     advance_payment: number;
@@ -407,6 +408,31 @@ export default function CheckinModal({
             }
         }
     }, [show, checkinToEdit, initialRoomId, targetGuestId]);
+
+    // --- EFECTO: DETECTAR HORARIO APLICADO (LocalStorage) ---
+    useEffect(() => {
+        if (show && !checkinToEdit) {
+            const storedSchedule = localStorage.getItem('hotel_active_schedule');
+            
+            if (storedSchedule) {
+                try {
+                    const parsed = JSON.parse(storedSchedule);
+                    // Cargamos el ID del horario, pero NO cambiamos la fecha aún (esperamos al botón)
+                    setData(prev => ({
+                        ...prev,
+                        schedule_id: parsed.id.toString(),
+                        actual_arrival_date: prev.check_in_date // Preparamos la hora real
+                    }));
+                } catch (e) {
+                    console.error("Error leyendo horario activo", e);
+                }
+            }
+        }
+    }, [show, checkinToEdit]);
+
+    //calculo matematico de fecha
+    
+
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
     // A. Variables calculadas
@@ -671,37 +697,48 @@ export default function CheckinModal({
     if (!show) return null;
     const hasErrors = Object.keys(errors).length > 0;
 
-    // Funcion de TOLERANCIA
-
+    // --- FUNCIÓN DE TOLERANCIA CON DEBUG ---
     const handleApplyTolerance = () => {
-        // 1. Verificar si hay un horario seleccionado
-        if (!data.schedule_id) return;
+        console.log("--- INICIO CLICK TOLERANCIA ---");
+        
+        // 1. Verificar ID
+        console.log("Schedule ID seleccionado:", data.schedule_id);
+        if (!data.schedule_id) {
+            console.warn("❌ No hay schedule_id seleccionado. Saliendo...");
+            return;
+        }
 
-        // 2. Buscar los datos del horario (para sacar la hora 06:00)
-        const selectedSchedule = schedules.find(
-            (s) => String(s.id) === data.schedule_id,
-        );
-        if (!selectedSchedule) return;
+        // 2. Verificar Horario en la lista
+        const selectedSchedule = schedules.find((s) => String(s.id) === data.schedule_id);
+        console.log("Objeto Schedule encontrado:", selectedSchedule);
+        
+        if (!selectedSchedule) {
+            console.warn("❌ No se encontró el horario en la lista de schedules.");
+            return;
+        }
 
-        // 3. Tomar la fecha que está puesta actualmente en el input (ej: 03:40)
+        // 3. Cálculos de fecha
         const currentInputDate = new Date(data.check_in_date);
-
-        // 4. Extraer SOLO LA FECHA (Año-Mes-Día) respetando la zona horaria local
-        // (Esto es vital para que no te cambie de día por error de zona horaria)
+        console.log("Fecha actual en el input (Sin procesar):", data.check_in_date);
+        
         const offset = currentInputDate.getTimezoneOffset() * 60000;
-        const localISODate = new Date(currentInputDate.getTime() - offset)
-            .toISOString()
-            .slice(0, 10);
-
-        // 5. Obtener la HORA OFICIAL del horario (Cortamos segundos: "06:00:00" -> "06:00")
+        const localISODate = new Date(currentInputDate.getTime() - offset).toISOString().slice(0, 10);
+        console.log("Fecha extraída (Día):", localISODate);
+        
         const officialTime = selectedSchedule.check_in_time.substring(0, 5);
-
-        // 6. "Completar" la fecha: Unimos el Día actual + La Hora Oficial
-        // Resultado: Si era "2026-02-03 03:40", ahora será "2026-02-03 06:00"
+        console.log("Hora oficial del turno:", officialTime);
+        
         const newDateTime = `${localISODate}T${officialTime}`;
+        console.log("✅ NUEVA FECHA FINAL A APLICAR:", newDateTime);
 
-        // 7. Actualizar el input visualmente
-        setData('check_in_date', newDateTime);
+        // 4. Aplicar
+        setData((prev) => ({
+            ...prev,
+            check_in_date: newDateTime,
+            actual_arrival_date: prev.check_in_date
+        }));
+        
+        console.log("--- FIN CLICK TOLERANCIA ---");
     };
 
     return (
@@ -1146,28 +1183,26 @@ export default function CheckinModal({
                                         type="datetime-local"
                                         value={data.check_in_date}
                                         onChange={(e) => setData('check_in_date', e.target.value)}
-                                        // disabled={true} // Quitar o mantener según preferencia
                                         className="w-full rounded-lg border border-gray-400 text-sm text-black"
                                     />
 
-                                    {/* BOTÓN DE TOLERANCIA (JUSTO DEBAJO Y A LA IZQUIERDA) */}
-                                    <div className="mt-2 flex justify-start"> {/* justify-start alinea a la izq */}
-                                        <button
-                                            type="button"
-                                            // Si no hay horario seleccionado, no hace nada pero se muestra (para pruebas visuales)
-                                            onClick={handleApplyTolerance}
-                                            className="group flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-bold text-green-700 uppercase transition-colors hover:border-green-300 hover:bg-green-100 active:scale-95"
-                                            title="Ajustar hora a la entrada oficial del turno"
-                                        >
-                                            <ArrowRightCircle className="h-3.5 w-3.5" />
-                                            <span>
-                                                Tolerancia ({
-                                                    schedules?.find((s) => String(s.id) === data.schedule_id)
-                                                        ?.check_in_time.substring(0, 5) || '06:00'
-                                                })
-                                            </span>
-                                        </button>
+                                    {/* --- AGREGAR ESTO AQUÍ --- */}
+                                    <div className="mt-2 flex justify-start"> 
+                                        {data.schedule_id && (
+                                            <button
+                                                type="button"
+                                                onClick={handleApplyTolerance}
+                                                className="group flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-bold text-green-700 uppercase transition-colors hover:border-green-300 hover:bg-green-100 active:scale-95"
+                                                title="Ajustar hora a la entrada oficial del turno"
+                                            >
+                                                <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                <span>
+                                                    Tolerancia
+                                                </span>
+                                            </button>
+                                        )}
                                     </div>
+                                    {/* ------------------------- */}
                                 </div>
 
                                 {/* COLUMNA DERECHA: ESTADÍA + SALIDA ESTIMADA */}

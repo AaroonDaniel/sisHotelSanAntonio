@@ -9,6 +9,7 @@ use App\Models\Price;
 use App\Models\Floor;
 use App\Models\Guest;
 use App\Models\Service;
+use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -161,6 +162,7 @@ class RoomController
             'services'  => \App\Models\Service::all(),
             'Blocks'    => \App\Models\Block::all(),
             'RoomTypes' => \App\Models\RoomType::all(),
+            'Schedules' => \App\Models\Schedule::where('is_active', true)->get(),
         ]);
     }
 

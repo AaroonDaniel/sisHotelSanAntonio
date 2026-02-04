@@ -13,6 +13,7 @@ import {
     Trash2,
     User as UserIcon,
     Users,
+    AlertCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinModal from './checkinModal';
@@ -40,6 +41,11 @@ interface Checkin {
     guest_id: number;
     room_id: number;
     check_in_date: string;
+
+    actual_arrival_date?: string | null;
+    schedule_id?: number | null;
+    schedule?: { name: string };
+
     check_out_date?: string | null;
     duration_days: number;
     advance_payment: number;
@@ -47,6 +53,7 @@ interface Checkin {
     guest?: Guest;
     room?: Room;
     companions?: Guest[]; // Aseguramos que use la interfaz Guest
+    created_at: string;
 }
 
 interface Props {
@@ -54,7 +61,7 @@ interface Props {
     Checkins: Checkin[];
     Guests: Guest[];
     Rooms: Room[];
-    Schedules: any[]; 
+    Schedules: any[];
 }
 
 export interface CheckinData {
@@ -62,20 +69,23 @@ export interface CheckinData {
     guest_id: number;
     room_id: number;
     check_in_date: string;
+    //
+    actual_arrival_date?: string;
+    schedule_id?: string;
+
     duration_days: number;
     advance_payment: number;
     notes?: string;
     services?: string[];
     guest?: Guest;
-    
+
     // --- CAMBIO CLAVE AQUÍ ---
     // Cambia esto:
-    // companions?: CompanionData[]; 
-    
-    // Por esto:
-    companions?: any[]; 
-}
+    // companions?: CompanionData[];
 
+    // Por esto:
+    companions?: any[];
+}
 
 export default function CheckinsIndex({
     auth,
@@ -171,6 +181,34 @@ export default function CheckinsIndex({
         });
     };
 
+    const formatTime = (dateString: string) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    // Formato de hora:
+    const formatDateOnly = (dateString: string) => {
+        if (!dateString) return '-';
+        return new Date(dateString).toLocaleDateString('es-BO', {
+            day: '2-digit',
+            month: '2-digit', 
+            year: 'numeric'
+        });
+    };
+
+    const formatTimeOnly = (dateString: string) => {
+        if (!dateString) return '';
+        return new Date(dateString).toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+    
+
     // --- 3. HELPER PARA RENDERIZAR FILAS (Row Renderer) ---
     // Esto renderiza una fila idéntica sea titular o acompañante
     const RenderRow = ({
@@ -186,8 +224,9 @@ export default function CheckinsIndex({
         const isTitular = type === 'TITULAR';
 
         return (
-            <tr className={`border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50 ${!isTitular ? 'bg-gray-50/30' : ''}`}>
-                
+            <tr
+                className={`border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50 ${!isTitular ? 'bg-gray-50/30' : ''}`}
+            >
                 {/* 1. Habitación (SOLO TITULAR) */}
                 <td className="px-6 py-4">
                     {isTitular && (
@@ -216,15 +255,18 @@ export default function CheckinsIndex({
                                 <Users className="h-4 w-4 text-gray-400" />
                             </div>
                         )}
-                        <span className={`uppercase ${isTitular ? 'font-bold text-gray-800' : 'text-sm font-medium text-gray-600'}`}>
+                        <span
+                            className={`uppercase ${isTitular ? 'font-bold text-gray-800' : 'text-sm font-medium text-gray-600'}`}
+                        >
                             {person?.full_name}
                         </span>
                     </div>
-                    <div className={`${isTitular ? 'ml-6' : 'ml-10'} flex flex-col`}>
+                    <div
+                        className={`${isTitular ? 'ml-6' : 'ml-10'} flex flex-col`}
+                    >
                         <span className="text-xs text-gray-500">
                             CI: {person?.identification_number || 'S/N'}
                         </span>
-                        
                     </div>
                 </td>
 
@@ -254,7 +296,6 @@ export default function CheckinsIndex({
                 {/* 5. Acciones */}
                 <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                        
                         {/* Botones Globales (Imprimir/Checkout) SOLO TITULAR */}
                         {isTitular && (
                             <>
