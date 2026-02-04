@@ -726,9 +726,8 @@ export default function RoomsStatus({
                 guests={Guests}
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
-                
                 // --- AGREGAR ESTA LÍNEA ---
-                schedules={Schedules} 
+                schedules={Schedules}
             />
 
             <DetailModal
@@ -751,6 +750,7 @@ export default function RoomsStatus({
                     <CheckoutConfirmationModal
                         checkin={checkoutData.checkin}
                         room={checkoutData.room}
+                        schedules={Schedules}
                         onClose={() => {
                             setConfirmCheckoutId(null);
                             setSelectedForAction(null);
@@ -773,13 +773,17 @@ function CheckoutConfirmationModal({
     checkin,
     room,
     onClose,
+    schedules,
 }: {
     checkin: any;
     room: any;
     onClose: () => void;
+    schedules?: any[];
 }) {
     const [processing, setProcessing] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+    const [exitDate, setExitDate] = useState(new Date());
 
     const [extraDetails, setExtraDetails] = useState<{
         servicios: any[];
@@ -844,13 +848,20 @@ function CheckoutConfirmationModal({
         setProcessing(true);
         try {
             // 1. Enviamos la petición de salida (Checkout) para actualizar la BD
+            const offset = exitDate.getTimezoneOffset() * 60000;
+            const localISODate = new Date(exitDate.getTime() - offset)
+                .toISOString()
+                .slice(0, 16);
+
+            // 1. Enviamos la petición de salida con la fecha ajustada
             await axios.put(`/checks/${checkin.id}/checkout`, {
                 tipo_documento: tipoDocumento,
+                check_out_date: localISODate, // <--- AGREGAR ESTA LÍNEA
             });
 
             // 2. Definimos qué PDF vamos a pedir según la selección
             let endpoint = '';
-            
+
             if (tipoDocumento === 'recibo') {
                 // Ruta para el recibo simple
                 endpoint = `/checks/${checkin.id}/checkout-receipt`;
@@ -869,17 +880,84 @@ function CheckoutConfirmationModal({
                 new Blob([response.data], { type: 'application/pdf' }),
             );
             setPdfUrl(url); // Esto activa la vista del PDF
-
         } catch (error: any) {
             console.error('Error al finalizar:', error);
             if (error.response?.status === 405) {
-                alert('Error 405: Revise que la ruta checkout-invoice exista en web.php.');
+                alert(
+                    'Error 405: Revise que la ruta checkout-invoice exista en web.php.',
+                );
             } else {
                 alert('Hubo un error al procesar la salida.');
             }
         } finally {
             setProcessing(false);
         }
+    };
+
+    // --- FUNCIÓN TOLERANCIA ---
+    // --- FUNCIÓN TOLERANCIA CON DEBUG (DEPURACIÓN) ---
+    const handleApplyTolerance = () => {
+        console.log(
+            '%c--- CLICK EN TOLERANCIA SALIDA ---',
+            'color: orange; font-weight: bold;',
+        );
+
+        // 1. Verificamos qué datos tenemos
+        console.log('1. Checkin Completo:', checkin);
+        console.log(
+            '2. ID del Horario en el Checkin (schedule_id):',
+            checkin.schedule_id,
+        );
+        console.log('3. Lista de Horarios (schedules):', schedules);
+
+        // 2. Validaciones
+        if (!checkin.schedule_id) {
+            console.error(
+                "❌ ERROR: Este checkin no tiene 'schedule_id'. No sabe qué horario aplicar.",
+            );
+            alert('Este registro no tiene un turno asignado.');
+            return;
+        }
+
+        if (!schedules || schedules.length === 0) {
+            console.error(
+                "❌ ERROR: La lista de 'schedules' está vacía o es undefined.",
+            );
+            console.log(
+                "Asegúrate de pasar 'schedules' desde el RoomController -> status.tsx -> Modal",
+            );
+            return;
+        }
+
+        // 3. Buscar el horario
+        // Nota: Convertimos a String/Number para asegurar que la comparación funcione
+        const schedule = schedules.find(
+            (s) => String(s.id) === String(checkin.schedule_id),
+        );
+        console.log('4. Horario Encontrado:', schedule);
+
+        if (!schedule) {
+            console.error(
+                '❌ ERROR: No se encontró un horario con el ID',
+                checkin.schedule_id,
+                'en la lista.',
+            );
+            return;
+        }
+
+        // 4. Calcular la fecha
+        console.log('5. Hora oficial de salida (DB):', schedule.check_out_time);
+
+        const [hours, minutes] = schedule.check_out_time.split(':');
+
+        const targetDate = new Date(); // Fecha de hoy
+        targetDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+        console.log('✅ FECHA FINAL CALCULADA:', targetDate.toLocaleString());
+
+        // 5. Aplicar
+        setExitDate(targetDate);
+        console.log('--- FIN DEL PROCESO (Estado Actualizado) ---');
     };
 
     const handleCloseFinal = () => {
@@ -1097,6 +1175,25 @@ function CheckoutConfirmationModal({
                                         </div>
                                     )}
                                 </div>
+                            </div>
+
+                            {/* BOTÓN TOLERANCIA */}
+                            <div className="mt-4 flex justify-center">
+                                <button
+                                    type="button"
+                                    onClick={handleApplyTolerance}
+                                    className="group flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[10px] font-bold text-red-700 uppercase shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 active:scale-95"
+                                    title="Ajustar hora a la salida oficial del turno"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                    <span>
+                                        Aplicar Tolerancia ({
+                                            checkin.schedule_id && schedules
+                                                ? schedules.find(s => s.id === checkin.schedule_id)?.check_out_time.substring(0, 5) 
+                                                : 'S/T'
+                                        })
+                                    </span>
+                                </button>
                             </div>
 
                             <div className="mt-4 mb-6 text-center">
