@@ -369,6 +369,49 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Registro eliminado.');
     }
 
+    // Obtener los detalles antes de finalizar
+    // --- NUEVO: Obtener detalles antes de finalizar ---
+    public function getCheckoutDetails(Request $request, Checkin $checkin)
+    {
+        // Cargamos relaciones necesarias
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
+
+        // Verificamos si el usuario pidió "perdonar" el retraso (S/T)
+        $waivePenalty = $request->boolean('waive_penalty', false);
+        $checkOutDate = now(); 
+
+        // Calculamos días usando la lógica inteligente
+        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+        
+        // Calculamos Costos
+        $price = $checkin->room->price->amount ?? 0;
+        $accommodationTotal = $days * $price;
+
+        $servicesTotal = 0;
+        foreach ($checkin->checkinDetails as $detail) {
+             $p = $detail->selling_price ?? $detail->service->price;
+             $servicesTotal += $detail->quantity * $p;
+        }
+
+        $grandTotal = $accommodationTotal + $servicesTotal;
+        $balance = $grandTotal - ($checkin->advance_payment ?? 0);
+
+        return response()->json([
+            'guest' => $checkin->guest,
+            'room' => $checkin->room,
+            'check_in_date' => $checkin->check_in_date->format('Y-m-d H:i:s'),
+            'check_out_date' => $checkOutDate->format('Y-m-d H:i:s'),
+            'duration_days' => $days,
+            'price_per_night' => $price,
+            'accommodation_total' => $accommodationTotal,
+            'services_total' => $servicesTotal,
+            'advance_payment' => $checkin->advance_payment,
+            'grand_total' => $grandTotal,
+            'balance' => $balance,
+            'notes' => $checkin->notes
+        ]);
+    }
+
     public function checkout(Request $request, Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
@@ -377,12 +420,18 @@ class CheckinController extends Controller
             $room->update(['status' => 'LIMPIEZA']);
         }
 
+        // Usamos la fecha enviada o la actual
         $checkOutDate = $request->input('check_out_date') 
             ? \Carbon\Carbon::parse($request->input('check_out_date')) 
             : now();
+        
+        // Recalculamos para asegurar integridad (especialmente si se usó tolerancia)
+        $waivePenalty = $request->boolean('waive_penalty', false);
+        $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
         $checkin->update([
             'check_out_date' => $checkOutDate,
+            'duration_days' => $finalDays, // Guardamos los días reales calculados
             'status' => 'finalizado'
         ]);
 
@@ -1049,51 +1098,63 @@ class CheckinController extends Controller
         ]);
     }
 
-    // --- LÓGICA DE TOLERANCIA INTELIGENTE ---
-    private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal)
+    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
+    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA PARA TU CASO) ---
+    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA Y FINAL) ---
+    private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal, $waivePenalty = false)
     {
-        $diasPactados = intval($checkin->duration_days);
-        if ($diasPactados < 1) $diasPactados = 1;
-
-        // Si no tiene horario asignado, usamos lógica simple
-        if (!$checkin->schedule) {
-            $ingreso = Carbon::parse($checkin->check_in_date);
-            $diasReales = $ingreso->diffInDays($fechaSalidaReal);
-            return max($diasPactados, ceil($diasReales)); 
+        // 1. Si ya está finalizado en BD, respetamos lo histórico
+        if ($checkin->status === 'finalizado') {
+            return max(1, intval($checkin->duration_days));
         }
 
+        $ingreso = Carbon::parse($checkin->check_in_date);
+        
+        // AJUSTE DE ENTRADA (Aplica siempre si hay horario)
+        // Si entró a las 05:12, para el sistema es como si hubiera entrado a las 06:00
+        if ($checkin->schedule) {
+            $horaOficialEntrada = Carbon::parse($ingreso->format('Y-m-d') . ' ' . $checkin->schedule->check_in_time);
+            $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($checkin->schedule->entry_tolerance_minutes);
+
+            if ($ingreso->between($inicioTolerancia, $horaOficialEntrada)) {
+                $ingreso = $horaOficialEntrada;
+            }
+        }
+
+        // --- CASO A: SI PRESIONAS EL BOTÓN DE TOLERANCIA ---
+        // Ignoramos la hora de salida. Solo contamos días calendario.
+        // Ej: Entró el 1, Salió el 4 a las 15:00. (4 - 1) = 3 Días.
+        if ($waivePenalty) {
+            $diasCalendario = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
+            return $diasCalendario == 0 ? 1 : $diasCalendario;
+        }
+
+        // --- CASO B: LÓGICA ESTRICTA (POR DEFECTO) ---
+        // Calculamos días calendario base
+        $diasBase = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
+        if ($diasBase == 0) $diasBase = 1;
+
+        if (!$checkin->schedule) {
+            // Sin horario: cálculo matemático simple de 24h
+            return max(intval($checkin->duration_days), ceil($ingreso->floatDiffInDays($fechaSalidaReal)));
+        }
+
+        // Con horario: Verificamos la hora de salida
         $horario = $checkin->schedule;
         
-        // A. AJUSTE DE ENTRADA (Early Check-in)
-        // Si llegó a las 5:30 y la entrada es 6:00, movemos el reloj a las 6:00
-        $fechaEntradaReal = Carbon::parse($checkin->check_in_date);
-        $horaOficialEntrada = Carbon::parse($fechaEntradaReal->format('Y-m-d') . ' ' . $horario->check_in_time);
-        $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($horario->entry_tolerance_minutes);
+        // Hora límite para HOY (día de salida)
+        $limiteSalidaHoy = Carbon::parse($fechaSalidaReal->format('Y-m-d') . ' ' . $horario->check_out_time);
+        $limiteConTolerancia = $limiteSalidaHoy->copy()->addMinutes($horario->exit_tolerance_minutes);
 
-        $fechaEntradaCalculo = $fechaEntradaReal;
-        
-        if ($fechaEntradaReal->between($inicioTolerancia, $horaOficialEntrada)) {
-            $fechaEntradaCalculo = $horaOficialEntrada; 
-        }
-
-        // B. AJUSTE DE SALIDA (Late Check-out)
-        // Calculamos cuándo debería salir
-        $fechaSalidaIdeal = $fechaEntradaCalculo->copy()->addDays($diasPactados);
-        
-        // Fijamos hora límite oficial
-        $limiteSalidaOficial = Carbon::parse($fechaSalidaIdeal->format('Y-m-d') . ' ' . $horario->check_out_time);
-        $limiteConTolerancia = $limiteSalidaOficial->copy()->addMinutes($horario->exit_tolerance_minutes);
-
-        // C. DECISIÓN FINAL
-        if ($fechaSalidaReal->lessThanOrEqualTo($limiteConTolerancia)) {
-            return $diasPactados; // Dentro del margen, cobramos lo pactado
+        // DECISIÓN:
+        if ($fechaSalidaReal->greaterThan($limiteConTolerancia)) {
+            // SE PASÓ DE LA HORA: Cobramos el día extra
+            // Ej: Entró el 1, Salió el 4 a las 11:35 (límite 11:30).
+            // Días base (3) + 1 = 4 Días.
+            return $diasBase + 1;
         } else {
-            // Se pasó: Cobramos diferencia real
-            $diasTotales = $fechaEntradaCalculo->diffInDays($fechaSalidaReal);
-            if ($diasTotales > $diasPactados) {
-                 return ceil($diasTotales);
-            }
-            return $diasPactados + 1;
+            // SALIÓ A TIEMPO (o dentro de tolerancia): Cobramos solo días base
+            return $diasBase;
         }
     }
 }

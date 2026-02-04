@@ -109,6 +109,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Ruta para cancelar asignación (Agregar debajo de checks.destroy)
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
 
+    Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
+
+
     // Detalle de asignacionb
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
     Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
