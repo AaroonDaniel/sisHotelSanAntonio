@@ -149,12 +149,6 @@ export default function OccupiedRoomModal({ show, onClose, checkin }: ModalProps
                 {/* FOOTER ORIGINAL */}
                 <div className="flex justify-end gap-3 border-t border-gray-100 bg-white p-4">
                     <button onClick={handleClose} className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 uppercase">Cerrar</button>
-                    <button 
-                        onClick={() => window.open(`/checks/${checkin.id}/receipt`, '_blank')}
-                        className="rounded-xl bg-gray-900 px-5 py-2 text-sm font-bold text-white hover:bg-gray-800 uppercase"
-                    >
-                        Imprimir Recibo
-                    </button>
                 </div>
             </div>
         </div>

@@ -19,8 +19,10 @@ class RoomController
     public function index()
     {
         // Usamos 'with' para cargar las relaciones y evitar consultas N+1
-        $rooms = Room::with(['roomType', 'price', 'floor', 'block'])->get();
-
+        $rooms = Room::with(['roomType', 'price', 'floor', 'block'])
+                 ->orderBy('number', 'asc') // <--- AGREGAR ESTO
+                 ->get();
+                 
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
             'RoomTypes' => RoomType::where('is_active', true)->get(),

@@ -1099,8 +1099,6 @@ class CheckinController extends Controller
     }
 
     // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
-    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA PARA TU CASO) ---
-    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA Y FINAL) ---
     private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal, $waivePenalty = false)
     {
         // 1. Si ya está finalizado en BD, respetamos lo histórico

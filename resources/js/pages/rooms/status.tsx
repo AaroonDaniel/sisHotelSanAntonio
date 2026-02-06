@@ -16,7 +16,6 @@ import {
     ShoppingCart,
     User as UserIcon,
     X,
-
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import DetailModal from '../checkindetails/detailModal';
@@ -758,8 +757,6 @@ export default function RoomsStatus({
                         }}
                     />
                 )}
-            
-
 
             {/* INTEGRACIÓN DEL NUEVO MODAL */}
             <OccupiedRoomModal
@@ -806,7 +803,9 @@ function CheckoutConfirmationModal({
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [waivePenalty, setWaivePenalty] = useState(false);
-    const [tipoDocumento, setTipoDocumento] = useState<'factura' | 'recibo' | null>(null);
+    const [tipoDocumento, setTipoDocumento] = useState<
+        'factura' | 'recibo' | null
+    >(null);
 
     // Estado unificado para los datos (del servidor o calculados localmente)
     const [displayData, setDisplayData] = useState<{
@@ -826,61 +825,79 @@ function CheckoutConfirmationModal({
         setLoadingDetails(true);
 
         // Definimos las promesas de datos
-        const fetchServices = axios.get('/guests/view-detail', { params: { guest_id: checkin.guest_id } })
-            .then(res => res.data.status === 'success' ? res.data.data.servicios : [])
+        const fetchServices = axios
+            .get('/guests/view-detail', {
+                params: { guest_id: checkin.guest_id },
+            })
+            .then((res) =>
+                res.data.status === 'success' ? res.data.data.servicios : [],
+            )
             .catch(() => []);
 
-        const fetchServerCalc = axios.get(`/checks/${checkin.id}/checkout-details`, { 
-            params: { waive_penalty: waivePenalty ? 1 : 0 } 
-        }).then(res => res.data).catch(() => null);
+        const fetchServerCalc = axios
+            .get(`/checks/${checkin.id}/checkout-details`, {
+                params: { waive_penalty: waivePenalty ? 1 : 0 },
+            })
+            .then((res) => res.data)
+            .catch(() => null);
 
         // Ejecutamos todo
-        Promise.all([fetchServices, fetchServerCalc]).then(([servicios, serverResponse]) => {
-            
-            // Calculamos el total de servicios localmente por si acaso
-            const servicesTotal = servicios.reduce((acc: number, item: any) => acc + (parseFloat(item.subtotal) || 0), 0);
+        Promise.all([fetchServices, fetchServerCalc])
+            .then(([servicios, serverResponse]) => {
+                // Calculamos el total de servicios localmente por si acaso
+                const servicesTotal = servicios.reduce(
+                    (acc: number, item: any) =>
+                        acc + (parseFloat(item.subtotal) || 0),
+                    0,
+                );
 
-            if (serverResponse) {
-                // PLAN A: El servidor respondió correctamente
-                setDisplayData({
-                    ...serverResponse,
-                    servicios: servicios,
-                    // Aseguramos que services_total coincida con la lista si el server no lo trajo
-                    services_total: serverResponse.services_total ?? servicesTotal, 
-                    guest: checkin.guest
-                });
-            } else {
-                // PLAN B: El servidor falló (404 o error), CALCULAMOS LOCALMENTE
-                const ingreso = new Date(checkin.check_in_date);
-                const salida = new Date();
-                // Diferencia en días (mínimo 1)
-                const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-                
-                const price = parseFloat(room.price?.amount || 0);
-                const accomTotal = diffDays * price;
-                const grandTotal = accomTotal + servicesTotal;
-                const advance = parseFloat(checkin.advance_payment || 0);
+                if (serverResponse) {
+                    // PLAN A: El servidor respondió correctamente
+                    setDisplayData({
+                        ...serverResponse,
+                        servicios: servicios,
+                        // Aseguramos que services_total coincida con la lista si el server no lo trajo
+                        services_total:
+                            serverResponse.services_total ?? servicesTotal,
+                        guest: checkin.guest,
+                    });
+                } else {
+                    // PLAN B: El servidor falló (404 o error), CALCULAMOS LOCALMENTE
+                    const ingreso = new Date(checkin.check_in_date);
+                    const salida = new Date();
+                    // Diferencia en días (mínimo 1)
+                    const diffTime = Math.abs(
+                        salida.getTime() - ingreso.getTime(),
+                    );
+                    const diffDays =
+                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-                setDisplayData({
-                    duration_days: diffDays,
-                    accommodation_total: accomTotal,
-                    services_total: servicesTotal,
-                    grand_total: grandTotal,
-                    balance: grandTotal - advance,
-                    check_out_date: salida.toISOString(),
-                    check_in_date: checkin.check_in_date,
-                    servicios: servicios,
-                    guest: checkin.guest
-                });
-            }
-        }).finally(() => setLoadingDetails(false));
+                    const price = parseFloat(room.price?.amount || 0);
+                    const accomTotal = diffDays * price;
+                    const grandTotal = accomTotal + servicesTotal;
+                    const advance = parseFloat(checkin.advance_payment || 0);
 
+                    setDisplayData({
+                        duration_days: diffDays,
+                        accommodation_total: accomTotal,
+                        services_total: servicesTotal,
+                        grand_total: grandTotal,
+                        balance: grandTotal - advance,
+                        check_out_date: salida.toISOString(),
+                        check_in_date: checkin.check_in_date,
+                        servicios: servicios,
+                        guest: checkin.guest,
+                    });
+                }
+            })
+            .finally(() => setLoadingDetails(false));
     }, [checkin.id, waivePenalty]);
 
     // Limpieza PDF
     useEffect(() => {
-        return () => { if (pdfUrl) window.URL.revokeObjectURL(pdfUrl); };
+        return () => {
+            if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
+        };
     }, [pdfUrl]);
 
     // --- ACCIONES ---
@@ -891,15 +908,20 @@ function CheckoutConfirmationModal({
             await axios.put(`/checks/${checkin.id}/checkout`, {
                 tipo_documento: tipoDocumento,
                 check_out_date: displayData.check_out_date,
-                waive_penalty: waivePenalty
+                waive_penalty: waivePenalty,
             });
 
-            const endpoint = tipoDocumento === 'recibo' 
-                ? `/checks/${checkin.id}/checkout-receipt`
-                : `/checks/${checkin.id}/checkout-invoice`;
+            const endpoint =
+                tipoDocumento === 'recibo'
+                    ? `/checks/${checkin.id}/checkout-receipt`
+                    : `/checks/${checkin.id}/checkout-invoice`;
 
-            const response = await axios.get(endpoint, { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+            const response = await axios.get(endpoint, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(
+                new Blob([response.data], { type: 'application/pdf' }),
+            );
             setPdfUrl(url);
         } catch (error) {
             console.error(error);
@@ -919,27 +941,49 @@ function CheckoutConfirmationModal({
     };
 
     // Agrupación visual de servicios
-    const serviceGrouped = displayData ? Object.values(
-        displayData.servicios.reduce((acc: any, item: any) => {
-            const key = item.service;
-            if (!acc[key]) acc[key] = { ...item, count: 0, subtotal: 0 };
-            acc[key].count += parseInt(item.count || 0);
-            acc[key].subtotal += parseFloat(item.subtotal || 0);
-            return acc;
-        }, {})
-    ) : [];
+    const serviceGrouped = displayData
+        ? Object.values(
+              displayData.servicios.reduce((acc: any, item: any) => {
+                  const key = item.service;
+                  if (!acc[key]) acc[key] = { ...item, count: 0, subtotal: 0 };
+                  acc[key].count += parseInt(item.count || 0);
+                  acc[key].subtotal += parseFloat(item.subtotal || 0);
+                  return acc;
+              }, {}),
+          )
+        : [];
 
     // --- RENDERIZADO ---
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
-            <div className={`flex flex-col w-full animate-in overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 zoom-in-95 ${pdfUrl ? 'h-[80vh] max-w-[450px]' : 'max-h-[85vh] max-w-sm'}`}>
-                
+            <div
+                className={`flex w-full animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 zoom-in-95 ${pdfUrl ? 'h-[80vh] max-w-[450px]' : 'max-h-[85vh] max-w-sm'}`}
+            >
                 {/* HEADER */}
-                <div className={`flex-none flex items-center justify-between border-b py-2 px-4 ${pdfUrl ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}>
-                    <h3 className={`flex items-center gap-2 text-lg font-bold ${pdfUrl ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {pdfUrl ? <><CheckCircle2 className="h-6 w-6" /> Salida Exitosa</> : <><AlertTriangle className="h-6 w-6" /> Finalizar Estadía</>}
+                <div
+                    className={`flex flex-none items-center justify-between border-b px-4 py-2 ${pdfUrl ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}
+                >
+                    <h3
+                        className={`flex items-center gap-2 text-lg font-bold ${pdfUrl ? 'text-emerald-700' : 'text-red-700'}`}
+                    >
+                        {pdfUrl ? (
+                            <>
+                                <CheckCircle2 className="h-6 w-6" /> Salida
+                                Exitosa
+                            </>
+                        ) : (
+                            <>
+                                <AlertTriangle className="h-6 w-6" /> Finalizar
+                                Estadía
+                            </>
+                        )}
                     </h3>
-                    <button onClick={handleCloseFinal} className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"><X className="h-5 w-5" /></button>
+                    <button
+                        onClick={handleCloseFinal}
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
                 </div>
 
                 {/* CONTENIDO (Con Scroll) */}
@@ -947,63 +991,167 @@ function CheckoutConfirmationModal({
                     {!pdfUrl ? (
                         <div className="p-3">
                             {loadingDetails || !displayData ? (
-                                <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-gray-400"/></div>
+                                <div className="flex justify-center py-10">
+                                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                                </div>
                             ) : (
                                 <>
-                                    <div className={`rounded-xl border p-4 text-sm shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}>
+                                    <div
+                                        className={`rounded-xl border p-4 text-sm shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
+                                    >
                                         <div className="mb-3 text-center">
-                                            <span className="block text-[20px] font-bold text-red-600 uppercase">Habitación {room.number}</span>
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase">{displayData.guest?.full_name}</span>
+                                            <span className="block text-[20px] font-bold text-red-600 uppercase">
+                                                Habitación {room.number}
+                                            </span>
+                                            <span className="text-[13px] font-bold text-black uppercase">
+                                                {displayData.guest?.full_name}
+                                            </span>
                                         </div>
 
                                         <div className="mb-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                            <div><span className="font-bold">Ingreso:</span> {new Date(displayData.check_in_date).toLocaleDateString()}</div>
-                                            <div className="text-right">{new Date(displayData.check_in_date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                                            
-                                            <div><span className="font-bold">Salida:</span> {new Date(displayData.check_out_date).toLocaleDateString()}</div>
-                                            <div className="text-right">{new Date(displayData.check_out_date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                            <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                <span className="font-bold">
+                                                    Ingreso:
+                                                </span>
+                                                <span>
+                                                    {new Date(
+                                                        displayData.check_in_date,
+                                                    ).toLocaleDateString()}
+                                                </span>
+                                                <span className="text-right font-bold">
+                                                    Hora:
+                                                </span>
+                                                <span className="text-right">
+                                                    {new Date(
+                                                        displayData.check_in_date,
+                                                    ).toLocaleTimeString([], {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </span>
+                                            </div>
+
+                                            <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                <span className="font-bold">
+                                                    Salida:
+                                                </span>
+                                                <span>
+                                                    {new Date(
+                                                        displayData.check_out_date,
+                                                    ).toLocaleDateString()}
+                                                </span>
+                                                <span className="text-right font-bold">
+                                                    Hora:
+                                                </span>
+                                                <span className="text-right">
+                                                    {new Date(
+                                                        displayData.check_out_date,
+                                                    ).toLocaleTimeString([], {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </span>
+                                            </div>
 
                                             <div className="col-span-2 my-1 border-t border-dashed border-gray-300"></div>
 
-                                            <div><span className="font-bold">Permanencia:</span> {displayData.duration_days} días</div>
+                                            <div>
+                                                <span className="font-bold">
+                                                    Permanencia:
+                                                </span>{' '}
+                                                {displayData.duration_days} días
+                                            </div>
                                             <div></div>
 
-                                            <div><span>Hospedaje:</span></div>
-                                            <div className="text-right">{displayData.accommodation_total.toFixed(2)} Bs</div>
+                                            <div>
+                                                <span>Hospedaje:</span>
+                                            </div>
+                                            <div className="text-right">
+                                                {displayData.accommodation_total.toFixed(
+                                                    2,
+                                                )}{' '}
+                                                Bs
+                                            </div>
 
                                             {displayData.services_total > 0 && (
                                                 <>
-                                                    <div><span>Extras:</span></div>
-                                                    <div className="text-right">{displayData.services_total.toFixed(2)} Bs</div>
-                                                </>
-                                            )}
-                                            
-                                            {Number(checkin.advance_payment) > 0 && (
-                                                <>
-                                                    <div className="text-green-600 font-bold">Adelanto:</div>
-                                                    <div className="text-right text-green-600 font-bold">-{Number(checkin.advance_payment).toFixed(2)} Bs</div>
+                                                    <div>
+                                                        <span>Extras:</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        {displayData.services_total.toFixed(
+                                                            2,
+                                                        )}{' '}
+                                                        Bs
+                                                    </div>
                                                 </>
                                             )}
 
-                                            <div className="col-span-2 mt-1 pt-1 border-t border-gray-300 flex justify-between">
-                                                <span className="font-bold text-gray-700">Total General:</span>
-                                                <span className="font-bold text-gray-700">{displayData.balance.toFixed(2)} Bs</span>
+                                            {Number(checkin.advance_payment) >
+                                                0 && (
+                                                <>
+                                                    <div className="font-bold text-green-600">
+                                                        Adelanto:
+                                                    </div>
+                                                    <div className="text-right font-bold text-green-600">
+                                                        -
+                                                        {Number(
+                                                            checkin.advance_payment,
+                                                        ).toFixed(2)}{' '}
+                                                        Bs
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            <div className="col-span-2 mt-1 flex justify-between border-t border-gray-300 pt-1">
+                                                <span className="font-bold text-gray-700">
+                                                    Total General:
+                                                </span>
+                                                <span className="font-bold text-gray-700">
+                                                    {displayData.balance.toFixed(
+                                                        2,
+                                                    )}{' '}
+                                                    Bs
+                                                </span>
                                             </div>
                                         </div>
 
-                                        <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">Obs: {checkin.notes || 'Sin obs.'}</div>
-                                        
+                                        <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
+                                            Obs: {checkin.notes || 'Sin obs.'}
+                                        </div>
+
                                         {/* Lista servicios */}
                                         {serviceGrouped.length > 0 && (
                                             <div className="mt-2 border-t border-red-200/50 pt-2">
-                                                <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">Consumos</span>
+                                                <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
+                                                    Consumos
+                                                </span>
                                                 <div className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
-                                                    {serviceGrouped.map((item: any, idx: number) => (
-                                                        <div key={idx} className="flex justify-between border-b border-gray-100 pb-1 last:border-0">
-                                                            <span className="font-medium text-gray-600">{item.count} x {item.service}</span>
-                                                            <span className="font-bold text-gray-900">{item.subtotal.toFixed(2)} Bs</span>
-                                                        </div>
-                                                    ))}
+                                                    {serviceGrouped.map(
+                                                        (
+                                                            item: any,
+                                                            idx: number,
+                                                        ) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
+                                                            >
+                                                                <span className="font-medium text-gray-600">
+                                                                    {item.count}{' '}
+                                                                    x{' '}
+                                                                    {
+                                                                        item.service
+                                                                    }
+                                                                </span>
+                                                                <span className="font-bold text-gray-900">
+                                                                    {item.subtotal.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1011,48 +1159,117 @@ function CheckoutConfirmationModal({
 
                                     {/* Botón Tolerancia */}
                                     <div className="mt-4 flex justify-center">
-                                        <button type="button" onClick={handleApplyTolerance} className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-colors active:scale-95 ${waivePenalty ? 'border-amber-400 bg-amber-100 text-amber-700 hover:border-amber-500' : 'border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50'}`}>
-                                            {waivePenalty ? <CheckCircle2 className="h-3 w-3"/> : <AlertTriangle className="h-3 w-3"/>}
-                                            <span>{waivePenalty ? 'Tolerancia Aplicada' : 'Aplicar Tolerancia'}</span>
+                                        <button
+                                            type="button"
+                                            onClick={handleApplyTolerance}
+                                            className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-colors active:scale-95 ${waivePenalty ? 'border-amber-400 bg-amber-100 text-amber-700 hover:border-amber-500' : 'border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50'}`}
+                                        >
+                                            {waivePenalty ? (
+                                                <CheckCircle2 className="h-3 w-3" />
+                                            ) : (
+                                                <AlertTriangle className="h-3 w-3" />
+                                            )}
+                                            <span>
+                                                {waivePenalty
+                                                    ? 'Tolerancia Aplicada'
+                                                    : 'Aplicar Tolerancia'}
+                                            </span>
                                         </button>
                                     </div>
 
                                     {/* Botones Selección */}
                                     <div className="mt-4 text-center">
-                                        <h4 className="text-xl font-bold text-gray-800">¿Confirmar salida?</h4>
+                                        <h4 className="text-xl font-bold text-gray-800">
+                                            ¿Confirmar salida?
+                                        </h4>
                                         <div className="mt-4 flex justify-center gap-4">
-                                            <button onClick={() => setTipoDocumento('recibo')} className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}>
-                                                <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}>{tipoDocumento === 'recibo' && <div className="h-2 w-2 rounded-full bg-emerald-600" />}</div>
-                                                <span className="text-sm font-bold uppercase">Sin Factura</span>
+                                            <button
+                                                onClick={() =>
+                                                    setTipoDocumento('recibo')
+                                                }
+                                                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
+                                            >
+                                                <div
+                                                    className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                                >
+                                                    {tipoDocumento ===
+                                                        'recibo' && (
+                                                        <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-bold uppercase">
+                                                    Sin Factura
+                                                </span>
                                             </button>
-                                            <button onClick={() => setTipoDocumento('factura')} className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}>
-                                                <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}>{tipoDocumento === 'factura' && <div className="h-2 w-2 rounded-full bg-blue-600" />}</div>
-                                                <span className="text-sm font-bold uppercase">Con Factura</span>
+                                            <button
+                                                onClick={() =>
+                                                    setTipoDocumento('factura')
+                                                }
+                                                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
+                                            >
+                                                <div
+                                                    className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                                >
+                                                    {tipoDocumento ===
+                                                        'factura' && (
+                                                        <div className="h-2 w-2 rounded-full bg-blue-600" />
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-bold uppercase">
+                                                    Con Factura
+                                                </span>
                                             </button>
                                         </div>
-                                        <p className="mt-4 text-[11px] text-gray-400 italic">Pasará a <strong>LIMPIEZA</strong>.</p>
+                                        <p className="mt-4 text-[11px] text-gray-400 italic">
+                                            Pasará a <strong>LIMPIEZA</strong>.
+                                        </p>
                                     </div>
                                 </>
                             )}
                         </div>
                     ) : (
                         <div className="flex h-full flex-1 flex-col overflow-hidden bg-gray-100">
-                            <iframe src={pdfUrl} className="h-full w-full border-none" title="Recibo PDF" />
+                            <iframe
+                                src={pdfUrl}
+                                className="h-full w-full border-none"
+                                title="Recibo PDF"
+                            />
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="flex-none flex justify-end gap-3 border-t border-gray-100 bg-white py-2 px-4">
+                <div className="flex flex-none justify-end gap-3 border-t border-gray-100 bg-white px-4 py-2">
                     {!pdfUrl ? (
                         <>
-                            <button onClick={onClose} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50" disabled={processing}>Cancelar</button>
-                            <button onClick={handleConfirmAndPreview} className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50" disabled={processing || !tipoDocumento || !displayData}>
-                                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sí, Finalizar'}
+                            <button
+                                onClick={onClose}
+                                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                                disabled={processing}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmAndPreview}
+                                className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50"
+                                disabled={
+                                    processing || !tipoDocumento || !displayData
+                                }
+                            >
+                                {processing ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    'Sí, Finalizar'
+                                )}
                             </button>
                         </>
                     ) : (
-                        <button onClick={handleCloseFinal} className="w-full rounded-xl bg-gray-900 px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-black md:w-auto">Cerrar</button>
+                        <button
+                            onClick={handleCloseFinal}
+                            className="w-full rounded-xl bg-gray-900 px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-black md:w-auto"
+                        >
+                            Cerrar
+                        </button>
                     )}
                 </div>
             </div>
