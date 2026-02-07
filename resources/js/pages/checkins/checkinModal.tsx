@@ -191,6 +191,7 @@ interface Schedule {
     name: string;
     check_in_time: string;
     check_out_time: string;
+    entry_tolerance_minutes: number;
 }
 
 interface CheckinFormData {
@@ -279,6 +280,35 @@ export default function CheckinModal({
             phone: '',
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
         });
+
+    const getToleranceStatus = () => {
+        // Validación de seguridad
+        if (!data.schedule_id || !data.check_in_date) return { isValid: false, message: 'Seleccione Horario' };
+
+        const schedule = schedules.find(s => String(s.id) === data.schedule_id);
+        if (!schedule) return { isValid: false, message: 'Horario no encontrado' };
+
+        const inputDate = new Date(data.check_in_date);
+        
+        // Calcular hora oficial
+        const [hours, minutes] = schedule.check_in_time.split(':').map(Number);
+        const officialDate = new Date(inputDate);
+        officialDate.setHours(hours, minutes, 0, 0);
+
+        // Calcular ventana de tolerancia
+        const toleranceStart = new Date(officialDate.getTime() - (schedule.entry_tolerance_minutes * 60000));
+        
+        // Verificar si está dentro del rango
+        const isInsideWindow = inputDate >= toleranceStart && inputDate <= officialDate;
+
+        return {
+            isValid: isInsideWindow,
+            officialTime: schedule.check_in_time.substring(0, 5),
+            toleranceMinutes: schedule.entry_tolerance_minutes
+        };
+    };
+
+    const toleranceStatus = getToleranceStatus();
 
     // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
     useEffect(() => {

@@ -1120,20 +1120,23 @@ class CheckinController extends Controller
         }
 
         // --- CASO A: SI PRESIONAS EL BOTÓN DE TOLERANCIA ---
-        // Ignoramos la hora de salida. Solo contamos días calendario.
-        // Ej: Entró el 1, Salió el 4 a las 15:00. (4 - 1) = 3 Días.
         if ($waivePenalty) {
             $diasCalendario = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
             return $diasCalendario == 0 ? 1 : $diasCalendario;
         }
 
-        // --- CASO B: LÓGICA ESTRICTA (POR DEFECTO) ---
-        // Calculamos días calendario base
+        // --- LÓGICA DE DÍAS CALENDARIO ---
         $diasBase = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
-        if ($diasBase == 0) $diasBase = 1;
 
+        // Si entra y sale el mismo día (diasBase = 0), siempre se cobra 1 día.
+        // No importa si se pasa de la hora de salida (13:00), porque su derecho es hasta mañana.
+        if ($diasBase == 0) {
+            return 1;
+        }
+
+        // --- CASO B: LÓGICA ESTRICTA (DÍAS POSTERIORES) ---
         if (!$checkin->schedule) {
-            // Sin horario: cálculo matemático simple de 24h
+            // Sin horario: cálculo matemático simple
             return max(intval($checkin->duration_days), ceil($ingreso->floatDiffInDays($fechaSalidaReal)));
         }
 
@@ -1146,13 +1149,14 @@ class CheckinController extends Controller
 
         // DECISIÓN:
         if ($fechaSalidaReal->greaterThan($limiteConTolerancia)) {
-            // SE PASÓ DE LA HORA: Cobramos el día extra
-            // Ej: Entró el 1, Salió el 4 a las 11:35 (límite 11:30).
-            // Días base (3) + 1 = 4 Días.
+            // SE PASÓ DE LA HORA EN UN DÍA POSTERIOR:
+            // Ej: Entró ayer, hoy sale a las 14:00 (límite 13:00).
+            // Días base (1) + 1 (Multa) = 2 Días.
             return $diasBase + 1;
         } else {
-            // SALIÓ A TIEMPO (o dentro de tolerancia): Cobramos solo días base
+            // SALIÓ A TIEMPO: Cobramos solo los días calendario transcurridos
             return $diasBase;
         }
     }
+   
 }
