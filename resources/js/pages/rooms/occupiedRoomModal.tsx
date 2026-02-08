@@ -42,14 +42,27 @@ export default function OccupiedRoomModal({ show, onClose, checkin }: ModalProps
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(amount);
 
-    const formatDate = (dateString: string) =>
-        new Date(dateString).toLocaleDateString('es-BO', {
+    // Esta función CORRIGE el problema de la hora cambiada
+    // En: resources/js/pages/rooms/occupiedRoomModal.tsx
+
+    // resources/js/pages/rooms/occupiedRoomModal.tsx
+
+    const formatDate = (dateString: string) => {
+        if (!dateString) return '---';
+
+        // Al venir en formato ISO desde Laravel (con el -04:00), 
+        // new Date() lo entiende perfectamente sin que hagamos trucos.
+        const date = new Date(dateString);
+
+        return date.toLocaleDateString('es-BO', {
             weekday: 'long',
             day: 'numeric',
             month: 'short',
             hour: '2-digit',
             minute: '2-digit',
+            hour12: true // Para ver a.m. / p.m.
         });
+    };
 
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in zoom-in-95">

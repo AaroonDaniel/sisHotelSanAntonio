@@ -96,7 +96,7 @@ class CheckinController extends Controller
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
             'user_id' => $userId,
-            
+
             'check_in_date' => $validatedCheckin['check_in_date'],
             'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
             'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
@@ -378,19 +378,19 @@ class CheckinController extends Controller
 
         // Verificamos si el usuario pidió "perdonar" el retraso (S/T)
         $waivePenalty = $request->boolean('waive_penalty', false);
-        $checkOutDate = now(); 
+        $checkOutDate = now();
 
         // Calculamos días usando la lógica inteligente
         $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
-        
+
         // Calculamos Costos
         $price = $checkin->room->price->amount ?? 0;
         $accommodationTotal = $days * $price;
 
         $servicesTotal = 0;
         foreach ($checkin->checkinDetails as $detail) {
-             $p = $detail->selling_price ?? $detail->service->price;
-             $servicesTotal += $detail->quantity * $p;
+            $p = $detail->selling_price ?? $detail->service->price;
+            $servicesTotal += $detail->quantity * $p;
         }
 
         $grandTotal = $accommodationTotal + $servicesTotal;
@@ -399,8 +399,8 @@ class CheckinController extends Controller
         return response()->json([
             'guest' => $checkin->guest,
             'room' => $checkin->room,
-            'check_in_date' => $checkin->check_in_date->format('Y-m-d H:i:s'),
-            'check_out_date' => $checkOutDate->format('Y-m-d H:i:s'),
+            'check_in_date' => $checkin->check_in_date->toIso8601String(),
+            'check_out_date' => $checkOutDate->toIso8601String(),
             'duration_days' => $days,
             'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
@@ -421,10 +421,10 @@ class CheckinController extends Controller
         }
 
         // Usamos la fecha enviada o la actual
-        $checkOutDate = $request->input('check_out_date') 
-            ? \Carbon\Carbon::parse($request->input('check_out_date')) 
+        $checkOutDate = $request->input('check_out_date')
+            ? \Carbon\Carbon::parse($request->input('check_out_date'))
             : now();
-        
+
         // Recalculamos para asegurar integridad (especialmente si se usó tolerancia)
         $waivePenalty = $request->boolean('waive_penalty', false);
         $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
@@ -686,7 +686,7 @@ class CheckinController extends Controller
 
         $pdf->Ln(1);
         $ingresoVisual = \Carbon\Carbon::parse($checkin->check_in_date); // Solo para mostrar
-        
+
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
@@ -989,7 +989,6 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="factura-' . $checkin->id . '.pdf"');
-                
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
         }
@@ -1107,7 +1106,7 @@ class CheckinController extends Controller
         }
 
         $ingreso = Carbon::parse($checkin->check_in_date);
-        
+
         // AJUSTE DE ENTRADA (Aplica siempre si hay horario)
         // Si entró a las 05:12, para el sistema es como si hubiera entrado a las 06:00
         if ($checkin->schedule) {
@@ -1142,7 +1141,7 @@ class CheckinController extends Controller
 
         // Con horario: Verificamos la hora de salida
         $horario = $checkin->schedule;
-        
+
         // Hora límite para HOY (día de salida)
         $limiteSalidaHoy = Carbon::parse($fechaSalidaReal->format('Y-m-d') . ' ' . $horario->check_out_time);
         $limiteConTolerancia = $limiteSalidaHoy->copy()->addMinutes($horario->exit_tolerance_minutes);
@@ -1158,5 +1157,4 @@ class CheckinController extends Controller
             return $diasBase;
         }
     }
-   
 }

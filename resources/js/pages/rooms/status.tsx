@@ -4,6 +4,8 @@ import axios from 'axios'; // Importante para la petición del PDF sin recarga
 import {
     AlertTriangle,
     ArrowLeft,
+    ArrowRightCircle,
+    Ban,
     BedDouble,
     Brush,
     CheckCircle2,
@@ -19,13 +21,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import DetailModal from '../checkindetails/detailModal';
-import OccupiedRoomModal from './occupiedRoomModal'; //
-
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
+import OccupiedRoomModal from './occupiedRoomModal'; //
 
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -79,7 +80,7 @@ interface Props {
     Checkins: any[];
     Schedules: any[];
 }
-
+import ToleranceModal from '@/components/ToleranceModal';
 export default function RoomsStatus({
     auth,
     Rooms,
@@ -90,6 +91,14 @@ export default function RoomsStatus({
     Checkins,
     Schedules,
 }: Props) {
+    // Modal de alerta Tolerancia
+    const [tolModal, setTolModal] = useState<{
+        show: boolean;
+        type: 'allowed' | 'denied';
+        time: string;
+        minutes: number;
+    }>({ show: false, type: 'allowed', time: '', minutes: 0 });
+
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [selectedRoomType, setSelectedRoomType] = useState('');
@@ -799,6 +808,13 @@ function CheckoutConfirmationModal({
 }) {
     if (!checkin) return null;
 
+    const [tolModal, setTolModal] = useState<{
+        show: boolean;
+        type: 'allowed' | 'denied';
+        time: string;
+        minutes: number;
+    }>({ show: false, type: 'allowed', time: '', minutes: 0 });
+
     const [processing, setProcessing] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -931,9 +947,82 @@ function CheckoutConfirmationModal({
         }
     };
 
+    // =========================================================================
+    //  LÓGICA DE TOLERANCIA DE SALIDA (Ej: 13:00 + 40m = Límite 13:40)
+    // =========================================================================
+    const getExitToleranceStatus = () => {
+        // Validaciones de seguridad
+        if (!checkin || !checkin.schedule_id) {
+            return { isValid: false, message: 'Sin Horario', limitTime: '' };
+        }
+
+        const safeSchedules = schedules || [];
+        const schedule = safeSchedules.find(
+            (s: any) => String(s.id) === String(checkin.schedule_id),
+        );
+
+        if (!schedule) {
+            return {
+                isValid: false,
+                message: 'Horario no encontrado',
+                limitTime: '',
+            };
+        }
+
+        const now = new Date(); // Hora actual (momento de la salida)
+
+        // 1. Obtener hora de salida oficial del horario (ej. 13:00)
+        const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
+        const exitDeadline = new Date();
+        exitDeadline.setHours(hours, minutes, 0, 0);
+
+        // 2. Calcular Límite Máximo (+ Minutos de tolerancia)
+        // Ej: 13:00 + 40 min = 13:40
+        const toleranceLimit = new Date(
+            exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000,
+        );
+
+        // 3. Comparación: ¿Estamos DENTRO del tiempo permitido?
+        // Es válido si la hora actual es MENOR o IGUAL al límite.
+        const isWithinTolerance = now <= toleranceLimit;
+
+        return {
+            isValid: isWithinTolerance,
+            limitTime: toleranceLimit.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+            }),
+            officialTime: schedule.check_out_time.substring(0, 5),
+        };
+    };
+
+    const exitToleranceStatus = getExitToleranceStatus();
+
+    // Nueva función del botón (Reemplaza la anterior handleApplyTolerance)
     const handleApplyTolerance = () => {
+        // CASO ROJO: Fuera de rango
+        if (!exitToleranceStatus.isValid) {
+            setTolModal({
+                show: true,
+                type: 'denied',
+                time: exitToleranceStatus.limitTime, // Muestra la hora límite (ej. 13:40)
+                minutes: 0 // No relevante para salida, pero necesario por TS
+            });
+            return;
+        }
+
+        // CASO VERDE: Dentro de rango
+        setTolModal({
+            show: true,
+            type: 'allowed',
+            time: exitToleranceStatus.limitTime,
+            minutes: 0
+        });
+        
+        // Aplicar descuento
         setWaivePenalty(!waivePenalty);
     };
+    // =========================================================================
 
     const handleCloseFinal = () => {
         onClose();
@@ -1157,22 +1246,40 @@ function CheckoutConfirmationModal({
                                         )}
                                     </div>
 
-                                    {/* Botón Tolerancia */}
+                                    {/* Botón Tolerancia Dinámico */}
                                     <div className="mt-4 flex justify-center">
                                         <button
                                             type="button"
                                             onClick={handleApplyTolerance}
-                                            className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-colors active:scale-95 ${waivePenalty ? 'border-amber-400 bg-amber-100 text-amber-700 hover:border-amber-500' : 'border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50'}`}
+                                            className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-colors active:scale-95 ${
+                                                // Lógica de colores basada en si es válido o no
+                                                exitToleranceStatus.isValid
+                                                    ? waivePenalty
+                                                        ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300' // Verde Activo
+                                                        : 'border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200' // Verde Inactivo
+                                                    : 'border-red-500 bg-red-100 text-red-700 hover:bg-red-200' // Rojo (Fuera de rango)
+                                            }`}
+                                            title={
+                                                exitToleranceStatus.isValid
+                                                    ? `Dentro del horario permitido (hasta ${exitToleranceStatus.limitTime})`
+                                                    : `Fuera del límite de tolerancia (${exitToleranceStatus.limitTime})`
+                                            }
                                         >
-                                            {waivePenalty ? (
-                                                <CheckCircle2 className="h-3 w-3" />
+                                            {/* Iconos Dinámicos */}
+                                            {!exitToleranceStatus.isValid ? (
+                                                <Ban className="h-3.5 w-3.5" /> // Icono Prohibido si es Rojo
+                                            ) : waivePenalty ? (
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
                                             ) : (
-                                                <AlertTriangle className="h-3 w-3" />
+                                                <ArrowRightCircle className="h-3.5 w-3.5" />
                                             )}
+
                                             <span>
-                                                {waivePenalty
-                                                    ? 'Tolerancia Aplicada'
-                                                    : 'Aplicar Tolerancia'}
+                                                {!exitToleranceStatus.isValid
+                                                    ? 'Fuera de Intervalo'
+                                                    : waivePenalty
+                                                      ? 'Tolerancia Aplicada'
+                                                      : 'Aplicar Tolerancia'}
                                             </span>
                                         </button>
                                     </div>
@@ -1273,6 +1380,16 @@ function CheckoutConfirmationModal({
                     )}
                 </div>
             </div>
+            <ToleranceModal 
+                show={tolModal.show}
+                onClose={() => setTolModal({ ...tolModal, show: false })}
+                type={tolModal.type}
+                data={{ 
+                    time: tolModal.time, 
+                    minutes: tolModal.minutes, 
+                    action: 'exit' // Importante: 'exit' para mensaje de salida
+                }}
+            />
         </div>
     );
 }

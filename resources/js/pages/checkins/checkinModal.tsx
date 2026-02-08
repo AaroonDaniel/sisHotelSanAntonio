@@ -1,8 +1,10 @@
+import ToleranceModal from '@/components/ToleranceModal';
 import { router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
     AlertTriangle,
     ArrowRightCircle,
+    Ban,
     Bed,
     CheckCircle2,
     ChevronLeft,
@@ -119,9 +121,23 @@ const calculateAge = (dateString: string) => {
     return age;
 };
 
+// Esta función prepara la fecha para el input datetime-local
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
-    return dateString.replace(' ', 'T').substring(0, 16);
+
+    // 1. Creamos un objeto Fecha real a partir del dato del servidor
+    // Esto maneja automáticamente si viene como "2026-02-08T17:25:00Z" (UTC)
+    const date = new Date(dateString);
+
+    // 2. Calculamos la diferencia horaria (en milisegundos)
+    // Para Bolivia (GMT-4), offset será 240 minutos (4 horas)
+    const offset = date.getTimezoneOffset() * 60000;
+
+    // 3. Restamos el desfase para obtener la hora local exacta
+    const localDate = new Date(date.getTime() - offset);
+
+    // 4. Devolvemos el formato ISO limpio (YYYY-MM-DDTHH:mm) que exige el input
+    return localDate.toISOString().slice(0, 16);
 };
 
 // --- INTERFACES ---
@@ -152,6 +168,7 @@ export interface CheckinData {
     guest?: Guest;
     companions?: any[];
     created_at?: string;
+    actual_arrival_date: string;
 }
 
 export interface Room {
@@ -228,6 +245,17 @@ export default function CheckinModal({
     schedules = [],
     initialRoomId,
 }: CheckinModalProps) {
+    // Modal de alerta Tolerancia
+    const [tolModal, setTolModal] = useState<{
+        show: boolean;
+        type: 'allowed' | 'denied';
+        time: string;
+        minutes: number;
+    }>({ show: false, type: 'allowed', time: '', minutes: 0 });
+    const [isToleranceApplied, setIsToleranceApplied] = useState(false);
+
+    //
+
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -249,15 +277,9 @@ export default function CheckinModal({
     //Hora actual
     const now = (() => {
         const date = new Date();
-        // Obtenemos el desfase horario (en Bolivia son 240 minutos)
         const offset = date.getTimezoneOffset() * 60000;
-        // Restamos el desfase para que al convertir a ISO se mantenga tu hora local
-        const localISOTime = new Date(date.getTime() - offset)
-            .toISOString()
-            .slice(0, 16);
-        return localISOTime;
+        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
     })();
-
     // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm<CheckinFormData>({
@@ -281,33 +303,62 @@ export default function CheckinModal({
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
         });
 
+    // =========================================================================
+    //  LÓGICA DE TOLERANCIA (Rango: -350m / +40m ejemplo)
+    // =========================================================================
+
     const getToleranceStatus = () => {
-        // Validación de seguridad
-        if (!data.schedule_id || !data.check_in_date) return { isValid: false, message: 'Seleccione Horario' };
+        // 1. Validaciones básicas para evitar errores
+        if (!data.schedule_id || !data.check_in_date) {
+            return {
+                isValid: false,
+                message: 'Seleccione Horario',
+                officialTime: '',
+                toleranceMinutes: 0,
+            };
+        }
 
-        const schedule = schedules.find(s => String(s.id) === data.schedule_id);
-        if (!schedule) return { isValid: false, message: 'Horario no encontrado' };
+        const safeSchedules = schedules || [];
+        const schedule = safeSchedules.find(
+            (s: any) => String(s.id) === data.schedule_id,
+        );
 
-        const inputDate = new Date(data.check_in_date);
-        
-        // Calcular hora oficial
+        if (!schedule) {
+            return {
+                isValid: false,
+                message: 'Horario no encontrado',
+                officialTime: '',
+                toleranceMinutes: 0,
+            };
+        }
+
+        // 2. Definir fechas
+        const inputDate = new Date(data.check_in_date); // La hora que el usuario puso
+
+        // Hora Oficial (Ej: 06:00) del día seleccionado
         const [hours, minutes] = schedule.check_in_time.split(':').map(Number);
         const officialDate = new Date(inputDate);
         officialDate.setHours(hours, minutes, 0, 0);
 
-        // Calcular ventana de tolerancia
-        const toleranceStart = new Date(officialDate.getTime() - (schedule.entry_tolerance_minutes * 60000));
-        
-        // Verificar si está dentro del rango
-        const isInsideWindow = inputDate >= toleranceStart && inputDate <= officialDate;
+        // 3. Calcular Ventana de Tolerancia (-350 minutos)
+        // Rango: [00:10] a [06:00]
+        const toleranceStart = new Date(
+            officialDate.getTime() - schedule.entry_tolerance_minutes * 60000,
+        );
+
+        // 4. Comparar: ¿Está la hora seleccionada DENTRO de la ventana?
+        // Se permite desde el inicio de la tolerancia hasta la hora exacta oficial.
+        const isInsideWindow =
+            inputDate >= toleranceStart && inputDate <= officialDate;
 
         return {
             isValid: isInsideWindow,
             officialTime: schedule.check_in_time.substring(0, 5),
-            toleranceMinutes: schedule.entry_tolerance_minutes
+            toleranceMinutes: schedule.entry_tolerance_minutes,
         };
     };
 
+    // Calcular estado actual
     const toleranceStatus = getToleranceStatus();
 
     // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
@@ -389,6 +440,8 @@ export default function CheckinModal({
                     guest_id: String(checkinToEdit.guest_id),
                     room_id: String(checkinToEdit.room_id),
                     check_in_date: initialDate,
+                    actual_arrival_date:
+                        checkinToEdit.actual_arrival_date || '',
                     duration_days: checkinToEdit.duration_days,
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
@@ -442,26 +495,27 @@ export default function CheckinModal({
     // --- EFECTO: DETECTAR HORARIO APLICADO (LocalStorage) ---
     useEffect(() => {
         if (show && !checkinToEdit) {
-            const storedSchedule = localStorage.getItem('hotel_active_schedule');
-            
+            const storedSchedule = localStorage.getItem(
+                'hotel_active_schedule',
+            );
+
             if (storedSchedule) {
                 try {
                     const parsed = JSON.parse(storedSchedule);
                     // Cargamos el ID del horario, pero NO cambiamos la fecha aún (esperamos al botón)
-                    setData(prev => ({
+                    setData((prev) => ({
                         ...prev,
                         schedule_id: parsed.id.toString(),
-                        actual_arrival_date: prev.check_in_date // Preparamos la hora real
+                        actual_arrival_date: prev.check_in_date, // Preparamos la hora real
                     }));
                 } catch (e) {
-                    console.error("Error leyendo horario activo", e);
+                    console.error('Error leyendo horario activo', e);
                 }
             }
         }
     }, [show, checkinToEdit]);
 
     //calculo matematico de fecha
-    
 
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
@@ -728,49 +782,58 @@ export default function CheckinModal({
     const hasErrors = Object.keys(errors).length > 0;
 
     // --- FUNCIÓN DE TOLERANCIA CON DEBUG ---
+    // Función al hacer clic en el botón
+    // --- FUNCIÓN DE TOLERANCIA ---
+    // En resources/js/pages/checkins/checkinModal.tsx
+
     const handleApplyTolerance = () => {
-        console.log("--- INICIO CLICK TOLERANCIA ---");
-        
-        // 1. Verificar ID
-        console.log("Schedule ID seleccionado:", data.schedule_id);
-        if (!data.schedule_id) {
-            console.warn("❌ No hay schedule_id seleccionado. Saliendo...");
+        // 1. Validaciones previas (Rojo si no corresponde)
+        if (!toleranceStatus.isValid) {
+            setTolModal({
+                show: true,
+                type: 'denied',
+                time: toleranceStatus.officialTime,
+                minutes: toleranceStatus.toleranceMinutes,
+            });
             return;
         }
 
-        // 2. Verificar Horario en la lista
-        const selectedSchedule = schedules.find((s) => String(s.id) === data.schedule_id);
-        console.log("Objeto Schedule encontrado:", selectedSchedule);
-        
-        if (!selectedSchedule) {
-            console.warn("❌ No se encontró el horario en la lista de schedules.");
-            return;
-        }
+        // 2. Obtener el horario seleccionado
+        const safeSchedules = schedules || [];
+        const schedule = safeSchedules.find(
+            (s: any) => String(s.id) === data.schedule_id,
+        );
+        if (!schedule) return;
 
-        // 3. Cálculos de fecha
-        const currentInputDate = new Date(data.check_in_date);
-        console.log("Fecha actual en el input (Sin procesar):", data.check_in_date);
-        
-        const offset = currentInputDate.getTimezoneOffset() * 60000;
-        const localISODate = new Date(currentInputDate.getTime() - offset).toISOString().slice(0, 10);
-        console.log("Fecha extraída (Día):", localISODate);
-        
-        const officialTime = selectedSchedule.check_in_time.substring(0, 5);
-        console.log("Hora oficial del turno:", officialTime);
-        
-        const newDateTime = `${localISODate}T${officialTime}`;
-        console.log("✅ NUEVA FECHA FINAL A APLICAR:", newDateTime);
+        // 3. LÓGICA DE REEMPLAZO DE HORA
+        // Tomamos la FECHA (Día) que el usuario eligió (o la de hoy por defecto)
+        const currentInputDateVal = data.check_in_date; // ej: "2026-02-07T00:15"
+        const datePart = currentInputDateVal.split('T')[0]; // "2026-02-07"
 
-        // 4. Aplicar
-        setData((prev) => ({
+        // Tomamos la HORA OFICIAL del horario (ej: "06:00")
+        const officialTime = schedule.check_in_time.substring(0, 5);
+
+        // Combinamos: Mismo día + Hora del Horario
+        const newDateTime = `${datePart}T${officialTime}`;
+
+        // 4. Aplicamos el cambio al formulario
+        setData((prev: any) => ({
             ...prev,
-            check_in_date: newDateTime,
-            actual_arrival_date: prev.check_in_date
+            check_in_date: newDateTime, // <--- Aquí se fuerza la hora del horario
+            actual_arrival_date: prev.check_in_date, // Guardamos la hora real como respaldo
         }));
-        
-        console.log("--- FIN CLICK TOLERANCIA ---");
-    };
 
+        // 5. Confirmación Visual
+        setTolModal({
+            show: true,
+            type: 'allowed',
+            time: officialTime,
+            minutes: toleranceStatus.toleranceMinutes,
+        });
+
+        setIsToleranceApplied(true);
+    };
+    // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
             <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -1205,39 +1268,72 @@ export default function CheckinModal({
                             </div>
                             <div className="flex gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
-                                <div className="flex-grow flex flex-col">
-                                    <label className="text-xs font-bold text-gray-500 mb-1">
+                                <div className="flex flex-grow flex-col">
+                                    <label className="mb-1 text-xs font-bold text-gray-500">
                                         Fecha Ingreso
                                     </label>
                                     <input
                                         type="datetime-local"
-                                        value={data.check_in_date}
-                                        onChange={(e) => setData('check_in_date', e.target.value)}
+                                        // AQUÍ ES DONDE SE APLICA LA MAGIA:
+                                        value={formatDateForInput(
+                                            data.check_in_date,
+                                        )}
+                                        onChange={(e) =>
+                                            setData(
+                                                'check_in_date',
+                                                e.target.value,
+                                            )
+                                        }
                                         className="w-full rounded-lg border border-gray-400 text-sm text-black"
                                     />
 
-                                    {/* --- AGREGAR ESTO AQUÍ --- */}
-                                    <div className="mt-2 flex justify-start"> 
+                                    {/* --- BOTÓN TOLERANCIA --- */}
+                                    <div className="mt-2 flex justify-start">
                                         {data.schedule_id && (
                                             <button
                                                 type="button"
                                                 onClick={handleApplyTolerance}
-                                                className="group flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-bold text-green-700 uppercase transition-colors hover:border-green-300 hover:bg-green-100 active:scale-95"
-                                                title="Ajustar hora a la entrada oficial del turno"
+                                                disabled={isToleranceApplied} // Se bloquea si ya se aplicó
+                                                className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
+                                                    isToleranceApplied
+                                                        ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800' // ESTADO APLICADO (Quieto)
+                                                        : toleranceStatus.isValid
+                                                          ? 'animate-bounce cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200' // ESTADO DISPONIBLE (Saltando)
+                                                          : 'cursor-pointer border-red-500 bg-red-100 text-red-700 hover:bg-red-200' // ESTADO ERROR (Quieto)
+                                                }`}
+                                                title={
+                                                    isToleranceApplied
+                                                        ? 'La tolerancia ya ha sido aplicada correctamente.'
+                                                        : toleranceStatus.isValid
+                                                          ? `Clic para ajustar a ${toleranceStatus.officialTime}`
+                                                          : `Fuera del límite de ${toleranceStatus.toleranceMinutes} min`
+                                                }
                                             >
-                                                <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                {/* Icono Dinámico */}
+                                                {isToleranceApplied ? (
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                ) : toleranceStatus.isValid ? (
+                                                    <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                ) : (
+                                                    <Ban className="h-3.5 w-3.5" />
+                                                )}
+
+                                                {/* Texto Dinámico */}
                                                 <span>
-                                                    Tolerancia
+                                                    {isToleranceApplied
+                                                        ? 'Tolerancia Aplicada'
+                                                        : toleranceStatus.isValid
+                                                          ? 'Aplicar Tolerancia'
+                                                          : 'Fuera de Tiempo'}
                                                 </span>
                                             </button>
                                         )}
                                     </div>
-                                    {/* ------------------------- */}
                                 </div>
 
                                 {/* COLUMNA DERECHA: ESTADÍA + SALIDA ESTIMADA */}
-                                <div className="w-24 flex flex-col">
-                                    <label className="text-xs font-bold text-gray-500 mb-1">
+                                <div className="flex w-24 flex-col">
+                                    <label className="mb-1 text-xs font-bold text-gray-500">
                                         Estadía
                                     </label>
                                     <input
@@ -1246,14 +1342,19 @@ export default function CheckinModal({
                                         value={data.duration_days}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            setData('duration_days', val === '' ? '' : Number(val));
+                                            setData(
+                                                'duration_days',
+                                                val === '' ? '' : Number(val),
+                                            );
                                         }}
                                         className="w-full rounded-lg border border-gray-400 text-right text-sm text-black"
                                     />
-                                    
+
                                     {/* TEXTO SALIDA (JUSTO DEBAJO Y A LA DERECHA) */}
                                     <div className="mt-2 text-right">
-                                        <span className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}>
+                                        <span
+                                            className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
+                                        >
                                             Salida: {checkoutString}
                                         </span>
                                     </div>
@@ -1421,6 +1522,17 @@ export default function CheckinModal({
                     </div>
                 </form>
             </div>
+            <ToleranceModal
+                show={tolModal.show}
+                onClose={() => setTolModal({ ...tolModal, show: false })}
+                type={tolModal.type}
+                data={{
+                    time: tolModal.time,
+                    minutes: tolModal.minutes,
+                    action: 'entry', // Importante: 'entry' para mensaje de entrada
+                }}
+            />
+
             <CancelAssignmentModal
                 show={showCancelModal}
                 onClose={() => setShowCancelModal(false)}
