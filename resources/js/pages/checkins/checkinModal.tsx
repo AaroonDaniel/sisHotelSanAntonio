@@ -478,9 +478,7 @@ export default function CheckinModal({
                         : [],
                 });
             } else {
-                // CASO NUEVO REGISTRO
-                reset();
-                setIsExistingGuest(false);
+            
                 if (initialRoomId) {
                     setData((prev) => ({
                         ...prev,
