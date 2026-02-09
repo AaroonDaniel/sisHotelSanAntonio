@@ -1,3 +1,4 @@
+import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios'; // Importante para la petición del PDF sin recarga
@@ -27,7 +28,7 @@ import CheckinModal, {
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
-
+import TransferModal from './transferModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -80,7 +81,7 @@ interface Props {
     Checkins: any[];
     Schedules: any[];
 }
-import ToleranceModal from '@/components/ToleranceModal';
+
 export default function RoomsStatus({
     auth,
     Rooms,
@@ -122,6 +123,10 @@ export default function RoomsStatus({
     // Detalles de una nueva vista para los datos del usuario
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
+
+    // Detalles para la tolerancia
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [checkinForTransfer, setCheckinForTransfer] = useState<any>(null);
 
     // --- LÓGICA DE ESTADO ---
     const getDisplayStatus = (room: Room) => {
@@ -431,8 +436,23 @@ export default function RoomsStatus({
             guest: checkin.guest || { full_name: 'Desconocido' }, // Aseguramos que guest exista
         })),
     );
+    // Detalles de la tolerancia y funcion
+    const handleOpenTransfer = (checkin: any) => {
+        setCheckinForTransfer(checkin);
+        setIsOccupiedModalOpen(false); // Cerramos el detalle
+        setIsTransferModalOpen(true); // Abrimos la transferencia
+    };
 
-    //Detalles de nota previa de asignacion
+    // Filtramos las disponibles (para mover individual)
+    const availableRoomsForTransfer = Rooms.filter((r) =>
+        ['available', 'disponible', 'libre'].includes(getDisplayStatus(r)),
+    );
+
+    // Filtramos las ocupadas (para unirse a grupo)
+    const occupiedRoomsForTransfer = Rooms.filter((r) =>
+        ['occupied', 'ocupada', 'ocupado'].includes(getDisplayStatus(r)) && 
+        (r.room_type?.capacity || 0) > 1
+    );
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -772,6 +792,16 @@ export default function RoomsStatus({
                 show={isOccupiedModalOpen}
                 onClose={() => setIsOccupiedModalOpen(false)}
                 checkin={occupiedCheckinData}
+                onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
+            />
+
+            {/* MODAL DE TRANSFERENCIA */}
+            <TransferModal
+                show={isTransferModalOpen}
+                onClose={() => setIsTransferModalOpen(false)}
+                checkin={checkinForTransfer}
+                availableRooms={availableRoomsForTransfer}
+                occupiedRooms={occupiedRoomsForTransfer}
             />
 
             {/* --- AQUÍ ESTÁ TU BLOQUE EXACTO --- */}
@@ -1006,7 +1036,7 @@ function CheckoutConfirmationModal({
                 show: true,
                 type: 'denied',
                 time: exitToleranceStatus.limitTime, // Muestra la hora límite (ej. 13:40)
-                minutes: 0 // No relevante para salida, pero necesario por TS
+                minutes: 0, // No relevante para salida, pero necesario por TS
             });
             return;
         }
@@ -1016,9 +1046,9 @@ function CheckoutConfirmationModal({
             show: true,
             type: 'allowed',
             time: exitToleranceStatus.limitTime,
-            minutes: 0
+            minutes: 0,
         });
-        
+
         // Aplicar descuento
         setWaivePenalty(!waivePenalty);
     };
@@ -1380,14 +1410,14 @@ function CheckoutConfirmationModal({
                     )}
                 </div>
             </div>
-            <ToleranceModal 
+            <ToleranceModal
                 show={tolModal.show}
                 onClose={() => setTolModal({ ...tolModal, show: false })}
                 type={tolModal.type}
-                data={{ 
-                    time: tolModal.time, 
-                    minutes: tolModal.minutes, 
-                    action: 'exit' // Importante: 'exit' para mensaje de salida
+                data={{
+                    time: tolModal.time,
+                    minutes: tolModal.minutes,
+                    action: 'exit', // Importante: 'exit' para mensaje de salida
                 }}
             />
         </div>

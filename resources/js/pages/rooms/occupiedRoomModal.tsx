@@ -15,16 +15,18 @@ import {
     Briefcase,
     Calendar,
     Phone,
-    ChevronDown
+    ChevronDown,
+    ArrowRightLeft
 } from 'lucide-react';
 
 interface ModalProps {
     show: boolean;
     onClose: () => void;
     checkin: any | null;
+    onTransfer: () => void;
 }
 
-export default function OccupiedRoomModal({ show, onClose, checkin }: ModalProps) {
+export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }: ModalProps) {
     // Usamos el ID del huésped para controlar cuál está desplegado
     const [expandedGuestId, setExpandedGuestId] = useState<number | null>(null);
 
@@ -154,6 +156,23 @@ export default function OccupiedRoomModal({ show, onClose, checkin }: ModalProps
                                 ) : (
                                     <p className="text-sm italic text-gray-400">Sin consumos adicionales.</p>
                                 )}
+                            </div>
+
+                            {/* --- NUEVO: CARD DE ACCIONES (TRANSFERENCIA) --- */}
+                            <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+                                <h3 className="mb-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                    Acciones Administrativas
+                                </h3>
+                                <button
+                                    onClick={onTransfer}
+                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100 active:scale-95"
+                                >
+                                    <ArrowRightLeft className="h-4 w-4" />
+                                    Transferir / Unir a Grupo
+                                </button>
+                                <p className="mt-2 text-center text-[10px] text-gray-400">
+                                    Mueve al huésped a otra habitación o agrégalo a un grupo existente.
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -1157,4 +1157,61 @@ class CheckinController extends Controller
             return $diasBase;
         }
     }
+
+    public function transfer(Request $request, Checkin $checkin)
+    {
+        $request->validate([
+            'new_room_id' => 'required|exists:rooms,id',
+        ]);
+
+        return DB::transaction(function () use ($request, $checkin) {
+            $oldRoomId = $checkin->room_id;
+            $newRoomId = $request->new_room_id;
+            $newRoom = Room::find($newRoomId);
+            $status = strtoupper($newRoom->status);
+            if ($status !== 'LIBRE' && $status !== 'DISPONIBLE') {
+                return back()->withErrors(['new_room_id' => 'La habitacion destino no disponinle (Estado: ' . $status . ').']);
+            }
+
+            Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
+            Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
+            $checkin->update([
+                'room_id' => $newRoomId
+            ]);
+
+            return back()->with('success', 'Transferencia realizada con éxito. La habitación ' . $checkin->room->number . ' pasó a LIMPIEZA.');
+        });
+    }
+
+    public function merge(Request $request, Checkin $checkin)
+    {
+        $request->validate([
+            'target_room_id' => 'required|exists:rooms,id',
+        ]);
+        return DB::transaction(function () use ($request, $checkin) {
+            $targetCheckin = Checkin::where('room_id', $request->target_room_id)
+                ->where('status', 'activo')
+                ->first();
+
+            if (!$targetCheckin) {
+                return back()->withErrors(['target_room_id' => 'La habitación destino no tiene una asignación activa para unirse.']);
+            }
+
+            if (!$targetCheckin->companions->contains($checkin->guest_id)) {
+                $targetCheckin->companions()->attach($checkin->guest_id);
+            }
+
+            $oldRoomNum = $checkin->room->number;
+            $oldRoomId = $checkin->room_id;
+
+            $checkin->update([
+                'status' => 'finalizado',
+                'check_out_date' => now(),
+                'notes' => $checkin->notes . " [TRASLADO: Se unió a Hab. " . $targetCheckin->room->number . "]",
+            ]);
+
+            Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
+            return back()->with('success', 'Huésped trasladado correctamente a la Habitación ' . $targetCheckin->room->number . '.');
+        });
+    }
 }

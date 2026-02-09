@@ -111,6 +111,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
 
+    // Ruta de Tolerancia
+    Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
+    Route::put('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');       // <--- NUEVO
 
     // Detalle de asignacionb
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
