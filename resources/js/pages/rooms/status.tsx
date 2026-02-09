@@ -449,10 +449,29 @@ export default function RoomsStatus({
     );
 
     // Filtramos las ocupadas (para unirse a grupo)
-    const occupiedRoomsForTransfer = Rooms.filter((r) =>
-        ['occupied', 'ocupada', 'ocupado'].includes(getDisplayStatus(r)) && 
-        (r.room_type?.capacity || 0) > 1
-    );
+    // resources/js/pages/rooms/status.tsx
+
+    // 2. Habitaciones Ocupadas (Para unirse a grupo)
+    const occupiedRoomsForTransfer = Rooms.filter(r => {
+        // A. Filtro básico: Debe estar ocupada
+        if (!['occupied', 'ocupada', 'ocupado'].includes(getDisplayStatus(r))) return false;
+
+        // B. Datos de capacidad
+        const capacity = r.room_type?.capacity || 0;
+
+        // C. Si es para 1 persona (Simple), la descartamos directo
+        if (capacity <= 1) return false;
+
+        // D. LÓGICA DE AFORO (Check-in Titular + Acompañantes)
+        const activeCheckin = r.checkins?.[0]; 
+        if (!activeCheckin) return false;
+
+        // Calculamos ocupantes actuales: 1 (El Titular) + N (Sus Acompañantes)
+        const currentOccupants = 1 + (activeCheckin.companions?.length || 0);
+
+        // E. REGLA FINAL: Solo pasa si hay espacio (Ocupantes < Capacidad)
+        return currentOccupants < capacity;
+    });
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -802,6 +821,7 @@ export default function RoomsStatus({
                 checkin={checkinForTransfer}
                 availableRooms={availableRoomsForTransfer}
                 occupiedRooms={occupiedRoomsForTransfer}
+                blocks={Blocks} // <--- AGREGAR ESTA LÍNEA
             />
 
             {/* --- AQUÍ ESTÁ TU BLOQUE EXACTO --- */}
