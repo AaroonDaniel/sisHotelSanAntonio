@@ -40,7 +40,7 @@ class CheckinController extends Controller
     {
         // 1. Validar y Crear/Actualizar al Huésped TITULAR
         if (!$request->filled('guest_id')) {
-            // --- NUEVO TITULAR (Lógica Anti-Duplicados) ---
+            // --- NUEVO TITULAR (Lógica Anti-Duplicados MEJORADA) ---
             $isComplete = $request->filled('identification_number');
 
             $request->validate([
@@ -53,17 +53,25 @@ class CheckinController extends Controller
             $birthDate = $request->birth_date;
             $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-            // A. BÚSQUEDA INTELIGENTE: Nombre + (Fecha Nacimiento O CI)
-            $query = \App\Models\Guest::where('full_name', $fullName);
+            // ==========================================================
+            // CAMBIO 1: BÚSQUEDA BLINDADA (Prioridad al Carnet)
+            // ==========================================================
+            $existingGuest = null;
 
-            if (!empty($birthDate)) {
-                $query->where('birth_date', $birthDate);
-            } elseif (!empty($idNumber)) {
-                // Solo usamos CI si no hay fecha de nacimiento
-                $query->where('identification_number', $idNumber);
+            // A. Primero buscamos por CI Exacto (Si se proporcionó)
+            if (!empty($idNumber)) {
+                $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
             }
 
-            $existingGuest = $query->first();
+            // B. Si no apareció por CI, recién buscamos por Nombre (+ Fecha Nac si hay)
+            if (!$existingGuest) {
+                $query = \App\Models\Guest::where('full_name', $fullName);
+                if (!empty($birthDate)) {
+                    $query->where('birth_date', $birthDate);
+                }
+                $existingGuest = $query->first();
+            }
+            // ==========================================================
 
             if ($existingGuest) {
                 // SI YA EXISTE: Actualizamos sus datos (Fusión de información)
@@ -95,7 +103,6 @@ class CheckinController extends Controller
                 ]);
                 $guestId = $guest->id;
             }
-
         } else {
             // --- TITULAR EXISTENTE (Seleccionado del buscador) ---
             $guestId = $request->guest_id;
@@ -108,7 +115,7 @@ class CheckinController extends Controller
             }
         }
 
-        // 2. Validar datos del Checkin
+        // 2. Validar datos del Checkin (SIN CAMBIOS)
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -123,7 +130,7 @@ class CheckinController extends Controller
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // 3. Crear el Checkin Principal
+        // 3. Crear el Checkin Principal (SIN CAMBIOS)
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
@@ -137,7 +144,7 @@ class CheckinController extends Controller
             'status' => 'activo',
         ]);
 
-        // 4. --- LÓGICA DE ACOMPAÑANTES (Con la misma protección Anti-Duplicados) ---
+        // 4. --- LÓGICA DE ACOMPAÑANTES ---
         if ($request->has('companions') && is_array($request->companions)) {
             $idsParaSincronizar = [];
 
@@ -148,18 +155,27 @@ class CheckinController extends Controller
                 $compBirthDate = $compData['birth_date'] ?? null;
                 $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
 
-                // A. Buscar Acompañante Existente (Nombre + Fecha Nac o CI)
-                $compQuery = \App\Models\Guest::where('full_name', $compName);
-                
-                if (!empty($compBirthDate)) {
-                    $compQuery->where('birth_date', $compBirthDate);
-                } elseif (!empty($compIdNumber)) {
-                    $compQuery->where('identification_number', $compIdNumber);
+                // ==========================================================
+                // CAMBIO 2: BÚSQUEDA BLINDADA PARA ACOMPAÑANTES
+                // ==========================================================
+                $companion = null;
+
+                // A. Prioridad CI
+                if (!empty($compIdNumber)) {
+                    $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
                 }
 
-                $companion = $compQuery->first();
+                // B. Respaldo Nombre
+                if (!$companion) {
+                    $compQuery = \App\Models\Guest::where('full_name', $compName);
+                    if (!empty($compBirthDate)) {
+                        $compQuery->where('birth_date', $compBirthDate);
+                    }
+                    $companion = $compQuery->first();
+                }
+                // ==========================================================
 
-                // B. Crear o Actualizar
+                // B. Crear o Actualizar (SIN CAMBIOS)
                 if (!$companion) {
                     $companion = \App\Models\Guest::create([
                         'full_name' => $compName,
@@ -173,14 +189,12 @@ class CheckinController extends Controller
                         'profile_status' => 'INCOMPLETE'
                     ]);
                 } else {
-                    // Opcional: Actualizar datos faltantes del acompañante encontrado
                     $companion->update([
                         'identification_number' => $compIdNumber ?? $companion->identification_number,
                         'birth_date' => $compBirthDate ?? $companion->birth_date,
                     ]);
                 }
 
-                // C. Preparar relación
                 if ($companion->id !== $guestId) {
                     $idsParaSincronizar[$companion->id] = [];
                 }
@@ -191,12 +205,12 @@ class CheckinController extends Controller
             }
         }
 
-        // 5. Guardar Servicios
+        // 5. Guardar Servicios (SIN CAMBIOS)
         if ($request->has('selected_services')) {
             $checkin->services()->sync($request->selected_services);
         }
 
-        // 6. Actualizar Estado Habitación
+        // 6. Actualizar Estado Habitación (SIN CAMBIOS)
         \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');

@@ -394,7 +394,7 @@ export default function CheckinModal({
 
     //Reloj actualiza cada 5 segundos para saber si ya pasaron los 10 minutos
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let interval: any;
         if (show) {
             setCurrentTime(Date.now());
             interval = setInterval(() => setCurrentTime(Date.now()), 5000);
@@ -478,12 +478,24 @@ export default function CheckinModal({
                         : [],
                 });
             } else {
-            
+                //1. Reinicio del formulario Reseteo si es una nueva asignacion
+                reset();
+                setIsExistingGuest(false);
+                setCurrentIndex(0);
                 if (initialRoomId) {
                     setData((prev) => ({
-                        ...prev,
-                        duration_days: 1,
+                        ...prev, // Tomamos los valores limpios del reset()
                         room_id: String(initialRoomId),
+                        duration_days: 1,
+                        check_in_date: now, // Refrescamos la hora
+                        companions: [], // Aseguramos que no haya acompañantes fantasma
+                    }));
+                } else {
+                    // Si no hay habitación seleccionada, solo refrescamos la hora
+                    setData((prev) => ({
+                        ...prev,
+                        check_in_date: now,
+                        companions: [],
                     }));
                 }
             }
@@ -902,19 +914,88 @@ export default function CheckinModal({
                                         // IMPORTANTE: Usamos currentPerson para que funcione en el carrusel
                                         value={currentPerson.full_name}
                                         onChange={(e) => {
-                                            handleFieldChange(
-                                                'full_name',
-                                                e.target.value.toUpperCase(),
-                                            );
+                                            const newValue =
+                                                e.target.value.toUpperCase();
 
-                                            // 1. Activamos el dropdown para CUALQUIERA (Titular o Acompañante)
-                                            setIsDropdownOpen(true);
+                                            // LÓGICA DE LIMPIEZA AUTOMÁTICA
+                                            // Detectamos si estamos editando sobre un usuario que YA estaba seleccionado (con ID)
+                                            // o si el usuario borró todo el texto.
+                                            const hasLinkedId = isTitular
+                                                ? !!data.guest_id
+                                                : !!companionsList[
+                                                      currentIndex - 1
+                                                  ]?.id;
 
-                                            // 2. Solo si es Titular reseteamos el ID principal
-                                            if (isTitular) {
-                                                setData('guest_id', null);
-                                                setIsExistingGuest(false);
+                                            const shouldReset =
+                                                hasLinkedId || newValue === '';
+
+                                            if (shouldReset) {
+                                                // --- CASO 1: LIMPIEZA PROFUNDA (Borrón y cuenta nueva) ---
+                                                if (isTitular) {
+                                                    setData((prev) => ({
+                                                        ...prev,
+                                                        full_name: newValue, // Mantenemos lo que escribe
+                                                        guest_id: null, // Rompemos el vínculo con el ID anterior
+                                                        // Limpiamos el resto de datos autocompletados
+                                                        identification_number:
+                                                            '',
+                                                        issued_in: '',
+                                                        nationality:
+                                                            'BOLIVIANA',
+                                                        civil_status: '',
+                                                        birth_date: '',
+                                                        profession: '',
+                                                        origin: '',
+                                                        phone: '',
+                                                    }));
+                                                    setIsExistingGuest(false);
+                                                } else {
+                                                    // Lógica para Acompañantes
+                                                    const newCompanions = [
+                                                        ...companionsList,
+                                                    ];
+                                                    if (
+                                                        newCompanions[
+                                                            currentIndex - 1
+                                                        ]
+                                                    ) {
+                                                        newCompanions[
+                                                            currentIndex - 1
+                                                        ] = {
+                                                            ...newCompanions[
+                                                                currentIndex - 1
+                                                            ],
+                                                            full_name: newValue,
+                                                            id: undefined, // Rompemos el vínculo
+                                                            // Limpiamos datos
+                                                            identification_number:
+                                                                '',
+                                                            issued_in: '',
+                                                            nationality:
+                                                                'BOLIVIANA',
+                                                            civil_status: '',
+                                                            birth_date: '',
+                                                            profession: '',
+                                                            origin: '',
+                                                            phone: '',
+                                                        };
+                                                        setData(
+                                                            'companions',
+                                                            newCompanions,
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                // --- CASO 2: ESCRITURA NORMAL (Solo actualiza el nombre) ---
+                                                // Esto pasa cuando ya limpiamos y el usuario sigue escribiendo el nombre correcto
+                                                handleFieldChange(
+                                                    'full_name',
+                                                    newValue,
+                                                );
                                             }
+
+                                            // 1. Siempre activamos el dropdown al escribir
+                                            setIsDropdownOpen(true);
                                         }}
                                         onFocus={() => {
                                             // Activamos dropdown para CUALQUIERA si hay texto
