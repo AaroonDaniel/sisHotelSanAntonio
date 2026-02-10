@@ -132,12 +132,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/horarios/{schedule}/toggle', [ScheduleController::class, 'toggleStatus'])->name('schedules.toggle');
 
     //Reportes 
-    // Página principal de reportes
+    //Reportes 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-    // Verificar estado para Libro Diario (AJAX)
+    Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
+    // Esta ruta la mantuve en el controlador para evitar error 500 en llamadas AJAX antiguas, aunque no se use activamente
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
-    // Generar PDF Libro Diario
-    Route::get('/reports/daily-book-pdf', [ReportController::class, 'generateDailyBookPdf'])->name('reports.daily_pdf');
 });
 
 require __DIR__ . '/settings.php';

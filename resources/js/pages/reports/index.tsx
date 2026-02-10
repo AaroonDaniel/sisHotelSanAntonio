@@ -1,164 +1,219 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
-import { 
-    BookDown, 
-    FileBarChart, 
-    AlertTriangle, 
-    X,
-    FileText
-} from 'lucide-react';
+import { ArrowLeft, CheckSquare, Printer, Search, Square } from 'lucide-react';
 import { useState } from 'react';
-import axios from 'axios';
 
-// --- INTERFACES ---
+interface Guest {
+    id: number;
+    full_name: string;
+    age: number | string;
+    nationality: string;
+    profession: string;
+    civil_status: string;
+    origin: string;
+    identification_number: string;
+    issued_in: string;
+    room_number: string;
+    role: string;
+}
+
 interface User {
     id: number;
     name: string;
+    email: string;
+    nickname: string;
+    full_name: string;
 }
 
 interface Props {
     auth: { user: User };
+    Guests: Guest[];
 }
 
-export default function ReportsIndex({ auth }: Props) {
-    // Estado para el modal de error
-    const [showErrorModal, setShowErrorModal] = useState(false);
-    const [errorDetails, setErrorDetails] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+export default function ReportsIndex({ auth, Guests }: Props) {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-    // --- FUNCIÓN PRINCIPAL: GENERAR LIBRO DIARIO ---
-    const handleGenerateDailyBook = async () => {
-        setLoading(true);
-        try {
-            // 1. Consultamos al backend si es posible generar
-            const response = await axios.get('/reports/check-daily-book');
-            
-            if (response.data.can_generate) {
-                // 2. Si todo ok, abrimos el PDF en nueva pestaña
-                window.open('/reports/daily-book-pdf', '_blank');
-            } else {
-                // 3. Si hay error, mostramos el modal con los detalles
-                setErrorDetails(response.data.details || []);
-                setShowErrorModal(true);
-            }
-        } catch (error) {
-            console.error("Error al verificar estado", error);
-            alert("Ocurrió un error al verificar los datos.");
-        } finally {
-            setLoading(false);
+    const filteredGuests = Guests.filter((guest) =>
+        guest.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        guest.identification_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        guest.room_number.toString().includes(searchTerm)
+    );
+
+    const toggleSelection = (id: number) => {
+        if (selectedIds.includes(id)) {
+            setSelectedIds(selectedIds.filter(sid => sid !== id));
+        } else {
+            setSelectedIds([...selectedIds, id]);
         }
     };
 
-    return (
-        <AuthenticatedLayout user={auth.user as any}>
-            <Head title="Reportes y Libros" />
+    const toggleSelectAll = () => {
+        if (filteredGuests.length === 0) return;
+        const allSelected = filteredGuests.every(g => selectedIds.includes(g.id));
+        
+        if (allSelected) {
+            const visibleIds = filteredGuests.map(g => g.id);
+            setSelectedIds(selectedIds.filter(id => !visibleIds.includes(id)));
+        } else {
+            const newIds = [...selectedIds];
+            filteredGuests.forEach(g => {
+                if (!newIds.includes(g.id)) newIds.push(g.id);
+            });
+            setSelectedIds(newIds);
+        }
+    };
 
-            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-                <div className="mb-8">
-                    <h2 className="text-3xl font-bold text-gray-800">Centro de Reportes</h2>
-                    <p className="text-gray-500 mt-1">Generación de documentos oficiales y estadísticas.</p>
+    const isAllSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedIds.includes(g.id));
+
+    // ACCIÓN: ABRIR EN NUEVA PESTAÑA
+    const handleGenerateReport = () => {
+        if (selectedIds.length === 0) return;
+        const idsQuery = selectedIds.join(',');
+        window.open(`/reports/generate-pdf?ids=${idsQuery}`, '_blank');
+    };
+
+    return (
+        <AuthenticatedLayout user={auth.user}>
+            <Head title="Reportes" />
+            <div className="mx-auto max-w-[98%] px-4 sm:px-6 lg:px-8">
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
+
+                <div className="mb-6">
+                    <h2 className="text-3xl font-bold text-white">
+                        Huéspedes en Casa
+                    </h2>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    
-                    {/* --- TARJETA 1: LIBRO DIARIO --- */}
-                    <div className="group relative overflow-hidden rounded-2xl bg-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-1">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <BookDown className="h-24 w-24 text-amber-600" />
-                        </div>
+                <div className="py-12">
+                    <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
                         
-                        <div className="p-6">
-                            <div className="mb-4 inline-flex items-center justify-center rounded-xl bg-amber-100 p-3 text-amber-600">
-                                <BookDown className="h-8 w-8" />
+                        {/* Header: Buscador y Botón */}
+                        <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:w-72">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Buscar por nombre o CI..."
+                                    className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-800">Libro Diario</h3>
-                            <p className="mt-2 text-sm text-gray-500 mb-6">
-                                Genera el PDF oficial para la Cámara Hotelera. Requiere que todos los huéspedes ocupantes tengan sus datos completos.
-                            </p>
                             
-                            <button
-                                onClick={handleGenerateDailyBook}
-                                disabled={loading}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
-                            >
-                                {loading ? 'Verificando...' : 'Generar PDF'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* --- TARJETA 2: REPORTE GENERAL (Placeholder) --- */}
-                    <div className="group relative overflow-hidden rounded-2xl bg-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-1">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <FileBarChart className="h-24 w-24 text-blue-600" />
-                        </div>
-                        <div className="p-6">
-                            <div className="mb-4 inline-flex items-center justify-center rounded-xl bg-blue-100 p-3 text-blue-600">
-                                <FileBarChart className="h-8 w-8" />
+                            <div className="flex items-center gap-4">
+                                <div className="text-sm text-gray-500 font-medium">
+                                    Total: {filteredGuests.length}
+                                </div>
+                                
+                                {/* BOTÓN GENERAR REPORTE */}
+                                <button
+                                    onClick={handleGenerateReport}
+                                    disabled={selectedIds.length === 0}
+                                    className={`group flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95 ${
+                                        selectedIds.length > 0
+                                            ? 'bg-emerald-600 hover:bg-emerald-500 hover:shadow-lg'
+                                            : 'bg-gray-400 cursor-not-allowed opacity-50'
+                                    }`}
+                                >
+                                    <Printer className="h-5 w-5" />
+                                    <span>
+                                        Generar Reporte
+                                        {selectedIds.length > 0 && ` (${selectedIds.length})`}
+                                    </span>
+                                </button>
                             </div>
-                            <h3 className="text-xl font-bold text-gray-800">Reporte General</h3>
-                            <p className="mt-2 text-sm text-gray-500 mb-6">
-                                Estadísticas de ocupación e ingresos del mes actual.
-                            </p>
-                            <button className="w-full flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-400 cursor-not-allowed">
-                                Próximamente
-                            </button>
+                        </div>
+
+                        {/* Tabla */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs text-gray-600">
+                                <thead className="bg-gray-50 text-xs text-gray-700 uppercase font-bold">
+                                    <tr>
+                                        <th className="px-4 py-3 text-center border-r w-8">
+                                            <button onClick={toggleSelectAll}>
+                                                {isAllSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4" />}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-center border-r">Hab</th>
+                                        <th className="px-4 py-3">Nombre Completo</th>
+                                        <th className="px-2 py-3 text-center">Edad</th>
+                                        <th className="px-4 py-3">Nacionalidad</th>
+                                        <th className="px-4 py-3">Profesión</th>
+                                        <th className="px-4 py-3">Est. Civil</th>
+                                        <th className="px-4 py-3">Procedencia</th>
+                                        <th className="px-4 py-3">CI / Pasap.</th>
+                                        <th className="px-4 py-3">Otorgado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {filteredGuests.length > 0 ? (
+                                        filteredGuests.map((guest, index) => {
+                                            const isSelected = selectedIds.includes(guest.id);
+                                            return (
+                                                <tr 
+                                                    key={`${guest.id}-${index}`} 
+                                                    onClick={() => toggleSelection(guest.id)} 
+                                                    className={`cursor-pointer transition-colors hover:bg-blue-50 ${isSelected ? 'bg-blue-50' : ''}`}
+                                                >
+                                                    <td className="px-4 py-2 text-center border-r">
+                                                        <div className="flex justify-center">
+                                                            {isSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-gray-300" />}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center font-bold text-gray-900 bg-gray-50 border-r">
+                                                        {guest.room_number}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-bold text-gray-900 whitespace-nowrap">
+                                                        {guest.full_name}
+                                                    </td>
+                                                    <td className="px-2 py-3 text-center">
+                                                        {guest.age}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {guest.nationality || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {guest.profession || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {guest.civil_status || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {guest.origin || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-mono font-medium text-gray-700">
+                                                        {guest.identification_number || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {guest.issued_in || '-'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={10} className="p-8 text-center text-gray-500">
+                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay huéspedes con datos completos.'}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-
                 </div>
             </div>
-
-            {/* --- MODAL FLOTANTE DE ERROR (DATOS FALTANTES) --- */}
-            {showErrorModal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-                        {/* Header Rojo */}
-                        <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-6 py-4">
-                            <h3 className="flex items-center gap-2 text-lg font-bold text-red-700">
-                                <AlertTriangle className="h-6 w-6" />
-                                No se puede generar
-                            </h3>
-                            <button onClick={() => setShowErrorModal(false)} className="rounded-full p-1 text-gray-400 hover:bg-gray-200 transition">
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                        
-                        <div className="p-6">
-                            <div className="text-center mb-6">
-                                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
-                                    <FileText className="h-7 w-7 text-red-600" />
-                                </div>
-                                <h4 className="text-lg font-bold text-gray-800">Datos Incompletos</h4>
-                                <p className="mt-1 text-sm text-gray-500">
-                                    Para generar el Libro Diario, debes completar la información de los siguientes huéspedes activos:
-                                </p>
-                            </div>
-
-                            {/* Lista de habitaciones con problemas */}
-                            <div className="max-h-48 overflow-y-auto rounded-xl border border-red-100 bg-red-50/50 p-3">
-                                <ul className="space-y-2">
-                                    {errorDetails.map((detail, idx) => (
-                                        <li key={idx} className="flex items-center gap-2 text-sm font-medium text-red-800 bg-white p-2 rounded-lg border border-red-100 shadow-sm">
-                                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                                            {detail}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end border-t border-gray-100 bg-gray-50 px-6 py-4">
-                            <button 
-                                onClick={() => setShowErrorModal(false)} 
-                                className="rounded-xl bg-gray-800 px-6 py-2 text-sm font-bold text-white hover:bg-gray-700 transition shadow-md"
-                            >
-                                Entendido
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
         </AuthenticatedLayout>
     );
 }

@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
-import { url } from 'inspector';
 
 // Interfaces Locales
 interface User {
@@ -72,8 +71,9 @@ const hotelModules = [
         theme: 'amber',
         items: [
             // URL '#' porque interceptaremos el clic
-            { name: 'Libro Diario', icon: BookDown, url: '#' }, 
+            
             { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
+            { name: 'Libro Diario', icon: BookDown, url: '#' }, 
         ],
     },
 ];
