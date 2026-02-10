@@ -29,10 +29,10 @@ class GuestController extends Controller
         $guestId = null;
 
         if (!$request->filled('guest_id')) {
-            // --- CASO: NUEVO HUÉSPED ---
+            // --- CASO: NUEVO HUÉSPED (Con Verificación de Duplicados) ---
             $isComplete = $request->filled('identification_number');
             
-            $guestData = $request->validate([
+            $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50', 
                 'nationality' => 'nullable|string',
@@ -44,27 +44,72 @@ class GuestController extends Controller
                 'issued_in' => 'nullable|string',
             ]);
 
-            $guest = \App\Models\Guest::create([
-                'full_name' => $guestData['full_name'],
-                'identification_number' => $request->identification_number,
-                'nationality' => $request->nationality ?? 'BOLIVIA',
-                'civil_status' => $request->civil_status,
-                'birth_date' => $request->birth_date,
-                'profession' => $request->profession,
-                'origin' => $request->origin,
-                'phone' => $request->phone,
-                'issued_in' => $request->issued_in,
-                'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-            ]);
+            // Preparar datos para la búsqueda y guardado
+            $fullName = strtoupper($request->full_name);
+            $birthDate = $request->birth_date;
+            $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-            $guestId = $guest->id;
+            // A. BÚSQUEDA INTELIGENTE
+            // Buscamos coincidencia exacta de nombre
+            $query = \App\Models\Guest::where('full_name', $fullName);
+
+            // Refinamos: Si hay fecha de nacimiento, esa es la llave maestra (la más segura)
+            if (!empty($birthDate)) {
+                $query->where('birth_date', $birthDate);
+            } 
+            // Si no hay fecha, usamos el CI como respaldo
+            elseif (!empty($idNumber)) {
+                $query->where('identification_number', $idNumber);
+            }
+
+            $existingGuest = $query->first();
+
+            if ($existingGuest) {
+                // B1. SI YA EXISTE: Actualizamos sus datos con lo nuevo que llegó
+                $existingGuest->update([
+                    'identification_number' => $idNumber ?? $existingGuest->identification_number,
+                    'nationality' => $request->nationality ? strtoupper($request->nationality) : $existingGuest->nationality,
+                    'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
+                    'birth_date' => $birthDate ?? $existingGuest->birth_date,
+                    'profession' => $request->profession ? strtoupper($request->profession) : $existingGuest->profession,
+                    'origin' => $request->origin ? strtoupper($request->origin) : $existingGuest->origin,
+                    'phone' => $request->phone ?? $existingGuest->phone,
+                    'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : $existingGuest->issued_in,
+                    // Si completó el CI, actualizamos el estado, si no, se queda como estaba
+                    'profile_status' => $isComplete ? 'COMPLETE' : $existingGuest->profile_status,
+                ]);
+                $guestId = $existingGuest->id;
+            } else {
+                // B2. SI NO EXISTE: Creamos uno nuevo
+                $guest = \App\Models\Guest::create([
+                    'full_name' => $fullName,
+                    'identification_number' => $idNumber,
+                    'nationality' => $request->nationality ? strtoupper($request->nationality) : 'BOLIVIA',
+                    'civil_status' => $request->civil_status,
+                    'birth_date' => $birthDate,
+                    'profession' => $request->profession ? strtoupper($request->profession) : null,
+                    'origin' => $request->origin ? strtoupper($request->origin) : null,
+                    'phone' => $request->phone,
+                    'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
+                    'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                ]);
+                $guestId = $guest->id;
+            }
+
         } else {
-            // --- CASO: HUÉSPED EXISTENTE ---
+            // --- CASO: HUÉSPED EXISTENTE (Seleccionado por ID) ---
             $guestId = $request->guest_id;
+            
+            // Actualizamos el teléfono si enviaron uno nuevo
+            if ($request->filled('phone')) {
+                $existingGuest = \App\Models\Guest::find($guestId);
+                if ($existingGuest) {
+                    $existingGuest->update(['phone' => $request->phone]);
+                }
+            }
         }
 
-        // 2. CORRECCIÓN: Solo creamos el Check-in si envían el 'room_id'
-        // Esto permite usar el modal de "Solo crear Huésped" sin errores.
+        // 2. Crear Check-in si envían room_id (Lógica Original Mantenida)
         if ($request->filled('room_id')) {
             
             $validatedCheckin = $request->validate([
@@ -82,7 +127,7 @@ class GuestController extends Controller
                 'check_in_date' => $validatedCheckin['check_in_date'],
                 'duration_days' => $validatedCheckin['duration_days'],
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-                'notes' => $validatedCheckin['notes'],
+                'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'active',
             ]);
 

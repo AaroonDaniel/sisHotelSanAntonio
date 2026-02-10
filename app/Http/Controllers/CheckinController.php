@@ -40,7 +40,7 @@ class CheckinController extends Controller
     {
         // 1. Validar y Crear/Actualizar al Huésped TITULAR
         if (!$request->filled('guest_id')) {
-            // --- NUEVO TITULAR ---
+            // --- NUEVO TITULAR (Lógica Anti-Duplicados) ---
             $isComplete = $request->filled('identification_number');
 
             $request->validate([
@@ -49,21 +49,55 @@ class CheckinController extends Controller
                 'phone' => 'nullable|string|max:20',
             ]);
 
-            $guest = \App\Models\Guest::create([
-                'full_name' => strtoupper($request->full_name),
-                'identification_number' => $request->identification_number ? strtoupper($request->identification_number) : null,
-                'nationality' => $request->nationality ?? 'BOLIVIANA',
-                'civil_status' => $request->civil_status,
-                'birth_date' => $request->birth_date,
-                'profession' => $request->profession ? strtoupper($request->profession) : null,
-                'origin' => $request->origin ? strtoupper($request->origin) : null,
-                'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
-                'phone' => $request->phone,
-                'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-            ]);
-            $guestId = $guest->id;
+            $fullName = strtoupper($request->full_name);
+            $birthDate = $request->birth_date;
+            $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
+
+            // A. BÚSQUEDA INTELIGENTE: Nombre + (Fecha Nacimiento O CI)
+            $query = \App\Models\Guest::where('full_name', $fullName);
+
+            if (!empty($birthDate)) {
+                $query->where('birth_date', $birthDate);
+            } elseif (!empty($idNumber)) {
+                // Solo usamos CI si no hay fecha de nacimiento
+                $query->where('identification_number', $idNumber);
+            }
+
+            $existingGuest = $query->first();
+
+            if ($existingGuest) {
+                // SI YA EXISTE: Actualizamos sus datos (Fusión de información)
+                $existingGuest->update([
+                    'identification_number' => $idNumber ?? $existingGuest->identification_number,
+                    'nationality' => $request->nationality ?? $existingGuest->nationality,
+                    'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
+                    'birth_date' => $birthDate ?? $existingGuest->birth_date,
+                    'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
+                    'origin' => $request->filled('origin') ? strtoupper($request->origin) : $existingGuest->origin,
+                    'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
+                    'phone' => $request->phone ?? $existingGuest->phone,
+                    'profile_status' => $isComplete ? 'COMPLETE' : $existingGuest->profile_status,
+                ]);
+                $guestId = $existingGuest->id;
+            } else {
+                // SI NO EXISTE: Lo creamos desde cero
+                $guest = \App\Models\Guest::create([
+                    'full_name' => $fullName,
+                    'identification_number' => $idNumber,
+                    'nationality' => $request->nationality ?? 'BOLIVIANA',
+                    'civil_status' => $request->civil_status,
+                    'birth_date' => $birthDate,
+                    'profession' => $request->profession ? strtoupper($request->profession) : null,
+                    'origin' => $request->origin ? strtoupper($request->origin) : null,
+                    'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
+                    'phone' => $request->phone,
+                    'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                ]);
+                $guestId = $guest->id;
+            }
+
         } else {
-            // --- TITULAR EXISTENTE ---
+            // --- TITULAR EXISTENTE (Seleccionado del buscador) ---
             $guestId = $request->guest_id;
             // Actualizar teléfono si se envió uno nuevo
             if ($request->filled('phone')) {
@@ -83,12 +117,10 @@ class CheckinController extends Controller
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
-            // Validar array de acompañantes
             'companions' => 'nullable|array',
             'selected_services' => 'nullable|array',
         ]);
 
-        // Usuario actual (fallback si no hay sesión)
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
         // 3. Crear el Checkin Principal
@@ -96,62 +128,70 @@ class CheckinController extends Controller
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
             'user_id' => $userId,
-
             'check_in_date' => $validatedCheckin['check_in_date'],
             'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
             'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
-
             'duration_days' => $validatedCheckin['duration_days'] ?? 0,
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
             'status' => 'activo',
         ]);
 
-        // 4. --- LÓGICA DE ACOMPAÑANTES (NUEVO) ---
+        // 4. --- LÓGICA DE ACOMPAÑANTES (Con la misma protección Anti-Duplicados) ---
         if ($request->has('companions') && is_array($request->companions)) {
             $idsParaSincronizar = [];
 
             foreach ($request->companions as $compData) {
-                // Si el nombre está vacío, saltar
                 if (empty($compData['full_name'])) continue;
 
-                // A. Buscar si ya existe por CI (si tiene CI)
-                $companion = null;
-                if (!empty($compData['identification_number'])) {
-                    $companion = \App\Models\Guest::where('identification_number', $compData['identification_number'])->first();
+                $compName = strtoupper($compData['full_name']);
+                $compBirthDate = $compData['birth_date'] ?? null;
+                $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
+
+                // A. Buscar Acompañante Existente (Nombre + Fecha Nac o CI)
+                $compQuery = \App\Models\Guest::where('full_name', $compName);
+                
+                if (!empty($compBirthDate)) {
+                    $compQuery->where('birth_date', $compBirthDate);
+                } elseif (!empty($compIdNumber)) {
+                    $compQuery->where('identification_number', $compIdNumber);
                 }
 
-                // B. Crear o usar existente
+                $companion = $compQuery->first();
+
+                // B. Crear o Actualizar
                 if (!$companion) {
                     $companion = \App\Models\Guest::create([
-                        'full_name' => strtoupper($compData['full_name']),
-                        'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
+                        'full_name' => $compName,
+                        'identification_number' => $compIdNumber,
                         'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
-                        // Otros campos opcionales
                         'civil_status' => $compData['civil_status'] ?? null,
-                        'birth_date' => $compData['birth_date'] ?? null,
+                        'birth_date' => $compBirthDate,
                         'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
                         'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
                         'phone' => $compData['phone'] ?? null,
-                        'profile_status' => 'INCOMPLETE' // Acompañantes suelen ser incompletos al inicio
+                        'profile_status' => 'INCOMPLETE'
+                    ]);
+                } else {
+                    // Opcional: Actualizar datos faltantes del acompañante encontrado
+                    $companion->update([
+                        'identification_number' => $compIdNumber ?? $companion->identification_number,
+                        'birth_date' => $compBirthDate ?? $companion->birth_date,
                     ]);
                 }
 
-                // C. Preparar relación (ID y Parentesco)
-                // Evitamos que el titular se agregue a sí mismo como acompañante
+                // C. Preparar relación
                 if ($companion->id !== $guestId) {
                     $idsParaSincronizar[$companion->id] = [];
                 }
             }
 
-            // D. Guardar en tabla intermedia
             if (!empty($idsParaSincronizar)) {
                 $checkin->companions()->sync($idsParaSincronizar);
             }
         }
-        // ------------------------------------------
 
-        // 5. Guardar Servicios opcionales
+        // 5. Guardar Servicios
         if ($request->has('selected_services')) {
             $checkin->services()->sync($request->selected_services);
         }
