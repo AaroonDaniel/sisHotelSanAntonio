@@ -90,7 +90,7 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
                         {/* COLUMNA IZQUIERDA: HUÉSPEDES */}
                         <div className="space-y-4">
                             <h3 className="mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">
-                                Ocupantes Registrados
+                                Huesped
                             </h3>
                             
                             {!hasCompanions ? (
@@ -244,12 +244,10 @@ function StaticGuestCard({ guest }: { guest: any }) {
     return (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:border-cyan-300 transition-colors">
             <div className="mb-6 flex items-center gap-4 border-b border-gray-100 pb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-700 text-white shadow-md">
-                    <User className="h-6 w-6" />
-                </div>
+                
                 <div>
                     <h3 className="text-lg font-black text-gray-900 uppercase">{guest.full_name}</h3>
-                    <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                         Huésped 
                     </p>
                 </div>
@@ -272,27 +270,11 @@ function ExpandableGuestCard({ guest, isTitular, isExpanded, onToggle }: any) {
             }`}
         >
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className={`flex items-center justify-center rounded-full font-bold transition-all duration-500 shadow-sm ${
-                        isExpanded 
-                        ? 'h-16 w-16 text-2xl bg-cyan-700 text-white' 
-                        : 'h-10 w-10 text-sm bg-cyan-50 text-cyan-700'
-                    }`}>
-                        {isTitular ? (
-                            <User className={isExpanded ? 'h-8 w-8' : 'h-5 w-5'} />
-                        ) : (
-                            <span>{guest.full_name.charAt(0)}</span>
-                        )}
-                    </div>
-                    
-                    <div>
-                        <p className={`font-bold uppercase transition-all duration-500 ${isExpanded ? 'text-lg text-black' : 'text-sm text-gray-700'}`}>
-                            {guest.full_name}
-                        </p>
-                        {isTitular && !isExpanded && (
-                            <p className="text-[9px] font-bold text-cyan-600 uppercase tracking-wider">Titular</p>
-                        )}
-                    </div>
+                {/* CAMBIO: Se eliminó el div con el ícono/inicial y clases flex innecesarias */}
+                <div>
+                    <p className={`font-bold uppercase transition-all duration-500 ${isExpanded ? 'text-lg text-black' : 'text-sm text-gray-700'}`}>
+                        {guest.full_name}
+                    </p>
                 </div>
                 <ChevronDown className={`h-5 w-5 text-gray-300 transition-transform duration-500 ${isExpanded ? 'rotate-180 text-cyan-600 shadow-sm' : ''}`} />
             </div>
