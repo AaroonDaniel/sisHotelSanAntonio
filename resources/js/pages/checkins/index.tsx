@@ -70,20 +70,13 @@ export interface CheckinData {
     room_id: number;
     check_in_date: string;
     //
-    actual_arrival_date?: string;
-    schedule_id?: string;
-
+    actual_arrival_date?: string | null;
+    schedule_id?: number | null;
     duration_days: number;
     advance_payment: number;
     notes?: string;
     services?: string[];
     guest?: Guest;
-
-    // --- CAMBIO CLAVE AQUÍ ---
-    // Cambia esto:
-    // companions?: CompanionData[];
-
-    // Por esto:
     companions?: any[];
 }
 
