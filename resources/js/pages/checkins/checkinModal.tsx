@@ -445,8 +445,9 @@ export default function CheckinModal({
                     duration_days: checkinToEdit.duration_days,
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
-                    selected_services: checkinToEdit.services || [],
-
+                    selected_services: checkinToEdit.services
+                        ? checkinToEdit.services.map((s: any) => String(s.id || s))
+                        : [],
                     // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
                     identification_number:
@@ -846,7 +847,7 @@ export default function CheckinModal({
     // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-            <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="max-h-[80vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">

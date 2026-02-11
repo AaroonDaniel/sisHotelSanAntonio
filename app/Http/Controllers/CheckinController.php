@@ -21,7 +21,7 @@ class CheckinController extends Controller
     public function index()
     {
 
-        $checkins = Checkin::with(['guest', 'room.roomType', 'companions', 'schedule'])
+        $checkins = Checkin::with(['guest', 'room.roomType', 'companions', 'schedule', 'services'])
             ->orderBy('created_at', 'desc')
             ->get();
 
