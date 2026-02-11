@@ -778,6 +778,10 @@ export default function RoomsStatus({
                 // --- AGREGAR ESTA LÍNEA ---
                 schedules={Schedules}
                 availableServices={services}
+                isReadOnly={
+                    !!checkinToEdit && 
+                    checkinToEdit.guest?.profile_status !== 'INCOMPLETE'
+                }
             />
 
             <DetailModal

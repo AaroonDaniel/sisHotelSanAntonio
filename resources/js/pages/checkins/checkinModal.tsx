@@ -191,6 +191,7 @@ interface CheckinModalProps {
     schedules: Schedule[];
     initialRoomId?: number | null;
     availableServices?: any[];
+    isReadOnly?: boolean;
 }
 
 interface CompanionData {
@@ -247,6 +248,7 @@ export default function CheckinModal({
     schedules = [],
     initialRoomId,
     availableServices = [],
+    isReadOnly = false,
 }: CheckinModalProps) {
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
@@ -957,6 +959,7 @@ export default function CheckinModal({
                                         placeholder="ESCRIBE PARA BUSCAR..."
                                         // IMPORTANTE: Usamos currentPerson para que funcione en el carrusel
                                         value={currentPerson.full_name}
+                                        disabled={isReadOnly}
                                         onChange={(e) => {
                                             const newValue =
                                                 e.target.value.toUpperCase();
@@ -1101,6 +1104,7 @@ export default function CheckinModal({
                                         value={
                                             currentPerson.identification_number
                                         }
+                                        disabled={isReadOnly}
                                         onChange={(e) =>
                                             handleFieldChange(
                                                 'identification_number',
@@ -1117,13 +1121,14 @@ export default function CheckinModal({
                                     <input
                                         className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
                                         value={currentPerson.issued_in}
+                                        disabled={isReadOnly}
                                         onChange={(e) =>
                                             handleFieldChange(
                                                 'issued_in',
                                                 e.target.value.toUpperCase(),
                                             )
                                         }
-                                        placeholder="LP"
+                                        placeholder="La Paz"
                                     />
                                 </div>
                                 <div className="relative" ref={nationalityRef}>
@@ -1133,6 +1138,7 @@ export default function CheckinModal({
                                     <input
                                         className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase" // Changed text-black to text-gray-900 font-medium
                                         value={currentPerson.nationality}
+                                        disabled={isReadOnly}
                                         onChange={(e) =>
                                             updateNationalityAndPhone(
                                                 e.target.value,
@@ -1174,6 +1180,7 @@ export default function CheckinModal({
                                     <select
                                         className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
                                         value={currentPerson.civil_status}
+                                        disabled={isReadOnly}
                                         onChange={(e) =>
                                             handleFieldChange(
                                                 'civil_status',
@@ -1201,6 +1208,7 @@ export default function CheckinModal({
                                             type="date"
                                             className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
                                             value={currentPerson.birth_date}
+                                            disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(
                                                     'birth_date',
@@ -1221,6 +1229,7 @@ export default function CheckinModal({
                                         <input
                                             className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
                                             value={currentPerson.profession}
+                                            disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(
                                                     'profession',
@@ -1243,6 +1252,7 @@ export default function CheckinModal({
                                         <input
                                             className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm text-black uppercase"
                                             value={currentPerson.origin}
+                                            disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(
                                                     'origin',
@@ -1264,6 +1274,7 @@ export default function CheckinModal({
                                         <input
                                             type="text"
                                             value={currentPerson.phone}
+                                            disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(
                                                     'phone',
@@ -1392,22 +1403,14 @@ export default function CheckinModal({
                             <div className="flex gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
                                 <div className="flex flex-grow flex-col">
-                                    <label className="mb-1 text-xs font-bold text-gray-500">
-                                        Fecha Ingreso
+                                    <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
+                                        Fecha Ingreso (Check-In)
                                     </label>
                                     <input
                                         type="datetime-local"
-                                        // AQUÍ ES DONDE SE APLICA LA MAGIA:
-                                        value={formatDateForInput(
-                                            data.check_in_date,
-                                        )}
-                                        onChange={(e) =>
-                                            setData(
-                                                'check_in_date',
-                                                e.target.value,
-                                            )
-                                        }
-                                        className="w-full rounded-lg border border-gray-400 text-sm text-black"
+                                        value={formatDateForInput(data.check_in_date)}
+                                        onChange={(e) => setData('check_in_date', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-400 text-sm text-black font-bold"
                                     />
 
                                     {/* --- BOTÓN TOLERANCIA --- */}
@@ -1416,20 +1419,20 @@ export default function CheckinModal({
                                             <button
                                                 type="button"
                                                 onClick={handleApplyTolerance}
-                                                disabled={isToleranceApplied} // Se bloquea si ya se aplicó
+                                                disabled={isToleranceApplied}
                                                 className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
                                                     isToleranceApplied
-                                                        ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800' // ESTADO APLICADO (Quieto)
+                                                        ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800'
                                                         : toleranceStatus.isValid
-                                                          ? 'animate-bounce cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200' // ESTADO DISPONIBLE (Saltando)
-                                                          : 'cursor-pointer border-red-500 bg-red-100 text-red-700 hover:bg-red-200' // ESTADO ERROR (Quieto)
+                                                          ? 'animate-bounce cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                          : 'cursor-pointer border-red-500 bg-red-100 text-red-700 hover:bg-red-200'
                                                 }`}
                                                 title={
                                                     isToleranceApplied
-                                                        ? 'La tolerancia ya ha sido aplicada correctamente.'
+                                                        ? 'Tolerancia aplicada.'
                                                         : toleranceStatus.isValid
                                                           ? `Clic para ajustar a ${toleranceStatus.officialTime}`
-                                                          : `Fuera del límite de ${toleranceStatus.toleranceMinutes} min`
+                                                          : 'Fuera de tiempo'
                                                 }
                                             >
                                                 {/* Icono Dinámico */}
@@ -1440,40 +1443,44 @@ export default function CheckinModal({
                                                 ) : (
                                                     <Ban className="h-3.5 w-3.5" />
                                                 )}
-
+                                                
                                                 {/* Texto Dinámico */}
                                                 <span>
                                                     {isToleranceApplied
-                                                        ? 'Tolerancia Aplicada'
+                                                        ? 'Hora Ajustada'
                                                         : toleranceStatus.isValid
                                                           ? 'Aplicar Tolerancia'
-                                                          : 'Fuera de Tiempo'}
+                                                          : 'Fuera de Tolerancia'}
                                                 </span>
                                             </button>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* COLUMNA DERECHA: ESTADÍA + SALIDA ESTIMADA */}
+                                {/* COLUMNA DERECHA: NOCHES (Antes "Estadía") */}
                                 <div className="flex w-24 flex-col">
-                                    <label className="mb-1 text-xs font-bold text-gray-500">
-                                        Estadía
+                                    <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
+                                        Noches
                                     </label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={data.duration_days}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setData(
-                                                'duration_days',
-                                                val === '' ? '' : Number(val),
-                                            );
-                                        }}
-                                        className="w-full rounded-lg border border-gray-400 text-right text-sm text-black"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            min="1" 
+                                            value={data.duration_days}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                // Aseguramos que sea un número positivo
+                                                setData('duration_days', val === '' ? '' : Math.max(0, Number(val)));
+                                            }}
+                                            className="w-full rounded-lg border border-gray-400 pr-2 pl-3 text-right text-sm font-black text-gray-900 focus:border-gray-500 focus:ring-blue-500"
+                                            placeholder="1"
+                                        />
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">
+                                            #
+                                        </span>
+                                    </div>
 
-                                    {/* TEXTO SALIDA (JUSTO DEBAJO Y A LA DERECHA) */}
+                                    {/* TEXTO SALIDA (Cálculo Automático) */}
                                     <div className="mt-2 text-right">
                                         <span
                                             className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
@@ -1593,50 +1600,63 @@ export default function CheckinModal({
                             </div>
                         </div>
 
+                        {/* PIE DEL FORMULARIO CON BOTONES */}
                         <div className="mt-8 flex items-center justify-end gap-3">
-                            {checkinToEdit &&
-                                (canCancel() ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowCancelModal(true)}
-                                        className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                        <span className="hidden sm:inline">
-                                            Cancelar Asignación
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
-                                        <AlertCircle className="h-3 w-3" />
-                                        <span>Asignación confirmada</span>
-                                    </div>
-                                ))}
+                            
+                            {/* --- 1. BOTÓN CANCELAR ASIGNACIÓN (Regla de 10 min) --- */}
+                            {/* ESTE BOTÓN AHORA ES INDEPENDIENTE: Si hay checkin y hay tiempo, APARECE SIEMPRE */}
+                            {checkinToEdit && canCancel() && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCancelModal(true)}
+                                    className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    <span className="hidden sm:inline">
+                                        Cancelar Asignación
+                                    </span>
+                                </button>
+                            )}
+
+                            {/* --- 2. MENSAJE "CONFIRMADA" (Solo visual) --- */}
+                            {/* Solo mostramos esto si YA PASÓ el tiempo y estamos editando (no en lectura) */}
+                            {!isReadOnly && checkinToEdit && !canCancel() && (
+                                <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Asignación confirmada</span>
+                                </div>
+                            )}
+
+                            {/* --- 3. BOTÓN CERRAR / CANCELAR --- */}
                             <button
                                 type="button"
                                 onClick={onClose}
                                 className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200"
                             >
-                                Cancelar
+                                {isReadOnly ? 'Cerrar' : 'Cancelar'}
                             </button>
-                            <button
-                                type="submit"
-                                disabled={processing}
-                                className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${isProfileIncomplete ? 'bg-amber-600 hover:bg-amber-500' : 'bg-green-600 hover:bg-green-500'}`}
-                            >
-                                {processing ? (
-                                    'Procesando...'
-                                ) : (
-                                    <>
-                                        <Save className="h-4 w-4" />
-                                        {checkinToEdit
-                                            ? 'Actualizar'
-                                            : isProfileIncomplete
-                                              ? 'Asignación Rápida'
-                                              : 'Registrar'}
-                                    </>
-                                )}
-                            </button>
+
+                            {/* --- 4. BOTÓN GUARDAR (Solo si NO es lectura) --- */}
+                            {!isReadOnly && (
+                                <button
+                                    type="submit"
+                                    disabled={processing}
+                                    className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${isProfileIncomplete ? 'bg-amber-600 hover:bg-amber-500' : 'bg-green-600 hover:bg-green-500'}`}
+                                >
+                                    {processing ? (
+                                        'Procesando...'
+                                    ) : (
+                                        <>
+                                            <Save className="h-4 w-4" />
+                                            {checkinToEdit
+                                                ? 'Actualizar'
+                                                : isProfileIncomplete
+                                                ? 'Asignación Rápida'
+                                                : 'Registrar'}
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </form>

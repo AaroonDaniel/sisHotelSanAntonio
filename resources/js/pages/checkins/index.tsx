@@ -472,17 +472,6 @@ export default function CheckinsIndex({
                     onClose={() => setIsDeleteModalOpen(false)}
                     checkinId={deletingCheckinId}
                 />
-
-                <TransferModal // Este componente lo tienes importado pero no se ve en el return del archivo que subiste, asegúrate de usarlo o si es parte de otro modal.
-                    // Si estás usando el TransferModal directamente:
-                    show={ /* ... */ }
-                    onClose={ /* ... */ }
-                    checkin={ /* ... */ }
-                    availableRooms={ /* ... */ }
-                    occupiedRooms={ /* ... */ }
-                    blocks={ /* ... */ }
-                    roomTypes={RoomTypes} // <--- ¡ESTO ES LO QUE HACE QUE FUNCIONE EL FILTRO!
-                />
             </div>
         </AuthenticatedLayout>
     );
