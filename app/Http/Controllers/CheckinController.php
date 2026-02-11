@@ -117,6 +117,19 @@ class CheckinController extends Controller
             }
         }
 
+        // Asignacion unica
+        $ocupacionPrevia = \App\Models\Checkin::with('room')
+            ->where('guest_id', $guestId)
+            ->where('status', 'activo')
+            ->first();
+
+        if ($ocupacionPrevia) {
+            // Si existe, DETENEMOS TODO y devolvemos el error
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
+            ]);
+        }
+
         // 2. Validar datos del Checkin (SIN CAMBIOS)
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',

@@ -168,7 +168,7 @@ export interface CheckinData {
     guest?: Guest;
     companions?: any[];
     created_at?: string;
-    actual_arrival_date?: string | null; 
+    actual_arrival_date?: string | null;
     schedule_id?: number | null;
 }
 
@@ -190,6 +190,7 @@ interface CheckinModalProps {
     rooms: Room[];
     schedules: Schedule[];
     initialRoomId?: number | null;
+    availableServices?: any[];
 }
 
 interface CompanionData {
@@ -245,6 +246,7 @@ export default function CheckinModal({
     rooms,
     schedules = [],
     initialRoomId,
+    availableServices = [],
 }: CheckinModalProps) {
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
@@ -263,6 +265,9 @@ export default function CheckinModal({
     // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isExistingGuest, setIsExistingGuest] = useState(false);
+
+    // Alerta flotante asignacion unica
+    const [showErrorToast, setShowErrorToast] = useState(false);
 
     // [NUEVO] Estado para la navegación del carrusel (0 = Titular)
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -447,7 +452,9 @@ export default function CheckinModal({
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     selected_services: checkinToEdit.services
-                        ? checkinToEdit.services.map((s: any) => String(s.id || s))
+                        ? checkinToEdit.services.map((s: any) =>
+                              String(s.id || s),
+                          )
                         : [],
                     // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
@@ -527,6 +534,21 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit]);
 
+    // Efecto para mostrar y ocultar asignacion unica
+    useEffect(() => {
+        if (Object.keys(errors).length > 0) {
+            setShowErrorToast(true); // Mostrar
+
+            // Ocultar después de 5 segundos
+            const timer = setTimeout(() => {
+                setShowErrorToast(false);
+            }, 5000);
+
+            return () => clearTimeout(timer); // Limpiar timer si cambia algo
+        } else {
+            setShowErrorToast(false);
+        }
+    }, [errors]);
     //calculo matematico de fecha
 
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
@@ -791,13 +813,8 @@ export default function CheckinModal({
     };
 
     if (!show) return null;
-    const hasErrors = Object.keys(errors).length > 0;
 
-    // --- FUNCIÓN DE TOLERANCIA CON DEBUG ---
-    // Función al hacer clic en el botón
     // --- FUNCIÓN DE TOLERANCIA ---
-    // En resources/js/pages/checkins/checkinModal.tsx
-
     const handleApplyTolerance = () => {
         // 1. Validaciones previas (Rojo si no corresponde)
         if (!toleranceStatus.isValid) {
@@ -870,11 +887,36 @@ export default function CheckinModal({
                     </div>
                 </div>
 
-                {hasErrors && (
-                    <div className="border-b border-red-100 bg-red-50 px-6 py-2">
-                        <div className="flex items-center gap-2 text-sm font-bold text-red-600">
-                            <AlertCircle className="h-4 w-4" />
-                            <span>Revise los errores.</span>
+                {/* --- NUEVA ALERTA FLOTANTE (TOAST) --- */}
+                {showErrorToast && Object.keys(errors).length > 0 && (
+                    <div className="fixed top-1/2 left-1/2 z-[100] flex w-96 -translate-x-1/2 -translate-y-1/2 animate-in flex-col gap-2 rounded-2xl border border-red-200 bg-white p-5 shadow-[0_0_50px_rgba(0,0,0,0.25)] duration-300 zoom-in-95 fade-in">
+                        <div className="flex items-start gap-4">
+                            <div className="rounded-full bg-red-100 p-3 text-red-600 shadow-sm">
+                                <AlertCircle className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-gray-900">
+                                    ¡Atención!
+                                </h3>
+                                <ul className="mt-2 list-inside list-disc text-sm font-medium text-red-600">
+                                    {Object.values(errors).map(
+                                        (error: any, index) => (
+                                            <li key={index}>{error}</li>
+                                        ),
+                                    )}
+                                </ul>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowErrorToast(false)}
+                                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {/* Barra de tiempo */}
+                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-red-50">
+                            <div className="h-full w-full origin-left animate-[w-0_5s_linear_forwards] bg-red-500" />
                         </div>
                     </div>
                 )}
@@ -1503,53 +1545,49 @@ export default function CheckinModal({
                                     Servicios
                                 </label>
 
-                                {/* INICIO DEL CÓDIGO A AGREGAR */}
+                                {/* SECCIÓN DE SERVICIOS ACTUALIZADA */}
+                            <div>
                                 <div className="flex flex-wrap gap-2">
-                                    {servicesList.map((srv) => {
-                                        const active =
-                                            data.selected_services.includes(
-                                                srv.id,
+                                    
+                                    {/* 1. BOTÓN GARAJE (Dinámico: Se conecta a la BD) */}
+                                    {availableServices
+                                        .filter((s: any) => s.name.toUpperCase().includes('GARAJE')) // Solo mostramos Garaje
+                                        .map((srv: any) => {
+                                            const srvId = String(srv.id);
+                                            const active = data.selected_services.includes(srvId);
+                                            return (
+                                                <button
+                                                    key={srv.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newServs = active
+                                                            ? data.selected_services.filter((id) => id !== srvId)
+                                                            : [...data.selected_services, srvId];
+                                                        setData('selected_services', newServs);
+                                                    }}
+                                                    className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+                                                        active
+                                                            ? 'border-green-500 bg-green-100 font-bold text-green-700' // Estilo Activo
+                                                            : 'border border-gray-400 bg-white text-gray-600 hover:border-gray-500' // Estilo Inactivo
+                                                    }`}
+                                                >
+                                                    {active && <CheckCircle2 className="h-3 w-3" />}
+                                                    {srv.name}
+                                                </button>
                                             );
-                                        return (
-                                            <button
-                                                key={srv.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    const newServs = active
-                                                        ? data.selected_services.filter(
-                                                              (id) =>
-                                                                  id !== srv.id,
-                                                          )
-                                                        : [
-                                                              ...data.selected_services,
-                                                              srv.id,
-                                                          ];
-                                                    setData(
-                                                        'selected_services',
-                                                        newServs,
-                                                    );
-                                                }}
-                                                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
-                                                    active
-                                                        ? 'border-green-500 bg-green-100 font-bold text-green-700'
-                                                        : 'border border-gray-400 bg-white text-gray-600'
-                                                }`}
-                                            >
-                                                {active && (
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                )}
-                                                {srv.name}
-                                            </button>
-                                        );
-                                    })}
+                                        })}
+
+                                    {/* 2. BOTÓN DESAYUNO (Estático: Siempre activo visualmente) */}
                                     <button
                                         type="button"
-                                        disabled={true}
-                                        className="flex items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700 transition"
+                                        disabled={true} // No se puede quitar clickeando
+                                        className="flex items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700 cursor-default"
                                     >
-                                        Desayuno
+                                        <CheckCircle2 className="h-3 w-3" />
+                                        DESAYUNO
                                     </button>
                                 </div>
+                            </div>
                                 <div className="mt-2 text-center text-base font-medium text-gray-800"></div>
                                 {/* FIN DEL CÓDIGO A AGREGAR */}
                             </div>

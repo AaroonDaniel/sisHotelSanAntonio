@@ -32,16 +32,6 @@ class RoomController
         ]);
     }
 
-    public function create()
-    {
-        return Inertia::render('rooms/create', [
-            'RoomTypes' => RoomType::where('is_active', true)->get(),
-            'Prices' => Price::where('is_active', true)->get(),
-            'Floors' => Floor::where('is_active', true)->get(),
-            'Blocks' => Block::where('is_active', true)->get(),
-        ]);
-    }
-
     public function store(Request $request)
     {
         // 1. Validación (Aceptamos español e inglés para el status)
@@ -149,11 +139,11 @@ class RoomController
     {
         // 1. Cargamos las habitaciones con sus relaciones y los detalles de consumo
         $rooms = Room::with(['roomType', 'price', 'checkins' => function ($q) {
-            $q->with(['guest', 'companions', 'checkinDetails.service'])->latest('id');
+            $q->with(['guest', 'companions', 'checkinDetails.service', 'services'])->latest('id');
         }])->orderBy('number')->get();
 
         // 2. Obtenemos todos los checkins activos para la búsqueda global en el modal
-        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room'])
+        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services'])
             ->where('status', 'activo')
             ->get();
 

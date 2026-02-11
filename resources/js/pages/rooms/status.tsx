@@ -777,6 +777,7 @@ export default function RoomsStatus({
                 initialRoomId={selectedRoomId}
                 // --- AGREGAR ESTA LÍNEA ---
                 schedules={Schedules}
+                availableServices={services}
             />
 
             <DetailModal
