@@ -133,7 +133,7 @@ export default function TransferModal({
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-            <div className="flex h-[80vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 
                 {/* --- HEADER --- */}
                 <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
@@ -286,7 +286,7 @@ export default function TransferModal({
                                         onChange={(e) => setSelectedRoomType(e.target.value)}
                                         className="h-8 rounded-lg border-gray-200 bg-gray-50 pl-8 pr-6 text-[10px] font-bold uppercase text-gray-600 focus:border-green-500 focus:ring-green-500 cursor-pointer hover:bg-gray-100"
                                     >
-                                        <option value="">Tipos</option>
+                                        <option value="">Todos</option>
                                         {roomTypes.map((type: any) => (
                                             <option key={type.id} value={type.id}>{type.name}</option>
                                         ))}

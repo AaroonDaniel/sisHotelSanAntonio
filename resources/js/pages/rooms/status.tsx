@@ -80,6 +80,7 @@ interface Props {
     RoomTypes: RoomType[];
     Checkins: any[];
     Schedules: any[];
+    
 }
 
 export default function RoomsStatus({
@@ -821,7 +822,8 @@ export default function RoomsStatus({
                 checkin={checkinForTransfer}
                 availableRooms={availableRoomsForTransfer}
                 occupiedRooms={occupiedRoomsForTransfer}
-                blocks={Blocks} // <--- AGREGAR ESTA LÍNEA
+                blocks={Blocks}
+                roomTypes={RoomTypes}
             />
 
             {/* --- AQUÍ ESTÁ TU BLOQUE EXACTO --- */}

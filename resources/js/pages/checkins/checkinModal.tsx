@@ -168,7 +168,8 @@ export interface CheckinData {
     guest?: Guest;
     companions?: any[];
     created_at?: string;
-    actual_arrival_date: string;
+    actual_arrival_date?: string | null; 
+    schedule_id?: number | null;
 }
 
 export interface Room {

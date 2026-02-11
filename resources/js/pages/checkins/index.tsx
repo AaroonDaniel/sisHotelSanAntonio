@@ -62,22 +62,22 @@ interface Props {
     Guests: Guest[];
     Rooms: Room[];
     Schedules: any[];
+    RoomTypes: any[];
 }
-
 export interface CheckinData {
     id: number;
     guest_id: number;
     room_id: number;
     check_in_date: string;
-    //
-    actual_arrival_date?: string | null;
-    schedule_id?: number | null;
+    actual_arrival_date?: string | null; 
+    schedule_id?: number | null;         
     duration_days: number;
     advance_payment: number;
     notes?: string;
     services?: string[];
     guest?: Guest;
     companions?: any[];
+    created_at?: string;
 }
 
 export default function CheckinsIndex({
@@ -86,6 +86,7 @@ export default function CheckinsIndex({
     Guests,
     Rooms,
     Schedules,
+    RoomTypes
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -470,6 +471,17 @@ export default function CheckinsIndex({
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
                     checkinId={deletingCheckinId}
+                />
+
+                <TransferModal // Este componente lo tienes importado pero no se ve en el return del archivo que subiste, asegúrate de usarlo o si es parte de otro modal.
+                    // Si estás usando el TransferModal directamente:
+                    show={ /* ... */ }
+                    onClose={ /* ... */ }
+                    checkin={ /* ... */ }
+                    availableRooms={ /* ... */ }
+                    occupiedRooms={ /* ... */ }
+                    blocks={ /* ... */ }
+                    roomTypes={RoomTypes} // <--- ¡ESTO ES LO QUE HACE QUE FUNCIONE EL FILTRO!
                 />
             </div>
         </AuthenticatedLayout>

@@ -28,11 +28,13 @@ class CheckinController extends Controller
         $guests = Guest::orderBy('full_name')->get();
         $rooms = Room::with(['roomType', 'price'])->get();
         $schedules = \App\Models\Schedule::where('is_active', true)->get();
+        $roomTypes = \App\Models\RoomType::where('is_active', true)->get();
         return Inertia::render('checkins/index', [
             'Checkins' => $checkins,
             'Guests' => $guests,
             'Rooms' => $rooms,
             'Schedules' => $schedules,
+            'RoomTypes' => $roomTypes,
         ]);
     }
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
