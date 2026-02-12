@@ -212,6 +212,7 @@ interface Schedule {
     check_in_time: string;
     check_out_time: string;
     entry_tolerance_minutes: number;
+    exit_tolerance_minutes: number;
 }
 
 interface CheckinFormData {
@@ -410,131 +411,137 @@ export default function CheckinModal({
         return () => clearInterval(interval);
     }, [show]);
 
-    // --- CARGA DE DATOS ---
+    // --- EFECTO MAESTRO: CARGA DE DATOS, HORA Y GESTIÓN DE HORARIOS ---
+    // --- EFECTO MAESTRO: CARGA DE DATOS, HORA Y GESTIÓN DE HORARIOS ---
     useEffect(() => {
         if (show) {
-            clearErrors();
+            clearErrors(); // Limpiamos errores previos
 
-            // 1. LÓGICA DE ENFOQUE INTELIGENTE (Determinar índice inicial)
+            // 1. Calculamos la HORA ACTUAL EXACTA
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            const currentDateTimeISO = now.toISOString().slice(0, 16);
+            const nowObj = new Date(); // Objeto fecha normal para comparaciones
+
+            // 2. LÓGICA DE ENFOQUE (Índice del carrusel)
             let startAt = 0;
             if (checkinToEdit && targetGuestId) {
-                // Caso A: Es el titular
                 if (Number(checkinToEdit.guest_id) === Number(targetGuestId)) {
-                    startAt = 0;
-                }
-                // Caso B: Es un acompañante
-                else if (checkinToEdit.companions) {
+                    startAt = 0; // Es el titular
+                } else if (checkinToEdit.companions) {
                     const compIndex = checkinToEdit.companions.findIndex(
                         (c: any) => c.id === Number(targetGuestId),
                     );
-                    if (compIndex !== -1) {
-                        startAt = compIndex + 1; // +1 porque el índice 0 es el titular
-                    }
+                    if (compIndex !== -1) startAt = compIndex + 1; // Es un acompañante
                 }
             }
-            setCurrentIndex(startAt); // Aplicamos el índice calculado
+            setCurrentIndex(startAt);
 
-            // 2. CARGA DE DATOS AL FORMULARIO
             if (checkinToEdit) {
+                // ===============================================
+                // MODO EDICIÓN: Cargar datos existentes
+                // ===============================================
                 setIsExistingGuest(true);
-                const isIncomplete =
-                    checkinToEdit.guest?.profile_status === 'INCOMPLETE';
-                const initialDate = isIncomplete
-                    ? now
-                    : formatDateForInput(checkinToEdit.check_in_date);
+                
+                // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
+                let calculatedDuration = Math.max(1, Number(checkinToEdit.duration_days));
+                
+                // Buscamos el horario asignado
+                const schedule = schedules.find(s => String(s.id) === String(checkinToEdit.schedule_id));
+                
+                if (schedule) {
+                    const checkInDate = new Date(checkinToEdit.check_in_date);
+                    const [outH, outM] = schedule.check_out_time.split(':').map(Number);
+                    // Usamos una tolerancia por defecto si no existe en la interfaz
+                    const exitTolerance = (schedule as any).exit_tolerance_minutes || 60; 
 
-                setData({
-                    ...data,
+                    let isValidDuration = false;
+                    while (!isValidDuration) {
+                        const targetCheckout = new Date(checkInDate);
+                        targetCheckout.setDate(targetCheckout.getDate() + calculatedDuration);
+                        targetCheckout.setHours(outH, outM, 0, 0);
+
+                        const hardLimit = new Date(targetCheckout.getTime() + exitTolerance * 60000);
+
+                        if (nowObj > hardLimit) {
+                            calculatedDuration++; // Sumamos 1 noche automáticamente
+                        } else {
+                            isValidDuration = true;
+                        }
+                        if (calculatedDuration > 365) break; 
+                    }
+                }
+
+                // Cargamos todo al formulario CON CONVERSIONES DE TIPO
+                setData((prev) => ({
+                    ...prev,
+                    // CORRECCIÓN DE ERROR DE TIPOS (Number -> String)
                     guest_id: String(checkinToEdit.guest_id),
                     room_id: String(checkinToEdit.room_id),
-                    check_in_date: initialDate,
-                    actual_arrival_date:
-                        checkinToEdit.actual_arrival_date || '',
-                    duration_days: checkinToEdit.duration_days,
+                    duration_days: calculatedDuration,
+                    check_in_date: checkinToEdit.check_in_date,
+                    schedule_id: checkinToEdit.schedule_id ? String(checkinToEdit.schedule_id) : '',
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
-                    selected_services: checkinToEdit.services
-                        ? checkinToEdit.services.map((s: any) =>
-                              String(s.id || s),
-                          )
+                    actual_arrival_date: checkinToEdit.actual_arrival_date || '',
+                    
+                    // Convertimos IDs de servicios a String
+                    selected_services: checkinToEdit.services 
+                        ? checkinToEdit.services.map((s: any) => String(s.id || s)) 
                         : [],
+                        
                     // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
-                    identification_number:
-                        checkinToEdit.guest?.identification_number || '',
+                    identification_number: checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality:
-                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
                     origin: checkinToEdit.guest?.origin || '',
                     phone: checkinToEdit.guest?.phone || '',
 
-                    // Datos Acompañantes (Mapeo importante)
-                    companions: checkinToEdit.companions
-                        ? checkinToEdit.companions.map((c: any) => ({
-                              id: c.id,
-                              full_name: c.full_name, // Nombre completo
-                              identification_number:
-                                  c.identification_number || '', // CI
-                              nationality: c.nationality || 'BOLIVIANA',
-                              issued_in: c.issued_in || '',
-                              civil_status: c.civil_status || '',
-                              birth_date: c.birth_date || '',
-                              profession: c.profession || '',
-                              origin: c.origin || '',
-                              phone: c.phone || '',
-                          }))
-                        : [],
-                });
+                    // Mapeamos acompañantes
+                    companions: checkinToEdit.companions?.map((c: any) => ({
+                        id: c.id,
+                        full_name: c.full_name,
+                        identification_number: c.identification_number || '',
+                        birth_date: c.birth_date || '',
+                        nationality: c.nationality || 'BOLIVIANA',
+                        issued_in: c.issued_in || '',
+                        civil_status: c.civil_status || '',
+                        profession: c.profession || '',
+                        origin: c.origin || '',
+                        phone: c.phone || '',
+                    })) || [],
+                }));
+
+                // Configuramos la persona actual para visualización (SIN setQuery)
+                if (checkinToEdit.guest) {
+                    // Eliminamos setQuery porque no existe y no hace falta
+                    // El valor del input se llena automáticamente por data.full_name
+                }
+
             } else {
-                //1. Reinicio del formulario Reseteo si es una nueva asignacion
-                reset();
+                // ===============================================
+                // MODO NUEVO REGISTRO: Limpiar formulario
+                // ===============================================
+                reset(); 
                 setIsExistingGuest(false);
                 setCurrentIndex(0);
-                if (initialRoomId) {
-                    setData((prev) => ({
-                        ...prev, // Tomamos los valores limpios del reset()
-                        room_id: String(initialRoomId),
-                        duration_days: 1,
-                        check_in_date: now, // Refrescamos la hora
-                        companions: [], // Aseguramos que no haya acompañantes fantasma
-                    }));
-                } else {
-                    // Si no hay habitación seleccionada, solo refrescamos la hora
-                    setData((prev) => ({
-                        ...prev,
-                        check_in_date: now,
-                        companions: [],
-                    }));
-                }
+                
+                // Valores iniciales
+                setData((prev) => ({
+                    ...prev,
+                    check_in_date: currentDateTimeISO, 
+                    room_id: initialRoomId ? String(initialRoomId) : '',
+                    duration_days: 1, 
+                    selected_services: [],
+                    companions: [],
+                }));
             }
         }
     }, [show, checkinToEdit, initialRoomId, targetGuestId]);
-
-    // --- EFECTO: DETECTAR HORARIO APLICADO (LocalStorage) ---
-    useEffect(() => {
-        if (show && !checkinToEdit) {
-            const storedSchedule = localStorage.getItem(
-                'hotel_active_schedule',
-            );
-
-            if (storedSchedule) {
-                try {
-                    const parsed = JSON.parse(storedSchedule);
-                    // Cargamos el ID del horario, pero NO cambiamos la fecha aún (esperamos al botón)
-                    setData((prev) => ({
-                        ...prev,
-                        schedule_id: parsed.id.toString(),
-                        actual_arrival_date: prev.check_in_date, // Preparamos la hora real
-                    }));
-                } catch (e) {
-                    console.error('Error leyendo horario activo', e);
-                }
-            }
-        }
-    }, [show, checkinToEdit]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -551,7 +558,22 @@ export default function CheckinModal({
             setShowErrorToast(false);
         }
     }, [errors]);
-    //calculo matematico de fecha
+    // Control de fecha y hora entorno del uso de horario  (useEffect)
+    useEffect(() => {
+        // Solo si el modal se está mostrando (show = true)
+        // Y NO estamos editando una asignación existente (es nueva)
+        if (show && !checkinToEdit) {
+            const now = new Date();
+            // Ajuste para obtener la hora local correcta en formato ISO (YYYY-MM-DDTHH:mm)
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            const currentDateTime = now.toISOString().slice(0, 16);
+
+            // Actualizamos el formulario con la hora exacta de AHORA
+            setData('check_in_date', currentDateTime);
+        }
+    }, [show, checkinToEdit]); // Se dispara cada vez que 'show' cambia
+
+    
 
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
@@ -1410,7 +1432,8 @@ export default function CheckinModal({
                                         type="datetime-local"
                                         value={formatDateForInput(data.check_in_date)}
                                         onChange={(e) => setData('check_in_date', e.target.value)}
-                                        className="w-full rounded-lg border border-gray-400 text-sm text-black font-bold"
+                                        disabled={isReadOnly}
+                                        className="w-full rounded-lg border border-gray-400 text-sm text-black font-bold disabled:bg-gray-100"
                                     />
 
                                     {/* --- BOTÓN TOLERANCIA --- */}
@@ -1419,7 +1442,7 @@ export default function CheckinModal({
                                             <button
                                                 type="button"
                                                 onClick={handleApplyTolerance}
-                                                disabled={isToleranceApplied}
+                                                disabled={isToleranceApplied || isReadOnly}
                                                 className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
                                                     isToleranceApplied
                                                         ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800'
@@ -1457,8 +1480,8 @@ export default function CheckinModal({
                                     </div>
                                 </div>
 
-                                {/* COLUMNA DERECHA: NOCHES (Antes "Estadía") */}
-                                <div className="flex w-24 flex-col">
+                                {/* COLUMNA DERECHA: NOCHES Y CONTROL DE PRECIOS */}
+                                <div className="flex w-40 flex-col"> {/* Ancho aumentado a w-40 para info extra */}
                                     <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
                                         Noches
                                     </label>
@@ -1467,12 +1490,13 @@ export default function CheckinModal({
                                             type="number"
                                             min="1" 
                                             value={data.duration_days}
+                                            disabled={isReadOnly}
                                             onChange={(e) => {
                                                 const val = e.target.value;
                                                 // Aseguramos que sea un número positivo
                                                 setData('duration_days', val === '' ? '' : Math.max(0, Number(val)));
                                             }}
-                                            className="w-full rounded-lg border border-gray-400 pr-2 pl-3 text-right text-sm font-black text-gray-900 focus:border-gray-500 focus:ring-blue-500"
+                                            className="w-full rounded-lg border border-gray-400 pr-2 pl-3 text-right text-sm font-black text-blue-900 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
                                             placeholder="1"
                                         />
                                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">
@@ -1480,13 +1504,45 @@ export default function CheckinModal({
                                         </span>
                                     </div>
 
-                                    {/* TEXTO SALIDA (Cálculo Automático) */}
-                                    <div className="mt-2 text-right">
-                                        <span
-                                            className={`text-[10px] font-medium ${durationVal > 0 ? 'text-green-600' : 'text-orange-600'}`}
-                                        >
-                                            Salida: {checkoutString}
-                                        </span>
+                                    {/* INFO DE PRECIO Y HORARIOS */}
+                                    <div className="mt-2 flex flex-col items-end gap-1">
+                                        {/* A. Precio Total (Habitación x Noches) */}
+                                        {(() => {
+                                            const selectedRoom = rooms.find(r => r.id === Number(data.room_id) || r.id === initialRoomId);
+                                            const price = selectedRoom?.price?.amount || 0;
+                                            const total = price * (Number(data.duration_days) || 0);
+                                            return (
+                                                <span className="text-sm font-black text-green-600 animate-in fade-in">
+                                                    Total: {total} Bs
+                                                </span>
+                                            );
+                                        })()}
+
+                                        {/* B. Hora Límite (Check-out + Tolerancia) */}
+                                        {(() => {
+                                            // Calculamos visualmente cuándo debe salir
+                                            const schedule = schedules.find(s => String(s.id) === data.schedule_id);
+                                            
+                                            if (schedule && data.check_in_date) {
+                                                // Usamos 'as any' temporalmente por si no has actualizado la interfaz Schedule aun
+                                                const exitTol = (schedule as any).exit_tolerance_minutes || 0;
+                                                
+                                                return (
+                                                    <div className="flex flex-col items-end text-[10px]">
+                                                        <span className="font-bold text-gray-500 text-right">
+                                                            Salida: {checkoutString} <br/> 
+                                                            hasta {schedule.check_out_time.substring(0,5)}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            }
+                                            // Fallback si no hay horario seleccionado
+                                            return (
+                                                <span className={`text-[10px] font-medium ${durationVal > 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                                    Salida: {checkoutString}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             </div>
