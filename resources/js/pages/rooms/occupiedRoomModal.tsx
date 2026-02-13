@@ -94,15 +94,20 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
                             </h3>
                             
                             {!hasCompanions ? (
-                                <StaticGuestCard guest={checkin.guest} />
+                                // CASO 1: SOLO TITULAR -> Pasamos checkin.origin
+                                <StaticGuestCard guest={checkin.guest} origin={checkin.origin} />
                             ) : (
                                 <>
+                                    {/* CASO 2: HAY ACOMPAÑANTES -> Titular expandible recibe origin */}
                                     <ExpandableGuestCard 
                                         guest={checkin.guest} 
                                         isTitular={true} 
+                                        origin={checkin.origin} // <--- AQUÍ SE PASA EL DATO
                                         isExpanded={expandedGuestId === checkin.guest?.id}
                                         onToggle={() => toggleExpand(checkin.guest?.id)}
                                     />
+                                    
+                                    {/* Los acompañantes NO reciben origin (es undefined) porque la procedencia es del grupo/titular */}
                                     {checkin.companions?.map((comp: any) => (
                                         <ExpandableGuestCard 
                                             key={comp.id}
@@ -200,9 +205,8 @@ const calculateAge = (dateString?: string) => {
 };
 
 /** Grilla de 3 Columnas con los Datos (CON TRADUCCIÓN DE ESTADO CIVIL) */
-function GuestDataGrid({ guest }: { guest: any }) {
+function GuestDataGrid({ guest, origin }: { guest: any; origin?: string }) {
     
-    // --- AQUÍ ESTÁ EL TRUCO PARA TRADUCIR ---
     const translateStatus = (status: string) => {
         if (!status) return '---';
         const map: Record<string, string> = {
@@ -217,7 +221,6 @@ function GuestDataGrid({ guest }: { guest: any }) {
             'WIDOWED': 'VIUDO',
             'SEPARATED': 'SEPARADO'
         };
-        // Si no está en la lista, lo muestra tal cual (en mayúsculas)
         return map[status] || map[status.toLowerCase()] || status.toUpperCase();
     };
 
@@ -231,15 +234,16 @@ function GuestDataGrid({ guest }: { guest: any }) {
             <InfoBox label="Edad" value={calculateAge(guest.birth_date)} />
             <InfoBox label="Profesión" value={guest.profession || '---'} />
 
-            <InfoBox label="Procedencia" value={guest.origin || '---'} />
+            {/* Ahora sí mostrará el dato real o '---' si está vacío */}
+            <InfoBox label="Procedencia" value={origin || '---'} />
+            
             <div className="col-span-2">
                 <InfoBox label="Teléfono" value={guest.phone || '---'} />
             </div>
         </div>
     );
 }
-
-function StaticGuestCard({ guest }: { guest: any }) {
+function StaticGuestCard({ guest, origin }: { guest: any; origin?: string }) {
     if (!guest) return null;
     return (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:border-cyan-300 transition-colors">
@@ -252,12 +256,13 @@ function StaticGuestCard({ guest }: { guest: any }) {
                     </p>
                 </div>
             </div>
-            <GuestDataGrid guest={guest} />
+            <GuestDataGrid guest={guest} origin={origin} />
         </div>
     );
 }
 
-function ExpandableGuestCard({ guest, isTitular, isExpanded, onToggle }: any) {
+function ExpandableGuestCard({ guest, isTitular, isExpanded, onToggle, origin }: any) {
+    
     if (!guest) return null;
 
     return (
@@ -282,7 +287,7 @@ function ExpandableGuestCard({ guest, isTitular, isExpanded, onToggle }: any) {
             <div className={`grid transition-all duration-500 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-6' : 'grid-rows-[0fr] opacity-0'}`}>
                 <div className="overflow-hidden">
                     <div className="pt-4 border-t border-gray-100 animate-in fade-in zoom-in-95 duration-500">
-                        <GuestDataGrid guest={guest} />
+                        <GuestDataGrid guest={guest} origin={origin} />
                     </div>
                 </div>
             </div>

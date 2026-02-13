@@ -24,6 +24,7 @@ class Checkin extends Model
         'advance_payment',
         'status',
         'schedule_id',
+        'origin',
         'actual_arrival_date',
     ];
 

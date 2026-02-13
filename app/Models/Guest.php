@@ -24,7 +24,6 @@ class Guest extends Model
         'civil_status',
         'birth_date', 
         'profession',
-        'origin',
         'phone',
     ];
 
@@ -33,7 +32,6 @@ class Guest extends Model
         'full_name',
         'nationality',
         'profession',
-        'origin',
         'civil_status',
         'issued_in',
     ];

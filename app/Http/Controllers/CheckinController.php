@@ -83,7 +83,7 @@ class CheckinController extends Controller
                     'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
                     'birth_date' => $birthDate ?? $existingGuest->birth_date,
                     'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
-                    'origin' => $request->filled('origin') ? strtoupper($request->origin) : $existingGuest->origin,
+                    //'origin' => $request->filled('origin') ? strtoupper($request->origin) : $existingGuest->origin,
                     'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
                     'phone' => $request->phone ?? $existingGuest->phone,
                     'profile_status' => $isComplete ? 'COMPLETE' : $existingGuest->profile_status,
@@ -98,7 +98,7 @@ class CheckinController extends Controller
                     'civil_status' => $request->civil_status,
                     'birth_date' => $birthDate,
                     'profession' => $request->profession ? strtoupper($request->profession) : null,
-                    'origin' => $request->origin ? strtoupper($request->origin) : null,
+                    //'origin' => $request->origin ? strtoupper($request->origin) : null,
                     'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
                     'phone' => $request->phone,
                     'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
@@ -136,6 +136,7 @@ class CheckinController extends Controller
             'check_in_date' => 'required|date',
             'actual_arrival_date' => 'nullable|date',
             'schedule_id' => 'nullable|exists:schedules,id',
+            'origin' => 'nullable|string|max:150',
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
@@ -153,6 +154,7 @@ class CheckinController extends Controller
             'check_in_date' => $validatedCheckin['check_in_date'],
             'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
             'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
+            'origin' => $request->filled('origin') ? strtoupper($request->origin) : null,
             'duration_days' => $validatedCheckin['duration_days'] ?? 0,
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
@@ -199,7 +201,7 @@ class CheckinController extends Controller
                         'civil_status' => $compData['civil_status'] ?? null,
                         'birth_date' => $compBirthDate,
                         'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
+                        //'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
                         'phone' => $compData['phone'] ?? null,
                         'profile_status' => 'INCOMPLETE'
                     ]);
@@ -240,12 +242,13 @@ class CheckinController extends Controller
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
+            'origin' => 'nullable|string|max:150',
 
             // Datos del Huésped Titular
             'full_name' => 'required|string|max:150',
             'identification_number' => 'nullable|string|max:50',
             'nationality' => 'nullable|string',
-            'origin' => 'nullable|string',
+            //'origin' => 'nullable|string',
             'profession' => 'nullable|string',
             'civil_status' => 'nullable|string',
             'birth_date' => 'nullable|date',
@@ -259,7 +262,7 @@ class CheckinController extends Controller
             'companions.*.relationship' => 'nullable|string|max:50',
             'companions.*.nationality' => 'nullable|string|max:50',
             'companions.*.profession' => 'nullable|string|max:100',
-            'companions.*.origin' => 'nullable|string|max:100',
+            //'companions.*.origin' => 'nullable|string|max:100',
             'companions.*.civil_status' => 'nullable|string',
             'companions.*.birth_date' => 'nullable|date',
             'companions.*.issued_in' => 'nullable|string',
@@ -272,7 +275,7 @@ class CheckinController extends Controller
             $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
 
             // 2. LÓGICA DE COMPLETITUD (TITULAR)
-            $requiredFields = ['identification_number', 'nationality', 'origin', 'profession', 'civil_status', 'birth_date', 'issued_in'];
+            $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
 
             $isTitularComplete = true; // Renombrado para diferenciar
             $missingField = null;
@@ -291,7 +294,7 @@ class CheckinController extends Controller
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
                 'duration_days' => $validated['duration_days'] ?? 0,
                 'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
-                'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
+                //'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
                 'civil_status' => $validated['civil_status'],
                 'birth_date' => $validated['birth_date'],
@@ -325,7 +328,7 @@ class CheckinController extends Controller
                         'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
                         'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
                         'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
+                        //'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
                         'civil_status' => $compData['civil_status'] ?? null,
                         'birth_date' => $compData['birth_date'] ?? null,
                         'phone' => $compData['phone'] ?? null,
@@ -387,6 +390,7 @@ class CheckinController extends Controller
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
                 'notes' => strtoupper($validated['notes'] ?? ''),
+                'origin' => $request->filled('origin') ? strtoupper($request->origin) : null,
             ]);
 
             // 7. SERVICIOS
@@ -408,7 +412,7 @@ class CheckinController extends Controller
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
                         'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia',
+                        //'origin' => 'Procedencia',
                         'profession' => 'Profesión',
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
@@ -610,7 +614,7 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode($checkin->guest->origin), 0, 1);
+        //$pdf->Cell(0, 4, utf8_decode($checkin->guest->origin), 0, 1);
 
         // --- DATOS DE INGRESO ---
         $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');

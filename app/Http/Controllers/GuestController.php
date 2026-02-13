@@ -39,7 +39,7 @@ class GuestController extends Controller
                 'civil_status' => 'nullable|string',
                 'birth_date' => 'nullable|date',
                 'profession' => 'nullable|string',
-                'origin' => 'nullable|string',
+                //'origin' => 'nullable|string',
                 'phone' => 'nullable|string|max:20',
                 'issued_in' => 'nullable|string',
             ]);
@@ -72,7 +72,7 @@ class GuestController extends Controller
                     'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
                     'birth_date' => $birthDate ?? $existingGuest->birth_date,
                     'profession' => $request->profession ? strtoupper($request->profession) : $existingGuest->profession,
-                    'origin' => $request->origin ? strtoupper($request->origin) : $existingGuest->origin,
+                    //'origin' => $request->origin ? strtoupper($request->origin) : $existingGuest->origin,
                     'phone' => $request->phone ?? $existingGuest->phone,
                     'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : $existingGuest->issued_in,
                     // Si completó el CI, actualizamos el estado, si no, se queda como estaba
@@ -88,7 +88,7 @@ class GuestController extends Controller
                     'civil_status' => $request->civil_status,
                     'birth_date' => $birthDate,
                     'profession' => $request->profession ? strtoupper($request->profession) : null,
-                    'origin' => $request->origin ? strtoupper($request->origin) : null,
+                    //'origin' => $request->origin ? strtoupper($request->origin) : null,
                     'phone' => $request->phone,
                     'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
                     'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
@@ -154,7 +154,7 @@ class GuestController extends Controller
             'birth_date' => 'nullable|date',
             'age' => 'exclude',
             'profession' => 'nullable|string|max:100',
-            'origin' => 'nullable|string|max:100',
+            //'origin' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:20',
         ]);
 

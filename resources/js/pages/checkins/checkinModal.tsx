@@ -151,7 +151,7 @@ export interface Guest {
     birth_date?: string;
     age?: number;
     profession?: string;
-    origin?: string;
+    //origin?: string;
     phone?: string;
     profile_status?: string;
 }
@@ -170,6 +170,7 @@ export interface CheckinData {
     created_at?: string;
     actual_arrival_date?: string | null;
     schedule_id?: number | null;
+    origin: string;
 }
 
 export interface Room {
@@ -203,7 +204,7 @@ interface CompanionData {
     civil_status: string;
     birth_date: string;
     profession: string;
-    origin: string;
+    //origin: string;
     phone: string;
 }
 interface Schedule {
@@ -222,6 +223,7 @@ interface CheckinFormData {
     actual_arrival_date?: string;
     check_in_date: string;
     duration_days: number | string;
+    origin:string;
     advance_payment: number;
     notes: string;
     selected_services: string[];
@@ -233,7 +235,7 @@ interface CheckinFormData {
     civil_status: string;
     birth_date: string;
     profession: string;
-    origin: string;
+    //origin: string;
     phone: string;
     // Lista de Acompañantes (Index 1..N)
     companions: CompanionData[];
@@ -295,6 +297,7 @@ export default function CheckinModal({
             guest_id: '' as string | null,
             room_id: '',
             schedule_id: '',
+            origin: '',
             check_in_date: now,
             duration_days: 1,
             advance_payment: 0,
@@ -307,7 +310,7 @@ export default function CheckinModal({
             civil_status: '',
             birth_date: '',
             profession: '',
-            origin: '',
+            //origin: '',
             phone: '',
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
         });
@@ -481,6 +484,7 @@ export default function CheckinModal({
                     duration_days: calculatedDuration,
                     check_in_date: checkinToEdit.check_in_date,
                     schedule_id: checkinToEdit.schedule_id ? String(checkinToEdit.schedule_id) : '',
+                    origin: checkinToEdit.origin || '',
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     actual_arrival_date: checkinToEdit.actual_arrival_date || '',
@@ -498,7 +502,7 @@ export default function CheckinModal({
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
-                    origin: checkinToEdit.guest?.origin || '',
+                    //origin: checkinToEdit.guest?.origin || '',
                     phone: checkinToEdit.guest?.phone || '',
 
                     // Mapeamos acompañantes
@@ -511,7 +515,7 @@ export default function CheckinModal({
                         issued_in: c.issued_in || '',
                         civil_status: c.civil_status || '',
                         profession: c.profession || '',
-                        origin: c.origin || '',
+                        //origin: c.origin || '',
                         phone: c.phone || '',
                     })) || [],
                 }));
@@ -599,7 +603,7 @@ export default function CheckinModal({
               civil_status: data.civil_status,
               birth_date: data.birth_date,
               profession: data.profession,
-              origin: data.origin,
+              //origin: data.origin,
               phone: data.phone,
           }
         : {
@@ -611,7 +615,7 @@ export default function CheckinModal({
               nationality:
                   companionsList[currentIndex - 1]?.nationality || 'BOLIVIANA',
               phone: companionsList[currentIndex - 1]?.phone || '',
-              origin: companionsList[currentIndex - 1]?.origin || '',
+              //origin: companionsList[currentIndex - 1]?.origin || '',
               profession: companionsList[currentIndex - 1]?.profession || '',
               issued_in: companionsList[currentIndex - 1]?.issued_in || '',
               civil_status:
@@ -653,7 +657,7 @@ export default function CheckinModal({
                 civil_status: '',
                 birth_date: '',
                 profession: '',
-                origin: '',
+                //origin: '',
                 phone: '',
             };
             setData('companions', [...companionsList, newCompanion]);
@@ -718,7 +722,7 @@ export default function CheckinModal({
                 civil_status: guest.civil_status || '',
                 birth_date: guest.birth_date || '',
                 profession: guest.profession || '',
-                origin: guest.origin || '',
+                //origin: guest.origin || '',
                 phone: guest.phone || '',
             }));
         } else {
@@ -737,7 +741,7 @@ export default function CheckinModal({
                     civil_status: guest.civil_status || '',
                     birth_date: guest.birth_date || '',
                     profession: guest.profession || '',
-                    origin: guest.origin || '',
+                    //origin: guest.origin || '',
                     phone: guest.phone || '',
                 };
                 setData('companions', newCompanions);
@@ -1014,7 +1018,7 @@ export default function CheckinModal({
                                                         civil_status: '',
                                                         birth_date: '',
                                                         profession: '',
-                                                        origin: '',
+                                                        //origin: '',
                                                         phone: '',
                                                     }));
                                                     setIsExistingGuest(false);
@@ -1045,7 +1049,7 @@ export default function CheckinModal({
                                                             civil_status: '',
                                                             birth_date: '',
                                                             profession: '',
-                                                            origin: '',
+                                                            //origin: '',
                                                             phone: '',
                                                         };
                                                         setData(
@@ -1266,22 +1270,24 @@ export default function CheckinModal({
                             {/* F. FILA PROCEDENCIA Y TELÉFONO */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="mb-1 block text-xs font-bold text-gray-500 uppercase">
                                         Procedencia
                                     </label>
                                     <div className="relative">
-                                        <Globe className="absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
+                                        <Globe className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                         <input
-                                            className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm text-black uppercase"
-                                            value={currentPerson.origin}
+                                            type="text"
+                                            className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm font-bold text-blue-900 uppercase focus:border-blue-500 focus:ring-blue-500 bg-blue-50/20"
+                                            
+                                            // ✅ CORRECCIÓN CLAVE:
+                                            // Vinculamos directamente a 'data.origin' (el dato de la asignación)
+                                            value={data.origin || ''}
+                                            
+                                            // ✅ Al escribir, actualizamos directo el formulario principal
+                                            onChange={(e) => setData('origin', e.target.value.toUpperCase())}
+                                            
                                             disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'origin',
-                                                    e.target.value.toUpperCase(),
-                                                )
-                                            }
-                                            placeholder="CIUDAD"
+                                            placeholder="EJ: COCHABAMBA"
                                         />
                                     </div>
                                 </div>
