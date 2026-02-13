@@ -17,6 +17,11 @@ interface Guest {
     role: string;
 }
 
+interface Checkin {
+    id: number;
+    origin: string;
+}
+
 interface User {
     id: number;
     name: string;
@@ -28,21 +33,32 @@ interface User {
 interface Props {
     auth: { user: User };
     Guests: Guest[];
+    Checkin: Checkin[];
 }
+
+const civilStatusTranslations: Record<string, string> = {
+    SINGLE: 'SOLTERO',
+    MARRIED: 'CASADO',
+    DIVORCED: 'DIVORCIADO',
+    WIDOWED: 'VIUDO',
+};
 
 export default function ReportsIndex({ auth, Guests }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-    const filteredGuests = Guests.filter((guest) =>
-        guest.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        guest.identification_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        guest.room_number.toString().includes(searchTerm)
+    const filteredGuests = Guests.filter(
+        (guest) =>
+            guest.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            guest.identification_number
+                ?.toLowerCase()
+                .includes(searchTerm.toLowerCase()) ||
+            guest.room_number.toString().includes(searchTerm),
     );
 
     const toggleSelection = (id: number) => {
         if (selectedIds.includes(id)) {
-            setSelectedIds(selectedIds.filter(sid => sid !== id));
+            setSelectedIds(selectedIds.filter((sid) => sid !== id));
         } else {
             setSelectedIds([...selectedIds, id]);
         }
@@ -50,21 +66,27 @@ export default function ReportsIndex({ auth, Guests }: Props) {
 
     const toggleSelectAll = () => {
         if (filteredGuests.length === 0) return;
-        const allSelected = filteredGuests.every(g => selectedIds.includes(g.id));
-        
+        const allSelected = filteredGuests.every((g) =>
+            selectedIds.includes(g.id),
+        );
+
         if (allSelected) {
-            const visibleIds = filteredGuests.map(g => g.id);
-            setSelectedIds(selectedIds.filter(id => !visibleIds.includes(id)));
+            const visibleIds = filteredGuests.map((g) => g.id);
+            setSelectedIds(
+                selectedIds.filter((id) => !visibleIds.includes(id)),
+            );
         } else {
             const newIds = [...selectedIds];
-            filteredGuests.forEach(g => {
+            filteredGuests.forEach((g) => {
                 if (!newIds.includes(g.id)) newIds.push(g.id);
             });
             setSelectedIds(newIds);
         }
     };
 
-    const isAllSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedIds.includes(g.id));
+    const isAllSelected =
+        filteredGuests.length > 0 &&
+        filteredGuests.every((g) => selectedIds.includes(g.id));
 
     // ACCIÓN: ABRIR EN NUEVA PESTAÑA
     const handleGenerateReport = () => {
@@ -95,7 +117,6 @@ export default function ReportsIndex({ auth, Guests }: Props) {
 
                 <div className="py-12">
                     <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                         {/* Header: Buscador y Botón */}
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
                             <div className="relative w-full sm:w-72">
@@ -105,17 +126,19 @@ export default function ReportsIndex({ auth, Guests }: Props) {
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar por nombre o CI..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
-                            
+
                             <div className="flex items-center gap-4">
-                                <div className="text-sm text-gray-500 font-medium">
+                                <div className="text-sm font-medium text-gray-500">
                                     Total: {filteredGuests.length}
                                 </div>
-                                
+
                                 {/* BOTÓN GENERAR REPORTE */}
                                 <button
                                     onClick={handleGenerateReport}
@@ -123,13 +146,14 @@ export default function ReportsIndex({ auth, Guests }: Props) {
                                     className={`group flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95 ${
                                         selectedIds.length > 0
                                             ? 'bg-emerald-600 hover:bg-emerald-500 hover:shadow-lg'
-                                            : 'bg-gray-400 cursor-not-allowed opacity-50'
+                                            : 'cursor-not-allowed bg-gray-400 opacity-50'
                                     }`}
                                 >
                                     <Printer className="h-5 w-5" />
                                     <span>
                                         Generar Reporte
-                                        {selectedIds.length > 0 && ` (${selectedIds.length})`}
+                                        {selectedIds.length > 0 &&
+                                            ` (${selectedIds.length})`}
                                     </span>
                                 </button>
                             </div>
@@ -138,62 +162,94 @@ export default function ReportsIndex({ auth, Guests }: Props) {
                         {/* Tabla */}
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs text-gray-600">
-                                <thead className="bg-gray-50 text-xs text-gray-700 uppercase font-bold">
+                                <thead className="bg-gray-50 text-xs font-bold text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-4 py-3 text-center border-r w-8">
+                                        <th className="w-8 border-r px-4 py-3 text-center">
                                             <button onClick={toggleSelectAll}>
-                                                {isAllSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4" />}
+                                                {isAllSelected ? (
+                                                    <CheckSquare className="h-4 w-4 text-emerald-600" />
+                                                ) : (
+                                                    <Square className="h-4 w-4" />
+                                                )}
                                             </button>
                                         </th>
-                                        <th className="px-4 py-3 text-center border-r">Hab</th>
-                                        <th className="px-4 py-3">Nombre Completo</th>
-                                        <th className="px-2 py-3 text-center">Edad</th>
-                                        <th className="px-4 py-3">Nacionalidad</th>
+                                        <th className="border-r px-4 py-3 text-center">
+                                            Hab
+                                        </th>
+                                        <th className="px-4 py-3">
+                                            Nombre Completo
+                                        </th>
+                                        <th className="px-2 py-3 text-center">
+                                            Edad
+                                        </th>
+                                        <th className="px-4 py-3">
+                                            Nacionalidad
+                                        </th>
                                         <th className="px-4 py-3">Profesión</th>
-                                        <th className="px-4 py-3">Est. Civil</th>
-                                        <th className="px-4 py-3">Procedencia</th>
-                                        <th className="px-4 py-3">CI / Pasap.</th>
+                                        <th className="px-4 py-3">
+                                            Est. Civil
+                                        </th>
+                                        <th className="px-4 py-3">
+                                            Procedencia
+                                        </th>
+                                        <th className="px-4 py-3">
+                                            CI / Pasap.
+                                        </th>
                                         <th className="px-4 py-3">Otorgado</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredGuests.length > 0 ? (
                                         filteredGuests.map((guest, index) => {
-                                            const isSelected = selectedIds.includes(guest.id);
+                                            const isSelected =
+                                                selectedIds.includes(guest.id);
                                             return (
-                                                <tr 
-                                                    key={`${guest.id}-${index}`} 
-                                                    onClick={() => toggleSelection(guest.id)} 
+                                                <tr
+                                                    key={`${guest.id}-${index}`}
+                                                    onClick={() =>
+                                                        toggleSelection(
+                                                            guest.id,
+                                                        )
+                                                    }
                                                     className={`cursor-pointer transition-colors hover:bg-blue-50 ${isSelected ? 'bg-blue-50' : ''}`}
                                                 >
-                                                    <td className="px-4 py-2 text-center border-r">
+                                                    <td className="border-r px-4 py-2 text-center">
                                                         <div className="flex justify-center">
-                                                            {isSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-gray-300" />}
+                                                            {isSelected ? (
+                                                                <CheckSquare className="h-4 w-4 text-emerald-600" />
+                                                            ) : (
+                                                                <Square className="h-4 w-4 text-gray-300" />
+                                                            )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center font-bold text-gray-900 bg-gray-50 border-r">
+                                                    <td className="border-r bg-gray-50 px-4 py-3 text-center font-bold text-gray-900">
                                                         {guest.room_number}
                                                     </td>
-                                                    <td className="px-4 py-3 font-bold text-gray-900 whitespace-nowrap">
+                                                    <td className="px-4 py-3 font-bold whitespace-nowrap text-gray-900">
                                                         {guest.full_name}
                                                     </td>
                                                     <td className="px-2 py-3 text-center">
                                                         {guest.age}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {guest.nationality || '-'}
+                                                        {guest.nationality ||
+                                                            '-'}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {guest.profession || '-'}
+                                                        {guest.profession ||
+                                                            '-'}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {guest.civil_status || '-'}
+                                                        {guest.civil_status 
+                                                                ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
+                                                                : '-'}
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        {guest.origin || '-'}
+                                                    <td className="px-4 py-3 font-bold text-gray-700 uppercase">
+                                                        {guest.origin || 'S/N'}
                                                     </td>
                                                     <td className="px-4 py-3 font-mono font-medium text-gray-700">
-                                                        {guest.identification_number || '-'}
+                                                        {guest.identification_number ||
+                                                            '-'}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {guest.issued_in || '-'}
@@ -203,8 +259,13 @@ export default function ReportsIndex({ auth, Guests }: Props) {
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={10} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay huéspedes con datos completos.'}
+                                            <td
+                                                colSpan={10}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay huéspedes con datos completos.'}
                                             </td>
                                         </tr>
                                     )}

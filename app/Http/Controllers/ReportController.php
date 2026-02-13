@@ -35,7 +35,7 @@ class ReportController extends Controller
                     'nationality' => $person->nationality,
                     'profession' => $person->profession,
                     'civil_status' => $person->civil_status,
-                    'origin' => $person->origin,
+                    'origin' => $checkin->origin,
                     'identification_number' => $person->identification_number,
                     'issued_in' => $person->issued_in,
                     'room_number' => $checkin->room->number,
@@ -76,6 +76,7 @@ class ReportController extends Controller
 
             if ($checkin) {
                 $guest->room_number = $checkin->room->number;
+                $guest->origin = $checkin->origin;
             } else {
                 // Buscar si es acompañante activo
                 $checkinAcomp = Checkin::where('status', 'activo')
@@ -85,6 +86,7 @@ class ReportController extends Controller
                     ->with('room')
                     ->first();
                 $guest->room_number = $checkinAcomp ? $checkinAcomp->room->number : '-';
+                $guest->origin = $checkinAcomp->origin;
             }
         }
 
