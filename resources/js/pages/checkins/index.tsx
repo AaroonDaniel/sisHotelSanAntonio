@@ -14,6 +14,7 @@ import {
     User as UserIcon,
     Users,
     AlertCircle,
+    MapPin,
 } from 'lucide-react';
 import { useState } from 'react';
 import CheckinModal from './checkinModal';
@@ -211,10 +212,12 @@ export default function CheckinsIndex({
         checkin,
         person,
         type,
+        origin,
     }: {
         checkin: Checkin;
         person: Guest | undefined;
         type: 'TITULAR' | 'ACOMPAÑANTE';
+        origin?: string | null;
     }) => {
         // Variable auxiliar para simplificar condiciones
         const isTitular = type === 'TITULAR';
@@ -263,6 +266,12 @@ export default function CheckinsIndex({
                         <span className="text-xs text-gray-500">
                             CI: {person?.identification_number || 'S/N'}
                         </span>
+                        {isTitular && origin && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
+                                
+                                <span>{origin}</span>
+                            </div>
+                        )}
                     </div>
                 </td>
 
@@ -425,6 +434,7 @@ export default function CheckinsIndex({
                                                 checkin={checkin}
                                                 person={checkin.guest}
                                                 type="TITULAR"
+                                                origin={checkin.origin}
                                             />
 
                                             {/* 2. Filas de Acompañantes (si existen) */}
