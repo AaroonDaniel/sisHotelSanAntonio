@@ -170,7 +170,7 @@ export interface CheckinData {
     created_at?: string;
     actual_arrival_date?: string | null;
     schedule_id?: number | null;
-    origin: string;
+    origin?: string | null;
 }
 
 export interface Room {

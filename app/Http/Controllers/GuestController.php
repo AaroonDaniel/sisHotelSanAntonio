@@ -18,11 +18,6 @@ class GuestController extends Controller
         ]);
     }
 
-    public function create()
-    {
-        return Inertia::render('guests/create');
-    }
-
     public function store(Request $request)
     {
         // 1. Lógica para Huésped Nuevo vs Existente
@@ -123,7 +118,7 @@ class GuestController extends Controller
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
                 'room_id' => $validatedCheckin['room_id'],
-                'user_id' => auth()->id(),
+                'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                 'check_in_date' => $validatedCheckin['check_in_date'],
                 'duration_days' => $validatedCheckin['duration_days'],
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,

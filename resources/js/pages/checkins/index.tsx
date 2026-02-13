@@ -54,6 +54,8 @@ interface Checkin {
     room?: Room;
     companions?: Guest[]; // Aseguramos que use la interfaz Guest
     created_at: string;
+    origin?: string;
+    
 }
 
 interface Props {

@@ -235,7 +235,7 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
-        // 1. Validaciones (Mantenemos tu estructura exacta)
+        // 1. Validaciones básicas (Permitimos nulo aquí para manejar el error manualmente abajo)
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -248,7 +248,6 @@ class CheckinController extends Controller
             'full_name' => 'required|string|max:150',
             'identification_number' => 'nullable|string|max:50',
             'nationality' => 'nullable|string',
-            //'origin' => 'nullable|string',
             'profession' => 'nullable|string',
             'civil_status' => 'nullable|string',
             'birth_date' => 'nullable|date',
@@ -262,7 +261,6 @@ class CheckinController extends Controller
             'companions.*.relationship' => 'nullable|string|max:50',
             'companions.*.nationality' => 'nullable|string|max:50',
             'companions.*.profession' => 'nullable|string|max:100',
-            //'companions.*.origin' => 'nullable|string|max:100',
             'companions.*.civil_status' => 'nullable|string',
             'companions.*.birth_date' => 'nullable|date',
             'companions.*.issued_in' => 'nullable|string',
@@ -274,10 +272,31 @@ class CheckinController extends Controller
             $guest = $checkin->guest;
             $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
 
-            // 2. LÓGICA DE COMPLETITUD (TITULAR)
+            // =========================================================
+            // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
+            // =========================================================
+            $inputOrigin = $request->input('origin');
+            $cleanOrigin = null;
+
+            // Verificamos que sea texto, no esté vacío, no sea URL y no sea la palabra 'null'
+            if (
+                !empty($inputOrigin) && 
+                is_string($inputOrigin) && 
+                trim($inputOrigin) !== '' &&
+                !str_starts_with(trim($inputOrigin), 'http') && // No URLs
+                strtolower(trim($inputOrigin)) !== 'null'
+            ) {
+                $cleanOrigin = strtoupper(trim($inputOrigin));
+            }
+
+            // =========================================================
+            // 🛑 2. VERIFICACIÓN DE COMPLETITUD
+            // =========================================================
+            
+            // A. Campos obligatorios del Perfil (Guest) - SIN 'origin'
             $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
 
-            $isTitularComplete = true; // Renombrado para diferenciar
+            $isTitularComplete = true; 
             $missingField = null;
 
             foreach ($requiredFields as $field) {
@@ -288,58 +307,61 @@ class CheckinController extends Controller
                 }
             }
 
+            // B. Validación ESTRICTA de Procedencia (Checkin)
+            // Si el perfil está completo pero falta la procedencia limpia, lo marcamos incompleto.
+            if ($isTitularComplete && is_null($cleanOrigin)) {
+                $isTitularComplete = false;
+                $missingField = 'origin'; // Marcamos explícitamente que falta origen
+            }
+
             // 3. ACTUALIZAR HUÉSPED TITULAR
             $guest->update([
                 'full_name' => strtoupper($validated['full_name']),
                 'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
                 'duration_days' => $validated['duration_days'] ?? 0,
                 'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
-                //'origin' => $request->filled('origin') ? strtoupper($validated['origin']) : null,
                 'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
                 'civil_status' => $validated['civil_status'],
                 'birth_date' => $validated['birth_date'],
                 'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
                 'phone' => $request->phone,
+                
+                // Si $isTitularComplete es falso (por falta de datos o de origen), se guarda INCOMPLETE
                 'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
 
             // 3.5 ACTUALIZAR ACOMPAÑANTES
-            $allCompanionsComplete = true; // Bandera global para acompañantes
+            $allCompanionsComplete = true; 
 
             if ($request->has('companions')) {
                 $idsParaSincronizar = [];
 
                 foreach ($request->companions as $compData) {
-
-                    // A. Verificar completitud de ESTE acompañante específico
+                    // Verificación de acompañante individual
                     $isThisCompanionComplete = true;
-                    foreach ($requiredFields as $field) {
-                        // Verificamos si el campo falta en el array del acompañante
+                    $compRequired = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
+
+                    foreach ($compRequired as $field) {
                         if (empty($compData[$field])) {
                             $isThisCompanionComplete = false;
-                            $allCompanionsComplete = false; // Marcamos bandera global como incompleta
+                            $allCompanionsComplete = false; 
                             break;
                         }
                     }
 
-                    // Preparar datos
                     $datosCompanion = [
                         'full_name' => strtoupper($compData['full_name']),
                         'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
                         'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
                         'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        //'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
                         'civil_status' => $compData['civil_status'] ?? null,
                         'birth_date' => $compData['birth_date'] ?? null,
                         'phone' => $compData['phone'] ?? null,
                         'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
-
-                        // AQUÍ ESTÁ EL CAMBIO CLAVE: Guardamos el estado real calculado
                         'profile_status' => $isThisCompanionComplete ? 'COMPLETE' : 'INCOMPLETE'
                     ];
 
                     $companion = null;
-
                     if (!empty($datosCompanion['identification_number'])) {
                         $companion = \App\Models\Guest::where('identification_number', $datosCompanion['identification_number'])->first();
                     }
@@ -354,19 +376,17 @@ class CheckinController extends Controller
                         $idsParaSincronizar[$companion->id] = [];
                     }
                 }
-
                 $checkin->companions()->sync($idsParaSincronizar);
             } else {
                 $checkin->companions()->detach();
             }
 
-            // 4. LÓGICA DE FECHAS Y ESTADO
-            // Para que se considere todo completo, deben estar OK el titular Y los acompañantes
+            // 4. LÓGICA DE FECHAS
+            // Solo si TODO es verdadero (incluida la procedencia válida)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
             $newCheckInDate = $validated['check_in_date'];
 
-            // Si antes faltaba algo y ahora TODO está completo, actualizamos fecha
             if ($wasIncomplete && $isEverythingComplete) {
                 $newCheckInDate = now();
             }
@@ -390,7 +410,9 @@ class CheckinController extends Controller
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
                 'notes' => strtoupper($validated['notes'] ?? ''),
-                'origin' => $request->filled('origin') ? strtoupper($request->origin) : null,
+                
+                // ✅ GUARDAR ÚNICAMENTE LA PROCEDENCIA LIMPIA
+                'origin' => $cleanOrigin,
             ]);
 
             // 7. SERVICIOS
@@ -403,16 +425,15 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-            // 8. RESPUESTA (Validamos si falta ALGUIEN)
+            // 8. RESPUESTA (ERROR SI FALTA PROCEDENCIA O CUALQUIER DATO)
             if (!$isEverythingComplete) {
                 $mensaje = 'Faltan datos.';
 
                 if (!$isTitularComplete) {
-                    // Traducción simple del campo faltante del titular
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
                         'nationality' => 'Nacionalidad',
-                        //'origin' => 'Procedencia',
+                        'origin' => 'Procedencia (Origen)', // <--- AVISO ESPECÍFICO
                         'profession' => 'Profesión',
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
@@ -424,6 +445,7 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
                 }
 
+                // 🛑 RETORNO DE ERROR (Esto evita que el frontend piense que está "Completo")
                 return redirect()->back()->with('error', $mensaje . '. La habitación sigue PENDIENTE.');
             }
 

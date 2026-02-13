@@ -161,7 +161,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                     <tr>
                                         <th className="px-6 py-4">Huésped</th>
                                         <th className="px-6 py-4">Documento</th>
-                                        <th className="px-6 py-4">Origen</th>
+                                        <th className="px-6 py-4">Nacionalidad</th>
                                         <th className="px-6 py-4">Edad / Civil</th>
                                         <th className="px-6 py-4">Telefono</th>
                                         <th className="px-6 py-4 text-right">Acciones</th>
@@ -214,10 +214,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                     <td className="px-6 py-4">
                                                         <div className="flex flex-col">
                                                             <span className="font-medium text-gray-900">{guest.nationality}</span>
-                                                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                                <MapPin className="h-3 w-3" />
-                                                                {guest.origin || 'Sin origen'}
-                                                            </div>
                                                         </div>
                                                     </td>
 
