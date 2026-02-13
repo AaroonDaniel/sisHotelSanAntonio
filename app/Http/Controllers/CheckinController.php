@@ -40,11 +40,65 @@ class CheckinController extends Controller
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
+        // =========================================================
+        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
+        // =========================================================
+        $inputOrigin = $request->input('origin');
+        $cleanOrigin = null;
+
+        // Limpiamos basura (URLs, nulls, espacios)
+        if (
+            !empty($inputOrigin) && 
+            is_string($inputOrigin) && 
+            trim($inputOrigin) !== '' &&
+            !str_starts_with(trim($inputOrigin), 'http') && 
+            strtolower(trim($inputOrigin)) !== 'null'
+        ) {
+            $cleanOrigin = strtoupper(trim($inputOrigin));
+        }
+
+        // =========================================================
+        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR)
+        // =========================================================
+        $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
+        $isTitularComplete = true;
+
+        if (!$request->filled('guest_id')) {
+            // A. Si es NUEVO: Verificamos que el formulario traiga todo
+            foreach ($requiredFields as $field) {
+                if (!$request->filled($field)) {
+                    $isTitularComplete = false;
+                    break;
+                }
+            }
+        } else {
+            // B. Si ya EXISTE: Verificamos sus datos actuales + lo nuevo que llega
+            $existingGuestCheck = \App\Models\Guest::find($request->guest_id);
+            if ($existingGuestCheck) {
+                foreach ($requiredFields as $field) {
+                    // Está completo si: viene en el request O ya lo tiene en la BD
+                    $hasData = $request->filled($field) || !empty($existingGuestCheck->$field);
+                    if (!$hasData) {
+                        $isTitularComplete = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // C. Verificar Procedencia (Origin) - CRÍTICO
+        // Si el perfil parece completo pero falta el origen limpio, lo marcamos incompleto
+        if ($isTitularComplete && is_null($cleanOrigin)) {
+            $isTitularComplete = false;
+        }
+
+        // =========================================================
+        // 3. PROCESO DE CREACIÓN / ACTUALIZACIÓN
+        // =========================================================
+        
         // 1. Validar y Crear/Actualizar al Huésped TITULAR
         if (!$request->filled('guest_id')) {
-            // --- NUEVO TITULAR (Lógica Anti-Duplicados MEJORADA) ---
-            $isComplete = $request->filled('identification_number');
-
+            // --- NUEVO TITULAR ---
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50',
@@ -55,17 +109,11 @@ class CheckinController extends Controller
             $birthDate = $request->birth_date;
             $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-            // ==========================================================
-            // CAMBIO 1: BÚSQUEDA BLINDADA (Prioridad al Carnet)
-            // ==========================================================
+            // BÚSQUEDA BLINDADA (Prioridad al Carnet)
             $existingGuest = null;
-
-            // A. Primero buscamos por CI Exacto (Si se proporcionó)
             if (!empty($idNumber)) {
                 $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
             }
-
-            // B. Si no apareció por CI, recién buscamos por Nombre (+ Fecha Nac si hay)
             if (!$existingGuest) {
                 $query = \App\Models\Guest::where('full_name', $fullName);
                 if (!empty($birthDate)) {
@@ -73,24 +121,23 @@ class CheckinController extends Controller
                 }
                 $existingGuest = $query->first();
             }
-            // ==========================================================
 
             if ($existingGuest) {
-                // SI YA EXISTE: Actualizamos sus datos (Fusión de información)
+                // SI YA EXISTE: Actualizamos
                 $existingGuest->update([
                     'identification_number' => $idNumber ?? $existingGuest->identification_number,
                     'nationality' => $request->nationality ?? $existingGuest->nationality,
                     'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
                     'birth_date' => $birthDate ?? $existingGuest->birth_date,
                     'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
-                    //'origin' => $request->filled('origin') ? strtoupper($request->origin) : $existingGuest->origin,
                     'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
                     'phone' => $request->phone ?? $existingGuest->phone,
-                    'profile_status' => $isComplete ? 'COMPLETE' : $existingGuest->profile_status,
+                    // ✅ APLICAMOS EL ESTADO REAL CALCULADO ARRIBA
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
                 ]);
                 $guestId = $existingGuest->id;
             } else {
-                // SI NO EXISTE: Lo creamos desde cero
+                // SI NO EXISTE: Creamos
                 $guest = \App\Models\Guest::create([
                     'full_name' => $fullName,
                     'identification_number' => $idNumber,
@@ -98,22 +145,24 @@ class CheckinController extends Controller
                     'civil_status' => $request->civil_status,
                     'birth_date' => $birthDate,
                     'profession' => $request->profession ? strtoupper($request->profession) : null,
-                    //'origin' => $request->origin ? strtoupper($request->origin) : null,
                     'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
                     'phone' => $request->phone,
-                    'profile_status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                    // ✅ APLICAMOS EL ESTADO REAL CALCULADO ARRIBA
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
                 ]);
                 $guestId = $guest->id;
             }
         } else {
             // --- TITULAR EXISTENTE (Seleccionado del buscador) ---
             $guestId = $request->guest_id;
-            // Actualizar teléfono si se envió uno nuevo
-            if ($request->filled('phone')) {
-                $existingGuest = \App\Models\Guest::find($guestId);
-                if ($existingGuest) {
-                    $existingGuest->update(['phone' => $request->phone]);
-                }
+            $existingGuest = \App\Models\Guest::find($guestId);
+            
+            // Actualizar teléfono y ESTADO si se envió información nueva que complete el perfil
+            if ($existingGuest) {
+                $existingGuest->update([
+                    'phone' => $request->phone ?? $existingGuest->phone,
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
+                ]);
             }
         }
 
@@ -124,19 +173,18 @@ class CheckinController extends Controller
             ->first();
 
         if ($ocupacionPrevia) {
-            // Si existe, DETENEMOS TODO y devolvemos el error
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
             ]);
         }
 
-        // 2. Validar datos del Checkin (SIN CAMBIOS)
+        // 2. Validar datos del Checkin
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
             'actual_arrival_date' => 'nullable|date',
             'schedule_id' => 'nullable|exists:schedules,id',
-            'origin' => 'nullable|string|max:150',
+            // 'origin' => Lo validamos y limpiamos manualmente arriba
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
@@ -146,7 +194,7 @@ class CheckinController extends Controller
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // 3. Crear el Checkin Principal (SIN CAMBIOS)
+        // 3. Crear el Checkin Principal
         $checkin = \App\Models\Checkin::create([
             'guest_id' => $guestId,
             'room_id' => $validatedCheckin['room_id'],
@@ -154,7 +202,8 @@ class CheckinController extends Controller
             'check_in_date' => $validatedCheckin['check_in_date'],
             'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
             'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
-            'origin' => $request->filled('origin') ? strtoupper($request->origin) : null,
+            // ✅ GUARDAMOS LA PROCEDENCIA LIMPIA
+            'origin' => $cleanOrigin,
             'duration_days' => $validatedCheckin['duration_days'] ?? 0,
             'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
             'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
@@ -172,17 +221,14 @@ class CheckinController extends Controller
                 $compBirthDate = $compData['birth_date'] ?? null;
                 $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
 
-                // ==========================================================
-                // CAMBIO 2: BÚSQUEDA BLINDADA PARA ACOMPAÑANTES
-                // ==========================================================
-                $companion = null;
+                // Calculamos estado del acompañante (simple)
+                $compIsComplete = !empty($compIdNumber) && !empty($compData['nationality']);
 
-                // A. Prioridad CI
+                // BÚSQUEDA BLINDADA ACOMPAÑANTES
+                $companion = null;
                 if (!empty($compIdNumber)) {
                     $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
                 }
-
-                // B. Respaldo Nombre
                 if (!$companion) {
                     $compQuery = \App\Models\Guest::where('full_name', $compName);
                     if (!empty($compBirthDate)) {
@@ -190,9 +236,7 @@ class CheckinController extends Controller
                     }
                     $companion = $compQuery->first();
                 }
-                // ==========================================================
 
-                // B. Crear o Actualizar (SIN CAMBIOS)
                 if (!$companion) {
                     $companion = \App\Models\Guest::create([
                         'full_name' => $compName,
@@ -201,9 +245,8 @@ class CheckinController extends Controller
                         'civil_status' => $compData['civil_status'] ?? null,
                         'birth_date' => $compBirthDate,
                         'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        //'origin' => !empty($compData['origin']) ? strtoupper($compData['origin']) : null,
                         'phone' => $compData['phone'] ?? null,
-                        'profile_status' => 'INCOMPLETE'
+                        'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                     ]);
                 } else {
                     $companion->update([
@@ -222,13 +265,19 @@ class CheckinController extends Controller
             }
         }
 
-        // 5. Guardar Servicios (SIN CAMBIOS)
+        // 5. Guardar Servicios
         if ($request->has('selected_services')) {
             $checkin->services()->sync($request->selected_services);
         }
 
-        // 6. Actualizar Estado Habitación (SIN CAMBIOS)
+        // 6. Actualizar Estado Habitación
         \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+        // 7. RESPUESTA FINAL
+        // Si falta algo (incluido el origen), avisamos al usuario aunque se haya guardado
+        if (!$isTitularComplete) {
+            return redirect()->back()->with('success', 'Asignación registrada, pero FALTAN DATOS (como la Procedencia). El huésped quedó como INCOMPLETE.');
+        }
 
         return redirect()->back()->with('success', 'Asignación registrada correctamente.');
     }
