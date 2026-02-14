@@ -176,7 +176,7 @@ export interface Room {
     id: number;
     number: string;
     status: string;
-    price?: { amount: number };
+    price?: { amount: number; bathroom_type?: string };
     room_type?: { name: string; capacity: number };
     checkins?: CheckinData[];
 }
@@ -428,7 +428,7 @@ export default function CheckinModal({
     useEffect(() => {
         if (show) {
             clearErrors(); // Limpiamos errores previos
-
+            setIsToleranceApplied(false);
             // 1. Calculamos la HORA ACTUAL EXACTA
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -925,6 +925,11 @@ export default function CheckinModal({
 
         setIsToleranceApplied(true);
     };
+
+    const typeBathroom: Record<string, string> = {
+        SHARED: 'COMPARTIDO',
+        PRIVATE: 'PRIVADO',
+    };
     // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
@@ -1380,10 +1385,41 @@ export default function CheckinModal({
                                 <span className="block text-[10px] font-bold text-blue-400 uppercase">
                                     Habitación
                                 </span>
-                                <span className="font-bold text-blue-800">
+
+                                {/* Nombre del Tipo de Habitación */}
+                                <span className="block text-sm leading-tight font-black text-blue-900 uppercase">
                                     {rooms.find(
                                         (r) => r.id === Number(data.room_id),
                                     )?.room_type?.name || 'ESTÁNDAR'}
+                                </span>
+
+                                {/* Separador sutil */}
+                                <div className="mx-auto my-1 w-8 border-t border-blue-200/50"></div>
+
+                                {/* Tipo de Baño Traducido */}
+                                <span className="block text-[10px] font-bold text-blue-500 uppercase">
+                                    {(() => {
+                                        const room = rooms.find(
+                                            (r) =>
+                                                r.id === Number(data.room_id),
+                                        );
+
+                                        // 1. Obtener valor (puede venir de price o room_type)
+                                        const rawType =
+                                            (room as any)?.price
+                                                ?.bathroom_type ||
+                                            (room as any)?.room_type
+                                                ?.bathroom_type;
+
+                                        if (!rawType) return '';
+
+                                        // 2. Convertir a Mayúsculas para asegurar la búsqueda
+                                        const key =
+                                            String(rawType).toUpperCase(); // "shared" -> "SHARED"
+
+                                        // 3. Traducir
+                                        return typeBathroom[key] || rawType;
+                                    })()}
                                 </span>
                             </div>
 
@@ -1489,7 +1525,7 @@ export default function CheckinModal({
                                                         isToleranceApplied ||
                                                         isReadOnly
                                                     }
-                                                    className={`group flex items-center gap-1.5 rounded-lg border px-3 py-0.2 text-[9px] font-black uppercase shadow-sm transition-all active:scale-95 ${
+                                                    className={`group py-0.2 flex items-center gap-1.5 rounded-lg border px-0.5 text-[9px] font-black uppercase shadow-sm transition-all active:scale-95 ${
                                                         isToleranceApplied
                                                             ? 'cursor-default border-emerald-600 bg-emerald-100 text-emerald-800'
                                                             : 'animate-in cursor-pointer border-emerald-500 bg-emerald-50 text-emerald-700 duration-300 fade-in zoom-in hover:bg-emerald-100'

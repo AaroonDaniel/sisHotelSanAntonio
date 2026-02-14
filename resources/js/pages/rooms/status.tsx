@@ -6,7 +6,6 @@ import {
     AlertTriangle,
     ArrowLeft,
     ArrowRightCircle,
-    Ban,
     BedDouble,
     Brush,
     CheckCircle2,
@@ -80,7 +79,6 @@ interface Props {
     RoomTypes: RoomType[];
     Checkins: any[];
     Schedules: any[];
-    
 }
 
 export default function RoomsStatus({
@@ -453,9 +451,10 @@ export default function RoomsStatus({
     // resources/js/pages/rooms/status.tsx
 
     // 2. Habitaciones Ocupadas (Para unirse a grupo)
-    const occupiedRoomsForTransfer = Rooms.filter(r => {
+    const occupiedRoomsForTransfer = Rooms.filter((r) => {
         // A. Filtro básico: Debe estar ocupada
-        if (!['occupied', 'ocupada', 'ocupado'].includes(getDisplayStatus(r))) return false;
+        if (!['occupied', 'ocupada', 'ocupado'].includes(getDisplayStatus(r)))
+            return false;
 
         // B. Datos de capacidad
         const capacity = r.room_type?.capacity || 0;
@@ -464,7 +463,7 @@ export default function RoomsStatus({
         if (capacity <= 1) return false;
 
         // D. LÓGICA DE AFORO (Check-in Titular + Acompañantes)
-        const activeCheckin = r.checkins?.[0]; 
+        const activeCheckin = r.checkins?.[0];
         if (!activeCheckin) return false;
 
         // Calculamos ocupantes actuales: 1 (El Titular) + N (Sus Acompañantes)
@@ -779,7 +778,7 @@ export default function RoomsStatus({
                 schedules={Schedules}
                 availableServices={services}
                 isReadOnly={
-                    !!checkinToEdit && 
+                    !!checkinToEdit &&
                     checkinToEdit.guest?.profile_status !== 'INCOMPLETE'
                 }
             />
@@ -1004,43 +1003,45 @@ function CheckoutConfirmationModal({
         }
     };
 
-    // =========================================================================
-    //  LÓGICA DE TOLERANCIA DE SALIDA (Ej: 13:00 + 40m = Límite 13:40)
-    // =========================================================================
+
     const getExitToleranceStatus = () => {
-        // Validaciones de seguridad
-        if (!checkin || !checkin.schedule_id) {
-            return { isValid: false, message: 'Sin Horario', limitTime: '' };
-        }
+        if (!checkin) return { isValid: false, message: 'No data', limitTime: '' };
 
         const safeSchedules = schedules || [];
-        const schedule = safeSchedules.find(
+        
+        // 1. Intento A: Buscar el horario asignado al checkin
+        let schedule = safeSchedules.find(
             (s: any) => String(s.id) === String(checkin.schedule_id),
         );
 
+        // 2. Intento B (FALLBACK): Si no tiene (es antiguo), usar el ACTIVO
+        if (!schedule) {
+            schedule = safeSchedules.find((s: any) => s.is_active === true || s.is_active === 1);
+        }
+
+        // Si aún así no hay horario, fallamos
         if (!schedule) {
             return {
                 isValid: false,
-                message: 'Horario no encontrado',
+                message: 'Sin Horario',
                 limitTime: '',
             };
         }
 
-        const now = new Date(); // Hora actual (momento de la salida)
+        const now = new Date(); // Hora actual
 
-        // 1. Obtener hora de salida oficial del horario (ej. 13:00)
+        // 3. Obtener hora de salida oficial
         const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
         const exitDeadline = new Date();
         exitDeadline.setHours(hours, minutes, 0, 0);
 
-        // 2. Calcular Límite Máximo (+ Minutos de tolerancia)
-        // Ej: 13:00 + 40 min = 13:40
+        // 4. Calcular Límite Máximo (+ Minutos de tolerancia)
         const toleranceLimit = new Date(
             exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000,
         );
 
-        // 3. Comparación: ¿Estamos DENTRO del tiempo permitido?
-        // Es válido si la hora actual es MENOR o IGUAL al límite.
+        // 5. Comparación: ¿Estamos dentro del tiempo extra permitido?
+        // (now <= toleranceLimit)
         const isWithinTolerance = now <= toleranceLimit;
 
         return {
@@ -1053,7 +1054,6 @@ function CheckoutConfirmationModal({
             officialTime: schedule.check_out_time.substring(0, 5),
         };
     };
-
     const exitToleranceStatus = getExitToleranceStatus();
 
     // Nueva función del botón (Reemplaza la anterior handleApplyTolerance)
@@ -1307,42 +1307,38 @@ function CheckoutConfirmationModal({
                                     </div>
 
                                     {/* Botón Tolerancia Dinámico */}
-                                    <div className="mt-4 flex justify-center">
-                                        <button
-                                            type="button"
-                                            onClick={handleApplyTolerance}
-                                            className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-colors active:scale-95 ${
-                                                // Lógica de colores basada en si es válido o no
-                                                exitToleranceStatus.isValid
-                                                    ? waivePenalty
-                                                        ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300' // Verde Activo
-                                                        : 'border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200' // Verde Inactivo
-                                                    : 'border-red-500 bg-red-100 text-red-700 hover:bg-red-200' // Rojo (Fuera de rango)
-                                            }`}
-                                            title={
-                                                exitToleranceStatus.isValid
-                                                    ? `Dentro del horario permitido (hasta ${exitToleranceStatus.limitTime})`
-                                                    : `Fuera del límite de tolerancia (${exitToleranceStatus.limitTime})`
-                                            }
-                                        >
-                                            {/* Iconos Dinámicos */}
-                                            {!exitToleranceStatus.isValid ? (
-                                                <Ban className="h-3.5 w-3.5" /> // Icono Prohibido si es Rojo
-                                            ) : waivePenalty ? (
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                            ) : (
-                                                <ArrowRightCircle className="h-3.5 w-3.5" />
-                                            )}
+                                    {/* Solo se muestra si es VÁLIDO (Tiempo) Y si la estadía es > 1 DÍA */}
+                                    {exitToleranceStatus.isValid && displayData && displayData.duration_days > 1 && (
+                                        <div className="mt-4 flex justify-center animate-in fade-in zoom-in duration-300">
+                                            <button
+                                                type="button"
+                                                onClick={handleApplyTolerance}
+                                                className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
+                                                    waivePenalty
+                                                        ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300'
+                                                        : 'border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 animate-pulse'
+                                                }`}
+                                                title={
+                                                    waivePenalty
+                                                        ? 'La tolerancia ya ha sido aplicada.'
+                                                        : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
+                                                }
+                                            >
+                                                {/* Iconos */}
+                                                {waivePenalty ? (
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                ) : (
+                                                    <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                )}
 
-                                            <span>
-                                                {!exitToleranceStatus.isValid
-                                                    ? 'Fuera de Intervalo'
-                                                    : waivePenalty
-                                                      ? 'Tolerancia Aplicada'
-                                                      : 'Aplicar Tolerancia'}
-                                            </span>
-                                        </button>
-                                    </div>
+                                                <span>
+                                                    {waivePenalty
+                                                        ? 'Tolerancia Aplicada'
+                                                        : 'Aplicar Tolerancia'}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Botones Selección */}
                                     <div className="mt-4 text-center">
