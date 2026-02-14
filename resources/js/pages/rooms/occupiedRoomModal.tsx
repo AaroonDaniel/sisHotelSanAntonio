@@ -51,7 +51,7 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
 
         const day = date.getDate();
         const month = date.toLocaleDateString('es-BO', { month: 'long' });
-        const time = date.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const time = date.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', hour12: false });
         const weekday = date.toLocaleDateString('es-BO', { weekday: 'long' });
         const weekdayCapitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
 

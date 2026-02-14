@@ -307,8 +307,8 @@ export default function RoomsStatus({
                     text += ' (Faltan Datos)';
                 }
                 // 2. Agregar procedencia si existe
-                else if (guest.origin) {
-                    text += ` (${guest.origin})`;
+                else if (checkin.origin) {
+                    text += ` (${checkin.origin})`;
                 }
 
                 // 3. --- AGREGAR ACOMPAÑANTES (NUEVO) ---
@@ -1048,6 +1048,7 @@ function CheckoutConfirmationModal({
             limitTime: toleranceLimit.toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
+                hourCycle: 'h23',
             }),
             officialTime: schedule.check_out_time.substring(0, 5),
         };
@@ -1173,6 +1174,7 @@ function CheckoutConfirmationModal({
                                                     ).toLocaleTimeString([], {
                                                         hour: '2-digit',
                                                         minute: '2-digit',
+                                                        hourCycle: 'h23',
                                                     })}
                                                 </span>
                                             </div>
@@ -1195,6 +1197,7 @@ function CheckoutConfirmationModal({
                                                     ).toLocaleTimeString([], {
                                                         hour: '2-digit',
                                                         minute: '2-digit',
+                                                        hourCycle: 'h23',
                                                     })}
                                                 </span>
                                             </div>

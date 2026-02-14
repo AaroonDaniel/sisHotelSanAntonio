@@ -214,6 +214,7 @@ interface Schedule {
     check_out_time: string;
     entry_tolerance_minutes: number;
     exit_tolerance_minutes: number;
+    is_active?: boolean | number;
 }
 
 interface CheckinFormData {
@@ -223,7 +224,7 @@ interface CheckinFormData {
     actual_arrival_date?: string;
     check_in_date: string;
     duration_days: number | string;
-    origin:string;
+    origin: string;
     advance_payment: number;
     notes: string;
     selected_services: string[];
@@ -320,7 +321,7 @@ export default function CheckinModal({
     // =========================================================================
 
     const getToleranceStatus = () => {
-        // 1. Validaciones básicas para evitar errores
+        // 1. Validaciones básicas
         if (!data.schedule_id || !data.check_in_date) {
             return {
                 isValid: false,
@@ -345,21 +346,27 @@ export default function CheckinModal({
         }
 
         // 2. Definir fechas
-        const inputDate = new Date(data.check_in_date); // La hora que el usuario puso
-
-        // Hora Oficial (Ej: 06:00) del día seleccionado
+        const inputDate = new Date(data.check_in_date); 
         const [hours, minutes] = schedule.check_in_time.split(':').map(Number);
-        const officialDate = new Date(inputDate);
+        
+        // Creamos la fecha oficial base
+        let officialDate = new Date(inputDate);
         officialDate.setHours(hours, minutes, 0, 0);
 
-        // 3. Calcular Ventana de Tolerancia (-350 minutos)
-        // Rango: [00:10] a [06:00]
+        // --- CORRECCIÓN MEDIANOCHE (IMPORTANTE) ---
+        // Si el horario es de madrugada (ej: 00:12) y el usuario marca de noche (ej: 22:14),
+        // significa que el horario oficial pertenece al día SIGUIENTE.
+        if (hours < 6 && inputDate.getHours() > 18) {
+            officialDate.setDate(officialDate.getDate() + 1);
+        }
+        // -------------------------------------------
+
+        // 3. Calcular Ventana de Tolerancia
         const toleranceStart = new Date(
             officialDate.getTime() - schedule.entry_tolerance_minutes * 60000,
         );
 
-        // 4. Comparar: ¿Está la hora seleccionada DENTRO de la ventana?
-        // Se permite desde el inicio de la tolerancia hasta la hora exacta oficial.
+        // 4. Comparar
         const isInsideWindow =
             inputDate >= toleranceStart && inputDate <= officialDate;
 
@@ -426,6 +433,13 @@ export default function CheckinModal({
             const currentDateTimeISO = now.toISOString().slice(0, 16);
             const nowObj = new Date(); // Objeto fecha normal para comparaciones
 
+            const activeSchedule = schedules.find(
+                (s) => s.is_active === true || s.is_active === 1,
+            );
+            const defaultScheduleId = activeSchedule
+                ? String(activeSchedule.id)
+                : '';
+
             // 2. LÓGICA DE ENFOQUE (Índice del carrusel)
             let startAt = 0;
             if (checkinToEdit && targetGuestId) {
@@ -445,33 +459,45 @@ export default function CheckinModal({
                 // MODO EDICIÓN: Cargar datos existentes
                 // ===============================================
                 setIsExistingGuest(true);
-                
+
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
-                let calculatedDuration = Math.max(1, Number(checkinToEdit.duration_days));
-                
+                let calculatedDuration = Math.max(
+                    1,
+                    Number(checkinToEdit.duration_days),
+                );
+
                 // Buscamos el horario asignado
-                const schedule = schedules.find(s => String(s.id) === String(checkinToEdit.schedule_id));
-                
+                const schedule = schedules.find(
+                    (s) => String(s.id) === String(checkinToEdit.schedule_id),
+                );
+
                 if (schedule) {
                     const checkInDate = new Date(checkinToEdit.check_in_date);
-                    const [outH, outM] = schedule.check_out_time.split(':').map(Number);
+                    const [outH, outM] = schedule.check_out_time
+                        .split(':')
+                        .map(Number);
                     // Usamos una tolerancia por defecto si no existe en la interfaz
-                    const exitTolerance = (schedule as any).exit_tolerance_minutes || 60; 
+                    const exitTolerance =
+                        (schedule as any).exit_tolerance_minutes || 60;
 
                     let isValidDuration = false;
                     while (!isValidDuration) {
                         const targetCheckout = new Date(checkInDate);
-                        targetCheckout.setDate(targetCheckout.getDate() + calculatedDuration);
+                        targetCheckout.setDate(
+                            targetCheckout.getDate() + calculatedDuration,
+                        );
                         targetCheckout.setHours(outH, outM, 0, 0);
 
-                        const hardLimit = new Date(targetCheckout.getTime() + exitTolerance * 60000);
+                        const hardLimit = new Date(
+                            targetCheckout.getTime() + exitTolerance * 60000,
+                        );
 
                         if (nowObj > hardLimit) {
                             calculatedDuration++; // Sumamos 1 noche automáticamente
                         } else {
                             isValidDuration = true;
                         }
-                        if (calculatedDuration > 365) break; 
+                        if (calculatedDuration > 365) break;
                     }
                 }
 
@@ -483,22 +509,29 @@ export default function CheckinModal({
                     room_id: String(checkinToEdit.room_id),
                     duration_days: calculatedDuration,
                     check_in_date: checkinToEdit.check_in_date,
-                    schedule_id: checkinToEdit.schedule_id ? String(checkinToEdit.schedule_id) : '',
+                    schedule_id: checkinToEdit.schedule_id
+                        ? String(checkinToEdit.schedule_id)
+                        : '',
                     origin: checkinToEdit.origin || '',
                     advance_payment: checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
-                    actual_arrival_date: checkinToEdit.actual_arrival_date || '',
-                    
+                    actual_arrival_date:
+                        checkinToEdit.actual_arrival_date || '',
+
                     // Convertimos IDs de servicios a String
-                    selected_services: checkinToEdit.services 
-                        ? checkinToEdit.services.map((s: any) => String(s.id || s)) 
+                    selected_services: checkinToEdit.services
+                        ? checkinToEdit.services.map((s: any) =>
+                              String(s.id || s),
+                          )
                         : [],
-                        
+
                     // Datos Titular
                     full_name: checkinToEdit.guest?.full_name || '',
-                    identification_number: checkinToEdit.guest?.identification_number || '',
+                    identification_number:
+                        checkinToEdit.guest?.identification_number || '',
                     issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality: checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    nationality:
+                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
                     civil_status: checkinToEdit.guest?.civil_status || '',
                     birth_date: checkinToEdit.guest?.birth_date || '',
                     profession: checkinToEdit.guest?.profession || '',
@@ -506,18 +539,20 @@ export default function CheckinModal({
                     phone: checkinToEdit.guest?.phone || '',
 
                     // Mapeamos acompañantes
-                    companions: checkinToEdit.companions?.map((c: any) => ({
-                        id: c.id,
-                        full_name: c.full_name,
-                        identification_number: c.identification_number || '',
-                        birth_date: c.birth_date || '',
-                        nationality: c.nationality || 'BOLIVIANA',
-                        issued_in: c.issued_in || '',
-                        civil_status: c.civil_status || '',
-                        profession: c.profession || '',
-                        //origin: c.origin || '',
-                        phone: c.phone || '',
-                    })) || [],
+                    companions:
+                        checkinToEdit.companions?.map((c: any) => ({
+                            id: c.id,
+                            full_name: c.full_name,
+                            identification_number:
+                                c.identification_number || '',
+                            birth_date: c.birth_date || '',
+                            nationality: c.nationality || 'BOLIVIANA',
+                            issued_in: c.issued_in || '',
+                            civil_status: c.civil_status || '',
+                            profession: c.profession || '',
+                            //origin: c.origin || '',
+                            phone: c.phone || '',
+                        })) || [],
                 }));
 
                 // Configuramos la persona actual para visualización (SIN setQuery)
@@ -525,27 +560,27 @@ export default function CheckinModal({
                     // Eliminamos setQuery porque no existe y no hace falta
                     // El valor del input se llena automáticamente por data.full_name
                 }
-
             } else {
                 // ===============================================
                 // MODO NUEVO REGISTRO: Limpiar formulario
                 // ===============================================
-                reset(); 
+                reset();
                 setIsExistingGuest(false);
                 setCurrentIndex(0);
-                
+
                 // Valores iniciales
                 setData((prev) => ({
                     ...prev,
-                    check_in_date: currentDateTimeISO, 
+                    check_in_date: currentDateTimeISO,
                     room_id: initialRoomId ? String(initialRoomId) : '',
-                    duration_days: 1, 
+                    schedule_id: defaultScheduleId,
+                    duration_days: 1,
                     selected_services: [],
                     companions: [],
                 }));
             }
         }
-    }, [show, checkinToEdit, initialRoomId, targetGuestId]);
+    }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -576,8 +611,6 @@ export default function CheckinModal({
             setData('check_in_date', currentDateTime);
         }
     }, [show, checkinToEdit]); // Se dispara cada vez que 'show' cambia
-
-    
 
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
@@ -1274,18 +1307,20 @@ export default function CheckinModal({
                                         Procedencia
                                     </label>
                                     <div className="relative">
-                                        <Globe className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                        <Globe className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
                                         <input
                                             type="text"
-                                            className="w-full rounded-lg border border-gray-400 py-2 pl-9 text-sm font-bold text-blue-900 uppercase focus:border-blue-500 focus:ring-blue-500 bg-blue-50/20"
-                                            
+                                            className="w-full rounded-lg border border-gray-400 bg-blue-50/20 py-2 pl-9 text-sm font-bold text-blue-900 uppercase focus:border-blue-500 focus:ring-blue-500"
                                             // ✅ CORRECCIÓN CLAVE:
                                             // Vinculamos directamente a 'data.origin' (el dato de la asignación)
                                             value={data.origin || ''}
-                                            
                                             // ✅ Al escribir, actualizamos directo el formulario principal
-                                            onChange={(e) => setData('origin', e.target.value.toUpperCase())}
-                                            
+                                            onChange={(e) =>
+                                                setData(
+                                                    'origin',
+                                                    e.target.value.toUpperCase(),
+                                                )
+                                            }
                                             disabled={isReadOnly}
                                             placeholder="EJ: COCHABAMBA"
                                         />
@@ -1434,12 +1469,30 @@ export default function CheckinModal({
                                     <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
                                         Fecha Ingreso (Check-In)
                                     </label>
+                                    {data.schedule_id && (
+                                        <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">
+                                            {
+                                                schedules.find(
+                                                    (s) =>
+                                                        String(s.id) ===
+                                                        data.schedule_id,
+                                                )?.name
+                                            }
+                                        </span>
+                                    )}
                                     <input
                                         type="datetime-local"
-                                        value={formatDateForInput(data.check_in_date)}
-                                        onChange={(e) => setData('check_in_date', e.target.value)}
+                                        value={formatDateForInput(
+                                            data.check_in_date,
+                                        )}
+                                        onChange={(e) =>
+                                            setData(
+                                                'check_in_date',
+                                                e.target.value,
+                                            )
+                                        }
                                         disabled={isReadOnly}
-                                        className="w-full rounded-lg border border-gray-400 text-sm text-black font-bold disabled:bg-gray-100"
+                                        className="w-full rounded-lg border border-gray-400 text-sm font-bold text-black disabled:bg-gray-100"
                                     />
 
                                     {/* --- BOTÓN TOLERANCIA --- */}
@@ -1448,7 +1501,10 @@ export default function CheckinModal({
                                             <button
                                                 type="button"
                                                 onClick={handleApplyTolerance}
-                                                disabled={isToleranceApplied || isReadOnly}
+                                                disabled={
+                                                    isToleranceApplied ||
+                                                    isReadOnly
+                                                }
                                                 className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
                                                     isToleranceApplied
                                                         ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800'
@@ -1472,7 +1528,7 @@ export default function CheckinModal({
                                                 ) : (
                                                     <Ban className="h-3.5 w-3.5" />
                                                 )}
-                                                
+
                                                 {/* Texto Dinámico */}
                                                 <span>
                                                     {isToleranceApplied
@@ -1487,38 +1543,57 @@ export default function CheckinModal({
                                 </div>
 
                                 {/* COLUMNA DERECHA: NOCHES Y CONTROL DE PRECIOS */}
-                                <div className="flex w-40 flex-col"> {/* Ancho aumentado a w-40 para info extra */}
+                                <div className="flex w-40 flex-col">
+                                    {' '}
+                                    {/* Ancho aumentado a w-40 para info extra */}
                                     <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
                                         Noches
                                     </label>
                                     <div className="relative">
                                         <input
                                             type="number"
-                                            min="1" 
+                                            min="1"
                                             value={data.duration_days}
                                             disabled={isReadOnly}
                                             onChange={(e) => {
                                                 const val = e.target.value;
                                                 // Aseguramos que sea un número positivo
-                                                setData('duration_days', val === '' ? '' : Math.max(0, Number(val)));
+                                                setData(
+                                                    'duration_days',
+                                                    val === ''
+                                                        ? ''
+                                                        : Math.max(
+                                                              0,
+                                                              Number(val),
+                                                          ),
+                                                );
                                             }}
                                             className="w-full rounded-lg border border-gray-400 pr-2 pl-3 text-right text-sm font-black text-blue-900 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
                                             placeholder="1"
                                         />
-                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">
+                                        <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[10px] font-bold text-gray-400">
                                             #
                                         </span>
                                     </div>
-
                                     {/* INFO DE PRECIO Y HORARIOS */}
                                     <div className="mt-2 flex flex-col items-end gap-1">
                                         {/* A. Precio Total (Habitación x Noches) */}
                                         {(() => {
-                                            const selectedRoom = rooms.find(r => r.id === Number(data.room_id) || r.id === initialRoomId);
-                                            const price = selectedRoom?.price?.amount || 0;
-                                            const total = price * (Number(data.duration_days) || 0);
+                                            const selectedRoom = rooms.find(
+                                                (r) =>
+                                                    r.id ===
+                                                        Number(data.room_id) ||
+                                                    r.id === initialRoomId,
+                                            );
+                                            const price =
+                                                selectedRoom?.price?.amount ||
+                                                0;
+                                            const total =
+                                                price *
+                                                (Number(data.duration_days) ||
+                                                    0);
                                             return (
-                                                <span className="text-sm font-black text-green-600 animate-in fade-in">
+                                                <span className="animate-in text-sm font-black text-green-600 fade-in">
                                                     Total: {total} Bs
                                                 </span>
                                             );
@@ -1527,24 +1602,42 @@ export default function CheckinModal({
                                         {/* B. Hora Límite (Check-out + Tolerancia) */}
                                         {(() => {
                                             // Calculamos visualmente cuándo debe salir
-                                            const schedule = schedules.find(s => String(s.id) === data.schedule_id);
-                                            
-                                            if (schedule && data.check_in_date) {
+                                            const schedule = schedules.find(
+                                                (s) =>
+                                                    String(s.id) ===
+                                                    data.schedule_id,
+                                            );
+
+                                            if (
+                                                schedule &&
+                                                data.check_in_date
+                                            ) {
                                                 // Usamos 'as any' temporalmente por si no has actualizado la interfaz Schedule aun
-                                                const exitTol = (schedule as any).exit_tolerance_minutes || 0;
-                                                
+                                                const exitTol =
+                                                    (schedule as any)
+                                                        .exit_tolerance_minutes ||
+                                                    0;
+
                                                 return (
                                                     <div className="flex flex-col items-end text-[10px]">
-                                                        <span className="font-bold text-gray-500 text-right">
-                                                            Salida: {checkoutString} <br/> 
-                                                            hasta {schedule.check_out_time.substring(0,5)}
+                                                        <span className="text-right font-bold text-gray-500">
+                                                            Salida:{' '}
+                                                            {checkoutString}{' '}
+                                                            <br />
+                                                            hasta{' '}
+                                                            {schedule.check_out_time.substring(
+                                                                0,
+                                                                5,
+                                                            )}
                                                         </span>
                                                     </div>
                                                 );
                                             }
                                             // Fallback si no hay horario seleccionado
                                             return (
-                                                <span className={`text-[10px] font-medium ${durationVal > 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                                <span
+                                                    className={`text-[10px] font-medium ${durationVal > 0 ? 'text-blue-600' : 'text-orange-600'}`}
+                                                >
                                                     Salida: {checkoutString}
                                                 </span>
                                             );
@@ -1615,48 +1708,69 @@ export default function CheckinModal({
                                 </label>
 
                                 {/* SECCIÓN DE SERVICIOS ACTUALIZADA */}
-                            <div>
-                                <div className="flex flex-wrap gap-2">
-                                    
-                                    {/* 1. BOTÓN GARAJE (Dinámico: Se conecta a la BD) */}
-                                    {availableServices
-                                        .filter((s: any) => s.name.toUpperCase().includes('GARAJE')) // Solo mostramos Garaje
-                                        .map((srv: any) => {
-                                            const srvId = String(srv.id);
-                                            const active = data.selected_services.includes(srvId);
-                                            return (
-                                                <button
-                                                    key={srv.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const newServs = active
-                                                            ? data.selected_services.filter((id) => id !== srvId)
-                                                            : [...data.selected_services, srvId];
-                                                        setData('selected_services', newServs);
-                                                    }}
-                                                    className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
-                                                        active
-                                                            ? 'border-green-500 bg-green-100 font-bold text-green-700' // Estilo Activo
-                                                            : 'border border-gray-400 bg-white text-gray-600 hover:border-gray-500' // Estilo Inactivo
-                                                    }`}
-                                                >
-                                                    {active && <CheckCircle2 className="h-3 w-3" />}
-                                                    {srv.name}
-                                                </button>
-                                            );
-                                        })}
+                                <div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* 1. BOTÓN GARAJE (Dinámico: Se conecta a la BD) */}
+                                        {availableServices
+                                            .filter((s: any) =>
+                                                s.name
+                                                    .toUpperCase()
+                                                    .includes('GARAJE'),
+                                            ) // Solo mostramos Garaje
+                                            .map((srv: any) => {
+                                                const srvId = String(srv.id);
+                                                const active =
+                                                    data.selected_services.includes(
+                                                        srvId,
+                                                    );
+                                                return (
+                                                    <button
+                                                        key={srv.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newServs =
+                                                                active
+                                                                    ? data.selected_services.filter(
+                                                                          (
+                                                                              id,
+                                                                          ) =>
+                                                                              id !==
+                                                                              srvId,
+                                                                      )
+                                                                    : [
+                                                                          ...data.selected_services,
+                                                                          srvId,
+                                                                      ];
+                                                            setData(
+                                                                'selected_services',
+                                                                newServs,
+                                                            );
+                                                        }}
+                                                        className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+                                                            active
+                                                                ? 'border-green-500 bg-green-100 font-bold text-green-700' // Estilo Activo
+                                                                : 'border border-gray-400 bg-white text-gray-600 hover:border-gray-500' // Estilo Inactivo
+                                                        }`}
+                                                    >
+                                                        {active && (
+                                                            <CheckCircle2 className="h-3 w-3" />
+                                                        )}
+                                                        {srv.name}
+                                                    </button>
+                                                );
+                                            })}
 
-                                    {/* 2. BOTÓN DESAYUNO (Estático: Siempre activo visualmente) */}
-                                    <button
-                                        type="button"
-                                        disabled={true} // No se puede quitar clickeando
-                                        className="flex items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700 cursor-default"
-                                    >
-                                        <CheckCircle2 className="h-3 w-3" />
-                                        DESAYUNO
-                                    </button>
+                                        {/* 2. BOTÓN DESAYUNO (Estático: Siempre activo visualmente) */}
+                                        <button
+                                            type="button"
+                                            disabled={true} // No se puede quitar clickeando
+                                            className="flex cursor-default items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
+                                        >
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            DESAYUNO
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
                                 <div className="mt-2 text-center text-base font-medium text-gray-800"></div>
                                 {/* FIN DEL CÓDIGO A AGREGAR */}
                             </div>
@@ -1664,7 +1778,6 @@ export default function CheckinModal({
 
                         {/* PIE DEL FORMULARIO CON BOTONES */}
                         <div className="mt-8 flex items-center justify-end gap-3">
-                            
                             {/* --- 1. BOTÓN CANCELAR ASIGNACIÓN (Regla de 10 min) --- */}
                             {/* ESTE BOTÓN AHORA ES INDEPENDIENTE: Si hay checkin y hay tiempo, APARECE SIEMPRE */}
                             {checkinToEdit && canCancel() && (
@@ -1713,8 +1826,8 @@ export default function CheckinModal({
                                             {checkinToEdit
                                                 ? 'Actualizar'
                                                 : isProfileIncomplete
-                                                ? 'Asignación Rápida'
-                                                : 'Registrar'}
+                                                  ? 'Asignación Rápida'
+                                                  : 'Registrar'}
                                         </>
                                     )}
                                 </button>
