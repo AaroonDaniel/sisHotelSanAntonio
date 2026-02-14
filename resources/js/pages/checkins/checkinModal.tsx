@@ -4,7 +4,6 @@ import {
     AlertCircle,
     AlertTriangle,
     ArrowRightCircle,
-    Ban,
     Bed,
     CheckCircle2,
     ChevronLeft,
@@ -345,28 +344,31 @@ export default function CheckinModal({
             };
         }
 
-        // 2. Definir fechas
-        const inputDate = new Date(data.check_in_date); 
+        // 2. Definir fechas base
+        const inputDate = new Date(data.check_in_date);
         const [hours, minutes] = schedule.check_in_time.split(':').map(Number);
-        
-        // Creamos la fecha oficial base
+
+        // Creamos la fecha oficial basada en el día que seleccionó el usuario
         let officialDate = new Date(inputDate);
         officialDate.setHours(hours, minutes, 0, 0);
 
-        // --- CORRECCIÓN MEDIANOCHE (IMPORTANTE) ---
-        // Si el horario es de madrugada (ej: 00:12) y el usuario marca de noche (ej: 22:14),
-        // significa que el horario oficial pertenece al día SIGUIENTE.
+        // =====================================================================
+        // CORRECCIÓN DE MEDIANOCHE (MADRUGADA)
+        // =====================================================================
+        // Si el horario es de madrugada (00:00 - 06:00) y el cliente llega
+        // de noche (18:00 - 23:59), asumimos que el turno es "mañana".
+        // =====================================================================
         if (hours < 6 && inputDate.getHours() > 18) {
             officialDate.setDate(officialDate.getDate() + 1);
         }
-        // -------------------------------------------
 
         // 3. Calcular Ventana de Tolerancia
         const toleranceStart = new Date(
             officialDate.getTime() - schedule.entry_tolerance_minutes * 60000,
         );
 
-        // 4. Comparar
+        // 4. Comparar si está dentro del rango
+        // Debe ser MAYOR al inicio de la tolerancia y MENOR o IGUAL a la hora oficial
         const isInsideWindow =
             inputDate >= toleranceStart && inputDate <= officialDate;
 
@@ -1465,21 +1467,57 @@ export default function CheckinModal({
                             </div>
                             <div className="flex gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
-                                <div className="flex flex-grow flex-col">
-                                    <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
-                                        Fecha Ingreso (Check-In)
-                                    </label>
-                                    {data.schedule_id && (
-                                        <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">
-                                            {
-                                                schedules.find(
-                                                    (s) =>
-                                                        String(s.id) ===
-                                                        data.schedule_id,
-                                                )?.name
-                                            }
-                                        </span>
-                                    )}
+                                <div className="relative flex flex-grow flex-col">
+                                    {/* 1. Header con etiqueta y Badge de Horario */}
+                                    <div className="mb-0.5 flex min-h-[20px] items-center gap-2">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">
+                                            Fecha Ingreso (Check-In)
+                                        </label>
+                                    </div>
+
+                                    {/* 2. BOTÓN TOLERANCIA (FLOTANTE / ABSOLUTO) */}
+                                    {/* Se posiciona 'encima' del layout en la esquina derecha. No empuja nada. */}
+                                    {data.schedule_id &&
+                                        toleranceStatus.isValid && (
+                                            <div className="absolute top-0 right-3 z-10">
+                                                <button
+                                                    type="button"
+                                                    onClick={
+                                                        handleApplyTolerance
+                                                    }
+                                                    disabled={
+                                                        isToleranceApplied ||
+                                                        isReadOnly
+                                                    }
+                                                    className={`group flex items-center gap-1.5 rounded-lg border px-3 py-0.2 text-[9px] font-black uppercase shadow-sm transition-all active:scale-95 ${
+                                                        isToleranceApplied
+                                                            ? 'cursor-default border-emerald-600 bg-emerald-100 text-emerald-800'
+                                                            : 'animate-in cursor-pointer border-emerald-500 bg-emerald-50 text-emerald-700 duration-300 fade-in zoom-in hover:bg-emerald-100'
+                                                    }`}
+                                                    title={
+                                                        isToleranceApplied
+                                                            ? 'Tolerancia aplicada.'
+                                                            : `Clic para ajustar a ${toleranceStatus.officialTime}`
+                                                    }
+                                                >
+                                                    {/* Icono Dinámico */}
+                                                    {isToleranceApplied ? (
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                    ) : (
+                                                        <ArrowRightCircle className="h-3 w-3" />
+                                                    )}
+
+                                                    {/* Texto Dinámico */}
+                                                    <span>
+                                                        {isToleranceApplied
+                                                            ? 'Ajustado'
+                                                            : 'Usar Tolerancia'}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                    {/* 3. Input de Fecha (Se mantiene igual) */}
                                     <input
                                         type="datetime-local"
                                         value={formatDateForInput(
@@ -1494,61 +1532,42 @@ export default function CheckinModal({
                                         disabled={isReadOnly}
                                         className="w-full rounded-lg border border-gray-400 text-sm font-bold text-black disabled:bg-gray-100"
                                     />
-
-                                    {/* --- BOTÓN TOLERANCIA --- */}
-                                    <div className="mt-2 flex justify-start">
-                                        {data.schedule_id && (
-                                            <button
-                                                type="button"
-                                                onClick={handleApplyTolerance}
-                                                disabled={
-                                                    isToleranceApplied ||
-                                                    isReadOnly
-                                                }
-                                                className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
-                                                    isToleranceApplied
-                                                        ? 'cursor-default border-emerald-600 bg-emerald-200 text-emerald-800'
-                                                        : toleranceStatus.isValid
-                                                          ? 'animate-bounce cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                                          : 'cursor-pointer border-red-500 bg-red-100 text-red-700 hover:bg-red-200'
-                                                }`}
-                                                title={
-                                                    isToleranceApplied
-                                                        ? 'Tolerancia aplicada.'
-                                                        : toleranceStatus.isValid
-                                                          ? `Clic para ajustar a ${toleranceStatus.officialTime}`
-                                                          : 'Fuera de tiempo'
-                                                }
-                                            >
-                                                {/* Icono Dinámico */}
-                                                {isToleranceApplied ? (
-                                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                                ) : toleranceStatus.isValid ? (
-                                                    <ArrowRightCircle className="h-3.5 w-3.5" />
-                                                ) : (
-                                                    <Ban className="h-3.5 w-3.5" />
-                                                )}
-
-                                                {/* Texto Dinámico */}
-                                                <span>
-                                                    {isToleranceApplied
-                                                        ? 'Hora Ajustada'
-                                                        : toleranceStatus.isValid
-                                                          ? 'Aplicar Tolerancia'
-                                                          : 'Fuera de Tolerancia'}
-                                                </span>
-                                            </button>
-                                        )}
-                                    </div>
                                 </div>
 
                                 {/* COLUMNA DERECHA: NOCHES Y CONTROL DE PRECIOS */}
                                 <div className="flex w-40 flex-col">
-                                    {' '}
-                                    {/* Ancho aumentado a w-40 para info extra */}
-                                    <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
-                                        Noches
-                                    </label>
+                                    {/* 1. CABECERA FILA: ETIQUETA "NOCHES" + INFO SALIDA A LA DERECHA */}
+                                    <div className="mb-1 flex items-end justify-between">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">
+                                            Noches:
+                                        </label>
+
+                                        {/* Lógica de Salida (Movida aquí arriba) */}
+                                        {(() => {
+                                            const schedule = schedules.find(
+                                                (s) =>
+                                                    String(s.id) ===
+                                                    data.schedule_id,
+                                            );
+                                            return (
+                                                <div className="text-right text-[12px] leading-3">
+                                                    <span className="font-bold text-gray-800">
+                                                        {checkoutString}
+                                                    </span>
+                                                    {schedule && (
+                                                        <span className="ml-1 font-medium text-gray-800">
+                                                            {schedule.check_out_time.substring(
+                                                                0,
+                                                                5,
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* 2. INPUT NOCHES */}
                                     <div className="relative">
                                         <input
                                             type="number"
@@ -1557,7 +1576,6 @@ export default function CheckinModal({
                                             disabled={isReadOnly}
                                             onChange={(e) => {
                                                 const val = e.target.value;
-                                                // Aseguramos que sea un número positivo
                                                 setData(
                                                     'duration_days',
                                                     val === ''
@@ -1575,9 +1593,9 @@ export default function CheckinModal({
                                             #
                                         </span>
                                     </div>
-                                    {/* INFO DE PRECIO Y HORARIOS */}
-                                    <div className="mt-2 flex flex-col items-end gap-1">
-                                        {/* A. Precio Total (Habitación x Noches) */}
+
+                                    {/* 3. PRECIO TOTAL (Debajo del input) */}
+                                    <div className="mt-0.5 flex justify-end">
                                         {(() => {
                                             const selectedRoom = rooms.find(
                                                 (r) =>
@@ -1595,50 +1613,6 @@ export default function CheckinModal({
                                             return (
                                                 <span className="animate-in text-sm font-black text-green-600 fade-in">
                                                     Total: {total} Bs
-                                                </span>
-                                            );
-                                        })()}
-
-                                        {/* B. Hora Límite (Check-out + Tolerancia) */}
-                                        {(() => {
-                                            // Calculamos visualmente cuándo debe salir
-                                            const schedule = schedules.find(
-                                                (s) =>
-                                                    String(s.id) ===
-                                                    data.schedule_id,
-                                            );
-
-                                            if (
-                                                schedule &&
-                                                data.check_in_date
-                                            ) {
-                                                // Usamos 'as any' temporalmente por si no has actualizado la interfaz Schedule aun
-                                                const exitTol =
-                                                    (schedule as any)
-                                                        .exit_tolerance_minutes ||
-                                                    0;
-
-                                                return (
-                                                    <div className="flex flex-col items-end text-[10px]">
-                                                        <span className="text-right font-bold text-gray-500">
-                                                            Salida:{' '}
-                                                            {checkoutString}{' '}
-                                                            <br />
-                                                            hasta{' '}
-                                                            {schedule.check_out_time.substring(
-                                                                0,
-                                                                5,
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            }
-                                            // Fallback si no hay horario seleccionado
-                                            return (
-                                                <span
-                                                    className={`text-[10px] font-medium ${durationVal > 0 ? 'text-blue-600' : 'text-orange-600'}`}
-                                                >
-                                                    Salida: {checkoutString}
                                                 </span>
                                             );
                                         })()}
