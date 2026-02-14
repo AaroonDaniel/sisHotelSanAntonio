@@ -893,10 +893,12 @@ function CheckoutConfirmationModal({
     } | null>(null);
 
     // --- EFECTO DE CARGA ROBUSTO (PLAN A + PLAN B) ---
+    // --- EFECTO DE CARGA Y CÁLCULO ---
+    // --- EFECTO DE CARGA Y CÁLCULO (Con Recálculo Automático) ---
     useEffect(() => {
         setLoadingDetails(true);
 
-        // Definimos las promesas de datos
+        // 1. Obtener servicios
         const fetchServices = axios
             .get('/guests/view-detail', {
                 params: { guest_id: checkin.guest_id },
@@ -906,17 +908,17 @@ function CheckoutConfirmationModal({
             )
             .catch(() => []);
 
+        // 2. Obtener cálculo del servidor (Enviando si hay tolerancia o no)
         const fetchServerCalc = axios
             .get(`/checks/${checkin.id}/checkout-details`, {
-                params: { waive_penalty: waivePenalty ? 1 : 0 },
+                params: { waive_penalty: waivePenalty ? 1 : 0 }, // <--- IMPORTANTE: Le decimos al server si aplicamos tolerancia
             })
             .then((res) => res.data)
             .catch(() => null);
 
-        // Ejecutamos todo
         Promise.all([fetchServices, fetchServerCalc])
             .then(([servicios, serverResponse]) => {
-                // Calculamos el total de servicios localmente por si acaso
+                // Suma total de servicios
                 const servicesTotal = servicios.reduce(
                     (acc: number, item: any) =>
                         acc + (parseFloat(item.subtotal) || 0),
@@ -924,25 +926,29 @@ function CheckoutConfirmationModal({
                 );
 
                 if (serverResponse) {
-                    // PLAN A: El servidor respondió correctamente
+                    // OPCIÓN A: El servidor respondió bien (Ideal)
                     setDisplayData({
                         ...serverResponse,
                         servicios: servicios,
-                        // Aseguramos que services_total coincida con la lista si el server no lo trajo
-                        services_total:
-                            serverResponse.services_total ?? servicesTotal,
+                        services_total: serverResponse.services_total ?? servicesTotal,
                         guest: checkin.guest,
                     });
                 } else {
-                    // PLAN B: El servidor falló (404 o error), CALCULAMOS LOCALMENTE
+                    // OPCIÓN B: Cálculo Local (Si falla el servidor o es muy rápido)
+                    // -------------------------------------------------------------
                     const ingreso = new Date(checkin.check_in_date);
-                    const salida = new Date();
-                    // Diferencia en días (mínimo 1)
-                    const diffTime = Math.abs(
-                        salida.getTime() - ingreso.getTime(),
-                    );
-                    const diffDays =
-                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                    let salida = new Date(); // Por defecto: AHORA MISMO
+
+                    // --- MAGIA AQUÍ: SI HAY TOLERANCIA, MODIFICAMOS LA HORA ---
+                    if (waivePenalty && exitToleranceStatus.officialTime) {
+                        const [hours, minutes] = exitToleranceStatus.officialTime.split(':').map(Number);
+                        salida.setHours(hours, minutes, 0, 0); // Ajustamos la salida a la hora oficial
+                    }
+                    // -----------------------------------------------------------
+
+                    const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
+                    // Redondear hacia arriba para cobrar días completos
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
                     const price = parseFloat(room.price?.amount || 0);
                     const accomTotal = diffDays * price;
@@ -955,7 +961,7 @@ function CheckoutConfirmationModal({
                         services_total: servicesTotal,
                         grand_total: grandTotal,
                         balance: grandTotal - advance,
-                        check_out_date: salida.toISOString(),
+                        check_out_date: new Date().toISOString(),
                         check_in_date: checkin.check_in_date,
                         servicios: servicios,
                         guest: checkin.guest,
@@ -963,8 +969,8 @@ function CheckoutConfirmationModal({
                 }
             })
             .finally(() => setLoadingDetails(false));
-    }, [checkin.id, waivePenalty]);
 
+    }, [checkin.id, waivePenalty]); // <--- ¡ESTO ES LO QUE FALTABA! (Escuchar cambios en el botón)
     // Limpieza PDF
     useEffect(() => {
         return () => {
@@ -1003,12 +1009,12 @@ function CheckoutConfirmationModal({
         }
     };
 
-
     const getExitToleranceStatus = () => {
-        if (!checkin) return { isValid: false, message: 'No data', limitTime: '' };
+        if (!checkin)
+            return { isValid: false, message: 'No data', limitTime: '' };
 
         const safeSchedules = schedules || [];
-        
+
         // 1. Intento A: Buscar el horario asignado al checkin
         let schedule = safeSchedules.find(
             (s: any) => String(s.id) === String(checkin.schedule_id),
@@ -1016,7 +1022,9 @@ function CheckoutConfirmationModal({
 
         // 2. Intento B (FALLBACK): Si no tiene (es antiguo), usar el ACTIVO
         if (!schedule) {
-            schedule = safeSchedules.find((s: any) => s.is_active === true || s.is_active === 1);
+            schedule = safeSchedules.find(
+                (s: any) => s.is_active === true || s.is_active === 1,
+            );
         }
 
         // Si aún así no hay horario, fallamos
@@ -1308,37 +1316,43 @@ function CheckoutConfirmationModal({
 
                                     {/* Botón Tolerancia Dinámico */}
                                     {/* Solo se muestra si es VÁLIDO (Tiempo) Y si la estadía es > 1 DÍA */}
-                                    {exitToleranceStatus.isValid && displayData && displayData.duration_days > 1 && (
-                                        <div className="mt-4 flex justify-center animate-in fade-in zoom-in duration-300">
-                                            <button
-                                                type="button"
-                                                onClick={handleApplyTolerance}
-                                                className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
-                                                    waivePenalty
-                                                        ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300'
-                                                        : 'border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 animate-pulse'
-                                                }`}
-                                                title={
-                                                    waivePenalty
-                                                        ? 'La tolerancia ya ha sido aplicada.'
-                                                        : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
-                                                }
-                                            >
-                                                {/* Iconos */}
-                                                {waivePenalty ? (
-                                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                                ) : (
-                                                    <ArrowRightCircle className="h-3.5 w-3.5" />
-                                                )}
+                                    {/* Botón Tolerancia Dinámico */}
+                                    {/* Solo se muestra si: 1. Tiempo es válido | 2. Datos existen | 3. Estancia > 1 noche */}
+                                    {exitToleranceStatus.isValid &&
+                                        displayData &&
+                                        displayData.duration_days > 1 && (
+                                            <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
+                                                <button
+                                                    type="button"
+                                                    onClick={
+                                                        handleApplyTolerance
+                                                    }
+                                                    className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
+                                                        waivePenalty
+                                                            ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300'
+                                                            : 'animate-pulse border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                    }`}
+                                                    title={
+                                                        waivePenalty
+                                                            ? 'La tolerancia ya ha sido aplicada.'
+                                                            : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
+                                                    }
+                                                >
+                                                    {/* Iconos */}
+                                                    {waivePenalty ? (
+                                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    ) : (
+                                                        <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                    )}
 
-                                                <span>
-                                                    {waivePenalty
-                                                        ? 'Tolerancia Aplicada'
-                                                        : 'Aplicar Tolerancia'}
-                                                </span>
-                                            </button>
-                                        </div>
-                                    )}
+                                                    <span>
+                                                        {waivePenalty
+                                                            ? 'Tolerancia Aplicada'
+                                                            : 'Aplicar Tolerancia'}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        )}
 
                                     {/* Botones Selección */}
                                     <div className="mt-4 text-center">

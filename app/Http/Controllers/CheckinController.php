@@ -517,17 +517,31 @@ class CheckinController extends Controller
     // --- NUEVO: Obtener detalles antes de finalizar ---
     public function getCheckoutDetails(Request $request, Checkin $checkin)
     {
-        // Cargamos relaciones necesarias
+        // 1. Cargar relaciones
         $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
 
-        // Verificamos si el usuario pidió "perdonar" el retraso (S/T)
+        // 2. Determinar si se aplica la tolerancia
         $waivePenalty = $request->boolean('waive_penalty', false);
-        $checkOutDate = now();
+        
+        // 3. Definir Fecha de Salida Efectiva
+        $checkOutDate = now(); // Por defecto: AHORA
 
-        // Calculamos días usando la lógica inteligente
-        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+        // --- LÓGICA DE TOLERANCIA ---
+        // Si el usuario pidió perdonar la multa Y existe un horario asociado
+        if ($waivePenalty && $checkin->schedule) {
+            // Obtenemos la hora oficial de salida (ej: "14:00:00")
+            $officialExitTime = $checkin->schedule->check_out_time;
+            
+            // Ajustamos la fecha de salida a HOY pero con la HORA OFICIAL
+            // Esto "borra" el retraso matemáticamente
+            $checkOutDate = now()->setTimeFromTimeString($officialExitTime);
+        }
+        // ----------------------------
 
-        // Calculamos Costos
+        // 4. Calcular días usando la fecha ajustada
+        $days = $this->calculateBillableDays($checkin, $checkOutDate);
+
+        // 5. Calcular Costos
         $price = $checkin->room->price->amount ?? 0;
         $accommodationTotal = $days * $price;
 
@@ -544,7 +558,7 @@ class CheckinController extends Controller
             'guest' => $checkin->guest,
             'room' => $checkin->room,
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
-            'check_out_date' => $checkOutDate->toIso8601String(),
+            'check_out_date' => $checkOutDate->toIso8601String(), // Devuelve la fecha usada (Real o Ajustada)
             'duration_days' => $days,
             'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
@@ -555,6 +569,11 @@ class CheckinController extends Controller
             'notes' => $checkin->notes
         ]);
     }
+
+    /**
+     * Función Auxiliar para cálculo estricto de días
+     */
+    
 
     public function checkout(Request $request, Checkin $checkin)
     {
