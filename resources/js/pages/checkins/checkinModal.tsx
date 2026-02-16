@@ -1365,7 +1365,7 @@ export default function CheckinModal({
                         </div>
 
                         {/* A. BARRA DE NAVEGACIÓN  */}
-                        <div className="relative mt-10 mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
+                        <div className="relative -top-8 mt-10 mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
                             {/* Contador: 1 de X */}
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
