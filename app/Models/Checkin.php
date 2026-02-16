@@ -99,4 +99,16 @@ class Checkin extends Model
     {
         return $this->belongsTo(Schedule::class);
     }
+
+    // Tipo de pago
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    // Opcional: Para obtener el total pagado real calculado desde la nueva tabla
+    public function getRealPaidAttribute()
+    {
+        return $this->payments->sum('amount');
+    }
 }

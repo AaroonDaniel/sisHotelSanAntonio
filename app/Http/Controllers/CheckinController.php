@@ -10,6 +10,7 @@ use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\Schedule;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -41,24 +42,24 @@ class CheckinController extends Controller
     public function store(Request $request)
     {
         // =========================================================
-        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
+        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA (SIN CAMBIOS)
         // =========================================================
         $inputOrigin = $request->input('origin');
         $cleanOrigin = null;
 
         // Limpiamos basura (URLs, nulls, espacios)
         if (
-            !empty($inputOrigin) && 
-            is_string($inputOrigin) && 
+            !empty($inputOrigin) &&
+            is_string($inputOrigin) &&
             trim($inputOrigin) !== '' &&
-            !str_starts_with(trim($inputOrigin), 'http') && 
+            !str_starts_with(trim($inputOrigin), 'http') &&
             strtolower(trim($inputOrigin)) !== 'null'
         ) {
             $cleanOrigin = strtoupper(trim($inputOrigin));
         }
 
         // =========================================================
-        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR)
+        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR) (SIN CAMBIOS)
         // =========================================================
         $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
         $isTitularComplete = true;
@@ -87,7 +88,6 @@ class CheckinController extends Controller
         }
 
         // C. Verificar Procedencia (Origin) - CRÍTICO
-        // Si el perfil parece completo pero falta el origen limpio, lo marcamos incompleto
         if ($isTitularComplete && is_null($cleanOrigin)) {
             $isTitularComplete = false;
         }
@@ -95,8 +95,8 @@ class CheckinController extends Controller
         // =========================================================
         // 3. PROCESO DE CREACIÓN / ACTUALIZACIÓN
         // =========================================================
-        
-        // 1. Validar y Crear/Actualizar al Huésped TITULAR
+
+        // 1. Validar y Crear/Actualizar al Huésped TITULAR (SIN CAMBIOS)
         if (!$request->filled('guest_id')) {
             // --- NUEVO TITULAR ---
             $request->validate([
@@ -132,7 +132,6 @@ class CheckinController extends Controller
                     'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
                     'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
                     'phone' => $request->phone ?? $existingGuest->phone,
-                    // ✅ APLICAMOS EL ESTADO REAL CALCULADO ARRIBA
                     'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
                 ]);
                 $guestId = $existingGuest->id;
@@ -147,7 +146,6 @@ class CheckinController extends Controller
                     'profession' => $request->profession ? strtoupper($request->profession) : null,
                     'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
                     'phone' => $request->phone,
-                    // ✅ APLICAMOS EL ESTADO REAL CALCULADO ARRIBA
                     'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
                 ]);
                 $guestId = $guest->id;
@@ -156,8 +154,8 @@ class CheckinController extends Controller
             // --- TITULAR EXISTENTE (Seleccionado del buscador) ---
             $guestId = $request->guest_id;
             $existingGuest = \App\Models\Guest::find($guestId);
-            
-            // Actualizar teléfono y ESTADO si se envió información nueva que complete el perfil
+
+            // Actualizar teléfono y ESTADO si se envió información nueva
             if ($existingGuest) {
                 $existingGuest->update([
                     'phone' => $request->phone ?? $existingGuest->phone,
@@ -184,102 +182,175 @@ class CheckinController extends Controller
             'check_in_date' => 'required|date',
             'actual_arrival_date' => 'nullable|date',
             'schedule_id' => 'nullable|exists:schedules,id',
-            // 'origin' => Lo validamos y limpiamos manualmente arriba
             'duration_days' => 'nullable|integer|min:0',
-            'advance_payment' => 'nullable|numeric',
             'notes' => 'nullable|string',
             'companions' => 'nullable|array',
             'selected_services' => 'nullable|array',
+
+            // --- MODIFICADO: VALIDACIÓN DE PAGOS ---
+            'advance_payment' => 'nullable|numeric|min:0',
+            // Si hay adelanto (>0), el método es obligatorio
+            'payment_method' => 'required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            // El banco es opcional (el frontend lo limpia si es efectivo), pero lo validamos como string
+            'qr_bank' => 'nullable|string',
         ]);
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
         // 3. Crear el Checkin Principal
-        $checkin = \App\Models\Checkin::create([
-            'guest_id' => $guestId,
-            'room_id' => $validatedCheckin['room_id'],
-            'user_id' => $userId,
-            'check_in_date' => $validatedCheckin['check_in_date'],
-            'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
-            'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
-            // ✅ GUARDAMOS LA PROCEDENCIA LIMPIA
-            'origin' => $cleanOrigin,
-            'duration_days' => $validatedCheckin['duration_days'] ?? 0,
-            'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-            'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
-            'status' => 'activo',
+        // Usamos una transacción para asegurar que si falla el pago, no se cree el checkin
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete) {
+
+            $checkin = \App\Models\Checkin::create([
+                'guest_id' => $guestId,
+                'room_id' => $validatedCheckin['room_id'],
+                'user_id' => $userId,
+                'check_in_date' => $validatedCheckin['check_in_date'],
+                'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
+                'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
+                'origin' => $cleanOrigin,
+                'duration_days' => $validatedCheckin['duration_days'] ?? 0,
+
+                // Mantenemos esta columna para reportes viejos, pero la verdad está en la tabla 'payments'
+                'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
+
+                'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
+                'status' => 'activo',
+            ]);
+
+            // --- NUEVO: REGISTRAR EL PAGO EN LA BILLETERA (Historial) ---
+            $montoInicial = $validatedCheckin['advance_payment'] ?? 0;
+
+            if ($montoInicial > 0) {
+                // Determinamos el banco: Si es EFECTIVO, el banco se guarda como NULL
+                $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
+
+                \App\Models\Payment::create([
+                    'checkin_id' => $checkin->id,
+                    'user_id' => $userId, // Guardamos QUÉ recepcionista recibió el dinero
+                    'amount' => $montoInicial,
+                    'method' => $request->payment_method, // EFECTIVO o QR
+                    'bank_name' => $banco, // BNB, BCP, o NULL
+                    'description' => 'PAGO INICIAL (CHECK-IN)',
+                    'type' => 'PAGO'
+                ]);
+            }
+            // -----------------------------------------------------------
+
+            // 4. --- LÓGICA DE ACOMPAÑANTES (SIN CAMBIOS) ---
+            if ($request->has('companions') && is_array($request->companions)) {
+                $idsParaSincronizar = [];
+
+                foreach ($request->companions as $compData) {
+                    if (empty($compData['full_name'])) continue;
+
+                    $compName = strtoupper($compData['full_name']);
+                    $compBirthDate = $compData['birth_date'] ?? null;
+                    $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
+
+                    // Calculamos estado del acompañante (simple)
+                    $compIsComplete = !empty($compIdNumber) && !empty($compData['nationality']);
+
+                    // BÚSQUEDA BLINDADA ACOMPAÑANTES
+                    $companion = null;
+                    if (!empty($compIdNumber)) {
+                        $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
+                    }
+                    if (!$companion) {
+                        $compQuery = \App\Models\Guest::where('full_name', $compName);
+                        if (!empty($compBirthDate)) {
+                            $compQuery->where('birth_date', $compBirthDate);
+                        }
+                        $companion = $compQuery->first();
+                    }
+
+                    if (!$companion) {
+                        $companion = \App\Models\Guest::create([
+                            'full_name' => $compName,
+                            'identification_number' => $compIdNumber,
+                            'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
+                            'civil_status' => $compData['civil_status'] ?? null,
+                            'birth_date' => $compBirthDate,
+                            'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                            'phone' => $compData['phone'] ?? null,
+                            'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
+                        ]);
+                    } else {
+                        $companion->update([
+                            'identification_number' => $compIdNumber ?? $companion->identification_number,
+                            'birth_date' => $compBirthDate ?? $companion->birth_date,
+                        ]);
+                    }
+
+                    if ($companion->id !== $guestId) {
+                        $idsParaSincronizar[$companion->id] = [];
+                    }
+                }
+
+                if (!empty($idsParaSincronizar)) {
+                    $checkin->companions()->sync($idsParaSincronizar);
+                }
+            }
+
+            // 5. Guardar Servicios (SIN CAMBIOS)
+            if ($request->has('selected_services')) {
+                $checkin->services()->sync($request->selected_services);
+            }
+
+            // 6. Actualizar Estado Habitación (SIN CAMBIOS)
+            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+            // 7. RESPUESTA FINAL (SIN CAMBIOS)
+            if (!$isTitularComplete) {
+                return redirect()->back()->with('success', 'Asignación registrada, pero FALTAN DATOS (como la Procedencia). El huésped quedó como INCOMPLETE.');
+            }
+
+            return redirect()->back()->with('success', 'Asignación registrada correctamente.');
+        });
+    }
+
+    /**
+     * Registra un pago adicional (amortización) a una estadía existente.
+     */
+    public function storePayment(Request $request, \App\Models\Checkin $checkin)
+    {
+        // 1. VALIDACIÓN
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.10',
+            'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            // El banco es obligatorio SOLO si el método NO es efectivo
+            'qr_bank' => 'nullable|required_if:payment_method,QR,TRANSFERENCIA|string',
+            'description' => 'nullable|string|max:150',
         ]);
 
-        // 4. --- LÓGICA DE ACOMPAÑANTES ---
-        if ($request->has('companions') && is_array($request->companions)) {
-            $idsParaSincronizar = [];
+        // 2. PROCESAMIENTO
+        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $request, $checkin) {
+            
+            $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
+            
+            // Limpieza: Si es efectivo, el banco debe ser NULL aunque envíen texto basura
+            $bankName = ($validated['payment_method'] === 'EFECTIVO') ? null : $validated['qr_bank'];
 
-            foreach ($request->companions as $compData) {
-                if (empty($compData['full_name'])) continue;
+            // A. INSERTAR EN LA TABLA DE PAGOS (La Billetera)
+            // Esto es lo que usará tu nuevo reporte de cierre de caja
+            \App\Models\Payment::create([
+                'checkin_id' => $checkin->id,
+                'user_id'    => $userId, // Importante: Guarda QUIÉN está cobrando ahora
+                'amount'     => $validated['amount'],
+                'method'     => $validated['payment_method'],
+                'bank_name'  => $bankName,
+                'type'       => 'PAGO', // Según tu default en BD
+                // Si no envían descripción, ponemos una por defecto
+                'description' => $request->description ?? 'AMORTIZACIÓN / PAGO A CUENTA'
+            ]);
 
-                $compName = strtoupper($compData['full_name']);
-                $compBirthDate = $compData['birth_date'] ?? null;
-                $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
+            // B. ACTUALIZAR EL TOTAL EN LA ESTADÍA (Compatibilidad Legacy)
+            // Sumamos este nuevo monto al campo 'advance_payment' de la tabla checkins
+            // para que en la vista rápida de habitaciones se vea el saldo actualizado.
+            $checkin->increment('advance_payment', $validated['amount']);
+        });
 
-                // Calculamos estado del acompañante (simple)
-                $compIsComplete = !empty($compIdNumber) && !empty($compData['nationality']);
-
-                // BÚSQUEDA BLINDADA ACOMPAÑANTES
-                $companion = null;
-                if (!empty($compIdNumber)) {
-                    $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
-                }
-                if (!$companion) {
-                    $compQuery = \App\Models\Guest::where('full_name', $compName);
-                    if (!empty($compBirthDate)) {
-                        $compQuery->where('birth_date', $compBirthDate);
-                    }
-                    $companion = $compQuery->first();
-                }
-
-                if (!$companion) {
-                    $companion = \App\Models\Guest::create([
-                        'full_name' => $compName,
-                        'identification_number' => $compIdNumber,
-                        'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
-                        'civil_status' => $compData['civil_status'] ?? null,
-                        'birth_date' => $compBirthDate,
-                        'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        'phone' => $compData['phone'] ?? null,
-                        'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
-                    ]);
-                } else {
-                    $companion->update([
-                        'identification_number' => $compIdNumber ?? $companion->identification_number,
-                        'birth_date' => $compBirthDate ?? $companion->birth_date,
-                    ]);
-                }
-
-                if ($companion->id !== $guestId) {
-                    $idsParaSincronizar[$companion->id] = [];
-                }
-            }
-
-            if (!empty($idsParaSincronizar)) {
-                $checkin->companions()->sync($idsParaSincronizar);
-            }
-        }
-
-        // 5. Guardar Servicios
-        if ($request->has('selected_services')) {
-            $checkin->services()->sync($request->selected_services);
-        }
-
-        // 6. Actualizar Estado Habitación
-        \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
-
-        // 7. RESPUESTA FINAL
-        // Si falta algo (incluido el origen), avisamos al usuario aunque se haya guardado
-        if (!$isTitularComplete) {
-            return redirect()->back()->with('success', 'Asignación registrada, pero FALTAN DATOS (como la Procedencia). El huésped quedó como INCOMPLETE.');
-        }
-
-        return redirect()->back()->with('success', 'Asignación registrada correctamente.');
+        return redirect()->back()->with('success', 'Pago registrado exitosamente.');
     }
 
     public function update(Request $request, Checkin $checkin)
@@ -329,8 +400,8 @@ class CheckinController extends Controller
 
             // Verificamos que sea texto, no esté vacío, no sea URL y no sea la palabra 'null'
             if (
-                !empty($inputOrigin) && 
-                is_string($inputOrigin) && 
+                !empty($inputOrigin) &&
+                is_string($inputOrigin) &&
                 trim($inputOrigin) !== '' &&
                 !str_starts_with(trim($inputOrigin), 'http') && // No URLs
                 strtolower(trim($inputOrigin)) !== 'null'
@@ -341,11 +412,11 @@ class CheckinController extends Controller
             // =========================================================
             // 🛑 2. VERIFICACIÓN DE COMPLETITUD
             // =========================================================
-            
+
             // A. Campos obligatorios del Perfil (Guest) - SIN 'origin'
             $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
 
-            $isTitularComplete = true; 
+            $isTitularComplete = true;
             $missingField = null;
 
             foreach ($requiredFields as $field) {
@@ -374,13 +445,13 @@ class CheckinController extends Controller
                 'birth_date' => $validated['birth_date'],
                 'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
                 'phone' => $request->phone,
-                
+
                 // Si $isTitularComplete es falso (por falta de datos o de origen), se guarda INCOMPLETE
                 'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
             ]);
 
             // 3.5 ACTUALIZAR ACOMPAÑANTES
-            $allCompanionsComplete = true; 
+            $allCompanionsComplete = true;
 
             if ($request->has('companions')) {
                 $idsParaSincronizar = [];
@@ -393,7 +464,7 @@ class CheckinController extends Controller
                     foreach ($compRequired as $field) {
                         if (empty($compData[$field])) {
                             $isThisCompanionComplete = false;
-                            $allCompanionsComplete = false; 
+                            $allCompanionsComplete = false;
                             break;
                         }
                     }
@@ -459,7 +530,7 @@ class CheckinController extends Controller
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
                 'notes' => strtoupper($validated['notes'] ?? ''),
-                
+
                 // ✅ GUARDAR ÚNICAMENTE LA PROCEDENCIA LIMPIA
                 'origin' => $cleanOrigin,
             ]);
@@ -522,7 +593,7 @@ class CheckinController extends Controller
 
         // 2. Determinar si se aplica la tolerancia
         $waivePenalty = $request->boolean('waive_penalty', false);
-        
+
         // 3. Definir Fecha de Salida Efectiva
         $checkOutDate = now(); // Por defecto: AHORA
 
@@ -531,7 +602,7 @@ class CheckinController extends Controller
         if ($waivePenalty && $checkin->schedule) {
             // Obtenemos la hora oficial de salida (ej: "14:00:00")
             $officialExitTime = $checkin->schedule->check_out_time;
-            
+
             // Ajustamos la fecha de salida a HOY pero con la HORA OFICIAL
             // Esto "borra" el retraso matemáticamente
             $checkOutDate = now()->setTimeFromTimeString($officialExitTime);
@@ -573,7 +644,7 @@ class CheckinController extends Controller
     /**
      * Función Auxiliar para cálculo estricto de días
      */
-    
+
 
     public function checkout(Request $request, Checkin $checkin)
     {

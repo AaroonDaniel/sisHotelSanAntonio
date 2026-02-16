@@ -170,6 +170,8 @@ export interface CheckinData {
     actual_arrival_date?: string | null;
     schedule_id?: number | null;
     origin?: string | null;
+    payment_method?: string | null;
+    qr_bank?: string | null;
 }
 
 export interface Room {
@@ -239,6 +241,8 @@ interface CheckinFormData {
     phone: string;
     // Lista de Acompañantes (Index 1..N)
     companions: CompanionData[];
+    payment_method: string; // 'EFECTIVO' o 'QR'
+    qr_bank: string; // 'BNB', 'BCP', etc.
 }
 
 export default function CheckinModal({
@@ -313,6 +317,8 @@ export default function CheckinModal({
             //origin: '',
             phone: '',
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
+            payment_method: 'EFECTIVO', // Por defecto efectivo
+            qr_bank: '', // Vacío al inicio
         });
 
     // =========================================================================
@@ -555,13 +561,10 @@ export default function CheckinModal({
                             //origin: c.origin || '',
                             phone: c.phone || '',
                         })) || [],
-                }));
 
-                // Configuramos la persona actual para visualización (SIN setQuery)
-                if (checkinToEdit.guest) {
-                    // Eliminamos setQuery porque no existe y no hace falta
-                    // El valor del input se llena automáticamente por data.full_name
-                }
+                    payment_method: checkinToEdit.payment_method || 'EFECTIVO', // <--- AGREGADO
+                    qr_bank: checkinToEdit.qr_bank || '',
+                }));
             } else {
                 // ===============================================
                 // MODO NUEVO REGISTRO: Limpiar formulario
@@ -579,6 +582,8 @@ export default function CheckinModal({
                     duration_days: 1,
                     selected_services: [],
                     companions: [],
+                    payment_method: 'EFECTIVO', // <--- AGREGADO
+                    qr_bank: '', // <--- AGREGADO
                 }));
             }
         }
@@ -933,7 +938,7 @@ export default function CheckinModal({
     // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-            <div className="max-h-[80vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex max-h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
@@ -991,7 +996,7 @@ export default function CheckinModal({
 
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
                     {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
-                    <div className="relative flex-1 border-r border-gray-100 bg-white p-6">
+                    <div className="relative flex-1 overflow-y-auto border-r border-gray-100 bg-white p-6">
                         {/* B. ALERTA DE PERFIL PENDIENTE (Solo visible para Titular) */}
                         {isTitular &&
                             isProfileIncomplete &&
@@ -1360,7 +1365,7 @@ export default function CheckinModal({
                         </div>
 
                         {/* A. BARRA DE NAVEGACIÓN  */}
-                        <div className="mt-10 mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
+                        <div className="relative mt-10 mb-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm">
                             {/* Contador: 1 de X */}
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold tracking-wider text-blue-400 uppercase">
@@ -1470,8 +1475,9 @@ export default function CheckinModal({
                             </div>
                         </div>
                     </div>
-                    {/* DERECHA - ASIGNACIÓN */}
-                    <div className="flex-1 bg-gray-50 p-6">
+
+                    {/* DERECHAAAAA - ASIGNACIÓN */}
+                    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
                         <div className="space-y-5">
                             <div>
                                 <label className="mb-1.5 flex items-center gap-2 text-base font-bold text-green-700">
@@ -1501,7 +1507,7 @@ export default function CheckinModal({
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex gap-3">
+                            <div className="grid grid-cols-[1fr_160px] gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
                                 <div className="relative flex flex-grow flex-col">
                                     {/* 1. Header con etiqueta y Badge de Horario */}
@@ -1659,39 +1665,166 @@ export default function CheckinModal({
                             {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
                             <div>
                                 {/* ELIMINADA LA CONDICIÓN isTitular && AQUÍ */}
-                                <div className="animate-in duration-300 fade-in slide-in-from-top-1">
-                                    <label className="text-xs font-bold text-gray-500">
-                                        Adelanto (Bs)
-                                    </label>
+                                <div className="relative -top-3 -mt-4 animate-in duration-300 fade-in slide-in-from-top-2">
+                                    <div className="flex flex-col gap-2">
+                                        {/* FILA SUPERIOR: SELECCIÓN DE MÉTODO + MONTO */}
+                                        <div className="flex gap-2">
+                                            {/* A. SELECTOR TIPO DE PAGO (IZQUIERDA) */}
+                                            <div className="w-1/2">
+                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                    Método
+                                                </label>
+                                                <div className="flex rounded-lg bg-gray-100 p-0.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setData((prev) => ({
+                                                                ...prev,
+                                                                payment_method:
+                                                                    'EFECTIVO',
+                                                                qr_bank: '',
+                                                            }))
+                                                        }
+                                                        disabled={!isTitular} // Bloquear si no es titular (opcional)
+                                                        className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${
+                                                            data.payment_method ===
+                                                            'EFECTIVO'
+                                                                ? 'bg-white text-green-700 shadow-sm ring-1 ring-gray-200'
+                                                                : 'text-gray-400 hover:text-gray-600'
+                                                        }`}
+                                                    >
+                                                        EFECTIVO
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setData(
+                                                                'payment_method',
+                                                                'QR',
+                                                            )
+                                                        }
+                                                        disabled={!isTitular}
+                                                        className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${
+                                                            data.payment_method ===
+                                                            'QR'
+                                                                ? 'bg-white text-purple-700 shadow-sm ring-1 ring-gray-200'
+                                                                : 'text-gray-400 hover:text-gray-600'
+                                                        }`}
+                                                    >
+                                                        QR
+                                                    </button>
+                                                </div>
+                                            </div>
 
-                                    <div className="relative">
-                                        <span
-                                            className={`absolute inset-y-0 left-3 flex items-center font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
-                                        >
-                                            Bs
-                                        </span>
+                                            {/* B. INPUT DE MONTO (DERECHA) */}
+                                            <div className="w-1/2">
+                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                    Adelanto
+                                                </label>
+                                                <div className="relative">
+                                                    <span
+                                                        className={`absolute inset-y-0 left-2 flex items-center text-[10px] font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
+                                                    >
+                                                        Bs
+                                                    </span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.50"
+                                                        min="0"
+                                                        value={
+                                                            data.advance_payment
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'advance_payment',
+                                                                Number(
+                                                                    e.target
+                                                                        .value,
+                                                                ),
+                                                            )
+                                                        }
+                                                        disabled={!isTitular}
+                                                        className="w-full rounded-lg border border-gray-400 py-1 pl-6 text-xs font-black text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={data.advance_payment}
-                                            onChange={(e) =>
-                                                setData(
-                                                    'advance_payment',
-                                                    Number(e.target.value),
-                                                )
-                                            }
-                                            // Si no es titular, se deshabilita pero SE MANTIENE VISIBLE
-                                            disabled={!isTitular}
-                                            className="w-full rounded-lg border border-gray-400 pl-12 text-sm font-bold text-green-700 focus:border-green-500 focus:ring-green-500 disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
-                                        />
+                                        {/* FILA INFERIOR: SELECCIÓN DE BANCO (SOLO APARECE SI ES QR) */}
+                                        <div
+    className={`border-t border-gray-100 pt-1.5 transition-all duration-300 ${
+        data.payment_method === 'QR'
+            ? 'opacity-100 visible'
+            : 'opacity-0 invisible'
+    }`}
+>
+    <div className="mb-1 flex items-center justify-between">
+        {/* Badge pequeño que muestra qué banco se eligió */}
+        {data.qr_bank && (
+            <span className="rounded bg-purple-100 text-[8px] font-bold text-purple-700">
+                {data.qr_bank}
+            </span>
+        )}
+    </div>
+
+    {/* GRID DE BANCOS */}
+    <div className="grid grid-cols-4 gap-1">
+        {[
+            {
+                id: 'YAPE',
+                label: 'YAPE',
+                color: 'border-green-200 bg-green-50 text-green-700',
+            },
+            {
+                id: 'FIE',
+                label: 'FIE',
+                color: 'border-orange-200 bg-orange-50 text-orange-700',
+            },
+            {
+                id: 'BNB',
+                label: 'BNB',
+                color: 'border-blue-200 bg-blue-50 text-blue-700',
+            },
+            {
+                id: 'ECO',
+                label: 'ECO',
+                color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+            },
+        ].map((banco) => (
+            <button
+                key={banco.id}
+                type="button"
+                onClick={() =>
+                    setData('qr_bank', banco.id)
+                }
+                disabled={!isTitular}
+                className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${
+                    data.qr_bank === banco.id
+                        ? `ring-1 ring-purple-500 ring-offset-0 ${banco.color} scale-105 shadow-sm brightness-95`
+                        : `border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50`
+                }`}
+            >
+                {banco.label}
+            </button>
+        ))}
+    </div>
+
+    {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
+    {data.advance_payment > 0 && !data.qr_bank && (
+        <div className="mt-1 flex animate-pulse items-center justify-center gap-0.5 text-[8px] font-bold text-red-500">
+            <AlertCircle className="h-2 w-2" />
+            <span>Requerido</span>
+        </div>
+    )}
+</div>
+
                                     </div>
                                 </div>
                                 {/* ELIMINADA LA LLAVE DE CIERRE AQUÍ */}
                             </div>
 
-                            <div>
+                            <div className="relative -top-7">
                                 <label className="text-xs font-bold text-gray-500">
                                     Observaciones
                                 </label>
@@ -1712,7 +1845,7 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                            <div>
+                            <div className="relative -top-10">
                                 <label className="mb-2 block text-xs font-bold text-gray-500">
                                     Servicios
                                 </label>
@@ -1787,61 +1920,61 @@ export default function CheckinModal({
                         </div>
 
                         {/* PIE DEL FORMULARIO CON BOTONES */}
-                        <div className="mt-8 flex items-center justify-end gap-3">
-                            {/* --- 1. BOTÓN CANCELAR ASIGNACIÓN (Regla de 10 min) --- */}
-                            {/* ESTE BOTÓN AHORA ES INDEPENDIENTE: Si hay checkin y hay tiempo, APARECE SIEMPRE */}
-                            {checkinToEdit && canCancel() && (
+                        {/* 3. FOOTER DE BOTONES (ESTÁTICO - FUERA DEL SCROLL) */}
+                        <div className="shrink-0 ">
+
+                            <div className="flex items-center justify-end gap-3">
+                                {checkinToEdit && canCancel() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCancelModal(true)}
+                                        className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        <span className="hidden sm:inline">
+                                            Cancelar Asignación
+                                        </span>
+                                    </button>
+                                )}
+
+                                {!isReadOnly &&
+                                    checkinToEdit &&
+                                    !canCancel() && (
+                                        <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
+                                            <AlertCircle className="h-3 w-3" />
+                                            <span>Asignación confirmada</span>
+                                        </div>
+                                    )}
+
                                 <button
                                     type="button"
-                                    onClick={() => setShowCancelModal(true)}
-                                    className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100"
+                                    onClick={onClose}
+                                    className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200"
                                 >
-                                    <Trash2 className="h-4 w-4" />
-                                    <span className="hidden sm:inline">
-                                        Cancelar Asignación
-                                    </span>
+                                    {isReadOnly ? 'Cerrar' : 'Cancelar'}
                                 </button>
-                            )}
 
-                            {/* --- 2. MENSAJE "CONFIRMADA" (Solo visual) --- */}
-                            {/* Solo mostramos esto si YA PASÓ el tiempo y estamos editando (no en lectura) */}
-                            {!isReadOnly && checkinToEdit && !canCancel() && (
-                                <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Asignación confirmada</span>
-                                </div>
-                            )}
-
-                            {/* --- 3. BOTÓN CERRAR / CANCELAR --- */}
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200"
-                            >
-                                {isReadOnly ? 'Cerrar' : 'Cancelar'}
-                            </button>
-
-                            {/* --- 4. BOTÓN GUARDAR (Solo si NO es lectura) --- */}
-                            {!isReadOnly && (
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${isProfileIncomplete ? 'bg-amber-600 hover:bg-amber-500' : 'bg-green-600 hover:bg-green-500'}`}
-                                >
-                                    {processing ? (
-                                        'Procesando...'
-                                    ) : (
-                                        <>
-                                            <Save className="h-4 w-4" />
-                                            {checkinToEdit
-                                                ? 'Actualizar'
-                                                : isProfileIncomplete
-                                                  ? 'Asignación Rápida'
-                                                  : 'Registrar'}
-                                        </>
-                                    )}
-                                </button>
-                            )}
+                                {!isReadOnly && (
+                                    <button
+                                        type="submit"
+                                        disabled={processing}
+                                        className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${isProfileIncomplete ? 'bg-amber-600 hover:bg-amber-500' : 'bg-green-600 hover:bg-green-500'}`}
+                                    >
+                                        {processing ? (
+                                            'Procesando...'
+                                        ) : (
+                                            <>
+                                                <Save className="h-4 w-4" />
+                                                {checkinToEdit
+                                                    ? 'Actualizar'
+                                                    : isProfileIncomplete
+                                                      ? 'Asignación Rápida'
+                                                      : 'Registrar'}
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </form>

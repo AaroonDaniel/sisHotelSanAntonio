@@ -108,9 +108,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
     // Ruta para cancelar asignación (Agregar debajo de checks.destroy)
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
-
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
-
+    // Ruta para registrar el tipo de pago
+    Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
+    
     // Ruta de Tolerancia
     Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
     Route::put('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');       // <--- NUEVO
