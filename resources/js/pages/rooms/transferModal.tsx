@@ -1,4 +1,5 @@
 import ConfirmTransferModal from '@/components/ConfirmTransferModal';
+import { transfer } from '@/routes/checkins';
 import { useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -44,9 +45,10 @@ export default function TransferModal({
 
     const [showConfirm, setShowConfirm] = useState(false);
 
-    const { data, setData, put, processing, reset, clearErrors } = useForm({
+    const { data, setData, put, processing, reset, clearErrors, post } = useForm({
         new_room_id: '',
         target_room_id: '',
+        transfer_reason: '',
     });
 
     useEffect(() => {
@@ -78,19 +80,21 @@ export default function TransferModal({
     };
 
     const handleConfirmAction = () => {
-        const url = mode === 'individual'
-            ? `/checkins/${checkin.id}/transfer`
-            : `/checkins/${checkin.id}/merge`;
+    // Definimos la URL manualmente (SIN Ziggy)
+    const url = mode === 'individual'
+        ? `/checkins/${checkin.id}/transfer`
+        : `/checkins/${checkin.id}/merge`;
 
-        put(url, {
-            onSuccess: () => {
-                setShowConfirm(false);
-                resetFilters();
-                onClose();
-            },
-            onError: () => setShowConfirm(false)
-        });
-    };
+    // Usamos el método POST
+    post(url, {
+        onSuccess: () => {
+            setShowConfirm(false);
+            resetFilters();
+            onClose();
+        },
+        onError: () => setShowConfirm(false)
+    });
+};
 
     // --- LÓGICA DE FILTRADO CORREGIDA ---
     const baseList = mode === 'individual' ? availableRooms : occupiedRooms;

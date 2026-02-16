@@ -317,6 +317,7 @@ export default function RoomsIndex({
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
+                                                        
 
                                                         {/* Eliminar */}
                                                         <button
