@@ -243,6 +243,7 @@ interface CheckinFormData {
     companions: CompanionData[];
     payment_method: string; // 'EFECTIVO' o 'QR'
     qr_bank: string; // 'BNB', 'BCP', etc.
+    is_temporary: boolean;
 }
 
 export default function CheckinModal({
@@ -319,6 +320,7 @@ export default function CheckinModal({
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
             payment_method: 'EFECTIVO', // Por defecto efectivo
             qr_bank: '', // Vacío al inicio
+            is_temporary: false,
         });
 
     // =========================================================================
@@ -1480,13 +1482,44 @@ export default function CheckinModal({
                     <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
                         <div className="space-y-5">
                             <div>
-                                <label className="mb-1.5 flex items-center gap-2 text-base font-bold text-green-700">
-                                    <Bed className="h-4 w-4" />
-                                    HABITACIÓN{' '}
-                                    <span className="text-black">
-                                        {data.room_id}
-                                    </span>
-                                </label>
+                                <div className="flex w-full items-center justify-between">
+                                    {/* IZQUIERDA */}
+                                    <label className="flex items-center gap-2 text-base font-bold text-green-700">
+                                        <Bed className="h-4 w-4" />
+                                        HABITACIÓN{' '}
+                                        <span className="text-black">
+                                            {data.room_id}
+                                        </span>
+                                    </label>
+
+                                    {/* DERECHA: Checkbox Temporal */}
+                                    <div className="flex items-center gap-2">
+                                        <label
+                                            htmlFor="is_temporary"
+                                            className={`cursor-pointer text-xs font-bold transition-colors select-none ${
+                                                data.is_temporary
+                                                    ? 'text-amber-600'
+                                                    : 'text-gray-400'
+                                            }`}
+                                        >
+                                           Asig. TEMPORAL:
+                                        </label>
+
+                                        <input
+                                            id="is_temporary"
+                                            type="checkbox"
+                                            checked={data.is_temporary}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'is_temporary',
+                                                    e.target.checked,
+                                                )
+                                            }
+                                            disabled={isReadOnly}
+                                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+                                        />
+                                    </div>
+                                </div>
 
                                 {/* --- CAMPO BLOQUEADO (DISABLED) --- */}
                                 <select
@@ -1753,72 +1786,76 @@ export default function CheckinModal({
 
                                         {/* FILA INFERIOR: SELECCIÓN DE BANCO (SOLO APARECE SI ES QR) */}
                                         <div
-    className={`border-t border-gray-100 pt-1.5 transition-all duration-300 ${
-        data.payment_method === 'QR'
-            ? 'opacity-100 visible'
-            : 'opacity-0 invisible'
-    }`}
->
-    <div className="mb-1 flex items-center justify-between">
-        {/* Badge pequeño que muestra qué banco se eligió */}
-        {data.qr_bank && (
-            <span className="rounded bg-purple-100 text-[8px] font-bold text-purple-700">
-                {data.qr_bank}
-            </span>
-        )}
-    </div>
+                                            className={`border-t border-gray-100 pt-1.5 transition-all duration-300 ${
+                                                data.payment_method === 'QR'
+                                                    ? 'visible opacity-100'
+                                                    : 'invisible opacity-0'
+                                            }`}
+                                        >
+                                            <div className="mb-1 flex items-center justify-between">
+                                                {/* Badge pequeño que muestra qué banco se eligió */}
+                                                {data.qr_bank && (
+                                                    <span className="rounded bg-purple-100 text-[8px] font-bold text-purple-700">
+                                                        {data.qr_bank}
+                                                    </span>
+                                                )}
+                                            </div>
 
-    {/* GRID DE BANCOS */}
-    <div className="grid grid-cols-4 gap-1">
-        {[
-            {
-                id: 'YAPE',
-                label: 'YAPE',
-                color: 'border-green-200 bg-green-50 text-green-700',
-            },
-            {
-                id: 'FIE',
-                label: 'FIE',
-                color: 'border-orange-200 bg-orange-50 text-orange-700',
-            },
-            {
-                id: 'BNB',
-                label: 'BNB',
-                color: 'border-blue-200 bg-blue-50 text-blue-700',
-            },
-            {
-                id: 'ECO',
-                label: 'ECO',
-                color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
-            },
-        ].map((banco) => (
-            <button
-                key={banco.id}
-                type="button"
-                onClick={() =>
-                    setData('qr_bank', banco.id)
-                }
-                disabled={!isTitular}
-                className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${
-                    data.qr_bank === banco.id
-                        ? `ring-1 ring-purple-500 ring-offset-0 ${banco.color} scale-105 shadow-sm brightness-95`
-                        : `border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50`
-                }`}
-            >
-                {banco.label}
-            </button>
-        ))}
-    </div>
+                                            {/* GRID DE BANCOS */}
+                                            <div className="grid grid-cols-4 gap-1">
+                                                {[
+                                                    {
+                                                        id: 'YAPE',
+                                                        label: 'YAPE',
+                                                        color: 'border-green-200 bg-green-50 text-green-700',
+                                                    },
+                                                    {
+                                                        id: 'FIE',
+                                                        label: 'FIE',
+                                                        color: 'border-orange-200 bg-orange-50 text-orange-700',
+                                                    },
+                                                    {
+                                                        id: 'BNB',
+                                                        label: 'BNB',
+                                                        color: 'border-blue-200 bg-blue-50 text-blue-700',
+                                                    },
+                                                    {
+                                                        id: 'ECO',
+                                                        label: 'ECO',
+                                                        color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+                                                    },
+                                                ].map((banco) => (
+                                                    <button
+                                                        key={banco.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setData(
+                                                                'qr_bank',
+                                                                banco.id,
+                                                            )
+                                                        }
+                                                        disabled={!isTitular}
+                                                        className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${
+                                                            data.qr_bank ===
+                                                            banco.id
+                                                                ? `ring-1 ring-purple-500 ring-offset-0 ${banco.color} scale-105 shadow-sm brightness-95`
+                                                                : `border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50`
+                                                        }`}
+                                                    >
+                                                        {banco.label}
+                                                    </button>
+                                                ))}
+                                            </div>
 
-    {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
-    {data.advance_payment > 0 && !data.qr_bank && (
-        <div className="mt-1 flex animate-pulse items-center justify-center gap-0.5 text-[8px] font-bold text-red-500">
-            <AlertCircle className="h-2 w-2" />
-            <span>Requerido</span>
-        </div>
-    )}
-</div>
-
+                                            {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
+                                            {data.advance_payment > 0 &&
+                                                !data.qr_bank && (
+                                                    <div className="mt-1 flex animate-pulse items-center justify-center gap-0.5 text-[8px] font-bold text-red-500">
+                                                        <AlertCircle className="h-2 w-2" />
+                                                        <span>Requerido</span>
+                                                    </div>
+                                                )}
+                                        </div>
                                     </div>
                                 </div>
                                 {/* ELIMINADA LA LLAVE DE CIERRE AQUÍ */}
@@ -1921,8 +1958,7 @@ export default function CheckinModal({
 
                         {/* PIE DEL FORMULARIO CON BOTONES */}
                         {/* 3. FOOTER DE BOTONES (ESTÁTICO - FUERA DEL SCROLL) */}
-                        <div className="shrink-0 ">
-
+                        <div className="shrink-0">
                             <div className="flex items-center justify-end gap-3">
                                 {checkinToEdit && canCancel() && (
                                     <button

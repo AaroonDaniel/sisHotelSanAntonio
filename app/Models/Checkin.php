@@ -26,6 +26,10 @@ class Checkin extends Model
         'schedule_id',
         'origin',
         'actual_arrival_date',
+        'carried_balance',
+        'is_temporary',
+        'parent_checkin_id',
+        'transfer_reason'
     ];
 
     protected $uppercaseFields = [
@@ -66,14 +70,14 @@ class Checkin extends Model
     }
 
     // --- RELACIONES (HasMany) ---
-    
+
     // Detalles de consumo (Servicios a la habitación: Coca Cola, Lavandería...)
     // Equivalente a tu tabla 'AsiDet'
     public function checkinDetails(): HasMany
     {
         return $this->hasMany(CheckinDetail::class);
     }
-    
+
     // Facturas generadas de esta estadía
     public function invoices(): HasMany
     {
@@ -84,15 +88,15 @@ class Checkin extends Model
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'checkin_details')
-                    ->withPivot('quantity', 'selling_price') // Campos extra de la tabla intermedia
-                    ->withTimestamps();
+            ->withPivot('quantity', 'selling_price') // Campos extra de la tabla intermedia
+            ->withTimestamps();
     }
     //Relacion con los acompañantes de la estadia
     public function companions(): BelongsToMany
     {
         return $this->belongsToMany(Guest::class, 'checkin_guests')
-                    
-                    ->withTimestamps();
+
+            ->withTimestamps();
     }
 
     public function schedule(): BelongsTo
@@ -110,5 +114,9 @@ class Checkin extends Model
     public function getRealPaidAttribute()
     {
         return $this->payments->sum('amount');
+    }
+    public function parentCheckin()
+    {
+        return $this->belongsTo(Checkin::class, 'parent_checkin_id');
     }
 }
