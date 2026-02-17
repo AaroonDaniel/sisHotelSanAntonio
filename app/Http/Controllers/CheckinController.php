@@ -320,6 +320,8 @@ class CheckinController extends Controller
      * Si es el mismo día, solo cambia la habitación.
      * Si ya pasó tiempo (asignación temporal), cierra la cuenta y arrastra el saldo.
      */
+    // app/Http/Controllers/CheckinController.php
+
     public function transfer(Request $request, Checkin $checkin)
     {
         $request->validate([
@@ -332,47 +334,34 @@ class CheckinController extends Controller
             $ahora = now();
             $ingreso = Carbon::parse($checkin->check_in_date);
 
-            // 1. DETERMINAR SI ES CAMBIO RÁPIDO (Mismo día calendario)
-            $esCambioRapido = $ingreso->isSameDay($ahora);
+            // 1. VERIFICAR CAMBIO RÁPIDO (Mismo día)
+            if ($ingreso->isSameDay($ahora)) {
+                // ... (Lógica de cambio rápido se mantiene igual) ...
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
+                \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
+                $checkin->update(['room_id' => $newRoomId, 'notes' => $checkin->notes . " | CAMBIO RÁPIDO"]);
+                return redirect()->back()->with('success', 'Cambio rápido realizado.');
+            }
 
-            if ($esCambioRapido) {
-                // === OPCIÓN A: CAMBIO RÁPIDO ===
-                Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
-                Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
-
-                $checkin->update([
-                    'room_id' => $newRoomId,
-                    'is_temporary' => false,
-                    'notes' => $checkin->notes . " | CAMBIO RÁPIDO A HAB " . Room::find($newRoomId)->number,
-                ]);
-
-                return redirect()->back()->with('success', 'Cambio de habitación realizado (Mismo día).');
-            } else {
-                // === OPCIÓN B: TRANSFERENCIA CON ARRASTRE (Días posteriores) ===
-
-                // Usamos TU lógica exacta para calcular cuántas noches cobrar
+            // 2. TRANSFERENCIA CON ARRASTRE DE HISTORIAL
+            else {
+                // A. Calcular Costo de la Habitación Vieja (BRUTO)
                 $diasACobrar = $this->calculateBillableDays($checkin, $ahora);
-
-                // a. Calcular SOLO Costo Alojamiento Habitación Vieja
-                // OJO: NO sumamos servicios aquí, porque se van a mover.
                 $precioVieja = $checkin->room->price->amount ?? 0;
-                $costoAlojamiento = $diasACobrar * $precioVieja;
 
-                // b. Calcular Saldo Final (Alojamiento - Pagos)
-                $totalPagado = $checkin->payments()->sum('amount');
-                $saldoArrastre = $costoAlojamiento - $totalPagado;
+                // Este es el costo PURO del hospedaje anterior. NO RESTAMOS PAGOS AÚN.
+                $deudaHospedajeAnterior = $diasACobrar * $precioVieja;
 
-                // c. Cerrar Checkin Viejo
+                // B. Cerrar Checkin Viejo
                 $checkin->update([
                     'status' => 'transferido',
                     'check_out_date' => $ahora,
                     'duration_days' => $diasACobrar,
-                    'notes' => $checkin->notes . " | TRANSFERIDO A HAB " . $newRoomId,
+                    'notes' => $checkin->notes . " | TRANSFERIDO (Historial movido)",
                 ]);
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
 
-                Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
-
-                // d. Crear Checkin Nuevo
+                // C. Crear Checkin Nuevo
                 $nuevoCheckin = Checkin::create([
                     'guest_id' => $checkin->guest_id,
                     'user_id' => Auth::id() ?? 1,
@@ -381,31 +370,35 @@ class CheckinController extends Controller
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
-                    'advance_payment' => 0,
+                    'advance_payment' => 0, // Se calcula dinámicamente con la tabla payments
                     'parent_checkin_id' => $checkin->id,
-                    'carried_balance' => $saldoArrastre, // Solo deuda de hospedaje
+                    // Guardamos la DEUDA BRUTA de la habitación anterior
+                    'carried_balance' => $deudaHospedajeAnterior,
                     'is_temporary' => false,
                     'status' => 'activo',
-                    'notes' => "Transferencia. Saldo hospedaje anterior ($diasACobrar noches): {$saldoArrastre} Bs. Razón: " . $request->transfer_reason,
+                    'notes' => "Transferencia. Deuda Hospedaje Anterior: {$deudaHospedajeAnterior} Bs. | Razón: " . $request->transfer_reason,
                 ]);
 
-                // e. Migrar Acompañantes
+                // D. MIGRACIÓN COMPLETA (¡AQUÍ ESTÁ LA MAGIA!)
+
+                // 1. Mover SERVICIOS al nuevo checkin
+                DB::table('checkin_details')
+                    ->where('checkin_id', $checkin->id)
+                    ->update(['checkin_id' => $nuevoCheckin->id]);
+
+                // 2. Mover PAGOS (Adelantos) al nuevo checkin
+                // Esto hace que todos los adelantos se "acumulen" en la cuenta actual
+                DB::table('payments')
+                    ->where('checkin_id', $checkin->id)
+                    ->update(['checkin_id' => $nuevoCheckin->id]);
+
+                // 3. Mover Acompañantes
                 $ids = $checkin->companions->pluck('id');
                 if ($ids->isNotEmpty()) $nuevoCheckin->companions()->sync($ids);
 
-                // f. MIGRAR SERVICIOS (LO IMPORTANTE)
-                // Actualizamos la tabla pivote para que los servicios pasen al nuevo checkin
-                // y sigan apareciendo en la lista de consumos.
-                foreach ($checkin->services as $service) {
-                    DB::table('checkin_details')
-                        ->where('checkin_id', $checkin->id)
-                        ->where('service_id', $service->id)
-                        ->update(['checkin_id' => $nuevoCheckin->id]);
-                }
+                \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
 
-                Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
-
-                return redirect()->back()->with('success', "Transferencia completada. Servicios movidos y se cobraron $diasACobrar noches previas.");
+                return redirect()->back()->with('success', 'Transferencia completa. Todo el historial (consumos y pagos) se ha movido a la nueva habitación.');
             }
         });
     }
@@ -744,7 +737,25 @@ class CheckinController extends Controller
     /**
      * Función Auxiliar para cálculo estricto de días
      */
+    // adelanto 
+    public function addPayment(Request $request, Checkin $checkin)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:1',
+            'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+        ]);
 
+        \App\Models\Payment::create([
+            'checkin_id' => $checkin->id,
+            'user_id' => Auth::id(),
+            'amount' => $request->amount,
+            'method' => $request->payment_method,
+            'description' => 'ADELANTO A CUENTA',
+            'type' => 'PAGO' // O 'ADELANTO'
+        ]);
+
+        return redirect()->back()->with('success', 'Adelanto de ' . $request->amount . ' Bs registrado correctamente.');
+    }
 
     public function checkout(Request $request, Checkin $checkin)
     {

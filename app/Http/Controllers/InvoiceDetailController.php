@@ -17,47 +17,50 @@ class InvoiceController extends Controller
     // ... (El método previewCheckout se mantiene igual que antes) ...
     // En InvoiceController.php
 
+    // app/Http/Controllers/InvoiceController.php
+
     public function previewCheckout(Checkin $checkin)
     {
-        // 1. Calcular Alojamiento Actual
+        // 1. Costo Habitación ACTUAL
         $entrada = Carbon::parse($checkin->check_in_date);
         $dias = $entrada->diffInDays(now());
         if ($dias < 1) $dias = 1;
-
         $precioHab = $checkin->room->price->amount ?? 0;
-        $totalAlojamiento = $dias * $precioHab; // 80 Bs
+        $totalAlojamientoActual = $dias * $precioHab;
 
-        // 2. Calcular Servicios (Los que se movieron)
+        // 2. Costo Habitación ANTERIOR (Viene en carried_balance como deuda bruta)
+        $totalAlojamientoAnterior = $checkin->carried_balance;
+
+        // 3. Servicios (Están todos acumulados aquí)
         $costoServicios = 0;
         foreach ($checkin->services as $service) {
             $cant = $service->pivot->quantity ?? 1;
             $precio = $service->pivot->selling_price ?? $service->price;
-            $costoServicios += ($cant * $precio); // 53 Bs
+            $costoServicios += ($cant * $precio);
         }
 
-        // 3. Deuda Anterior (Ya tiene descontado el adelanto viejo)
-        // Debería ser 130 Bs (260 deuda - 130 pagado)
-        $saldoAnterior = $checkin->carried_balance;
+        // 4. TOTAL DE ADELANTOS (Suma histórica de todo lo que pagó el cliente)
+        // Como movimos los pagos en el CheckinController, aquí sale la suma total real.
+        $totalPagadoHistorico = $checkin->payments()->sum('amount');
 
-        // 4. Adelantos NUEVOS (Si pagó algo más al llegar a la Hab 14)
-        // OJO: No sumar los adelantos del checkin viejo, esos ya murieron.
-        $totalPagadoNuevo = $checkin->payments()->sum('amount');
+        // 5. CÁLCULO FINAL
+        // (Todo lo que debe de habitaciones) + (Servicios)
+        $granTotalDeuda = $totalAlojamientoActual + $totalAlojamientoAnterior + $costoServicios;
 
-        // 5. Total Final
-        $granTotal = $totalAlojamiento + $costoServicios + $saldoAnterior;
-        $saldoPendiente = $granTotal - $totalPagadoNuevo;
+        // Restamos todo lo que ya pagó
+        $montoPendiente = $granTotalDeuda - $totalPagadoHistorico;
 
         return response()->json([
             'details' => [
                 'days' => $dias,
-                'room_total' => $totalAlojamiento,      // 80
-                'services_total' => $costoServicios,    // 53
-                'carried_balance' => $saldoAnterior,    // 130
+                'room_total' => $totalAlojamientoActual,
+                'room_old_total' => $totalAlojamientoAnterior, // Nuevo campo para mostrar
+                'services_total' => $costoServicios,
             ],
             'financials' => [
-                'total_amount' => $granTotal,           // 263
-                'paid_amount' => $totalPagadoNuevo,     // 0 (Si no dio más adelantos)
-                'pending_amount' => $saldoPendiente     // 263
+                'total_debt' => $granTotalDeuda,      // Cuánto debe en total (sin restar pagos)
+                'total_paid' => $totalPagadoHistorico, // Cuánto adelantó en total (acumulado)
+                'pending_amount' => $montoPendiente   // Lo que tiene que poner ahora
             ]
         ]);
     }

@@ -113,7 +113,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
     // Ruta de transferencia
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
-
+    // Ruta para guardar adelantos
+    Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])
+    ->name('checkins.addPayment');
 
     // Ruta de Tolerancia
     Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
