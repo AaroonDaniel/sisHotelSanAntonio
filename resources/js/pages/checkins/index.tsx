@@ -16,7 +16,7 @@ import {
     AlertCircle,
     MapPin,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CheckinModal from './checkinModal';
 import DeleteModal from './deleteModal';
 
@@ -104,6 +104,18 @@ export default function CheckinsIndex({
     const [deletingCheckinId, setDeletingCheckinId] = useState<number | null>(
         null,
     );
+
+    useEffect(() => {
+        if (editingCheckin) {
+            // Buscamos el checkin actualizado en la lista nueva que llegó del servidor
+            const freshCheckin = Checkins.find((c) => c.id === editingCheckin.id);
+            
+            // Si existe (no fue eliminado), actualizamos el estado del modal
+            if (freshCheckin) {
+                setEditingCheckin(freshCheckin);
+            }
+        }
+    }, [Checkins]);
 
     // --- 1. LÓGICA DE FILTRADO MEJORADA ---
     // Ahora busca también en los nombres de los acompañantes

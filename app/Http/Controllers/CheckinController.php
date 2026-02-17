@@ -745,15 +745,20 @@ class CheckinController extends Controller
             'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
         ]);
 
-        \App\Models\Payment::create([
-            'checkin_id' => $checkin->id,
-            'user_id' => Auth::id(),
-            'amount' => $request->amount,
-            'method' => $request->payment_method,
-            'description' => 'ADELANTO A CUENTA',
-            'type' => 'PAGO' // O 'ADELANTO'
-        ]);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
+            \App\Models\Payment::create([
+                'checkin_id' => $checkin->id,
+                'user_id' => Auth::id(),
+                'amount' => $request->amount,
+                'method' => $request->payment_method,
+                'description' => 'ADELANTO A CUENTA',
+                'type' => 'PAGO'
+            ]);
 
+            // --- ESTA ES LA LÍNEA MÁGICA QUE FALTABA ---
+            // Actualiza el acumulado en la tabla principal para que se vea al instante
+            $checkin->increment('advance_payment', $request->amount);
+        });
         return redirect()->back()->with('success', 'Adelanto de ' . $request->amount . ' Bs registrado correctamente.');
     }
 
