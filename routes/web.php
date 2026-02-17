@@ -11,6 +11,7 @@ use App\Http\Controllers\GuestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\CheckinDetailController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ReservationController;
 use Illuminate\Support\Facades\Route;
 
 use Inertia\Inertia;
@@ -115,7 +116,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
     // Ruta para guardar adelantos
     Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])
-    ->name('checkins.addPayment');
+        ->name('checkins.addPayment');
 
     // Ruta de Tolerancia
     Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
@@ -136,6 +137,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/horarios/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
     Route::delete('/horarios/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
     Route::patch('/horarios/{schedule}/toggle', [ScheduleController::class, 'toggleStatus'])->name('schedules.toggle');
+
+    //Reserva
+    Route::get('/reservas', [ReservationController::class, 'index'])->name('reservations.index');
+    Route::post('/reservas', [ReservationController::class, 'store'])->name('reservations.store');
+    Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
+    Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
 
     //Reportes 
     //Reportes 
