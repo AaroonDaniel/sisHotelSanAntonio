@@ -46,15 +46,19 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        const onSuccess = () => {
-            reset();
-            onClose();
+        const options = {
+            preserveScroll: true, // <--- ESTO ES CLAVE: Mantiene la posición de la pantalla
+            onSuccess: () => {
+                reset();
+                onClose();
+                // Inertia automáticamente actualizará la lista 'Services' en el componente padre
+            }
         };
 
         if (ServiceToEdit) {
-            put(`/servicios/${ServiceToEdit.id}`, { onSuccess });
+            put(`/servicios/${ServiceToEdit.id}`, options);
         } else {
-            post('/servicios', { onSuccess });
+            post('/servicios', options);
         }
     };
 

@@ -18,11 +18,6 @@ class PriceController extends Controller
         ]);
     }
 
-    public function create()
-    {
-        return Inertia::render('prices/create');
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -43,7 +38,7 @@ class PriceController extends Controller
         $validated['is_active'] = true;
 
         Price::create($validated);
-        return redirect()->route('prices.index');
+        return redirect()->back();
     }
 
     // CORRECCIÓN IMPORTANTE: Quitamos 'RoomType $roomType' de los argumentos
@@ -69,13 +64,13 @@ class PriceController extends Controller
         }
 
         $price->update($validated);
-        return redirect()->route('prices.index');
+        return redirect()->back();
     }
 
     public function destroy(Price $price)
     {
         $price->delete();
-        return redirect()->route('prices.index');
+        return redirect()->back();
     }
 
     public function toggleStatus(Price $price)

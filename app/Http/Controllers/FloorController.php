@@ -18,19 +18,13 @@ class FloorController extends Controller
         ]);
     }
 
-    public function create()
-    {
-        // Si tienes este archivo, también en minúscula
-        return Inertia::render('floors/create'); 
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:50',
         ]);
         Floor::create($validated);
-        return redirect()->route('floors.index');
+        return redirect()->back();
     }
 
     public function update(Request $request, Floor $floor)
@@ -39,13 +33,13 @@ class FloorController extends Controller
             'name' => 'required|string|max:50',
         ]);
         $floor->update($validated);
-        return redirect()->route('floors.index');
+        return redirect()->back();
     }
 
     public function destroy(Floor $floor)
     {
         $floor->delete();
-        return redirect()->route('floors.index');
+        return redirect()->back();
     }
     public function toggleStatus(Floor $floor)
     {

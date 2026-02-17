@@ -34,15 +34,18 @@ export default function FloorModal({ show, onClose, FloorToEdit }: FloorModalPro
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        const onSuccess = () => {
+        const options = {
+        preserveScroll: true, // <--- AGREGAR ESTO SIEMPRE
+        onSuccess: () => {
             reset();
             onClose();
-        };
+        }
+    };
 
         if (FloorToEdit) {
-            put(`/pisos/${FloorToEdit.id}`, { onSuccess });
+            put(`/pisos/${FloorToEdit.id}`, options);
         } else {
-            post('/pisos', { onSuccess });
+            post('/pisos', options);
         }
     };
 

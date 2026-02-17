@@ -40,7 +40,9 @@ export default function BlocksIndex({ auth, blocks }: Props) {
     // --- 3. NUEVO: FUNCIÓN PARA CAMBIAR ESTADO ---
     const toggleStatus = (block: Block) => {
         // Asegúrate de tener esta ruta en tu web.php o dará error 404
-        router.patch(`/bloques/${block.id}/toggle`);
+        router.patch(`/bloques/${block.id}/toggle`, {}, {
+            preserveScroll: true
+        });
     };
 
     // Funciones Helper

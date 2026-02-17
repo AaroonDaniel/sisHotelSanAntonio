@@ -16,11 +16,6 @@ class BlockController extends Controller
         ]);
     }
 
-    public function create()
-    {
-        return Inertia::render('blocks/create');
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -30,7 +25,7 @@ class BlockController extends Controller
 
         Block::create($validated);
         
-        return redirect()->route('blocks.index');  
+        return redirect()->back();  
     }
 
     // --- FUNCIONES QUE TE FALTABAN ---
@@ -47,7 +42,7 @@ class BlockController extends Controller
         $block->update($validated);
 
         // 3. Redirigir
-        return redirect()->route('blocks.index');
+        return redirect()->back();
     }
 
     public function destroy(Block $block)
@@ -56,7 +51,7 @@ class BlockController extends Controller
         $block->delete();
 
         // 2. Redirigir
-        return redirect()->route('blocks.index');
+        return redirect()->back();
     }
 
     public function toggleStatus(Block $block)

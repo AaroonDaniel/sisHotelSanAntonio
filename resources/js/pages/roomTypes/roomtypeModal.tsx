@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { Building, Hash, Save, X, FileText } from 'lucide-react';
+import { Building, FileText, Hash, Save, X } from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
 
 interface Roomtype {
@@ -51,15 +51,18 @@ export default function RoomtypeModal({
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        const onSuccess = () => {
-            reset();
-            onClose();
+        const options = {
+            preserveScroll: true, // <--- AGREGAR ESTO SIEMPRE
+            onSuccess: () => {
+                reset();
+                onClose();
+            },
         };
 
         if (RoomtypeToEdit) {
-            put(`/tipohabitacion/${RoomtypeToEdit.id}`, { onSuccess });
+            put(`/tipohabitacion/${RoomtypeToEdit.id}`, options);
         } else {
-            post('/tipohabitacion', { onSuccess });
+            post('/tipohabitacion', options);
         }
     };
 
@@ -74,7 +77,9 @@ export default function RoomtypeModal({
                         <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                             <Building className="h-5 w-5" />
                         </div>
-                        {RoomtypeToEdit ? 'Editar Piso' : 'Nuevo tipo de Habitación'}
+                        {RoomtypeToEdit
+                            ? 'Editar Piso'
+                            : 'Nuevo tipo de Habitación'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -101,7 +106,10 @@ export default function RoomtypeModal({
                                     type="text"
                                     value={data.name}
                                     onChange={(e) =>
-                                        setData('name', e.target.value.toUpperCase())
+                                        setData(
+                                            'name',
+                                            e.target.value.toUpperCase(),
+                                        )
                                     }
                                     // CORREGIDO: 'block' en lugar de 'Roomtype'
                                     className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
@@ -156,7 +164,10 @@ export default function RoomtypeModal({
                                 <textarea
                                     value={data.description}
                                     onChange={(e) =>
-                                        setData('description', e.target.value.toUpperCase())
+                                        setData(
+                                            'description',
+                                            e.target.value.toUpperCase(),
+                                        )
                                     }
                                     rows={3}
                                     className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"

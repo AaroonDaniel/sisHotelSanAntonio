@@ -154,13 +154,13 @@ class GuestController extends Controller
         ]);
 
         $guest->update($validated);
-        return redirect()->route('guests.index')->with('success', 'Huésped actualizado.');
+        return redirect()->back()->with('success', 'Huésped actualizado.');
     }
 
     public function destroy(Guest $guest)
     {
         $guest->delete();
-        return redirect()->route('guests.index');
+        return redirect()->back();
     }
 
     

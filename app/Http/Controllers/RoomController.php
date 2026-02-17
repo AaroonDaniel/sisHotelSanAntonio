@@ -71,7 +71,7 @@ class RoomController
         }
 
         Room::create($validated);
-        return redirect()->route('rooms.index');
+        return redirect()->back();
     }
 
     public function update(Request $request, Room $room)
@@ -121,13 +121,13 @@ class RoomController
         }
 
         $room->update($validated);
-        return redirect()->route('rooms.index');
+        return redirect()->back();
     }
 
     public function destroy(Room $room)
     {
         $room->delete();
-        return redirect()->route('rooms.index');
+        return redirect()->back();
     }
 
     public function toggleStatus(Room $room)

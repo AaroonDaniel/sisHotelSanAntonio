@@ -25,7 +25,7 @@ class RoomTypeController extends Controller
         ]);
 
         RoomType::create($validated);
-        return redirect()->route('room_types.index');
+        return redirect()->back();
     }
 
     public function update(Request $request, RoomType $roomType)
@@ -37,14 +37,14 @@ class RoomTypeController extends Controller
         ]);
 
         $roomType->update($validated);
-        return redirect()->route('room_types.index');
+        return redirect()->back();
     }
 
     public function destroy(RoomType $roomType)
     {
         // Aquí podrías agregar el try-catch si hay relaciones con habitaciones
         $roomType->delete();
-        return redirect()->route('room_types.index');
+        return redirect()->back();
     }
 
     public function toggleStatus(RoomType $roomType)
