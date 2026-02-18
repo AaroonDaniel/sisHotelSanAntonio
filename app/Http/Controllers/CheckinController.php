@@ -313,14 +313,7 @@ class CheckinController extends Controller
         });
     }
 
-    // app/Http/Controllers/CheckinController.php
 
-    /**
-     * Realiza la transferencia de habitación.
-     * Si es el mismo día, solo cambia la habitación.
-     * Si ya pasó tiempo (asignación temporal), cierra la cuenta y arrastra el saldo.
-     */
-    // app/Http/Controllers/CheckinController.php
 
     public function transfer(Request $request, Checkin $checkin)
     {
@@ -1507,8 +1500,6 @@ class CheckinController extends Controller
         }
     }
 
-
-
     public function merge(Request $request, Checkin $checkin)
     {
         $request->validate([
@@ -1539,5 +1530,35 @@ class CheckinController extends Controller
             Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
             return back()->with('success', 'Huésped trasladado correctamente a la Habitación ' . $targetCheckin->room->number . '.');
         });
+    }
+
+    /*Fucion a futuro* */
+    // Ejemplo lógico (no copres esto todavía, es para que entiendas el flujo)
+
+    public function storeFromReservation(Request $request)
+    {
+        // 1. Creamos el Checkin Físico para el huésped que llegó
+        $checkin = Checkin::create([
+            'guest_id' => $request->guest_id, // Puede ser Juan o Pedro
+            'room_id'  => $request->room_id,
+            // ... otros datos
+        ]);
+
+        // 2. ¿Queremos usar el saldo de la reserva?
+        if ($request->usar_saldo_reserva) {
+
+            // Buscamos los pagos "flotantes" de esa reserva
+            $pagosAdelantados = Payment::where('reservation_id', $request->reservation_id)
+                ->whereNull('checkin_id') // Que aún no se hayan gastado
+                ->get();
+
+            foreach ($pagosAdelantados as $pago) {
+                // AQUÍ ESTÁ LA MAGIA:
+                // Asignamos ese pago antiguo a ESTE checkin nuevo
+                $pago->update([
+                    'checkin_id' => $checkin->id
+                ]);
+            }
+        }
     }
 }
