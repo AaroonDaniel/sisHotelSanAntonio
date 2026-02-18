@@ -17,7 +17,13 @@ class ReservationController extends Controller
     public function index()
     {
         return Inertia::render('reservations/index', [
-            'Reservations' => Reservation::with(['guest', 'details.room'])->latest()->get(),
+            // CORRECCIÓN: Cargamos 'details.price' y 'details.room.roomType'
+            'Reservations' => Reservation::with([
+                'guest', 
+                'details.room.roomType', 
+                'details.price'
+            ])->latest()->get(),
+            
             'Guests' => Guest::all(),
             'Rooms' => Room::with(['roomType', 'prices'])->where('status', 'LIBRE')->get(),
         ]);

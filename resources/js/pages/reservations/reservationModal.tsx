@@ -24,6 +24,22 @@ export interface Guest {
     full_name?: string;
     identification_number?: string;
     nationality?: string;
+
+    room?: { 
+        id: number; 
+        room_type_id: number;
+        number: string;
+    };
+
+    price_relation?: { // Laravel suele llamarlo 'price' si la relación se llama 'price'
+        id: number;
+        bathroom_type: string;
+    };
+
+    // Campos temporales del frontend
+    _temp_pax_count?: number; 
+    _temp_bathroom_filter?: string;
+    _temp_room_type_id?: string;
 }
 
 export interface Price {
@@ -121,6 +137,43 @@ export default function ReservationModal({
     useEffect(() => {
         if (show) {
             if (reservationToEdit) {
+                // LÓGICA DE REHIDRATACIÓN PARA EDICIÓN
+                const mappedDetails = (reservationToEdit.details || []).map((det: any) => {
+                    // 1. Detectar tipo de baño desde la relación 'price' cargada
+                    const bathroomType = det.price?.bathroom_type || '';
+                    
+                    // 2. Detectar tipo de habitación desde la relación 'room'
+                    const roomTypeId = det.room?.room_type_id?.toString() || '';
+
+                    return {
+                        room_id: det.room_id.toString(),
+                        price_id: det.price_id.toString(),
+                        price: Number(det.price),
+                        // Calculamos pax (si no lo tienes guardado, asumimos 1 o lógica de grupos)
+                        _temp_pax_count: 1, 
+                        
+                        // REHIDRATAMOS LOS FILTROS:
+                        _temp_bathroom_filter: bathroomType, 
+                        _temp_room_type_id: roomTypeId
+                    };
+                });
+
+                // Recalcular grupos visuales basado en la cantidad de detalles
+                // Si la reserva tiene 3 detalles (3 habs), creamos 3 grupos de 1 persona
+                const totalGuests = reservationToEdit.guest_count;
+                const totalRooms = mappedDetails.length;
+                
+                // Lógica simple de reconstrucción de grupos visuales (breaks)
+                // Esto es visual, intenta distribuir los huéspedes
+                const newBreaks = new Array(Math.max(0, totalGuests - 1)).fill(false);
+                // Aquí podrías agregar lógica para marcar 'true' donde cambia de habitación si guardaras esa info
+                // Por defecto, dejémoslo simple o separado:
+                if(totalRooms > 1) {
+                     // Si hay varias habitaciones, sugerimos separación visual
+                     newBreaks.fill(true); 
+                }
+                setBreaks(newBreaks);
+
                 setData({
                     ...data,
                     guest_count: reservationToEdit.guest_count,
@@ -129,33 +182,25 @@ export default function ReservationModal({
                     duration_days: reservationToEdit.duration_days,
                     status: reservationToEdit.status,
                     guest_id: reservationToEdit.guest_id.toString(),
-                    details: reservationToEdit.details || [],
+                    
+                    // AQUÍ ASIGNAMOS LOS DETALLES CON LOS FILTROS ACTIVOS
+                    details: mappedDetails, 
+                    
                     advance_payment: reservationToEdit.advance_payment,
                     payment_type: reservationToEdit.payment_type || 'EFECTIVO',
                     qr_bank: reservationToEdit.qr_bank || ''
                 });
+
                 const currentGuest = guests.find(g => g.id === reservationToEdit.guest_id);
                 if (currentGuest) {
                     setGuestQuery(currentGuest.full_name || `${currentGuest.name} ${currentGuest.last_name}`);
                 }
-                setBreaks(new Array(Math.max(0, reservationToEdit.guest_count - 1)).fill(true));
             } else {
+                // ... (reset normal)
                 reset();
                 setGuestQuery('');
                 setBreaks([]);
-                setData(prev => ({ 
-                    ...prev, 
-                    guest_count: 1,
-                    details: [{ 
-                        room_id: '', 
-                        price_id: '', 
-                        price: 0, 
-                        _temp_pax_count: 1, 
-                        _temp_bathroom_filter: '', 
-                        _temp_room_type_id: '' 
-                    }],
-                    arrival_date: new Date().toISOString().split('T')[0]
-                }));
+                // ...
             }
             clearErrors();
             setIsGuestDropdownOpen(false);
