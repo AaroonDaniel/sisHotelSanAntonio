@@ -17,6 +17,7 @@ import {
 import { FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 
 // --- INTERFACES ---
+
 export interface Guest {
     id: number;
     name: string;
@@ -24,22 +25,6 @@ export interface Guest {
     full_name?: string;
     identification_number?: string;
     nationality?: string;
-
-    room?: { 
-        id: number; 
-        room_type_id: number;
-        number: string;
-    };
-
-    price_relation?: { // Laravel suele llamarlo 'price' si la relación se llama 'price'
-        id: number;
-        bathroom_type: string;
-    };
-
-    // Campos temporales del frontend
-    _temp_pax_count?: number; 
-    _temp_bathroom_filter?: string;
-    _temp_room_type_id?: string;
 }
 
 export interface Price {
@@ -66,6 +51,17 @@ export interface DetailItem {
     room_id: string;
     price_id: string;
     price: number;
+    
+    // Propiedades opcionales para la lógica visual
+    room?: {
+        id: number;
+        number: string;
+        room_type?: { id: number; name: string };
+        room_type_id?: number;
+    };
+    price_relation?: Price; 
+
+    // Campos temporales (UI)
     _temp_pax_count?: number; 
     _temp_bathroom_filter?: string; 
     _temp_room_type_id?: string;    
@@ -83,8 +79,24 @@ export interface Reservation {
     payment_type: string;
     qr_bank?: string;
     status: string;
-    // observation ELIMINADO
     details?: DetailItem[];
+}
+
+// --- NUEVA INTERFAZ PARA EL FORMULARIO (Soluciona el error de profundidad) ---
+interface ReservationFormData {
+    is_new_guest: boolean;
+    guest_id: string;
+    new_guest_name: string;
+    new_guest_ci: string;
+    guest_count: number;
+    arrival_date: string;
+    arrival_time: string;
+    duration_days: number;
+    advance_payment: number;
+    payment_type: string;
+    qr_bank: string;
+    status: string;
+    details: DetailItem[];
 }
 
 interface Props {
@@ -107,7 +119,8 @@ export default function ReservationModal({
     const dropdownRef = useRef<HTMLDivElement>(null); 
     const [breaks, setBreaks] = useState<boolean[]>([]);
 
-    const { data, setData, post, put, processing, reset, clearErrors } = useForm({
+    // --- USO EXPLÍCITO DE LA INTERFAZ EN useForm ---
+    const { data, setData, post, put, processing, reset, clearErrors } = useForm<ReservationFormData>({
         is_new_guest: false,
         guest_id: '',
         new_guest_name: '',
@@ -119,11 +132,11 @@ export default function ReservationModal({
         advance_payment: 0,
         payment_type: 'EFECTIVO',
         qr_bank: '',
-        status: 'PENDIENTE',
-        // observation ELIMINADO
-        details: [] as DetailItem[]
+        status: 'pendiente', 
+        details: []
     });
 
+    // Filtramos tipos de habitación disponibles
     const availableRoomTypes = useMemo(() => {
         const types = new Map();
         rooms.filter(r => r.status === 'LIBRE').forEach(room => {
@@ -137,70 +150,75 @@ export default function ReservationModal({
     useEffect(() => {
         if (show) {
             if (reservationToEdit) {
-                // LÓGICA DE REHIDRATACIÓN PARA EDICIÓN
-                const mappedDetails = (reservationToEdit.details || []).map((det: any) => {
-                    // 1. Detectar tipo de baño desde la relación 'price' cargada
-                    const bathroomType = det.price?.bathroom_type || '';
+                // Reconstrucción de detalles para edición
+                const mappedDetails: DetailItem[] = (reservationToEdit.details || []).map((det: any) => {
+                    const priceObj = det.price || det.price_relation; 
+                    const roomObj = det.room;
+
+                    const bathroomType = priceObj?.bathroom_type || '';
+                    const roomTypeId = roomObj?.room_type?.id?.toString() || roomObj?.room_type_id?.toString() || '';
                     
-                    // 2. Detectar tipo de habitación desde la relación 'room'
-                    const roomTypeId = det.room?.room_type_id?.toString() || '';
+                    // Asegurar que price sea número
+                    const finalPrice = typeof det.price === 'object' ? Number(det.price.amount) : Number(det.price);
 
                     return {
                         room_id: det.room_id.toString(),
-                        price_id: det.price_id.toString(),
-                        price: Number(det.price),
-                        // Calculamos pax (si no lo tienes guardado, asumimos 1 o lógica de grupos)
+                        price_id: det.price_id ? det.price_id.toString() : '',
+                        price: finalPrice,
                         _temp_pax_count: 1, 
-                        
-                        // REHIDRATAMOS LOS FILTROS:
                         _temp_bathroom_filter: bathroomType, 
                         _temp_room_type_id: roomTypeId
                     };
                 });
 
-                // Recalcular grupos visuales basado en la cantidad de detalles
-                // Si la reserva tiene 3 detalles (3 habs), creamos 3 grupos de 1 persona
-                const totalGuests = reservationToEdit.guest_count;
-                const totalRooms = mappedDetails.length;
-                
-                // Lógica simple de reconstrucción de grupos visuales (breaks)
-                // Esto es visual, intenta distribuir los huéspedes
-                const newBreaks = new Array(Math.max(0, totalGuests - 1)).fill(false);
-                // Aquí podrías agregar lógica para marcar 'true' donde cambia de habitación si guardaras esa info
-                // Por defecto, dejémoslo simple o separado:
-                if(totalRooms > 1) {
-                     // Si hay varias habitaciones, sugerimos separación visual
-                     newBreaks.fill(true); 
-                }
-                setBreaks(newBreaks);
-
                 setData({
-                    ...data,
+                    is_new_guest: false,
+                    new_guest_name: '',
+                    new_guest_ci: '',
                     guest_count: reservationToEdit.guest_count,
                     arrival_date: reservationToEdit.arrival_date,
                     arrival_time: reservationToEdit.arrival_time,
                     duration_days: reservationToEdit.duration_days,
                     status: reservationToEdit.status,
                     guest_id: reservationToEdit.guest_id.toString(),
-                    
-                    // AQUÍ ASIGNAMOS LOS DETALLES CON LOS FILTROS ACTIVOS
-                    details: mappedDetails, 
-                    
+                    details: mappedDetails,
                     advance_payment: reservationToEdit.advance_payment,
                     payment_type: reservationToEdit.payment_type || 'EFECTIVO',
                     qr_bank: reservationToEdit.qr_bank || ''
                 });
-
+                
                 const currentGuest = guests.find(g => g.id === reservationToEdit.guest_id);
                 if (currentGuest) {
                     setGuestQuery(currentGuest.full_name || `${currentGuest.name} ${currentGuest.last_name}`);
                 }
+                setBreaks(new Array(Math.max(0, reservationToEdit.guest_count - 1)).fill(true));
             } else {
-                // ... (reset normal)
                 reset();
                 setGuestQuery('');
                 setBreaks([]);
-                // ...
+                // Inicializar datos limpios
+                setData({
+                    is_new_guest: false,
+                    guest_id: '',
+                    new_guest_name: '',
+                    new_guest_ci: '',
+                    guest_count: 1,
+                    arrival_date: new Date().toISOString().split('T')[0],
+                    arrival_time: '14:00',
+                    duration_days: 1,
+                    advance_payment: 0,
+                    payment_type: 'EFECTIVO',
+                    qr_bank: '',
+                    status: 'pendiente',
+                    details: [{ 
+                        room_id: '', 
+                        price_id: '', 
+                        price: 0, 
+                        _temp_pax_count: 1, 
+                        _temp_bathroom_filter: '', 
+                        _temp_room_type_id: '' 
+                    }]
+                });
             }
             clearErrors();
             setIsGuestDropdownOpen(false);
@@ -212,36 +230,59 @@ export default function ReservationModal({
         const newBreaks = new Array(Math.max(0, validCount - 1)).fill(true);
         for(let i = 0; i < Math.min(breaks.length, newBreaks.length); i++) { newBreaks[i] = breaks[i]; }
         setBreaks(newBreaks);
-        setData('guest_count', validCount);
-        recalculateDetails(newBreaks, validCount);
+        
+        // Actualizamos estado manualmente para evitar recursión de setData
+        setData(prev => {
+            const groups: number[] = [];
+            let currentGroupSize = 1;
+            for (let i = 0; i < newBreaks.length; i++) {
+                if (newBreaks[i]) { groups.push(currentGroupSize); currentGroupSize = 1; } else { currentGroupSize++; }
+            }
+            groups.push(currentGroupSize);
+
+            const newDetails: DetailItem[] = groups.map((groupSize, index) => {
+                const existing = prev.details[index];
+                return {
+                    room_id: existing ? existing.room_id : '',
+                    price_id: existing ? existing.price_id : '',
+                    price: existing ? existing.price : 0,
+                    _temp_bathroom_filter: existing ? existing._temp_bathroom_filter : '',
+                    _temp_room_type_id: existing ? existing._temp_room_type_id : '',
+                    _temp_pax_count: groupSize 
+                };
+            });
+
+            return { ...prev, guest_count: validCount, details: newDetails };
+        });
     };
 
     const toggleBreak = (index: number) => {
         const newBreaks = [...breaks];
         newBreaks[index] = !newBreaks[index];
         setBreaks(newBreaks);
-        recalculateDetails(newBreaks, data.guest_count);
-    };
+        
+        // Recalcular detalles basado en los nuevos quiebres
+        setData(prev => {
+            const groups: number[] = [];
+            let currentGroupSize = 1;
+            for (let i = 0; i < newBreaks.length; i++) {
+                if (newBreaks[i]) { groups.push(currentGroupSize); currentGroupSize = 1; } else { currentGroupSize++; }
+            }
+            groups.push(currentGroupSize);
 
-    const recalculateDetails = (currentBreaks: boolean[], count: number) => {
-        const groups: number[] = [];
-        let currentGroupSize = 1;
-        for (let i = 0; i < currentBreaks.length; i++) {
-            if (currentBreaks[i]) { groups.push(currentGroupSize); currentGroupSize = 1; } else { currentGroupSize++; }
-        }
-        groups.push(currentGroupSize);
-        const newDetails: DetailItem[] = groups.map((groupSize, index) => {
-            const existing = data.details[index];
-            return {
-                room_id: existing ? existing.room_id : '',
-                price_id: existing ? existing.price_id : '',
-                price: existing ? existing.price : 0,
-                _temp_bathroom_filter: existing ? existing._temp_bathroom_filter : '',
-                _temp_room_type_id: existing ? existing._temp_room_type_id : '',
-                _temp_pax_count: groupSize 
-            };
+            const newDetails: DetailItem[] = groups.map((groupSize, idx) => {
+                const existing = prev.details[idx];
+                return {
+                    room_id: existing ? existing.room_id : '',
+                    price_id: existing ? existing.price_id : '',
+                    price: existing ? existing.price : 0,
+                    _temp_bathroom_filter: existing ? existing._temp_bathroom_filter : '',
+                    _temp_room_type_id: existing ? existing._temp_room_type_id : '',
+                    _temp_pax_count: groupSize 
+                };
+            });
+            return { ...prev, details: newDetails };
         });
-        setData('details', newDetails);
     };
 
     const filteredGuests = useMemo(() => {
@@ -262,8 +303,9 @@ export default function ReservationModal({
         setIsGuestDropdownOpen(false);
     };
 
-    const updateDetailRow = <K extends keyof DetailItem>(index: number, field: K, value: DetailItem[K]) => {
+    const updateDetailRow = (index: number, field: keyof DetailItem, value: any) => {
         const newDetails = [...data.details];
+        // @ts-ignore - TypeScript a veces se queja de la asignación dinámica, pero es segura aquí
         newDetails[index][field] = value;
 
         if (field === '_temp_bathroom_filter') {
@@ -410,7 +452,7 @@ export default function ReservationModal({
                             </div>
                         </div>
                         
-                        {/* COLUMNA DERECHA */}
+                        {/* COLUMNA DERECHA (HABITACIONES) */}
                         <div className="flex h-full flex-col space-y-1 lg:col-span-8">
                             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 uppercase"><BedDouble className="h-5 w-5 text-gray-400" /> Configuración de Habitaciones</h3>
@@ -427,18 +469,22 @@ export default function ReservationModal({
                                             </div>
                                             {/* Grid */}
                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                                {/* 1. BAÑO */}
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">1. Baño</label>
                                                     <div className="relative"><Bath className="absolute left-2 top-2 h-3.5 w-3.5 text-gray-400" /><select value={detail._temp_bathroom_filter} onChange={(e) => updateDetailRow(index, '_temp_bathroom_filter', e.target.value)} className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500"><option value="">Elegir...</option><option value="private">Privado</option><option value="shared">Compartido</option></select></div>
                                                 </div>
+                                                {/* 2. TIPO */}
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">2. Tipo Hab.</label>
                                                     <select value={detail._temp_room_type_id} onChange={(e) => updateDetailRow(index, '_temp_room_type_id', e.target.value)} disabled={!detail._temp_bathroom_filter} className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"><option value="">{detail._temp_bathroom_filter ? 'Elegir Tipo...' : '← Baño primero'}</option>{availableRoomTypes.map(type => (<option key={type.id} value={type.id}>{type.name}</option>))}</select>
                                                 </div>
+                                                {/* 3. HABITACIÓN */}
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">3. Habitación</label>
                                                     <select value={detail.room_id} onChange={(e) => updateDetailRow(index, 'room_id', e.target.value)} disabled={!detail._temp_room_type_id} className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"><option value="">{detail._temp_room_type_id ? 'Elegir Hab...' : '← Tipo primero'}</option>{rooms.filter(r => r.status === 'LIBRE').filter(r => r.room_type?.id.toString() === detail._temp_room_type_id).filter(r => r.prices?.some(p => p.bathroom_type === detail._temp_bathroom_filter)).map(r => (<option key={r.id} value={r.id}>HAB. {r.number}</option>))}</select>
                                                 </div>
+                                                {/* 4. PRECIO */}
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">4. Precio (Auto)</label>
                                                     <div className="relative"><DollarSign className="absolute left-2 top-2 h-3.5 w-3.5 text-green-600" /><input type="text" readOnly value={detail.price > 0 ? detail.price : ''} className="w-full cursor-not-allowed rounded-lg border-gray-200 bg-green-50 py-1.5 pl-8 text-xs font-bold text-green-700 focus:ring-0" placeholder="0.00" /></div>
@@ -473,9 +519,7 @@ export default function ReservationModal({
                                         <div className="mt-1 flex justify-between border-t border-gray-200 pt-1 text-sm font-bold text-red-600"><span>Saldo Pendiente:</span><span>{balance > 0 ? balance : 0} Bs</span></div>
                                     </div>
                                 </div>
-                                <div className="mt-4 border-t border-gray-200 pt-4">
-                                    {/* Observation text area was removed */}
-                                </div>
+                                
                             </div>
                         </div>
                     </div>

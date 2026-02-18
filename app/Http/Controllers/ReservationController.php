@@ -86,6 +86,7 @@ class ReservationController extends Controller
                         'price_id' => $detail['price_id'],
                         'price' => $detail['price'],
                     ]);
+                    Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
                 }
 
                 // 4. Pago (Adelanto)
@@ -110,17 +111,25 @@ class ReservationController extends Controller
 
     public function update(Request $request, Reservation $reservation)
     {
+       if ($request->status === 'cancelado' && $reservation->status !== 'cancelado') {
+            foreach ($reservation->details as $detail) {
+                Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+            }
+        }
+
         $reservation->update($request->only([
-            'arrival_date', 
-            'arrival_time', 
-            'guest_count', 
-            'status'
+            'arrival_date', 'arrival_time', 'guest_count', 'status'
         ]));
+        
         return redirect()->back();
     }
 
     public function destroy(Reservation $reservation)
     {
+        foreach ($reservation->details as $detail) {
+            Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+        }
+        
         $reservation->delete();
         return redirect()->back();
     }
