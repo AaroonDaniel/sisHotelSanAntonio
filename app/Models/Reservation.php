@@ -16,7 +16,7 @@ class Reservation extends Model
         'advance_payment',
         'payment_type',
         'status',
-        'observation'
+
     ];
 
     // Relación: Una reserva pertenece a un Huésped
