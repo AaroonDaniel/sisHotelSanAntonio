@@ -21,7 +21,7 @@ class ReservationController extends Controller
             'Reservations' => Reservation::with(['guest', 'details.room'])->latest()->get(),
             'Guests' => Guest::all(),
             // Para el select del modal: Habitaciones con sus precios
-            'Rooms' => Room::with(['type', 'prices'])->where('status', 'DISPONIBLE')->get(),
+            'Rooms' => Room::with(['roomType', 'prices'])->where('status', 'LIBRE')->get(),
         ]);
     }
 

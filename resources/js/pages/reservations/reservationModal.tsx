@@ -1,24 +1,22 @@
 import { useForm } from '@inertiajs/react';
 import {
-    Calendar,
-    Users,
-    DollarSign,
-    Save,
-    X,
-    User,
-    Clock,
-    CreditCard,
-    Link as LinkIcon,
-    Unlink,
-    BedDouble,
-    Bath,
     AlertCircle,
-    Info
+    Bath,
+    BedDouble,
+    Calendar,
+    Clock,
+    Info,
+    Link as LinkIcon,
+    Save,
+    Unlink,
+    User,
+    Users,
+    X
 } from 'lucide-react';
-import { FormEventHandler, useEffect, useState, useMemo, useRef } from 'react';
+import { FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 
-// --- Interfaces ---
-interface Guest {
+// --- INTERFACES EXPORTADAS CORRECTAMENTE ---
+export interface Guest {
     id: number;
     name: string;
     last_name: string;
@@ -27,23 +25,33 @@ interface Guest {
     nationality?: string;
 }
 
-interface Price {
+export interface Price {
     id: number;
     amount: number;
-    bathroom_type: string;
+    bathroom_type: string; // 'private' o 'shared'
 }
 
-interface Room {
+export interface Room {
     id: number;
     number: string;
     prices?: Price[];
-    status: string;
+    status: string; // 'LIBRE', 'OCUPADO', etc.
     type?: { name: string };
+    room_type?: { name: string };
 }
 
-interface Reservation {
+export interface DetailItem {
+    room_id: string;
+    price_id: string;
+    price: number;
+    _temp_pax_count?: number; 
+    _temp_bathroom_filter?: string;
+}
+
+export interface Reservation {
     id: number;
     guest_id: number;
+    guest?: Guest;
     guest_count: number;
     arrival_date: string;
     arrival_time: string;
@@ -54,14 +62,6 @@ interface Reservation {
     status: string;
     observation: string;
     details?: DetailItem[];
-}
-
-interface DetailItem {
-    room_id: string;
-    price_id: string;
-    price: number;
-    _temp_pax_count?: number; 
-    _temp_bathroom_filter?: string;
 }
 
 interface Props {
@@ -79,53 +79,49 @@ export default function ReservationModal({
     guests,
     rooms,
 }: Props) {
-    // --- ESTADOS ---
     const [guestQuery, setGuestQuery] = useState('');
     const [isGuestDropdownOpen, setIsGuestDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null); 
-    
-    // Control de rupturas: true = separado, false = unido. 
-    // Inicialmente todos true (separados) para mostrar la grilla de 30.
     const [breaks, setBreaks] = useState<boolean[]>([]);
 
-    const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, put, processing, reset, clearErrors } = useForm({
         is_new_guest: false,
         guest_id: '',
         new_guest_name: '',
         new_guest_ci: '',
-        
         guest_count: 1,
         arrival_date: new Date().toISOString().split('T')[0],
         arrival_time: '14:00',
         duration_days: 1,
-        
         advance_payment: 0,
         payment_type: 'EFECTIVO',
         qr_bank: '',
-
         status: 'PENDIENTE',
         observation: '',
         details: [] as DetailItem[]
     });
 
-    // --- INICIALIZACIÓN ---
     useEffect(() => {
         if (show) {
             if (reservationToEdit) {
                 setData({
                     ...data,
-                    ...reservationToEdit,
+                    guest_count: reservationToEdit.guest_count,
+                    arrival_date: reservationToEdit.arrival_date,
+                    arrival_time: reservationToEdit.arrival_time,
+                    duration_days: reservationToEdit.duration_days,
+                    status: reservationToEdit.status,
+                    observation: reservationToEdit.observation || '',
                     guest_id: reservationToEdit.guest_id.toString(),
                     details: reservationToEdit.details || [],
+                    advance_payment: reservationToEdit.advance_payment,
                     payment_type: reservationToEdit.payment_type || 'EFECTIVO',
                     qr_bank: reservationToEdit.qr_bank || ''
                 });
-                
                 const currentGuest = guests.find(g => g.id === reservationToEdit.guest_id);
                 if (currentGuest) {
                     setGuestQuery(currentGuest.full_name || `${currentGuest.name} ${currentGuest.last_name}`);
                 }
-                // En edición, asumimos 1 pax por hab por defecto si no hay lógica compleja
                 setBreaks(new Array(Math.max(0, reservationToEdit.guest_count - 1)).fill(true));
             } else {
                 reset();
@@ -134,7 +130,6 @@ export default function ReservationModal({
                 setData(prev => ({ 
                     ...prev, 
                     guest_count: 1,
-                    // Inicializamos detalles
                     details: [{ room_id: '', price_id: '', price: 0, _temp_pax_count: 1, _temp_bathroom_filter: '' }],
                     arrival_date: new Date().toISOString().split('T')[0]
                 }));
@@ -144,17 +139,12 @@ export default function ReservationModal({
         }
     }, [show, reservationToEdit]);
 
-    // --- LÓGICA DE AGRUPACIÓN ---
     const handleGuestCountChange = (newCount: number) => {
         const validCount = Math.max(1, newCount);
-        // Por defecto: TODOS SEPARADOS (Grilla completa) -> fill(true)
         const newBreaks = new Array(Math.max(0, validCount - 1)).fill(true);
-        
-        // Preservar configuración previa si existe
         for(let i = 0; i < Math.min(breaks.length, newBreaks.length); i++) {
             newBreaks[i] = breaks[i];
         }
-
         setBreaks(newBreaks);
         setData('guest_count', validCount);
         recalculateDetails(newBreaks, validCount);
@@ -170,17 +160,15 @@ export default function ReservationModal({
     const recalculateDetails = (currentBreaks: boolean[], count: number) => {
         const groups: number[] = [];
         let currentGroupSize = 1;
-
         for (let i = 0; i < currentBreaks.length; i++) {
-            if (currentBreaks[i]) { // Si hay ruptura
+            if (currentBreaks[i]) { 
                 groups.push(currentGroupSize);
                 currentGroupSize = 1;
-            } else { // Si están unidos
+            } else { 
                 currentGroupSize++;
             }
         }
         groups.push(currentGroupSize);
-
         const newDetails: DetailItem[] = groups.map((groupSize, index) => {
             const existing = data.details[index];
             return {
@@ -191,11 +179,9 @@ export default function ReservationModal({
                 _temp_pax_count: groupSize 
             };
         });
-
         setData('details', newDetails);
     };
 
-    // --- MANEJO DE HUÉSPED ---
     const filteredGuests = useMemo(() => {
         if (!guestQuery) return [];
         return guests.filter((g) => {
@@ -213,7 +199,6 @@ export default function ReservationModal({
         setIsGuestDropdownOpen(false);
     };
 
-    // --- MANEJO DE DETALLES ---
     const updateDetailRow = (index: number, field: keyof DetailItem, value: any) => {
         const newDetails = [...data.details];
         // @ts-ignore
@@ -233,11 +218,9 @@ export default function ReservationModal({
             const selectedPrice = room?.prices?.find((p: any) => p.id.toString() === value);
             newDetails[index].price = selectedPrice ? Number(selectedPrice.amount) : 0;
         }
-
         setData('details', newDetails);
     };
 
-    // Cálculos
     const totalPerNight = data.details.reduce((acc, item) => acc + Number(item.price), 0);
     const grandTotal = totalPerNight * Number(data.duration_days);
     const balance = grandTotal - Number(data.advance_payment);
@@ -279,10 +262,8 @@ export default function ReservationModal({
                 <form id="reservation-form" onSubmit={submit} className="flex-1 overflow-y-auto bg-white p-6">
                     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
                         
-                        {/* ================= COLUMNA IZQUIERDA (4 COLS) ================= */}
+                        {/* COLUMNA IZQUIERDA */}
                         <div className="space-y-2 lg:col-span-4">
-                            
-                            {/* 1. SECCIÓN HUÉSPED */}
                             <div className="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm" ref={dropdownRef}>
                                 <label className="mb-3 block text-center text-base font-bold text-red-700 uppercase tracking-wide border-b border-red-100 pb-2">
                                     DATO DEL HUESPED
@@ -326,10 +307,9 @@ export default function ReservationModal({
                                     </div>
                                 )}
                             </div>
-
                             <div className="border-t border-gray-100"></div>
 
-                            {/* 2. FECHAS */}
+                            {/* FECHAS */}
                             <div className="space-y-2">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -362,161 +342,43 @@ export default function ReservationModal({
                                 </div>
                             </div>
 
-                            {/* 3. DISTRIBUCIÓN HÍBRIDA (FILAS + GRILLA) */}
+                            {/* DISTRIBUCIÓN VISUAL (Sin cambios lógicos, solo código compactado) */}
                             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
                                 <h3 className="text-xs font-bold text-blue-800 uppercase flex items-center gap-2 mb-3">
                                     <Info className="h-4 w-4" /> Distribución ({data.guest_count})
                                 </h3>
-                                
                                 <div className="space-y-2">
                                     {(() => {
-                                        // 1. Convertir la lista plana en "Bloques" visuales
                                         const visualBlocks = [];
                                         let currentBlock: number[] = [];
-                                        
-                                        // Agrupamos: Un bloque se corta cuando breaks[i] es true
                                         for(let i = 0; i < data.guest_count; i++) {
                                             currentBlock.push(i);
-                                            // Si hay un corte en esta posición (y no es el último), cerramos bloque
-                                            if (breaks[i] && i < data.guest_count - 1) {
-                                                visualBlocks.push(currentBlock);
-                                                currentBlock = [];
-                                            }
+                                            if (breaks[i] && i < data.guest_count - 1) { visualBlocks.push(currentBlock); currentBlock = []; }
                                         }
-                                        // Push último bloque
                                         if (currentBlock.length > 0) visualBlocks.push(currentBlock);
-
-                                        // 2. Procesar Bloques para renderizado Híbrido
                                         const renderedElements: any[] = [];
-                                        let accumulatedSingles: number[][] = []; // Array de arrays para individuales
+                                        let accumulatedSingles: number[][] = [];
 
                                         visualBlocks.forEach((block, blockIndex) => {
-                                            const isMultiPerson = block.length > 1;
-                                            
-                                            // Si es grupo multipersona, primero renderizamos los singles acumulados (si hay)
-                                            if (isMultiPerson) {
+                                            if (block.length > 1) {
                                                 if (accumulatedSingles.length > 0) {
-                                                    renderedElements.push(
-                                                        <div key={`grid-${blockIndex}`} className="flex flex-wrap gap-1 p-2 bg-white rounded-lg border border-blue-100 justify-start">
-                                                            {accumulatedSingles.map((singleGroup, idx) => {
-                                                                const guestIdx = singleGroup[0];
-                                                                return (
-                                                                    <div key={guestIdx} className="flex items-center">
-                                                                        <div 
-                                                                            className={`flex items-center justify-center h-7 w-7 rounded-full text-[10px] font-bold border transition-all cursor-pointer hover:bg-blue-100 ${guestIdx===0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
-                                                                            title={`Huésped ${guestIdx + 1}`}
-                                                                        >
-                                                                            {guestIdx + 1}
-                                                                        </div>
-                                                                        {/* Botón UNIR en la grilla (a la derecha del single) */}
-                                                                        <button 
-                                                                            type="button" 
-                                                                            onClick={() => toggleBreak(guestIdx)}
-                                                                            className="mx-0.5 text-gray-300 hover:text-green-500 transition-colors"
-                                                                            title="Unir con siguiente"
-                                                                        >
-                                                                            <LinkIcon className="h-3 w-3" />
-                                                                        </button>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                    );
+                                                    renderedElements.push(<div key={`grid-${blockIndex}`} className="flex flex-wrap gap-1 p-2 bg-white rounded-lg border border-blue-100 justify-start">{accumulatedSingles.map((singleGroup) => <div key={singleGroup[0]} className="flex items-center"><div className={`flex items-center justify-center h-7 w-7 rounded-full text-[10px] font-bold border transition-all cursor-pointer hover:bg-blue-100 ${singleGroup[0]===0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{singleGroup[0] + 1}</div><button type="button" onClick={() => toggleBreak(singleGroup[0])} className="mx-0.5 text-gray-300 hover:text-green-500 transition-colors"><LinkIcon className="h-3 w-3" /></button></div>)}</div>);
                                                     accumulatedSingles = [];
                                                 }
-                                                
-                                                // Renderizamos el Bloque Multipersona (Fila Completa)
-                                                renderedElements.push(
-                                                    <div key={`row-${blockIndex}`} className="flex flex-col items-center w-full animate-in fade-in slide-in-from-left-2">
-                                                        {/* Conector ARRIBA si no es el primero */}
-                                                        {blockIndex > 0 && (
-                                                            <div className="h-4 w-0.5 bg-gray-300 relative flex items-center justify-center my-0.5">
-                                                                <button type="button" onClick={() => toggleBreak(block[0] - 1)} className="absolute z-10 bg-white border border-gray-300 rounded-full p-0.5 hover:text-green-600 hover:border-green-500 shadow-sm"><LinkIcon className="h-2 w-2" /></button>
-                                                            </div>
-                                                        )}
-
-                                                        <div className="flex flex-wrap gap-2 items-center justify-start bg-white p-2 rounded-lg border border-blue-200 shadow-sm w-full relative">
-                                                            <div className="absolute left-0 top-0 bottom-0 bg-blue-600 w-1 rounded-l-lg"></div>
-                                                            <span className="text-[9px] font-bold text-gray-400 ml-2">HAB</span>
-                                                            
-                                                            {block.map((guestIdx, localIdx) => (
-                                                                <div key={guestIdx} className="flex items-center">
-                                                                    <div className={`flex items-center justify-center h-8 w-8 rounded-full text-xs font-bold border-2 ${guestIdx===0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                                                                        {guestIdx + 1}
-                                                                    </div>
-                                                                    {/* Botón Deshacer dentro del grupo */}
-                                                                    {localIdx < block.length - 1 && (
-                                                                        <div className="mx-1">
-                                                                            <button type="button" onClick={() => toggleBreak(guestIdx)} className="h-5 w-5 flex items-center justify-center rounded-full bg-blue-50 border border-blue-200 text-blue-400 hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-all">
-                                                                                <Unlink className="h-3 w-3" />
-                                                                            </button>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            } else {
-                                                // Es single, lo acumulamos para la grilla
-                                                accumulatedSingles.push(block);
-                                            }
+                                                renderedElements.push(<div key={`row-${blockIndex}`} className="flex flex-col items-center w-full animate-in fade-in slide-in-from-left-2">{blockIndex > 0 && (<div className="h-4 w-0.5 bg-gray-300 relative flex items-center justify-center my-0.5"><button type="button" onClick={() => toggleBreak(block[0] - 1)} className="absolute z-10 bg-white border border-gray-300 rounded-full p-0.5 hover:text-green-600 hover:border-green-500 shadow-sm"><LinkIcon className="h-2 w-2" /></button></div>)}<div className="flex flex-wrap gap-2 items-center justify-start bg-white p-2 rounded-lg border border-blue-200 shadow-sm w-full relative"><div className="absolute left-0 top-0 bottom-0 bg-blue-600 w-1 rounded-l-lg"></div><span className="text-[9px] font-bold text-gray-400 ml-2">HAB</span>{block.map((guestIdx, localIdx) => (<div key={guestIdx} className="flex items-center"><div className={`flex items-center justify-center h-8 w-8 rounded-full text-xs font-bold border-2 ${guestIdx===0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{guestIdx + 1}</div>{localIdx < block.length - 1 && (<div className="mx-1"><button type="button" onClick={() => toggleBreak(guestIdx)} className="h-5 w-5 flex items-center justify-center rounded-full bg-blue-50 border border-blue-200 text-blue-400 hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-all"><Unlink className="h-3 w-3" /></button></div>)}</div>))}</div></div>);
+                                            } else { accumulatedSingles.push(block); }
                                         });
-
-                                        // Renderizar singles restantes al final
                                         if (accumulatedSingles.length > 0) {
-                                            renderedElements.push(
-                                                <div key="grid-last" className="flex flex-col w-full">
-                                                    {/* Conector si hubo bloque antes */}
-                                                    {renderedElements.length > 0 && (
-                                                        <div className="flex justify-center h-4 w-full relative my-0.5">
-                                                            <div className="h-full w-0.5 bg-gray-300"></div>
-                                                            <button type="button" onClick={() => toggleBreak(accumulatedSingles[0][0] - 1)} className="absolute top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-300 rounded-full p-0.5 hover:text-green-600 hover:border-green-500 shadow-sm">
-                                                                <LinkIcon className="h-2 w-2" />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex flex-wrap gap-1.5 p-2 bg-white rounded-lg border border-blue-100 justify-start min-h-[50px]">
-                                                        {accumulatedSingles.map((singleGroup, idx) => {
-                                                            const guestIdx = singleGroup[0];
-                                                            // Determinar si es el último absoluto de toda la lista
-                                                            const isLastAbsolute = guestIdx === data.guest_count - 1;
-                                                            return (
-                                                                <div key={guestIdx} className="flex items-center">
-                                                                    <div 
-                                                                        className={`flex items-center justify-center h-7 w-7 rounded-full text-[10px] font-bold border transition-all cursor-pointer hover:bg-blue-100 ${guestIdx===0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
-                                                                    >
-                                                                        {guestIdx + 1}
-                                                                    </div>
-                                                                    {/* Botón de Unión (invisible si es el último) */}
-                                                                    {!isLastAbsolute && (
-                                                                        <button 
-                                                                            type="button" 
-                                                                            onClick={() => toggleBreak(guestIdx)}
-                                                                            className="mx-0.5 text-gray-300 hover:text-green-500 hover:scale-125 transition-all p-0.5"
-                                                                            title="Unir"
-                                                                        >
-                                                                            <LinkIcon className="h-3 w-3" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            );
+                                            renderedElements.push(<div key="grid-last" className="flex flex-col w-full">{renderedElements.length > 0 && (<div className="flex justify-center h-4 w-full relative my-0.5"><div className="h-full w-0.5 bg-gray-300"></div><button type="button" onClick={() => toggleBreak(accumulatedSingles[0][0] - 1)} className="absolute top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-300 rounded-full p-0.5 hover:text-green-600 hover:border-green-500 shadow-sm"><LinkIcon className="h-2 w-2" /></button></div>)}<div className="flex flex-wrap gap-1.5 p-2 bg-white rounded-lg border border-blue-100 justify-start min-h-[50px]">{accumulatedSingles.map((singleGroup) => { const guestIdx = singleGroup[0]; const isLastAbsolute = guestIdx === data.guest_count - 1; return (<div key={guestIdx} className="flex items-center"><div className={`flex items-center justify-center h-7 w-7 rounded-full text-[10px] font-bold border transition-all cursor-pointer hover:bg-blue-100 ${guestIdx===0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{guestIdx + 1}</div>{!isLastAbsolute && (<button type="button" onClick={() => toggleBreak(guestIdx)} className="mx-0.5 text-gray-300 hover:text-green-500 hover:scale-125 transition-all p-0.5"><LinkIcon className="h-3 w-3" /></button>)}</div>)})}</div></div>);
                                         }
-
                                         return renderedElements;
                                     })()}
                                 </div>
                             </div>
-
                         </div>
 
-                        {/* ================= COLUMNA DERECHA (8 COLS) ================= */}
+                        {/* COLUMNA DERECHA */}
                         <div className="flex h-full flex-col space-y-1 lg:col-span-8">
-                            {/* TITULO */}
                             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 uppercase">
                                     <BedDouble className="h-5 w-5 text-gray-400" /> Configuración de Habitaciones
@@ -524,7 +386,6 @@ export default function ReservationModal({
                                 <div className="text-xs font-medium text-gray-400">{data.details.length} Habitación(es)</div>
                             </div>
 
-                            {/* LISTA HABITACIONES */}
                             <div className="max-h-[380px] flex-1 space-y-4 overflow-y-auto p-1">
                                 {data.details.map((detail, index) => (
                                     <div key={index} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
@@ -538,18 +399,20 @@ export default function ReservationModal({
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">Tipo Baño</label>
                                                     <div className="relative">
                                                         <Bath className="absolute left-2 top-2 h-3.5 w-3.5 text-gray-400" />
+                                                        {/* CORRECCIÓN: Los valores coinciden con 'private'/'shared' de la BD */}
                                                         <select value={detail._temp_bathroom_filter} onChange={(e) => updateDetailRow(index, '_temp_bathroom_filter', e.target.value)} className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500">
                                                             <option value="">Seleccionar...</option>
-                                                            <option value="Privado">Privado</option>
-                                                            <option value="Compartido">Compartido</option>
+                                                            <option value="private">Privado</option>
+                                                            <option value="shared">Compartido</option>
                                                         </select>
                                                     </div>
                                                 </div>
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">Habitación</label>
+                                                    {/* CORRECCIÓN: Filtramos por 'LIBRE' en vez de 'DISPONIBLE' */}
                                                     <select value={detail.room_id} onChange={(e) => updateDetailRow(index, 'room_id', e.target.value)} disabled={!detail._temp_bathroom_filter} className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100">
                                                         <option value="">Elegir...</option>
-                                                        {rooms.filter(r => r.status === 'DISPONIBLE').filter(r => r.prices?.some(p => p.bathroom_type === detail._temp_bathroom_filter)).map(r => (<option key={r.id} value={r.id}>HAB. {r.number}</option>))}
+                                                        {rooms.filter(r => r.status === 'LIBRE').filter(r => r.prices?.some(p => p.bathroom_type === detail._temp_bathroom_filter)).map(r => (<option key={r.id} value={r.id}>HAB. {r.number}</option>))}
                                                     </select>
                                                 </div>
                                                 <div>
@@ -570,7 +433,6 @@ export default function ReservationModal({
                                 ))}
                             </div>
 
-                            {/* FOOTER PAGOS */}
                             <div className="mt-auto rounded-2xl border border-gray-200 bg-gray-50 p-5">
                                 <div className="flex flex-col gap-6 md:flex-row">
                                     <div className="flex-1 flex flex-col gap-2 relative -top-3 -mt-4 animate-in duration-300 fade-in slide-in-from-top-2 pt-6">
