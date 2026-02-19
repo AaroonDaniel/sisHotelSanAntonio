@@ -1,6 +1,5 @@
 import { useForm } from '@inertiajs/react';
 import {
-    AlertCircle,
     Bath,
     BedDouble,
     Calendar,
@@ -12,12 +11,12 @@ import {
     Unlink,
     User,
     Users,
-    X
+    X,
+    AlertCircle
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 
 // --- INTERFACES ---
-
 export interface Guest {
     id: number;
     name: string;
@@ -52,7 +51,7 @@ export interface DetailItem {
     price_id: string;
     price: number;
     
-    // Propiedades opcionales para la lógica visual
+    // Datos opcionales que vienen del backend al editar
     room?: {
         id: number;
         number: string;
@@ -61,7 +60,7 @@ export interface DetailItem {
     };
     price_relation?: Price; 
 
-    // Campos temporales (UI)
+    // Temporales para el frontend
     _temp_pax_count?: number; 
     _temp_bathroom_filter?: string; 
     _temp_room_type_id?: string;    
@@ -82,7 +81,7 @@ export interface Reservation {
     details?: DetailItem[];
 }
 
-// --- NUEVA INTERFAZ PARA EL FORMULARIO (Soluciona el error de profundidad) ---
+// Interface explícita para useForm
 interface ReservationFormData {
     is_new_guest: boolean;
     guest_id: string;
@@ -97,6 +96,7 @@ interface ReservationFormData {
     qr_bank: string;
     status: string;
     details: DetailItem[];
+    observation: string;
 }
 
 interface Props {
@@ -119,7 +119,6 @@ export default function ReservationModal({
     const dropdownRef = useRef<HTMLDivElement>(null); 
     const [breaks, setBreaks] = useState<boolean[]>([]);
 
-    // --- USO EXPLÍCITO DE LA INTERFAZ EN useForm ---
     const { data, setData, post, put, processing, reset, clearErrors } = useForm<ReservationFormData>({
         is_new_guest: false,
         guest_id: '',
@@ -133,13 +132,16 @@ export default function ReservationModal({
         payment_type: 'EFECTIVO',
         qr_bank: '',
         status: 'pendiente', 
-        details: []
+        details: [],
+        observation: ''
     });
 
-    // Filtramos tipos de habitación disponibles
+    // Filtramos tipos de habitación disponibles basados en las habitaciones LIBRES
     const availableRoomTypes = useMemo(() => {
         const types = new Map();
-        rooms.filter(r => r.status === 'LIBRE').forEach(room => {
+        // Mapeamos tipos de todas las habitaciones que nos envió el backend
+        // (El backend ya filtra available + reserved)
+        rooms.forEach(room => {
             if (room.room_type) {
                 types.set(room.room_type.id, room.room_type);
             }
@@ -150,15 +152,17 @@ export default function ReservationModal({
     useEffect(() => {
         if (show) {
             if (reservationToEdit) {
-                // Reconstrucción de detalles para edición
+                // LOGICA DE REHIDRATACIÓN
                 const mappedDetails: DetailItem[] = (reservationToEdit.details || []).map((det: any) => {
+                    
+                    // Recuperamos objetos anidados
                     const priceObj = det.price || det.price_relation; 
                     const roomObj = det.room;
 
+                    // Extraemos valores para los selectores
                     const bathroomType = priceObj?.bathroom_type || '';
                     const roomTypeId = roomObj?.room_type?.id?.toString() || roomObj?.room_type_id?.toString() || '';
                     
-                    // Asegurar que price sea número
                     const finalPrice = typeof det.price === 'object' ? Number(det.price.amount) : Number(det.price);
 
                     return {
@@ -166,10 +170,23 @@ export default function ReservationModal({
                         price_id: det.price_id ? det.price_id.toString() : '',
                         price: finalPrice,
                         _temp_pax_count: 1, 
+                        // Establecemos los filtros para que los selectores muestren el valor correcto
                         _temp_bathroom_filter: bathroomType, 
                         _temp_room_type_id: roomTypeId
                     };
                 });
+
+                // Calculamos grupos visuales
+                const totalRooms = mappedDetails.length;
+                const totalGuests = reservationToEdit.guest_count;
+                const newBreaks = new Array(Math.max(0, totalGuests - 1)).fill(false);
+                if(totalRooms > 1 && totalGuests > 1) {
+                     // Si hay múltiples habitaciones, intentamos sugerir separación visual básica
+                     for(let i=0; i < totalRooms -1; i++) {
+                        if(i < newBreaks.length) newBreaks[i] = true;
+                     }
+                }
+                setBreaks(newBreaks);
 
                 setData({
                     is_new_guest: false,
@@ -184,32 +201,22 @@ export default function ReservationModal({
                     details: mappedDetails,
                     advance_payment: reservationToEdit.advance_payment,
                     payment_type: reservationToEdit.payment_type || 'EFECTIVO',
-                    qr_bank: reservationToEdit.qr_bank || ''
+                    qr_bank: reservationToEdit.qr_bank || '',
+                    observation: ''
                 });
                 
                 const currentGuest = guests.find(g => g.id === reservationToEdit.guest_id);
                 if (currentGuest) {
                     setGuestQuery(currentGuest.full_name || `${currentGuest.name} ${currentGuest.last_name}`);
                 }
-                setBreaks(new Array(Math.max(0, reservationToEdit.guest_count - 1)).fill(true));
             } else {
                 reset();
                 setGuestQuery('');
                 setBreaks([]);
-                // Inicializar datos limpios
-                setData({
-                    is_new_guest: false,
-                    guest_id: '',
-                    new_guest_name: '',
-                    new_guest_ci: '',
+                setData(prev => ({
+                    ...prev,
                     guest_count: 1,
                     arrival_date: new Date().toISOString().split('T')[0],
-                    arrival_time: '14:00',
-                    duration_days: 1,
-                    advance_payment: 0,
-                    payment_type: 'EFECTIVO',
-                    qr_bank: '',
-                    status: 'pendiente',
                     details: [{ 
                         room_id: '', 
                         price_id: '', 
@@ -218,20 +225,22 @@ export default function ReservationModal({
                         _temp_bathroom_filter: '', 
                         _temp_room_type_id: '' 
                     }]
-                });
+                }));
             }
             clearErrors();
             setIsGuestDropdownOpen(false);
         }
     }, [show, reservationToEdit]);
 
+    // ... Funciones handleGuestCountChange, toggleBreak, recalculateDetails, filteredGuests, selectGuest (se mantienen igual) ...
+    // Para abreviar, incluyo solo las que cambian o son críticas.
+    
     const handleGuestCountChange = (newCount: number) => {
         const validCount = Math.max(1, newCount);
         const newBreaks = new Array(Math.max(0, validCount - 1)).fill(true);
         for(let i = 0; i < Math.min(breaks.length, newBreaks.length); i++) { newBreaks[i] = breaks[i]; }
         setBreaks(newBreaks);
         
-        // Actualizamos estado manualmente para evitar recursión de setData
         setData(prev => {
             const groups: number[] = [];
             let currentGroupSize = 1;
@@ -251,7 +260,6 @@ export default function ReservationModal({
                     _temp_pax_count: groupSize 
                 };
             });
-
             return { ...prev, guest_count: validCount, details: newDetails };
         });
     };
@@ -261,7 +269,6 @@ export default function ReservationModal({
         newBreaks[index] = !newBreaks[index];
         setBreaks(newBreaks);
         
-        // Recalcular detalles basado en los nuevos quiebres
         setData(prev => {
             const groups: number[] = [];
             let currentGroupSize = 1;
@@ -305,7 +312,7 @@ export default function ReservationModal({
 
     const updateDetailRow = (index: number, field: keyof DetailItem, value: any) => {
         const newDetails = [...data.details];
-        // @ts-ignore - TypeScript a veces se queja de la asignación dinámica, pero es segura aquí
+        // @ts-ignore
         newDetails[index][field] = value;
 
         if (field === '_temp_bathroom_filter') {
@@ -372,9 +379,9 @@ export default function ReservationModal({
                 {/* BODY */}
                 <form id="reservation-form" onSubmit={submit} className="flex-1 overflow-y-auto bg-white p-6">
                     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                        {/* COLUMNA IZQUIERDA */}
+                        
+                        {/* COLUMNA IZQUIERDA (Igual que antes) */}
                         <div className="space-y-2 lg:col-span-4">
-                            {/* SECCIÓN HUÉSPED */}
                             <div className="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm" ref={dropdownRef}>
                                 <label className="mb-3 block text-center text-base font-bold text-red-700 uppercase tracking-wide border-b border-red-100 pb-2">DATO DEL HUESPED</label>
                                 <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">Nombre Completo</label>
@@ -407,7 +414,7 @@ export default function ReservationModal({
                                 )}
                             </div>
                             <div className="border-t border-gray-100"></div>
-                            {/* FECHAS */}
+                            {/* FECHAS Y ESTADÍA */}
                             <div className="space-y-2">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -430,7 +437,7 @@ export default function ReservationModal({
                                     </div>
                                 </div>
                             </div>
-                            {/* DISTRIBUCIÓN */}
+                            {/* VISUALIZADOR DE GRUPOS */}
                             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
                                 <h3 className="text-xs font-bold text-blue-800 uppercase flex items-center gap-2 mb-3"><Info className="h-4 w-4" /> Distribución ({data.guest_count})</h3>
                                 <div className="space-y-2">
@@ -482,7 +489,18 @@ export default function ReservationModal({
                                                 {/* 3. HABITACIÓN */}
                                                 <div>
                                                     <label className="mb-1 block text-[10px] font-bold text-gray-400 uppercase">3. Habitación</label>
-                                                    <select value={detail.room_id} onChange={(e) => updateDetailRow(index, 'room_id', e.target.value)} disabled={!detail._temp_room_type_id} className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"><option value="">{detail._temp_room_type_id ? 'Elegir Hab...' : '← Tipo primero'}</option>{rooms.filter(r => r.status === 'LIBRE').filter(r => r.room_type?.id.toString() === detail._temp_room_type_id).filter(r => r.prices?.some(p => p.bathroom_type === detail._temp_bathroom_filter)).map(r => (<option key={r.id} value={r.id}>HAB. {r.number}</option>))}</select>
+                                                    <select value={detail.room_id} onChange={(e) => updateDetailRow(index, 'room_id', e.target.value)} disabled={!detail._temp_room_type_id} className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100">
+                                                        <option value="">{detail._temp_room_type_id ? 'Elegir Hab...' : '← Tipo primero'}</option>
+                                                        {/* CORRECCIÓN VISUAL: Mostrar la habitación si está LIBRE *O* si es la que ya tiene seleccionada esta fila */}
+                                                        {rooms
+                                                            .filter(r => 
+                                                                (r.status === 'available' || r.id.toString() === detail.room_id) && 
+                                                                r.room_type?.id.toString() === detail._temp_room_type_id &&
+                                                                r.prices?.some(p => p.bathroom_type === detail._temp_bathroom_filter)
+                                                            )
+                                                            .map(r => (<option key={r.id} value={r.id}>HAB. {r.number}</option>))
+                                                        }
+                                                    </select>
                                                 </div>
                                                 {/* 4. PRECIO */}
                                                 <div>
@@ -519,7 +537,7 @@ export default function ReservationModal({
                                         <div className="mt-1 flex justify-between border-t border-gray-200 pt-1 text-sm font-bold text-red-600"><span>Saldo Pendiente:</span><span>{balance > 0 ? balance : 0} Bs</span></div>
                                     </div>
                                 </div>
-                                
+                                <div className="mt-4 border-t border-gray-200 pt-4"><label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">Observaciones</label><textarea rows={1} value={data.observation} onChange={(e) => setData('observation', e.target.value)} className="w-full rounded-lg border-gray-300 text-sm focus:border-gray-500 focus:ring-gray-500" placeholder="Detalles adicionales..." /></div>
                             </div>
                         </div>
                     </div>

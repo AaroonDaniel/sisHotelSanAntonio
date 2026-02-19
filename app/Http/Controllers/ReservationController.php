@@ -17,15 +17,20 @@ class ReservationController extends Controller
     public function index()
     {
         return Inertia::render('reservations/index', [
-            // CORRECCIÓN: Cargamos 'details.price' y 'details.room.roomType'
             'Reservations' => Reservation::with([
                 'guest', 
-                'details.room.roomType', 
-                'details.price'
+                'details.room.roomType', // Para saber qué hab es al editar
+                'details.price'          // Para saber si es privado/compartido
             ])->latest()->get(),
             
             'Guests' => Guest::all(),
-            'Rooms' => Room::with(['roomType', 'prices'])->where('status', 'LIBRE')->get(),
+            
+            // CORRECCIÓN CRÍTICA:
+            // Enviamos habitaciones 'available' (para nuevas) Y 'reserved' (para poder editar las existentes)
+            // Si solo enviamos 'available', las que están ocupadas no aparecen en el modal al editar.
+            'Rooms' => Room::with(['roomType', 'prices'])
+                        ->whereIn('status', ['available', 'reserved']) 
+                        ->get(),
         ]);
     }
 
@@ -51,9 +56,7 @@ class ReservationController extends Controller
         try {
             DB::transaction(function () use ($request) {
                 
-                // 1. Gestión del Huésped
                 $guestId = $request->guest_id;
-
                 if ($request->is_new_guest) {
                     $newGuest = Guest::create([
                         'full_name' => strtoupper($request->new_guest_name),
@@ -64,7 +67,6 @@ class ReservationController extends Controller
                     $guestId = $newGuest->id;
                 }
 
-                // 2. Crear Reserva
                 $reservation = Reservation::create([
                     'user_id' => Auth::id(),
                     'guest_id' => $guestId,
@@ -74,11 +76,9 @@ class ReservationController extends Controller
                     'duration_days' => $request->duration_days,
                     'advance_payment' => $request->advance_payment ?? 0,
                     'payment_type' => $request->payment_type,
-                    // CORRECCIÓN: 'pendiente' en minúsculas para cumplir la restricción de la BD
                     'status' => 'pendiente', 
                 ]);
 
-                // 3. Detalles de Habitaciones
                 foreach ($request->details as $detail) {
                     ReservationDetail::create([
                         'reservation_id' => $reservation->id,
@@ -86,10 +86,10 @@ class ReservationController extends Controller
                         'price_id' => $detail['price_id'],
                         'price' => $detail['price'],
                     ]);
-                    Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
+                    // Al reservar, la habitación pasa a 'reserved'
+                    Room::where('id', $detail['room_id'])->update(['status' => 'reserved']);
                 }
 
-                // 4. Pago (Adelanto)
                 if ($request->advance_payment > 0) {
                     Payment::create([
                         'reservation_id' => $reservation->id,
@@ -111,26 +111,54 @@ class ReservationController extends Controller
 
     public function update(Request $request, Reservation $reservation)
     {
-       if ($request->status === 'cancelado' && $reservation->status !== 'cancelado') {
-            foreach ($reservation->details as $detail) {
-                Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
-            }
-        }
+        $newStatus = $request->status;
 
-        $reservation->update($request->only([
-            'arrival_date', 'arrival_time', 'guest_count', 'status'
-        ]));
-        
-        return redirect()->back();
+        try {
+            DB::transaction(function () use ($request, $reservation, $newStatus) {
+                
+                // CASO: CANCELAR
+                if ($newStatus === 'cancelado') {
+                    $reservation->update(['status' => 'cancelado']);
+
+                    // Al cancelar, liberamos las habitaciones a 'available'
+                    foreach ($reservation->details as $detail) {
+                        Room::where('id', $detail->room_id)->update(['status' => 'available']);
+                    }
+                }
+                
+                // CASO: CONFIRMAR
+                elseif ($newStatus === 'confirmado') {
+                    $reservation->update(['status' => 'confirmado']);
+                    // Las habitaciones siguen 'reserved' esperando al huésped
+                }
+
+                // CASO: EDICIÓN NORMAL
+                else {
+                    $reservation->update($request->only([
+                        'arrival_date', 'arrival_time', 'guest_count', 'status'
+                    ]));
+                }
+            });
+
+            return redirect()->back()->with('success', 'Reserva actualizada.');
+
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['error' => 'Error al actualizar: ' . $e->getMessage()]);
+        }
     }
 
     public function destroy(Reservation $reservation)
     {
-        foreach ($reservation->details as $detail) {
-            Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+        try {
+            DB::transaction(function () use ($reservation) {
+                foreach ($reservation->details as $detail) {
+                    Room::where('id', $detail->room_id)->update(['status' => 'available']);
+                }
+                $reservation->delete();
+            });
+            return redirect()->back()->with('success', 'Reserva eliminada.');
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['error' => 'Error: ' . $e->getMessage()]);
         }
-        
-        $reservation->delete();
-        return redirect()->back();
     }
 }
