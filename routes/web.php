@@ -145,7 +145,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
 
     //Reportes 
-    //Reportes 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
     // Esta ruta la mantuve en el controlador para evitar error 500 en llamadas AJAX antiguas, aunque no se use activamente

@@ -10,6 +10,7 @@ use App\Models\Floor;
 use App\Models\Guest;
 use App\Models\Service;
 use App\Models\Schedule;
+use App\Models\Reservation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -20,9 +21,9 @@ class RoomController
     {
         // Usamos 'with' para cargar las relaciones y evitar consultas N+1
         $rooms = Room::with(['roomType', 'price', 'floor', 'block'])
-                 ->orderBy('number', 'asc') // <--- AGREGAR ESTO
-                 ->get();
-                 
+            ->orderBy('number', 'asc') // <--- AGREGAR ESTO
+            ->get();
+
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
             'RoomTypes' => RoomType::where('is_active', true)->get(),
@@ -146,6 +147,10 @@ class RoomController
         $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services'])
             ->where('status', 'activo')
             ->get();
+        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
+            ->where('status', 'PENDIENTE') // <-- PONLO EN MAYÚSCULAS
+            ->get();
+        // Prueba de otra manera esta parte debido a que sale sigue error por este metodo deberia de revisar y dar entender que se podria hacer 
 
         return \Inertia\Inertia::render('rooms/status', [
             'Rooms'     => $rooms,
@@ -155,6 +160,7 @@ class RoomController
             'Blocks'    => \App\Models\Block::all(),
             'RoomTypes' => \App\Models\RoomType::all(),
             'Schedules' => \App\Models\Schedule::where('is_active', true)->get(),
+            'reservations' => $pendingReservations,
         ]);
     }
 

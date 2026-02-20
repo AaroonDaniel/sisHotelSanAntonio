@@ -16,6 +16,10 @@ class ReservationController extends Controller
 {
     public function index()
     {
+        $pendingReservations = Reservation::with(['guest', 'details.room.room_type'])
+        ->where('status', 'pendiente') // O el estado que uses para "pendiente"
+        // ->whereDate('expected_check_in', today()) // Opcional: solo las de hoy
+        ->get();
         return Inertia::render('reservations/index', [
             'Reservations' => Reservation::with([
                 'guest',
@@ -29,6 +33,7 @@ class ReservationController extends Controller
             'Rooms' => Room::with(['roomType', 'price'])
                 ->whereIn('status', ['LIBRE', 'RESERVADO'])
                 ->get(),
+            'reservations' => $pendingReservations,
         ]);
     }
 

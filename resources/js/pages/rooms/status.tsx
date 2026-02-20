@@ -8,6 +8,7 @@ import {
     ArrowRightCircle,
     BedDouble,
     Brush,
+    CalendarClock,
     CheckCircle2,
     Construction,
     FileEdit,
@@ -27,6 +28,7 @@ import CheckinModal, {
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
+import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -79,6 +81,7 @@ interface Props {
     RoomTypes: RoomType[];
     Checkins: any[];
     Schedules: any[];
+    reservations: any[];
 }
 
 export default function RoomsStatus({
@@ -90,7 +93,10 @@ export default function RoomsStatus({
     RoomTypes,
     Checkins,
     Schedules,
+    reservations,
 }: Props) {
+    //Estado para el modal de reserva
+    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
         show: boolean;
@@ -395,18 +401,17 @@ export default function RoomsStatus({
                     info: 'En Reparación',
                     actionLabel: '-',
                 };
-            
+
             case 'reserved':
                 return {
-                    colorClass: 'bg-purple-600 hover:bg-purple-500 cursor-pointer',
+                    colorClass:
+                        'bg-purple-600 hover:bg-purple-500 cursor-pointer',
                     borderColor: 'border-purple-700',
                     label: 'Reservado',
-                    icon: (
-                        <FileEdit className='h-0 w-10 text-purple-200/50' />
-                    ),
-                    info: 'Habitacion Reservada' ,
-                    actionLabel: 'Ver reserva'
-                }; 
+                    icon: <FileEdit className="h-0 w-10 text-purple-200/50" />,
+                    info: 'Habitacion Reservada',
+                    actionLabel: 'Ver reserva',
+                };
 
             default:
                 return {
@@ -526,6 +531,23 @@ export default function RoomsStatus({
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-4">
                         <div className="flex flex-row items-center justify-end gap-2">
+                            {/* EL BOTÓN ANIMADO DE RESERVAS */}
+
+                            <button
+                                onClick={() => setIsPendingModalOpen(true)}
+                                className={`flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-bold uppercase transition-all ${
+                                    PendingReservationsModal.length > 0
+                                        ? 'animate-bounce bg-purple-600 text-white shadow-lg hover:scale-105 hover:bg-purple-500'
+                                        : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-500'
+                                }`}
+                            >
+                                <CalendarClock className="h-4 w-4" /> Reservas
+                                {PendingReservationsModal.length > 0 && (
+                                    <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-purple-600">
+                                        {PendingReservationsModal.length}
+                                    </span>
+                                )}
+                            </button>
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
@@ -580,13 +602,6 @@ export default function RoomsStatus({
 
                         <div className="flex flex-wrap justify-end gap-2">
                             <Badge
-                                count={countStatus('reserved')}
-                                label="Reservadas"
-                                color="bg-purple-700 font-bold"
-                                onClick={()=> setFilterStatus('reserved')}
-                                active={filterStatus === 'reserved'}
-                            />
-                            <Badge
                                 count={countBathroom('private')}
                                 label="Baño Privado"
                                 // Usamos color Teal para características
@@ -629,6 +644,13 @@ export default function RoomsStatus({
                                 color="bg-cyan-600"
                                 onClick={() => setFilterStatus('occupied')}
                                 active={filterStatus === 'occupied'}
+                            />
+                            <Badge
+                                count={countStatus('reserved')}
+                                label="Reservadas"
+                                color="bg-purple-700 font-bold"
+                                onClick={() => setFilterStatus('reserved')}
+                                active={filterStatus === 'reserved'}
                             />
 
                             <Badge
@@ -867,6 +889,13 @@ export default function RoomsStatus({
                         }}
                     />
                 )}
+
+            {/* MODAL DE RESERVAS PENDIENTES*/}
+            <PendingReservationsModal
+                show={isPendingModalOpen}
+                onClose={() => setIsPendingModalOpen(false)}
+                reservations={reservations} // <-- Pásale la variable en minúsculas
+            />
         </AuthenticatedLayout>
     );
 }
