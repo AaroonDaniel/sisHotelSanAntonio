@@ -152,6 +152,9 @@ export default function RoomsStatus({
             }
             return 'occupied';
         }
+        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) {
+            return 'reserved';
+        }
         if (['available', 'disponible', 'libre'].includes(dbStatus))
             return 'available';
         if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
@@ -392,6 +395,18 @@ export default function RoomsStatus({
                     info: 'En Reparación',
                     actionLabel: '-',
                 };
+            
+            case 'reserved':
+                return {
+                    colorClass: 'bg-purple-600 hover:bg-purple-500 cursor-pointer',
+                    borderColor: 'border-purple-700',
+                    label: 'Reservado',
+                    icon: (
+                        <FileEdit className='h-0 w-10 text-purple-200/50' />
+                    ),
+                    info: 'Habitacion Reservada' ,
+                    actionLabel: 'Ver reserva'
+                }; 
 
             default:
                 return {
@@ -565,6 +580,13 @@ export default function RoomsStatus({
 
                         <div className="flex flex-wrap justify-end gap-2">
                             <Badge
+                                count={countStatus('reserved')}
+                                label="Reservadas"
+                                color="bg-purple-700 font-bold"
+                                onClick={()=> setFilterStatus('reserved')}
+                                active={filterStatus === 'reserved'}
+                            />
+                            <Badge
                                 count={countBathroom('private')}
                                 label="Baño Privado"
                                 // Usamos color Teal para características
@@ -594,7 +616,7 @@ export default function RoomsStatus({
 
                             <Badge
                                 count={countStatus('available')}
-                                label="Libres"
+                                label="Libre"
                                 color="bg-emerald-600"
                                 onClick={() => setFilterStatus('available')}
                                 active={filterStatus === 'available'}
@@ -930,7 +952,8 @@ function CheckoutConfirmationModal({
                     setDisplayData({
                         ...serverResponse,
                         servicios: servicios,
-                        services_total: serverResponse.services_total ?? servicesTotal,
+                        services_total:
+                            serverResponse.services_total ?? servicesTotal,
                         guest: checkin.guest,
                     });
                 } else {
@@ -941,14 +964,20 @@ function CheckoutConfirmationModal({
 
                     // --- MAGIA AQUÍ: SI HAY TOLERANCIA, MODIFICAMOS LA HORA ---
                     if (waivePenalty && exitToleranceStatus.officialTime) {
-                        const [hours, minutes] = exitToleranceStatus.officialTime.split(':').map(Number);
+                        const [hours, minutes] =
+                            exitToleranceStatus.officialTime
+                                .split(':')
+                                .map(Number);
                         salida.setHours(hours, minutes, 0, 0); // Ajustamos la salida a la hora oficial
                     }
                     // -----------------------------------------------------------
 
-                    const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
+                    const diffTime = Math.abs(
+                        salida.getTime() - ingreso.getTime(),
+                    );
                     // Redondear hacia arriba para cobrar días completos
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                    const diffDays =
+                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
                     const price = parseFloat(room.price?.amount || 0);
                     const accomTotal = diffDays * price;
@@ -969,7 +998,6 @@ function CheckoutConfirmationModal({
                 }
             })
             .finally(() => setLoadingDetails(false));
-
     }, [checkin.id, waivePenalty]); // <--- ¡ESTO ES LO QUE FALTABA! (Escuchar cambios en el botón)
     // Limpieza PDF
     useEffect(() => {

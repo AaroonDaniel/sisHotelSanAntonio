@@ -122,8 +122,14 @@ class ReservationController extends Controller
                         Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
                     }
                 }
+                // CASO: CONFIRMAR
                 elseif ($newStatus === 'confirmado') {
                     $reservation->update(['status' => 'confirmado']);
+                    
+                    // Al confirmar, la habitación pasa a OCUPADO
+                    foreach ($reservation->details as $detail) {
+                        Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
+                    }
                 }
                 else {
                     $reservation->update($request->only([
