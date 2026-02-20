@@ -25,6 +25,7 @@ class ReservationController extends Controller
             
             'Guests' => Guest::all(),
             
+            
             // CORRECCIÓN CRÍTICA:
             // Enviamos habitaciones 'available' (para nuevas) Y 'reserved' (para poder editar las existentes)
             // Si solo enviamos 'available', las que están ocupadas no aparecen en el modal al editar.
