@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     Calendar,
+    CheckCircle, // Agregado para el botón confirmar
     Clock,
     DollarSign,
     Filter,
@@ -15,6 +16,10 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReservationModal, { Guest, Reservation, Room } from './reservationModal';
+// 1. IMPORTAMOS LOS MODALES COMPARTIDOS
+import DeleteModal from './deleteModal'; 
+import CancelModal from '@/components/cancelModal';   // Importamos el de cancelar
+import ConfirmModal from '@/components/confirmModal'; // Importamos el de confirmar
 
 interface Props {
     auth: { user: User };
@@ -23,9 +28,7 @@ interface Props {
     Rooms: Room[];
 }
 
-// --- COLORES DE ESTADO (Solo aquí aplicamos el Violeta) ---
 const statusStyles: Record<string, string> = {
-    // Aquí está el cambio solicitado: Violeta solo para este estado
     pendiente: 'bg-violet-100 text-violet-700 border border-violet-200',
     confirmado: 'bg-green-100 text-green-700 border border-green-200',
     cancelado: 'bg-red-50 text-red-600 border border-red-100 opacity-70',
@@ -44,6 +47,17 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
     const [statusFilter, setStatusFilter] = useState('');
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
     const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+
+    // Estados para los modales
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deletingReservationId, setDeletingReservationId] = useState<number | null>(null);
+
+    // Nuevos estados para Confirmar y Cancelar
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
+
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [confirmingReservationId, setConfirmingReservationId] = useState<number | null>(null);
 
     useEffect(() => {
         if (editingReservation) {
@@ -78,18 +92,9 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
         setIsReservationModalOpen(true);
     };
 
-    const handleDelete = (id: number) => {
-        if (confirm('¿Estás seguro de cancelar y eliminar esta reserva? Las habitaciones quedarán libres.')) {
-            router.delete(`/reservas/${id}`, { preserveScroll: true });
-        }
-    };
-
-    const updateStatus = (reservation: Reservation, newStatus: string) => {
-        if(confirm(`¿Cambiar estado a ${newStatus.toUpperCase()}?`)) {
-            router.put(`/reservas/${reservation.id}`, { 
-                status: newStatus 
-            }, { preserveScroll: true });
-        }
+    const openDeleteModal = (id: number) => {
+        setDeletingReservationId(id);
+        setIsDeleteModalOpen(true);
     };
 
     return (
@@ -168,7 +173,6 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                     filteredReservations.map((res) => (
                                         <tr key={res.id} className={`transition-colors hover:bg-gray-50 ${res.status === 'cancelado' ? 'bg-gray-50 opacity-60' : ''}`}>
                                             
-                                            {/* Columna 1: Huésped (Diseño estándar Azul) */}
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold">
@@ -186,7 +190,6 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                 </div>
                                             </td>
 
-                                            {/* Columna 2: Fechas (Diseño estándar Gris) */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col gap-1.5">
                                                     <div className="flex items-center gap-2 text-gray-700">
@@ -200,7 +203,6 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                 </div>
                                             </td>
 
-                                            {/* Columna 3: Habitaciones */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap gap-1">
                                                     {res.details && res.details.length > 0 ? (
@@ -216,7 +218,6 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                 </div>
                                             </td>
 
-                                            {/* Columna 4: Adelanto */}
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-1.5">
                                                     <div className={`flex h-8 w-8 items-center justify-center rounded-full ${res.advance_payment > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -231,16 +232,26 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                 </div>
                                             </td>
 
-                                            {/* Columna 5: Estado (AQUÍ ESTÁ EL VIOLETA) */}
                                             <td className="px-6 py-4 text-center">
                                                 <span className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-bold uppercase shadow-sm ${statusStyles[res.status] || 'bg-gray-100 text-gray-600'}`}>
                                                     {statusLabels[res.status] || res.status}
                                                 </span>
                                             </td>
 
-                                            {/* Columna 6: Acciones */}
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    
+                                                    {/* BOTÓN CONFIRMAR -> Dispara confirmModal */}
+                                                    {res.status === 'pendiente' && (
+                                                        <button 
+                                                            onClick={() => { setConfirmingReservationId(res.id); setIsConfirmModalOpen(true); }}
+                                                            className="group relative rounded-lg p-2 text-green-500 transition hover:bg-green-50 hover:text-green-700"
+                                                            title="Confirmar Llegada / Ocupar"
+                                                        >
+                                                            <CheckCircle className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+
                                                     <button 
                                                         onClick={() => openEditModal(res)}
                                                         className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-blue-50 hover:text-blue-600"
@@ -249,9 +260,10 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                         <Pencil className="h-4 w-4" />
                                                     </button>
 
+                                                    {/* BOTÓN CANCELAR -> Dispara cancelModal */}
                                                     {res.status !== 'cancelado' && (
                                                         <button 
-                                                            onClick={() => updateStatus(res, 'cancelado')}
+                                                            onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
                                                             className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
                                                             title="Cancelar"
                                                         >
@@ -259,10 +271,10 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                         </button>
                                                     )}
 
-                                                    <button 
-                                                        onClick={() => handleDelete(res.id)}
+                                                    <button
+                                                        onClick={() => openDeleteModal(res.id)}
                                                         className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
-                                                        title="Eliminar"
+                                                        title="Eliminar permanentemente"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
@@ -292,6 +304,25 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                     reservationToEdit={editingReservation}
                     guests={Guests}
                     rooms={Rooms}
+                />
+                
+                {/* AQUI RENDERIZAMOS LOS 3 MODALES */}
+                <DeleteModal
+                    show={isDeleteModalOpen}
+                    onClose={() => setIsDeleteModalOpen(false)}
+                    reservationId={deletingReservationId}
+                />
+
+                <CancelModal 
+                    show={isCancelModalOpen} 
+                    onClose={() => setIsCancelModalOpen(false)} 
+                    actionUrl={cancelingReservationId ? `/reservas/${cancelingReservationId}` : null} 
+                />
+                
+                <ConfirmModal 
+                    show={isConfirmModalOpen} 
+                    onClose={() => setIsConfirmModalOpen(false)} 
+                    actionUrl={confirmingReservationId ? `/reservas/${confirmingReservationId}` : null} 
                 />
             </div>
         </AuthenticatedLayout>
