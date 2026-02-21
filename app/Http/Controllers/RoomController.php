@@ -23,6 +23,9 @@ class RoomController
         $rooms = Room::with(['roomType', 'price', 'floor', 'block'])
             ->orderBy('number', 'asc') // <--- AGREGAR ESTO
             ->get();
+        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
+        ->whereRaw('LOWER(status) = ?', ['pendiente'])
+        ->get();
 
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
@@ -30,6 +33,7 @@ class RoomController
             'Prices' => Price::where('is_active', true)->get(),
             'Floors' => Floor::where('is_active', true)->get(),
             'Blocks' => Block::where('is_active', true)->get(),
+            'reservations' => $pendingReservations,
         ]);
     }
 
@@ -148,8 +152,8 @@ class RoomController
             ->where('status', 'activo')
             ->get();
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
-            ->where('status', 'PENDIENTE') // <-- PONLO EN MAYÚSCULAS
-            ->get();
+    ->whereRaw('LOWER(status) = ?', ['pendiente'])
+    ->get();
         // Prueba de otra manera esta parte debido a que sale sigue error por este metodo deberia de revisar y dar entender que se podria hacer 
 
         return \Inertia\Inertia::render('rooms/status', [

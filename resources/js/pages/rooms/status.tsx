@@ -537,7 +537,7 @@ export default function RoomsStatus({
                                 onClick={() => setIsPendingModalOpen(true)}
                                 className={`flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-bold uppercase transition-all ${
                                     PendingReservationsModal.length > 0
-                                        ? 'animate-bounce bg-purple-600 text-white shadow-lg hover:scale-105 hover:bg-purple-500'
+                                        ? 'animate-bounce bg-gray-800 text-white shadow-lg hover:scale-105 hover:bg-gray-700'
                                         : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-500'
                                 }`}
                             >
