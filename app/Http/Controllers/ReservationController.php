@@ -172,10 +172,51 @@ class ReservationController extends Controller
                     
                     $reservation->update(['status' => 'confirmada']); 
                     
-                    // Al confirmar, la habitación pasa a OCUPADO
-                    foreach ($reservation->details as $detail) {
+                    // ========================================================
+                    // 🚨 NUEVO: CREAR EL CHECK-IN AUTOMÁTICAMENTE AL CONFIRMAR 🚨
+                    // ========================================================
+                    $primerCheckinId = null;
+
+                    foreach ($reservation->details as $index => $detail) {
+                        // Creamos el Checkin en blanco para que el sistema sepa quién está en la habitación
+                        $checkin = \App\Models\Checkin::create([
+                            'guest_id' => $reservation->guest_id,
+                            'room_id'  => $detail->room_id,
+                            'user_id'  => Auth::id() ?? 1,
+                            'check_in_date' => $reservation->arrival_date ?? now(),
+                            'actual_arrival_date' => now(),
+                            'duration_days' => $reservation->duration_days ?? 1,
+                            'advance_payment' => 0, 
+                            'origin' => null, // 🚨 ESTO ES CLAVE: Fuerza a React a mostrar "Faltan Datos" (Ámbar)
+                            'status' => 'activo',
+                            'is_temporary' => false,
+                            'notes' => 'Generado automáticamente desde la Reserva #' . $reservation->id,
+                        ]);
+
+                        // Guardamos el ID del primer checkin para moverle la plata del adelanto
+                        if ($index === 0) {
+                            $primerCheckinId = $checkin->id;
+                        }
+
+                        // Al confirmar, la habitación pasa a OCUPADO
                         Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
                     }
+
+                    // Trasladar pagos (Adelantos) de la reserva al Check-in
+                    if ($primerCheckinId && $reservation->advance_payment > 0) {
+                        $pagos = Payment::where('reservation_id', $reservation->id)->get();
+                        foreach ($pagos as $pago) {
+                            $pago->update([
+                                'checkin_id' => $primerCheckinId,
+                                'reservation_id' => null 
+                            ]);
+                        }
+                        
+                        // Actualizar el saldo visible
+                        $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
+                        \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+                    }
+                    // ========================================================
                 }
                 else {
                     $reservation->update($request->only([
@@ -189,7 +230,7 @@ class ReservationController extends Controller
             });
 
             Log::info("=== PROCESO TERMINADO CON ÉXITO ===");
-            return redirect()->back()->with('success', 'Reserva actualizada.');
+            return redirect()->back()->with('success', 'Reserva confirmada. Ahora las habitaciones están pendientes de completar datos.');
             
         } catch (\Exception $e) {
             Log::error("❌ ERROR: " . $e->getMessage());

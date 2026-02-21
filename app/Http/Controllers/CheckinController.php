@@ -59,16 +59,18 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR) (SIN CAMBIOS)
+        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR)
         // =========================================================
         $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
         $isTitularComplete = true;
+        $missingField = null; // <-- AÑADIDO: Rastrea qué campo exacto falta
 
         if (!$request->filled('guest_id')) {
             // A. Si es NUEVO: Verificamos que el formulario traiga todo
             foreach ($requiredFields as $field) {
                 if (!$request->filled($field)) {
                     $isTitularComplete = false;
+                    $missingField = $field; // <-- Guardamos el campo
                     break;
                 }
             }
@@ -81,6 +83,7 @@ class CheckinController extends Controller
                     $hasData = $request->filled($field) || !empty($existingGuestCheck->$field);
                     if (!$hasData) {
                         $isTitularComplete = false;
+                        $missingField = $field; // <-- Guardamos el campo
                         break;
                     }
                 }
@@ -90,6 +93,7 @@ class CheckinController extends Controller
         // C. Verificar Procedencia (Origin) - CRÍTICO
         if ($isTitularComplete && is_null($cleanOrigin)) {
             $isTitularComplete = false;
+            $missingField = 'origin'; // <-- Guardamos el campo
         }
 
         // =========================================================
@@ -198,9 +202,8 @@ class CheckinController extends Controller
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // 3. Crear el Checkin Principal
-        // Usamos una transacción para asegurar que si falla el pago, no se cree el checkin
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete) {
+        // Pasamos también $missingField a la transacción
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField) {
 
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
@@ -241,7 +244,9 @@ class CheckinController extends Controller
             }
             // -----------------------------------------------------------
 
-            // 4. --- LÓGICA DE ACOMPAÑANTES (SIN CAMBIOS) ---
+            // 4. --- LÓGICA DE ACOMPAÑANTES (SIN CAMBIOS ESTRUCTURALES) ---
+            $allCompanionsComplete = true; // <-- AÑADIDO: Verifica si los acompañantes están completos
+
             if ($request->has('companions') && is_array($request->companions)) {
                 $idsParaSincronizar = [];
 
@@ -254,6 +259,9 @@ class CheckinController extends Controller
 
                     // Calculamos estado del acompañante (simple)
                     $compIsComplete = !empty($compIdNumber) && !empty($compData['nationality']);
+                    if (!$compIsComplete) {
+                        $allCompanionsComplete = false; // <-- Detectamos si falta data de algún acompañante
+                    }
 
                     // BÚSQUEDA BLINDADA ACOMPAÑANTES
                     $companion = null;
@@ -301,19 +309,42 @@ class CheckinController extends Controller
                 $checkin->services()->sync($request->selected_services);
             }
 
-            // 6. Actualizar Estado Habitación (SIN CAMBIOS)
-            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+            // =========================================================
+            // 🛑 6. EL BLOQUEO ESTRICTO DE RESPUESTA (LO ÚNICO QUE REEMPLAZA EL FINAL ANTERIOR)
+            // =========================================================
+            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
-            // 7. RESPUESTA FINAL (SIN CAMBIOS)
-            if (!$isTitularComplete) {
-                return redirect()->back()->with('success', 'Asignación registrada, pero FALTAN DATOS (como la Procedencia). El huésped quedó como INCOMPLETE.');
+            if (!$isEverythingComplete) {
+                $mensaje = 'Faltan datos.';
+
+                if (!$isTitularComplete) {
+                    $campoFaltante = match ($missingField) {
+                        'identification_number' => 'Carnet de Identidad',
+                        'nationality' => 'Nacionalidad',
+                        'origin' => 'Procedencia (Origen)', 
+                        'profession' => 'Profesión',
+                        'civil_status' => 'Estado Civil',
+                        'birth_date' => 'Fecha de Nacimiento',
+                        'issued_in' => 'Lugar de Expedición',
+                        default => 'algún dato obligatorio'
+                    };
+                    $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
+                } elseif (!$allCompanionsComplete) {
+                    $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
+                }
+
+                // 🛑 Lanza una excepción. Cancela todo y no deja que pase a Ocupado.
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'origin' => $mensaje . ' Complete la información para que la habitación pase a Ocupado.'
+                ]);
             }
 
-            return redirect()->back()->with('success', 'Asignación registrada correctamente.');
+            // 7. Actualizar Estado Habitación (AHORA SÍ, DE FORMA SEGURA PORQUE YA VALIDÓ)
+            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+            return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente.');
         });
     }
-
-
 
     public function transfer(Request $request, Checkin $checkin)
     {

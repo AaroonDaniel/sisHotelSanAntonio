@@ -1000,15 +1000,19 @@ export default function CheckinModal({
                     {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
                     <div className="relative flex-1 overflow-y-auto border-r border-gray-100 bg-white p-6">
                         {/* B. ALERTA DE PERFIL PENDIENTE (Solo visible para Titular) */}
-                        {/* ALERTA DE DATOS FALTANTES (Para Reservas Convertidas o Perfiles Nuevos) */}
-                        {(isTitular && (isProfileIncomplete || (checkinToEdit && (!data.origin || data.origin.trim() === '')))) && (
-                            <div className="mb-4 flex animate-in items-center justify-between rounded-lg border-b border-amber-100 bg-amber-50 px-6 py-2 slide-in-from-top-2">
-                                <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    FALTAN DATOS: Complete la procedencia y datos del titular/acompañantes para confirmar el Check-in.
-                                </span>
-                            </div>
-                        )}
+                        {isTitular &&
+                            (isProfileIncomplete ||
+                                (checkinToEdit &&
+                                    (!data.origin ||
+                                        data.origin.trim() === ''))) && (
+                                <div className="-mx-6 -mt-6 mb-2 flex animate-in items-center justify-between rounded-none border-b border-amber-100 bg-amber-50 px-6 py-2 slide-in-from-top-2">
+                                    <span className="flex items-center gap-2 text-[11px] font-bold text-amber-700">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        Completa todos los campos para confirmar
+                                        el Check-in.
+                                    </span>
+                                </div>
+                            )}
 
                         <div className="space-y-4">
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
@@ -1500,7 +1504,7 @@ export default function CheckinModal({
                                                     : 'text-gray-400'
                                             }`}
                                         >
-                                           Asig. TEMPORAL:
+                                            Asig. TEMPORAL:
                                         </label>
 
                                         <input
@@ -1993,9 +1997,12 @@ export default function CheckinModal({
                                         type="submit"
                                         disabled={processing}
                                         className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${
-                                            (isProfileIncomplete || (checkinToEdit && (!data.origin || data.origin.trim() === ''))) 
-                                            ? 'bg-amber-600 hover:bg-amber-500' 
-                                            : 'bg-green-600 hover:bg-green-500'
+                                            isProfileIncomplete ||
+                                            (checkinToEdit &&
+                                                (!data.origin ||
+                                                    data.origin.trim() === ''))
+                                                ? 'bg-amber-600 hover:bg-amber-500'
+                                                : 'bg-green-600 hover:bg-green-500'
                                         }`}
                                     >
                                         {processing ? (
@@ -2004,7 +2011,10 @@ export default function CheckinModal({
                                             <>
                                                 <Save className="h-4 w-4" />
                                                 {checkinToEdit
-                                                    ? ((!data.origin || data.origin.trim() === '') ? 'Completar Check-in' : 'Actualizar')
+                                                    ? !data.origin ||
+                                                      data.origin.trim() === ''
+                                                        ? 'Completar Check-in'
+                                                        : 'Actualizar'
                                                     : isProfileIncomplete
                                                       ? 'Asignación Rápida'
                                                       : 'Registrar'}
