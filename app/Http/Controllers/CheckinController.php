@@ -631,7 +631,8 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-            // 8. RESPUESTA (ERROR SI FALTA PROCEDENCIA O CUALQUIER DATO)
+           $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
+
             if (!$isEverythingComplete) {
                 $mensaje = 'Faltan datos.';
 
@@ -639,7 +640,7 @@ class CheckinController extends Controller
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
                         'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia (Origen)', // <--- AVISO ESPECÍFICO
+                        'origin' => 'Procedencia (Origen)', 
                         'profession' => 'Profesión',
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
@@ -651,11 +652,16 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
                 }
 
-                // 🛑 RETORNO DE ERROR (Esto evita que el frontend piense que está "Completo")
-                return redirect()->back()->with('error', $mensaje . '. La habitación sigue PENDIENTE.');
+                // Lanza excepción: Aborta el guardado en BD, evita que pase a OCUPADO y muestra el error rojo en React
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'origin' => $mensaje . ' Complete la información para poder Registrar.'
+                ]);
             }
 
-            return redirect()->back()->with('success', 'Todos los datos (Titular y Acompañantes) actualizados correctamente.');
+            // Si TODO está completo, pasamos la habitación a OCUPADO
+            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+            return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente.');
         });
     }
 
@@ -1535,6 +1541,8 @@ class CheckinController extends Controller
     /*Fucion a futuro* */
     // Ejemplo lógico (no copres esto todavía, es para que entiendas el flujo)
 
+    // --- CONVERSIÓN DE RESERVA A CHECK-IN ---
+    // --- CONVERSIÓN DE RESERVA A CHECK-IN ---
     public function storeFromReservation(Request $request)
     {
         $request->validate([
@@ -1547,46 +1555,53 @@ class CheckinController extends Controller
 
             $primerCheckinId = null;
 
-            // Recorremos CADA HABITACIÓN reservada (si reservó 5, creará 5 check-ins)
+            // Recorremos CADA HABITACIÓN reservada
             foreach ($reservation->details as $index => $detail) {
+                
+                $arrivalDate = $reservation->arrival_date ?? now();
+
                 $checkin = \App\Models\Checkin::create([
                     'guest_id' => $reservation->guest_id,
                     'room_id'  => $detail->room_id,
                     'user_id'  => \Illuminate\Support\Facades\Auth::id() ?? 1,
-                    'check_in_date' => now(), // Hora real de llegada
+                    'check_in_date' => now(), 
                     'actual_arrival_date' => now(),
-                    'duration_days' => $reservation->duration_days,
+                    'duration_days' => $reservation->duration_days ?? 1,
                     'advance_payment' => 0, 
-                    'origin' => null, // 🚨 ESTO ES CLAVE: Como es null, el sistema detectará que "Faltan Datos"
+                    'origin' => null, // 🚨 ESTO ES CLAVE: El sistema detectará que "Faltan Datos"
                     'status' => 'activo',
                     'is_temporary' => false,
                     'notes' => 'Generado desde Reserva #' . $reservation->id,
+                    'schedule_id' => $reservation->schedule_id, // Sin el error de clone
                 ]);
 
-                // Guardamos el ID de la primera habitación para asignarle todo el pago adelantado
                 if ($index === 0) {
                     $primerCheckinId = $checkin->id;
                 }
 
-                // Pasamos la habitación a OCUPADO
+                // Pasamos la habitación a OCUPADO en la BD (Se verá Ámbar en el frontend)
                 \App\Models\Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
             }
 
-            // Trasladamos el pago (Adelanto) de la Reserva al primer Check-in para que cuadre caja
+            // Trasladamos el pago (Adelanto)
             if ($primerCheckinId && $reservation->advance_payment > 0) {
                 $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
                 foreach ($pagos as $pago) {
-                    $pago->update(['checkin_id' => $primerCheckinId]);
+                    $pago->update([
+                        'checkin_id' => $primerCheckinId,
+                        'reservation_id' => null 
+                    ]);
                 }
                 
-                $totalPagos = $pagos->sum('amount');
+                // Actualizamos el total acumulado
+                $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                 \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
             }
 
             // Marcamos la reserva original como completada
             $reservation->update(['status' => 'completada']);
 
-            return redirect()->back()->with('success', 'Reserva confirmada. Por favor, complete los datos faltantes de cada habitación.');
+            return redirect()->back()->with('success', 'Reserva confirmada. Por favor, ingrese a la habitación para completar los datos faltantes del Check-in.');
         });
     }
 }

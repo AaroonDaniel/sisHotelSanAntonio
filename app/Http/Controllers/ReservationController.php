@@ -40,37 +40,55 @@ class ReservationController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'is_new_guest' => 'boolean',
-            'guest_id' => 'required_if:is_new_guest,false',
-            'new_guest_name' => 'required_if:is_new_guest,true',
-            'new_guest_ci' => 'nullable',
-            'guest_count' => 'required|integer|min:1',
-            'arrival_date' => 'required|date',
-            'arrival_time' => 'nullable',
-            'duration_days' => 'required|integer|min:1',
-            'advance_payment' => 'nullable|numeric|min:0',
-            'payment_type' => 'required|string',
-            'details' => 'required|array|min:1',
-            'details.*.room_id' => 'required',
-            'details.*.price_id' => 'required',
-            'details.*.price' => 'required|numeric',
-        ]);
+        // 🔴 1. LOG INICIAL: Imprimimos ABSOLUTAMENTE TODO lo que manda React
+        Log::info('=== INICIANDO CREACIÓN DE RESERVA ===');
+        Log::info('Datos recibidos desde el Frontend (React):', $request->all());
 
+        // 2. Validación
+        try {
+            $validatedData = $request->validate([
+                'is_new_guest' => 'boolean',
+                'guest_id' => 'required_if:is_new_guest,false',
+                'new_guest_name' => 'required_if:is_new_guest,true',
+                'guest_count' => 'required|integer|min:1',
+                'arrival_date' => 'required|date',
+                'duration_days' => 'required|integer|min:1',
+                'advance_payment' => 'nullable|numeric|min:0',
+                'payment_type' => 'required|string',
+                'details' => 'required|array|min:1',
+                'details.*.room_id' => 'required',
+                'details.*.price_id' => 'required',
+                'details.*.price' => 'required|numeric',
+            ]);
+            Log::info('✅ Validación superada con éxito.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Si la validación falla, lo guardamos en el Log y retornamos el error
+            Log::error('❌ Falló la validación de los datos:', $e->errors());
+            return redirect()->back()->withErrors($e->errors());
+        }
+
+        // 3. Inserción en la Base de Datos
         try {
             DB::transaction(function () use ($request) {
+                Log::info('Iniciando transacción de Base de Datos...');
 
                 $guestId = $request->guest_id;
+                
+                // Si es un huésped nuevo, lo creamos primero
                 if ($request->is_new_guest) {
+                    Log::info('Creando nuevo huésped...');
                     $newGuest = Guest::create([
                         'full_name' => strtoupper($request->new_guest_name),
-                        'identification_number' => $request->new_guest_ci,
+                        'identification_number' => $request->new_guest_ci ?? null, // Manejo seguro de null
                         'nationality' => 'BOLIVIA',
                         'profile_status' => 'INCOMPLETE',
                     ]);
                     $guestId = $newGuest->id;
+                    Log::info("Nuevo huésped creado con ID: {$guestId}");
                 }
 
+                // Creamos la Reserva Principal
+                Log::info('Creando registro principal de Reserva...');
                 $reservation = Reservation::create([
                     'user_id' => Auth::id(),
                     'guest_id' => $guestId,
@@ -80,9 +98,12 @@ class ReservationController extends Controller
                     'duration_days' => $request->duration_days,
                     'advance_payment' => $request->advance_payment ?? 0,
                     'payment_type' => $request->payment_type,
-                    'status' => 'pendiente',
+                    'status' => 'pendiente', // ⚠️ OJO: Según tu BD debe ser minúscula
                 ]);
+                Log::info("Reserva principal creada con ID: {$reservation->id}");
 
+                // Agregamos los detalles (Habitaciones)
+                Log::info('Procesando ' . count($request->details) . ' habitaciones...');
                 foreach ($request->details as $detail) {
                     ReservationDetail::create([
                         'reservation_id' => $reservation->id,
@@ -91,11 +112,14 @@ class ReservationController extends Controller
                         'price' => $detail['price'],
                     ]);
                     
-                    // 🚀 CORRECCIÓN: Estado en español para no reventar la BD
+                    // Pasamos la habitación a RESERVADO
                     Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
+                    Log::info("Habitación {$detail['room_id']} apartada y marcada como RESERVADO.");
                 }
 
+                // Registramos el pago si dejó algún adelanto
                 if ($request->advance_payment > 0) {
+                    Log::info("Registrando pago de adelanto por: {$request->advance_payment}");
                     Payment::create([
                         'reservation_id' => $reservation->id,
                         'user_id' => Auth::id(),
@@ -107,9 +131,13 @@ class ReservationController extends Controller
                 }
             });
 
+            Log::info('=== CREACIÓN DE RESERVA FINALIZADA CON ÉXITO ===');
             return redirect()->back()->with('success', 'Reserva registrada correctamente');
+            
         } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['error' => 'Error: ' . $e->getMessage()]);
+            // Si cualquier consulta SQL falla, explotará aquí
+            Log::error("❌ Error CRÍTICO en la Base de Datos (store): " . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => 'Error al guardar en la BD: ' . $e->getMessage()]);
         }
     }
 

@@ -24,8 +24,8 @@ class RoomController
             ->orderBy('number', 'asc') // <--- AGREGAR ESTO
             ->get();
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
-        ->whereRaw('LOWER(status) = ?', ['pendiente'])
-        ->get();
+            ->whereRaw('LOWER(status) = ?', ['pendiente'])
+            ->get();
 
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
@@ -142,28 +142,35 @@ class RoomController
     }
     public function status()
     {
-        // 1. Cargamos las habitaciones con sus relaciones y los detalles de consumo
-        $rooms = Room::with(['roomType', 'price', 'checkins' => function ($q) {
-            $q->with(['guest', 'companions', 'checkinDetails.service', 'services'])->latest('id');
-        }])->orderBy('number')->get();
+        // 1. Cargamos las habitaciones y le decimos a Laravel que SOLO traiga el Checkin 'activo'
+        $rooms = Room::with([
+            'roomType', 
+            'price', 
+            'checkins' => function ($q) {
+                // 🛑 ESTO ES LO QUE FALTABA: Asegurarnos de traer el activo para que React lo vea
+                $q->where('status', 'activo')
+                  ->with(['guest', 'companions', 'checkinDetails.service', 'services']);
+            }
+        ])->orderBy('number')->get();
 
         // 2. Obtenemos todos los checkins activos para la búsqueda global en el modal
         $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services'])
             ->where('status', 'activo')
             ->get();
+
+        // 3. Reservas pendientes
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
-    ->whereRaw('LOWER(status) = ?', ['pendiente'])
-    ->get();
-        // Prueba de otra manera esta parte debido a que sale sigue error por este metodo deberia de revisar y dar entender que se podria hacer 
+            ->whereRaw('LOWER(status) = ?', ['pendiente'])
+            ->get();
 
         return \Inertia\Inertia::render('rooms/status', [
-            'Rooms'     => $rooms,
-            'Checkins'  => $activeCheckins, // Propiedad necesaria para el nuevo modal
-            'Guests'    => \App\Models\Guest::all(),
-            'services'  => \App\Models\Service::all(),
-            'Blocks'    => \App\Models\Block::all(),
-            'RoomTypes' => \App\Models\RoomType::all(),
-            'Schedules' => \App\Models\Schedule::where('is_active', true)->get(),
+            'Rooms'        => $rooms,
+            'Checkins'     => $activeCheckins,
+            'Guests'       => \App\Models\Guest::all(),
+            'services'     => \App\Models\Service::all(),
+            'Blocks'       => \App\Models\Block::all(),
+            'RoomTypes'    => \App\Models\RoomType::all(),
+            'Schedules'    => \App\Models\Schedule::where('is_active', true)->get(),
             'reservations' => $pendingReservations,
         ]);
     }

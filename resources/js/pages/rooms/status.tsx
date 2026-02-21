@@ -142,25 +142,42 @@ export default function RoomsStatus({
                 room.checkins && room.checkins.length > 0
                     ? room.checkins[0]
                     : null;
+
+            // =========================================================
+            // 🔍 CONSOLE.LOGS DE DEPURACIÓN PARA ENCONTRAR EL ERROR
+            // =========================================================
+            console.log(`\n================================`);
+            console.log(`[DEBUG] Evaluando Habitación: ${room.number}`);
+            console.log(`[DEBUG] Status en Base de Datos: ${dbStatus}`);
+            console.log(`[DEBUG] Checkin Activo Encontrado:`, activeCheckin);
+
             if (activeCheckin) {
                 const guest = activeCheckin.guest as Guest | undefined;
-                const isTitularIncomplete =
-                    guest?.profile_status === 'INCOMPLETE';
-                const companions = activeCheckin.companions as
-                    | Guest[]
-                    | undefined;
+                const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
+                const companions = activeCheckin.companions as Guest[] | undefined;
                 const isAnyCompanionIncomplete = companions?.some(
                     (c) => c.profile_status === 'INCOMPLETE',
                 );
 
                 const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
+                console.log(`[DEBUG] -> ¿Titular Incompleto?: ${isTitularIncomplete} (Profile Status: ${guest?.profile_status})`);
+                console.log(`[DEBUG] -> ¿Origin Faltante?: ${isOriginMissing} (Valor actual: "${activeCheckin.origin}")`);
+                console.log(`[DEBUG] -> ¿Acompañante Incompleto?: ${isAnyCompanionIncomplete}`);
+
                 if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
+                    console.log(`[DEBUG] 🎯 RESULTADO PARA HAB ${room.number} -> INCOMPLETE (Debería ser Ámbar)`);
                     return 'incomplete';
                 }
+            } else {
+                console.log(`[DEBUG] ⚠️ ADVERTENCIA: La habitación está en OCUPADO en BD, pero NO TIENE array de 'checkins' asociado en la respuesta del servidor.`);
             }
+
+            console.log(`[DEBUG] 🟢 RESULTADO PARA HAB ${room.number} -> OCCUPIED (Pasa directo a Cian)`);
             return 'occupied';
+            // =========================================================
         }
+
         if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) {
             return 'reserved';
         }
