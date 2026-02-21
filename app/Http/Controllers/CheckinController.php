@@ -1537,28 +1537,56 @@ class CheckinController extends Controller
 
     public function storeFromReservation(Request $request)
     {
-        // 1. Creamos el Checkin Físico para el huésped que llegó
-        $checkin = Checkin::create([
-            'guest_id' => $request->guest_id, // Puede ser Juan o Pedro
-            'room_id'  => $request->room_id,
-            // ... otros datos
+        $request->validate([
+            'reservation_id' => 'required|exists:reservations,id'
         ]);
 
-        // 2. ¿Queremos usar el saldo de la reserva?
-        if ($request->usar_saldo_reserva) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            // Traemos la reserva con todas sus habitaciones y el huésped
+            $reservation = \App\Models\Reservation::with(['details.room', 'guest'])->findOrFail($request->reservation_id);
 
-            // Buscamos los pagos "flotantes" de esa reserva
-            $pagosAdelantados = Payment::where('reservation_id', $request->reservation_id)
-                ->whereNull('checkin_id') // Que aún no se hayan gastado
-                ->get();
+            $primerCheckinId = null;
 
-            foreach ($pagosAdelantados as $pago) {
-                // AQUÍ ESTÁ LA MAGIA:
-                // Asignamos ese pago antiguo a ESTE checkin nuevo
-                $pago->update([
-                    'checkin_id' => $checkin->id
+            // Recorremos CADA HABITACIÓN reservada (si reservó 5, creará 5 check-ins)
+            foreach ($reservation->details as $index => $detail) {
+                $checkin = \App\Models\Checkin::create([
+                    'guest_id' => $reservation->guest_id,
+                    'room_id'  => $detail->room_id,
+                    'user_id'  => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                    'check_in_date' => now(), // Hora real de llegada
+                    'actual_arrival_date' => now(),
+                    'duration_days' => $reservation->duration_days,
+                    'advance_payment' => 0, 
+                    'origin' => null, // 🚨 ESTO ES CLAVE: Como es null, el sistema detectará que "Faltan Datos"
+                    'status' => 'activo',
+                    'is_temporary' => false,
+                    'notes' => 'Generado desde Reserva #' . $reservation->id,
                 ]);
+
+                // Guardamos el ID de la primera habitación para asignarle todo el pago adelantado
+                if ($index === 0) {
+                    $primerCheckinId = $checkin->id;
+                }
+
+                // Pasamos la habitación a OCUPADO
+                \App\Models\Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
             }
-        }
+
+            // Trasladamos el pago (Adelanto) de la Reserva al primer Check-in para que cuadre caja
+            if ($primerCheckinId && $reservation->advance_payment > 0) {
+                $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
+                foreach ($pagos as $pago) {
+                    $pago->update(['checkin_id' => $primerCheckinId]);
+                }
+                
+                $totalPagos = $pagos->sum('amount');
+                \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+            }
+
+            // Marcamos la reserva original como completada
+            $reservation->update(['status' => 'completada']);
+
+            return redirect()->back()->with('success', 'Reserva confirmada. Por favor, complete los datos faltantes de cada habitación.');
+        });
     }
 }

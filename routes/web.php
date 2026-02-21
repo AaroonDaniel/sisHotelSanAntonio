@@ -117,6 +117,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Ruta para guardar adelantos
     Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])
         ->name('checkins.addPayment');
+    // Ruta de agregar reserva a checkin
+    Route::post('/checkins/from-reservation', [App\Http\Controllers\CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
 
     // Ruta de Tolerancia
     Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
@@ -143,6 +145,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/reservas', [ReservationController::class, 'store'])->name('reservations.store');
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
+
 
     //Reportes 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');

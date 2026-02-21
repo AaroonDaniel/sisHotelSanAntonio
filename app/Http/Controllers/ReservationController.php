@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
@@ -16,7 +17,7 @@ class ReservationController extends Controller
 {
     public function index()
     {
-        $pendingReservations = Reservation::with(['guest', 'details.room.room_type'])
+        $pendingReservations = Reservation::with(['guest', 'details.room.roomType'])
         ->where('status', 'pendiente') // O el estado que uses para "pendiente"
         // ->whereDate('expected_check_in', today()) // Opcional: solo las de hoy
         ->get();
@@ -116,20 +117,32 @@ class ReservationController extends Controller
     {
         $newStatus = $request->status;
 
+        Log::info("=== INTENTANDO ACTUALIZAR RESERVA ID: {$reservation->id} ===");
+        Log::info("Estado recibido: " . $newStatus);
+
         try {
             DB::transaction(function () use ($request, $reservation, $newStatus) {
 
-                if ($newStatus === 'cancelado') {
-                    $reservation->update(['status' => 'cancelado']);
+                // Convertimos a mayúsculas para evaluar lo que manda React
+                $statusUpper = strtoupper($newStatus);
 
-                    // 🚀 CORRECCIÓN: Al cancelar vuelve a LIBRE
+                // React manda 'cancelado', evaluamos 'CANCELADO'
+                if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
+                    
+                    // 🚀 AQUÍ ESTÁ LA MAGIA: Lo guardamos en la BD tal cual lo exige el ENUM
+                    $reservation->update(['status' => 'cancelada']);
+                    Log::info("✅ Reserva actualizada a 'cancelada' en la BD.");
+
+                    // Liberamos las habitaciones
                     foreach ($reservation->details as $detail) {
                         Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+                        Log::info("✅ Habitación ID {$detail->room_id} liberada.");
                     }
                 }
-                // CASO: CONFIRMAR
-                elseif ($newStatus === 'confirmado') {
-                    $reservation->update(['status' => 'confirmado']);
+                // Si en algún momento confirmas, también debes respetar el ENUM ('confirmada')
+                elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
+                    
+                    $reservation->update(['status' => 'confirmada']); 
                     
                     // Al confirmar, la habitación pasa a OCUPADO
                     foreach ($reservation->details as $detail) {
@@ -141,13 +154,17 @@ class ReservationController extends Controller
                         'arrival_date',
                         'arrival_time',
                         'guest_count',
-                        'status'
+                        // Si actualizas otros estados desde otro lado, ten cuidado de mandar las minúsculas exactas
+                        'status' 
                     ]));
                 }
             });
 
+            Log::info("=== PROCESO TERMINADO CON ÉXITO ===");
             return redirect()->back()->with('success', 'Reserva actualizada.');
+            
         } catch (\Exception $e) {
+            Log::error("❌ ERROR: " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error al actualizar: ' . $e->getMessage()]);
         }
     }

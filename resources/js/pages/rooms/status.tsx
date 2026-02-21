@@ -152,7 +152,10 @@ export default function RoomsStatus({
                 const isAnyCompanionIncomplete = companions?.some(
                     (c) => c.profile_status === 'INCOMPLETE',
                 );
-                if (isTitularIncomplete || isAnyCompanionIncomplete) {
+
+                const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
+
+                if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
                     return 'incomplete';
                 }
             }

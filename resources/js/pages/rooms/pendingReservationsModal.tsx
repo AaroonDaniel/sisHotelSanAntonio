@@ -53,17 +53,25 @@ export default function PendingReservationsModal({
     };
 
     // Confirmar envía los datos para crear el Check-in
-    const submitCheckin: FormEventHandler = (e) => {
-        e.preventDefault();
-        post('/checkins/from-reservation', {
+    const handleConfirm = (id: number) => {
+        console.log(`⏳ Convirtiendo Reserva ID: ${id} a asignaciones (Check-in)...`);
+        
+        // Enviamos un POST al CheckinController, NO un PUT al ReservationController
+        router.post('/checkins/from-reservation', { reservation_id: id }, {
             preserveScroll: true,
             onSuccess: () => {
-                reset();
-                onClose();
+                console.log('✅ ¡Check-ins creados! Las habitaciones pasarán a color Ámbar (Faltan Datos).');
+                if (selectedReservation?.id === id) {
+                    setSelectedReservation(null);
+                    reset(); // Limpia el formulario
+                }
+                onClose(); // Cierra el modal para ver el panel actualizado
             },
+            onError: (errors) => {
+                console.error('❌ Error devuelto por el servidor al crear checkins:', errors);
+            }
         });
     };
-
     // Función para manejar la selección de una fila
     const handleRowClick = (res: any) => {
         setSelectedReservation(res);
@@ -269,10 +277,8 @@ export default function PendingReservationsModal({
                     </div>
 
                     {/* PANEL DERECHO: DETALLES Y FORMULARIO */}
-                    <form
-                        onSubmit={submitCheckin}
-                        className="flex w-[55%] flex-col bg-gray-50"
-                    >
+                    {/* PANEL DERECHO: DETALLES Y FORMULARIO */}
+                    <div className="flex w-[55%] flex-col bg-gray-50">
                         <div className="flex-1 overflow-y-auto p-6">
                             {!selectedReservation ? (
                                 <div className="flex h-full flex-col items-center justify-center pb-10 text-center text-gray-400">
@@ -392,7 +398,7 @@ export default function PendingReservationsModal({
                             </div>
                             
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>
