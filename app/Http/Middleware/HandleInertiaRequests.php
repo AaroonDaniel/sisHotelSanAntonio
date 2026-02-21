@@ -36,7 +36,7 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+        [$message, $author] = str(\Illuminate\Foundation\Inspiring::quotes()->random())->explode('-');
 
         return [
             ...parent::share($request),
@@ -44,6 +44,12 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+            ],
+            // 🚀 AÑADIMOS ESTE BLOQUE 'flash' PARA LOS MENSAJES Y LA COLA DE CHECKINS
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+                'auto_open_checkins' => fn () => $request->session()->get('auto_open_checkins'),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

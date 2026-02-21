@@ -21,6 +21,8 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { usePage } from '@inertiajs/react';
+
 import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
@@ -132,6 +134,61 @@ export default function RoomsStatus({
     // Detalles para la tolerancia
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [checkinForTransfer, setCheckinForTransfer] = useState<any>(null);
+
+    const { flash } = usePage<any>().props;
+    useEffect(() => {
+        if (flash.auto_open_checkins && Array.isArray(flash.auto_open_checkins) && flash.auto_open_checkins.length > 0) {
+            sessionStorage.setItem('pendingCheckinsQueue', JSON.stringify(flash.auto_open_checkins));
+        }
+    }, [flash.auto_open_checkins]);
+
+
+    useEffect(() => {
+        const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
+        if (queueStr && !isCheckinModalOpen) {
+            let queue: number[] = JSON.parse(queueStr);
+            let openedModal = false;
+
+            // 🚀 BUCLE: Avanza instantáneamente ignorando las habitaciones ya completadas
+            while (queue.length > 0 && !openedModal) {
+                const nextCheckinId = queue[0];
+                
+                const roomWithCheckin = Rooms.find(r => 
+                    r.checkins && r.checkins.some(c => c.id === nextCheckinId)
+                );
+                
+                if (roomWithCheckin) {
+                    const checkin = roomWithCheckin.checkins!.find(c => c.id === nextCheckinId);
+                    if (checkin) {
+                        const isTitularIncomplete = checkin.guest?.profile_status === 'INCOMPLETE';
+                        const isOriginMissing = !checkin.origin || checkin.origin.trim() === '';
+                        
+                        if (isTitularIncomplete || isOriginMissing) {
+                            // FALTAN DATOS: Nos detenemos aquí y abrimos el modal
+                            setCheckinToEdit(checkin);
+                            setSelectedRoomId(roomWithCheckin.id);
+                            setIsCheckinModalOpen(true);
+                            openedModal = true;
+                        } else {
+                            // ESTÁ COMPLETA: La sacamos de la lista y el bucle revisa la siguiente al instante
+                            queue.shift();
+                        }
+                    } else {
+                        queue.shift();
+                    }
+                } else {
+                    queue.shift();
+                }
+            }
+
+            // Actualizamos la memoria
+            if (queue.length > 0) {
+                sessionStorage.setItem('pendingCheckinsQueue', JSON.stringify(queue));
+            } else {
+                sessionStorage.removeItem('pendingCheckinsQueue');
+            }
+        }
+    }, [Rooms, isCheckinModalOpen]);
 
     // --- LÓGICA DE ESTADO ---
     const getDisplayStatus = (room: Room) => {
@@ -828,22 +885,29 @@ export default function RoomsStatus({
 
             <CheckinModal
                 show={isCheckinModalOpen}
-                onClose={() => {
+                onClose={(isSuccess?: boolean) => {
                     setIsCheckinModalOpen(false);
                     setSelectedRoomId(null);
                     setCheckinToEdit(null);
                     setSelectedForAction(null);
+                    if (!isSuccess) {
+                        sessionStorage.removeItem('pendingCheckinsQueue');
+                    }
                 }}
                 checkinToEdit={checkinToEdit}
                 guests={Guests}
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
-                // --- AGREGAR ESTA LÍNEA ---
                 schedules={Schedules}
                 availableServices={services}
                 isReadOnly={
                     !!checkinToEdit &&
-                    checkinToEdit.guest?.profile_status !== 'INCOMPLETE'
+                    checkinToEdit.guest?.profile_status === 'COMPLETE' &&
+                    checkinToEdit.origin !== null &&
+                    checkinToEdit.origin !== 'null' && // 🚀 Blindaje contra la palabra "null"
+                    checkinToEdit.origin !== undefined &&
+                    checkinToEdit.origin.trim() !== '' &&
+                    !(checkinToEdit.companions && checkinToEdit.companions.some((c: any) => c.profile_status === 'INCOMPLETE'))
                 }
             />
 
@@ -964,8 +1028,7 @@ function CheckoutConfirmationModal({
     } | null>(null);
 
     // --- EFECTO DE CARGA ROBUSTO (PLAN A + PLAN B) ---
-    // --- EFECTO DE CARGA Y CÁLCULO ---
-    // --- EFECTO DE CARGA Y CÁLCULO (Con Recálculo Automático) ---
+    
     useEffect(() => {
         setLoadingDetails(true);
 

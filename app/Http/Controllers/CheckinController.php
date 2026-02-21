@@ -506,9 +506,6 @@ class CheckinController extends Controller
 
         return DB::transaction(function () use ($validated, $request, $checkin) {
 
-            $guest = $checkin->guest;
-            $wasIncomplete = $guest->profile_status === 'INCOMPLETE';
-
             // =========================================================
             // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
             // =========================================================
@@ -551,21 +548,51 @@ class CheckinController extends Controller
                 $missingField = 'origin'; // Marcamos explícitamente que falta origen
             }
 
-            // 3. ACTUALIZAR HUÉSPED TITULAR
-            $guest->update([
-                'full_name' => strtoupper($validated['full_name']),
-                'identification_number' => $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null,
-                'duration_days' => $validated['duration_days'] ?? 0,
-                'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : null,
-                'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
-                'civil_status' => $validated['civil_status'],
-                'birth_date' => $validated['birth_date'],
-                'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
-                'phone' => $request->phone,
+            // =========================================================
+            // 🚀 3. ACTUALIZACIÓN INTELIGENTE DEL TITULAR (EVITA UNIQUE ERROR)
+            // =========================================================
+            $idNumber = $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null;
+            $fullName = strtoupper($validated['full_name']);
 
-                // Si $isTitularComplete es falso (por falta de datos o de origen), se guarda INCOMPLETE
-                'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
-            ]);
+            // Intentamos buscar si el usuario escribió un carnet o nombre diferente
+            $targetGuest = null;
+            if (!empty($idNumber)) {
+                $targetGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
+            }
+            if (!$targetGuest) {
+                $targetGuest = \App\Models\Guest::where('full_name', $fullName)->first();
+            }
+
+            // Si encontró a la persona en la base de datos (sea el original u otro distinto)
+            if ($targetGuest) {
+                $targetGuest->update([
+                    'identification_number' => $idNumber ?? $targetGuest->identification_number,
+                    'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : $targetGuest->nationality,
+                    'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : $targetGuest->profession,
+                    'civil_status' => $validated['civil_status'] ?? $targetGuest->civil_status,
+                    'birth_date' => $validated['birth_date'] ?? $targetGuest->birth_date,
+                    'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : $targetGuest->issued_in,
+                    'phone' => $request->phone ?? $targetGuest->phone,
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
+                ]);
+                $guestId = $targetGuest->id;
+                $wasIncomplete = $targetGuest->profile_status === 'INCOMPLETE';
+            } else {
+                // Si es una persona totalmente nueva, creamos su perfil
+                $newGuest = \App\Models\Guest::create([
+                    'full_name' => $fullName,
+                    'identification_number' => $idNumber,
+                    'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : 'BOLIVIANA',
+                    'civil_status' => $validated['civil_status'],
+                    'birth_date' => $validated['birth_date'],
+                    'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
+                    'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
+                    'phone' => $request->phone,
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
+                ]);
+                $guestId = $newGuest->id;
+                $wasIncomplete = true;
+            }
 
             // 3.5 ACTUALIZAR ACOMPAÑANTES
             $allCompanionsComplete = true;
@@ -609,7 +636,8 @@ class CheckinController extends Controller
                         $companion->update($datosCompanion);
                     }
 
-                    if ($companion->id !== $guest->id) {
+                    // Evitar que el titular se agregue como su propio acompañante
+                    if ($companion->id !== $guestId) {
                         $idsParaSincronizar[$companion->id] = [];
                     }
                 }
@@ -641,6 +669,7 @@ class CheckinController extends Controller
 
             // 6. ACTUALIZAR CHECKIN
             $checkin->update([
+                'guest_id' => $guestId, // 🚀 VINCULAMOS LA HABITACIÓN AL HUÉSPED CORRECTO
                 'room_id' => $validated['room_id'],
                 'check_in_date' => $newCheckInDate,
                 'duration_days' => $validated['duration_days'],

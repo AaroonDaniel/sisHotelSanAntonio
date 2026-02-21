@@ -149,7 +149,10 @@ class ReservationController extends Controller
         Log::info("Estado recibido: " . $newStatus);
 
         try {
-            DB::transaction(function () use ($request, $reservation, $newStatus) {
+            // 🚀 AÑADIDO: Array para recolectar los Checkins y armar la "Cola"
+            $checkinIds = [];
+
+            DB::transaction(function () use ($request, $reservation, $newStatus, &$checkinIds) {
 
                 // Convertimos a mayúsculas para evaluar lo que manda React
                 $statusUpper = strtoupper($newStatus);
@@ -157,7 +160,7 @@ class ReservationController extends Controller
                 // React manda 'cancelado', evaluamos 'CANCELADO'
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
                     
-                    // 🚀 AQUÍ ESTÁ LA MAGIA: Lo guardamos en la BD tal cual lo exige el ENUM
+                    // Lo guardamos en la BD tal cual lo exige el ENUM
                     $reservation->update(['status' => 'cancelada']);
                     Log::info("✅ Reserva actualizada a 'cancelada' en la BD.");
 
@@ -173,7 +176,7 @@ class ReservationController extends Controller
                     $reservation->update(['status' => 'confirmada']); 
                     
                     // ========================================================
-                    // 🚨 NUEVO: CREAR EL CHECK-IN AUTOMÁTICAMENTE AL CONFIRMAR 🚨
+                    // 🚨 CREAR EL CHECK-IN AUTOMÁTICAMENTE AL CONFIRMAR 🚨
                     // ========================================================
                     $primerCheckinId = null;
 
@@ -192,6 +195,9 @@ class ReservationController extends Controller
                             'is_temporary' => false,
                             'notes' => 'Generado automáticamente desde la Reserva #' . $reservation->id,
                         ]);
+
+                        // 🚀 AÑADIDO: Guardamos el ID del Checkin en nuestra lista de cola
+                        $checkinIds[] = $checkin->id;
 
                         // Guardamos el ID del primer checkin para moverle la plata del adelanto
                         if ($index === 0) {
@@ -230,7 +236,16 @@ class ReservationController extends Controller
             });
 
             Log::info("=== PROCESO TERMINADO CON ÉXITO ===");
-            return redirect()->back()->with('success', 'Reserva confirmada. Ahora las habitaciones están pendientes de completar datos.');
+
+            // 🚀 AÑADIDO: Si confirmamos la reserva, lo mandamos a la vista de Habitaciones y le pasamos la cola de IDs
+            if (strtoupper($newStatus) === 'CONFIRMADO' || strtoupper($newStatus) === 'CONFIRMADA') {
+                return redirect()->route('rooms.status')
+                    ->with('success', 'Reserva confirmada. Por favor, complete los datos de las habitaciones asignadas.')
+                    ->with('auto_open_checkins', $checkinIds); // Pasamos el array invisible a React
+            }
+
+            // Si fue otra acción (Cancelar, etc), vuelve a donde estaba
+            return redirect()->back()->with('success', 'Reserva actualizada.');
             
         } catch (\Exception $e) {
             Log::error("❌ ERROR: " . $e->getMessage());

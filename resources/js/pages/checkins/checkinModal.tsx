@@ -2,7 +2,6 @@ import ToleranceModal from '@/components/ToleranceModal';
 import { router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
-    AlertTriangle,
     ArrowRightCircle,
     Bed,
     CheckCircle2,
@@ -185,7 +184,7 @@ export interface Room {
 
 interface CheckinModalProps {
     show: boolean;
-    onClose: () => void;
+    onClose: (isSuccess?: boolean) => void;
     checkinToEdit?: CheckinData | null;
     targetGuestId?: number | null;
     guests: Guest[];
@@ -281,6 +280,43 @@ export default function CheckinModal({
 
     // [NUEVO] Estado para la navegación del carrusel (0 = Titular)
     const [currentIndex, setCurrentIndex] = useState(0);
+
+    // =========================================================
+    // 🚀 LÓGICA PARA DETECTAR SI VIENE DE UNA RESERVA
+    // =========================================================
+    const isFromReservation = checkinToEdit?.notes
+        ?.toLowerCase()
+        .includes('reserva');
+    const [showReservationToast, setShowReservationToast] = useState(false);
+    const [showIncompleteToast, setShowIncompleteToast] = useState(false);
+    // Console.log para verificar que React sí detecta la reserva
+    useEffect(() => {
+        if (show && checkinToEdit) {
+            console.log('\n=================================');
+            console.log('🏨 ABRIENDO MODAL DE CHECK-IN');
+            console.log('-> Notas del Checkin:', checkinToEdit.notes);
+            console.log('-> ¿Viene de Reserva?:', isFromReservation);
+            console.log('=================================\n');
+        }
+    }, [show, checkinToEdit]);
+
+    useEffect(() => {
+        if (show && isFromReservation) {
+            // Mostrar el toast al abrir el modal si viene de reserva
+            setShowReservationToast(true);
+
+            // Ocultarlo automáticamente después de 10 segundos (10000 ms)
+            const timer = setTimeout(() => {
+                setShowReservationToast(false);
+            }, 10000);
+
+            return () => clearTimeout(timer);
+        } else {
+            // Si se cierra el modal, reiniciar el estado
+            setShowReservationToast(false);
+        }
+    }, [show, isFromReservation]);
+    // =========================================================
 
     // REFS PARA DETECTAR CLICS FUERA
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -815,7 +851,7 @@ export default function CheckinModal({
         e.preventDefault();
         const onSuccess = () => {
             reset();
-            onClose();
+            onClose(true);
         };
         if (checkinToEdit) {
             put(`/checks/${checkinToEdit.id}`, { onSuccess });
@@ -954,7 +990,7 @@ export default function CheckinModal({
 
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={onClose}
+                            onClick={() => onClose(false)}
                             className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
                         >
                             <X className="h-5 w-5" />
@@ -962,58 +998,106 @@ export default function CheckinModal({
                     </div>
                 </div>
 
-                {/* --- NUEVA ALERTA FLOTANTE (TOAST) --- */}
-                {showErrorToast && Object.keys(errors).length > 0 && (
-                    <div className="fixed top-1/2 left-1/2 z-[100] flex w-96 -translate-x-1/2 -translate-y-1/2 animate-in flex-col gap-2 rounded-2xl border border-red-200 bg-white p-5 shadow-[0_0_50px_rgba(0,0,0,0.25)] duration-300 zoom-in-95 fade-in">
-                        <div className="flex items-start gap-4">
-                            <div className="rounded-full bg-red-100 p-3 text-red-600 shadow-sm">
-                                <AlertCircle className="h-6 w-6" />
+                {/* ===================================================== */}
+                {/* 🚀 ZONA DE TOASTS FLOTANTES (MÁS ABAJO Y LADO A LADO) */}
+                {/* ===================================================== */}
+                <div className="pointer-events-none fixed top-24 right-8 z-[100] flex flex-row items-start justify-end gap-4">
+                    {/* TOAST 1: ALERTA DE ERROR (ROJO) */}
+                    {showErrorToast && Object.keys(errors).length > 0 && (
+                        <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-red-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                            <div className="flex items-start gap-3">
+                                <div className="rounded-full bg-red-100 p-2 text-red-600">
+                                    <AlertCircle className="h-5 w-5" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-bold text-gray-900">
+                                        Faltan datos
+                                    </h3>
+                                    <ul className="mt-1 list-inside list-disc text-xs font-medium text-red-600">
+                                        {Object.values(errors).map(
+                                            (error: any, index) => (
+                                                <li key={index}>{error}</li>
+                                            ),
+                                        )}
+                                    </ul>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowErrorToast(false)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
                             </div>
-                            <div className="flex-1">
-                                <h3 className="text-lg font-bold text-gray-900">
-                                    ¡Atención!
-                                </h3>
-                                <ul className="mt-2 list-inside list-disc text-sm font-medium text-red-600">
-                                    {Object.values(errors).map(
-                                        (error: any, index) => (
-                                            <li key={index}>{error}</li>
-                                        ),
-                                    )}
-                                </ul>
+                        </div>
+                    )}
+
+                    {/* TOAST 2: AVISO FALTAN DATOS (ÁMBAR - CONSTANTE) */}
+                    {/*}
+                    {isTitular &&
+                        (isProfileIncomplete ||
+                            (checkinToEdit &&
+                                (!data.origin ||
+                                    data.origin.trim() === ''))) && (
+                            <div className="pointer-events-auto fixed left-1/2 top-[15%] z-50 w-80 -translate-x-1/2 -translate-y-1/2 animate-in flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-4 shadow-xl duration-300 fade-in zoom-in-95">
+                                <div className="flex items-start gap-3">
+                                    <div className="rounded-full bg-amber-100 p-2 text-amber-600">
+                                        <AlertTriangle className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-bold text-gray-900">
+                                            Algunos campos faltan llenar
+                                        </h3>
+                                        <p className="mt-0.5 text-xs font-medium text-amber-700">
+                                            Complete la{' '}
+                                            <span className="font-bold">
+                                                Procedencia
+                                            </span>{' '}
+                                            y los datos para habilitar el
+                                            Check-in.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowErrorToast(false)}
-                                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
+                        )}
+                    {*/}
+                    {/* TOAST 3: INFO DE RESERVA (AZUL - 10 SEGUNDOS) */}
+                    {showReservationToast && (
+                        <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-blue-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                            <div className="flex items-start gap-3">
+                                <div className="rounded-full bg-blue-100 p-2 text-blue-600">
+                                    <AlertCircle className="h-5 w-5" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-bold text-gray-900">
+                                        Asignación de Reserva
+                                    </h3>
+                                    <p className="mt-0.5 text-xs font-medium text-blue-700">
+                                        Habitación separada previamente. (
+                                        {checkinToEdit?.notes})
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setShowReservationToast(false)
+                                    }
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                            {/* Barra de tiempo de 10s */}
+                            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-50">
+                                <div className="h-full w-full origin-left animate-[w-0_10s_linear_forwards] bg-blue-500" />
+                            </div>
                         </div>
-                        {/* Barra de tiempo */}
-                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-red-50">
-                            <div className="h-full w-full origin-left animate-[w-0_5s_linear_forwards] bg-red-500" />
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 <form onSubmit={submit} className="flex flex-col md:flex-row">
                     {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
                     <div className="relative flex-1 overflow-y-auto border-r border-gray-100 bg-white p-6">
-                        {/* B. ALERTA DE PERFIL PENDIENTE (Solo visible para Titular) */}
-                        {isTitular &&
-                            (isProfileIncomplete ||
-                                (checkinToEdit &&
-                                    (!data.origin ||
-                                        data.origin.trim() === ''))) && (
-                                <div className="-mx-6 -mt-6 mb-2 flex animate-in items-center justify-between rounded-none border-b border-amber-100 bg-amber-50 px-6 py-2 slide-in-from-top-2">
-                                    <span className="flex items-center gap-2 text-[11px] font-bold text-amber-700">
-                                        <AlertTriangle className="h-3.5 w-3.5" />
-                                        Completa todos los campos para confirmar
-                                        el Check-in.
-                                    </span>
-                                </div>
-                            )}
-
                         <div className="space-y-4">
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
                             <div className="relative" ref={dropdownRef}>
@@ -1984,44 +2068,49 @@ export default function CheckinModal({
                                         </div>
                                     )}
 
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200"
-                                >
-                                    {isReadOnly ? 'Cerrar' : 'Cancelar'}
-                                </button>
-
-                                {!isReadOnly && (
+                                <div className="-mt-10 flex items-center justify-end gap-3 border-t border-gray-100 pt-5">
                                     <button
-                                        type="submit"
-                                        disabled={processing}
-                                        className={`flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${
-                                            isProfileIncomplete ||
-                                            (checkinToEdit &&
-                                                (!data.origin ||
-                                                    data.origin.trim() === ''))
-                                                ? 'bg-amber-600 hover:bg-amber-500'
-                                                : 'bg-green-600 hover:bg-green-500'
-                                        }`}
+                                        type="button"
+                                        onClick={() => onClose(false)}
+                                        className="rounded-xl px-5 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 active:scale-95"
                                     >
-                                        {processing ? (
-                                            'Procesando...'
-                                        ) : (
-                                            <>
-                                                <Save className="h-4 w-4" />
-                                                {checkinToEdit
-                                                    ? !data.origin ||
-                                                      data.origin.trim() === ''
-                                                        ? 'Completar Check-in'
-                                                        : 'Actualizar'
-                                                    : isProfileIncomplete
-                                                      ? 'Asignación Rápida'
-                                                      : 'Registrar'}
-                                            </>
-                                        )}
+                                        {isReadOnly ? 'Cerrar' : 'Cancelar'}
                                     </button>
-                                )}
+
+                                    {/* TU BOTÓN ORIGINAL INTACTO */}
+                                    {!isReadOnly && (
+                                        <button
+                                            type="submit"
+                                            disabled={processing}
+                                            className={`flex items-center gap-4 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${
+                                                isProfileIncomplete ||
+                                                (checkinToEdit &&
+                                                    (!data.origin ||
+                                                        data.origin.trim() ===
+                                                            ''))
+                                                    ? 'bg-amber-600 hover:bg-amber-500'
+                                                    : 'bg-green-600 hover:bg-green-500'
+                                            }`}
+                                        >
+                                            {processing ? (
+                                                'Procesando...'
+                                            ) : (
+                                                <>
+                                                    <Save className="h-4 w-4" />
+                                                    {checkinToEdit
+                                                        ? !data.origin ||
+                                                          data.origin.trim() ===
+                                                              ''
+                                                            ? 'Completar Check-in'
+                                                            : 'Actualizar'
+                                                        : isProfileIncomplete
+                                                          ? 'Asignación Rápida'
+                                                          : 'Registrar'}
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2038,10 +2127,11 @@ export default function CheckinModal({
                 }}
             />
 
+            
             <CancelAssignmentModal
                 show={showCancelModal}
                 onClose={() => setShowCancelModal(false)}
-                onConfirm={onClose}
+                onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
             />
         </div>
