@@ -505,12 +505,15 @@ export default function CheckinModal({
                 // MODO EDICIÓN: Cargar datos existentes
                 // ===============================================
 
-                // 🚀 DETECTAMOS SI ES UNA HABITACIÓN "ADICIONAL" DE UNA RESERVA
+                // 🚀 CORRECCIÓN: Verificamos si aún falta llenar la procedencia
+                const isOriginMissing = !checkinToEdit.origin || checkinToEdit.origin.trim() === '';
+
+                // 🚀 DETECTAMOS SI ES UNA HABITACIÓN "ADICIONAL" DE UNA RESERVA Y ESTÁ PENDIENTE
                 const isSecondaryRoom = checkinToEdit.notes
                     ?.toLowerCase()
-                    .includes('adicional');
+                    .includes('adicional') && isOriginMissing;
 
-                // Si es adicional, no bloqueamos como existente para obligar a buscar/crear
+                // Si es adicional y está pendiente, no bloqueamos como existente para obligar a buscar/crear
                 setIsExistingGuest(!isSecondaryRoom);
 
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
@@ -554,7 +557,7 @@ export default function CheckinModal({
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
-                    // 🚀 SI ES ADICIONAL: Vaciamos el ID y los datos para no sobreescribir al titular
+                    // 🚀 SI ES ADICIONAL Y PENDIENTE: Vaciamos el ID y los datos para no sobreescribir al titular
                     guest_id: isSecondaryRoom
                         ? ''
                         : String(checkinToEdit.guest_id),
@@ -575,7 +578,7 @@ export default function CheckinModal({
                           )
                         : [],
 
-                    // 🚀 DATOS DEL TITULAR (BLANCOS SI ES HABITACIÓN ADICIONAL)
+                    // 🚀 DATOS DEL TITULAR (BLANCOS SI ES HABITACIÓN ADICIONAL PENDIENTE)
                     full_name: isSecondaryRoom
                         ? ''
                         : checkinToEdit.guest?.full_name || '',

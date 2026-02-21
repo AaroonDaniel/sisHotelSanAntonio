@@ -183,7 +183,7 @@ class ReservationController extends Controller
                     foreach ($reservation->details as $index => $detail) {
                         
                         // 🚀 AQUÍ ESTÁ LA NUEVA LÓGICA: Etiquetar las habitaciones secundarias
-                        $notaAsignacion = 'Generado automáticamente desde la Reserva #' . $reservation->id;
+                        $notaAsignacion = 'Reserva' . $reservation->id;
                         if ($index > 0) {
                             $notaAsignacion .= ' - ADICIONAL'; // Etiqueta clave para que React vacíe el formulario
                         }
