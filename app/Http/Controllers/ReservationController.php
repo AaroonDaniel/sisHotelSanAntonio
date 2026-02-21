@@ -141,18 +141,18 @@ class ReservationController extends Controller
         }
     }
 
-    public function update(Request $request, Reservation $reservation)
+    public function update(Request $request, \App\Models\Reservation $reservation)
     {
         $newStatus = $request->status;
 
-        Log::info("=== INTENTANDO ACTUALIZAR RESERVA ID: {$reservation->id} ===");
-        Log::info("Estado recibido: " . $newStatus);
+        \Illuminate\Support\Facades\Log::info("=== INTENTANDO ACTUALIZAR RESERVA ID: {$reservation->id} ===");
+        \Illuminate\Support\Facades\Log::info("Estado recibido: " . $newStatus);
 
         try {
             // 🚀 AÑADIDO: Array para recolectar los Checkins y armar la "Cola"
             $checkinIds = [];
 
-            DB::transaction(function () use ($request, $reservation, $newStatus, &$checkinIds) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($request, $reservation, $newStatus, &$checkinIds) {
 
                 // Convertimos a mayúsculas para evaluar lo que manda React
                 $statusUpper = strtoupper($newStatus);
@@ -162,12 +162,12 @@ class ReservationController extends Controller
                     
                     // Lo guardamos en la BD tal cual lo exige el ENUM
                     $reservation->update(['status' => 'cancelada']);
-                    Log::info("✅ Reserva actualizada a 'cancelada' en la BD.");
+                    \Illuminate\Support\Facades\Log::info("✅ Reserva actualizada a 'cancelada' en la BD.");
 
                     // Liberamos las habitaciones
                     foreach ($reservation->details as $detail) {
-                        Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
-                        Log::info("✅ Habitación ID {$detail->room_id} liberada.");
+                        \App\Models\Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+                        \Illuminate\Support\Facades\Log::info("✅ Habitación ID {$detail->room_id} liberada.");
                     }
                 }
                 // Si en algún momento confirmas, también debes respetar el ENUM ('confirmada')
@@ -181,11 +181,18 @@ class ReservationController extends Controller
                     $primerCheckinId = null;
 
                     foreach ($reservation->details as $index => $detail) {
+                        
+                        // 🚀 AQUÍ ESTÁ LA NUEVA LÓGICA: Etiquetar las habitaciones secundarias
+                        $notaAsignacion = 'Generado automáticamente desde la Reserva #' . $reservation->id;
+                        if ($index > 0) {
+                            $notaAsignacion .= ' - ADICIONAL'; // Etiqueta clave para que React vacíe el formulario
+                        }
+
                         // Creamos el Checkin en blanco para que el sistema sepa quién está en la habitación
                         $checkin = \App\Models\Checkin::create([
                             'guest_id' => $reservation->guest_id,
                             'room_id'  => $detail->room_id,
-                            'user_id'  => Auth::id() ?? 1,
+                            'user_id'  => \Illuminate\Support\Facades\Auth::id() ?? 1,
                             'check_in_date' => $reservation->arrival_date ?? now(),
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
@@ -193,7 +200,7 @@ class ReservationController extends Controller
                             'origin' => null, // 🚨 ESTO ES CLAVE: Fuerza a React a mostrar "Faltan Datos" (Ámbar)
                             'status' => 'activo',
                             'is_temporary' => false,
-                            'notes' => 'Generado automáticamente desde la Reserva #' . $reservation->id,
+                            'notes' => $notaAsignacion, // Guardamos la nota con o sin la etiqueta
                         ]);
 
                         // 🚀 AÑADIDO: Guardamos el ID del Checkin en nuestra lista de cola
@@ -205,12 +212,12 @@ class ReservationController extends Controller
                         }
 
                         // Al confirmar, la habitación pasa a OCUPADO
-                        Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
+                        \App\Models\Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
                     }
 
                     // Trasladar pagos (Adelantos) de la reserva al Check-in
                     if ($primerCheckinId && $reservation->advance_payment > 0) {
-                        $pagos = Payment::where('reservation_id', $reservation->id)->get();
+                        $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
                         foreach ($pagos as $pago) {
                             $pago->update([
                                 'checkin_id' => $primerCheckinId,
@@ -235,7 +242,7 @@ class ReservationController extends Controller
                 }
             });
 
-            Log::info("=== PROCESO TERMINADO CON ÉXITO ===");
+            \Illuminate\Support\Facades\Log::info("=== PROCESO TERMINADO CON ÉXITO ===");
 
             // 🚀 AÑADIDO: Si confirmamos la reserva, lo mandamos a la vista de Habitaciones y le pasamos la cola de IDs
             if (strtoupper($newStatus) === 'CONFIRMADO' || strtoupper($newStatus) === 'CONFIRMADA') {
@@ -248,7 +255,7 @@ class ReservationController extends Controller
             return redirect()->back()->with('success', 'Reserva actualizada.');
             
         } catch (\Exception $e) {
-            Log::error("❌ ERROR: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("❌ ERROR: " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error al actualizar: ' . $e->getMessage()]);
         }
     }

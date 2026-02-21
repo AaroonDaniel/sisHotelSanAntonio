@@ -504,15 +504,20 @@ export default function CheckinModal({
                 // ===============================================
                 // MODO EDICIÓN: Cargar datos existentes
                 // ===============================================
-                setIsExistingGuest(true);
+
+                // 🚀 DETECTAMOS SI ES UNA HABITACIÓN "ADICIONAL" DE UNA RESERVA
+                const isSecondaryRoom = checkinToEdit.notes
+                    ?.toLowerCase()
+                    .includes('adicional');
+
+                // Si es adicional, no bloqueamos como existente para obligar a buscar/crear
+                setIsExistingGuest(!isSecondaryRoom);
 
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
                 let calculatedDuration = Math.max(
                     1,
                     Number(checkinToEdit.duration_days),
                 );
-
-                // Buscamos el horario asignado
                 const schedule = schedules.find(
                     (s) => String(s.id) === String(checkinToEdit.schedule_id),
                 );
@@ -522,7 +527,6 @@ export default function CheckinModal({
                     const [outH, outM] = schedule.check_out_time
                         .split(':')
                         .map(Number);
-                    // Usamos una tolerancia por defecto si no existe en la interfaz
                     const exitTolerance =
                         (schedule as any).exit_tolerance_minutes || 60;
 
@@ -539,7 +543,7 @@ export default function CheckinModal({
                         );
 
                         if (nowObj > hardLimit) {
-                            calculatedDuration++; // Sumamos 1 noche automáticamente
+                            calculatedDuration++;
                         } else {
                             isValidDuration = true;
                         }
@@ -547,11 +551,13 @@ export default function CheckinModal({
                     }
                 }
 
-                // Cargamos todo al formulario CON CONVERSIONES DE TIPO
+                // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
-                    // CORRECCIÓN DE ERROR DE TIPOS (Number -> String)
-                    guest_id: String(checkinToEdit.guest_id),
+                    // 🚀 SI ES ADICIONAL: Vaciamos el ID y los datos para no sobreescribir al titular
+                    guest_id: isSecondaryRoom
+                        ? ''
+                        : String(checkinToEdit.guest_id),
                     room_id: String(checkinToEdit.room_id),
                     duration_days: calculatedDuration,
                     check_in_date: checkinToEdit.check_in_date,
@@ -563,26 +569,37 @@ export default function CheckinModal({
                     notes: checkinToEdit.notes || '',
                     actual_arrival_date:
                         checkinToEdit.actual_arrival_date || '',
-
-                    // Convertimos IDs de servicios a String
                     selected_services: checkinToEdit.services
                         ? checkinToEdit.services.map((s: any) =>
                               String(s.id || s),
                           )
                         : [],
 
-                    // Datos Titular
-                    full_name: checkinToEdit.guest?.full_name || '',
-                    identification_number:
-                        checkinToEdit.guest?.identification_number || '',
-                    issued_in: checkinToEdit.guest?.issued_in || '',
-                    nationality:
-                        checkinToEdit.guest?.nationality || 'BOLIVIANA',
-                    civil_status: checkinToEdit.guest?.civil_status || '',
-                    birth_date: checkinToEdit.guest?.birth_date || '',
-                    profession: checkinToEdit.guest?.profession || '',
-                    //origin: checkinToEdit.guest?.origin || '',
-                    phone: checkinToEdit.guest?.phone || '',
+                    // 🚀 DATOS DEL TITULAR (BLANCOS SI ES HABITACIÓN ADICIONAL)
+                    full_name: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.full_name || '',
+                    identification_number: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.identification_number || '',
+                    issued_in: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.issued_in || '',
+                    nationality: isSecondaryRoom
+                        ? 'BOLIVIANA'
+                        : checkinToEdit.guest?.nationality || 'BOLIVIANA',
+                    civil_status: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.civil_status || '',
+                    birth_date: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.birth_date || '',
+                    profession: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.profession || '',
+                    phone: isSecondaryRoom
+                        ? ''
+                        : checkinToEdit.guest?.phone || '',
 
                     // Mapeamos acompañantes
                     companions:
@@ -596,11 +613,10 @@ export default function CheckinModal({
                             issued_in: c.issued_in || '',
                             civil_status: c.civil_status || '',
                             profession: c.profession || '',
-                            //origin: c.origin || '',
                             phone: c.phone || '',
                         })) || [],
 
-                    payment_method: checkinToEdit.payment_method || 'EFECTIVO', // <--- AGREGADO
+                    payment_method: checkinToEdit.payment_method || 'EFECTIVO',
                     qr_bank: checkinToEdit.qr_bank || '',
                 }));
             } else {
@@ -1073,8 +1089,13 @@ export default function CheckinModal({
                                         Asignación de Reserva
                                     </h3>
                                     <p className="mt-0.5 text-xs font-medium text-blue-700">
-                                        Habitación separada previamente. (
-                                        {checkinToEdit?.notes})
+                                        Reservado a nombre de:{' '}
+                                        <span className="font-bold uppercase">
+                                            {checkinToEdit?.guest?.full_name}
+                                        </span>
+                                    </p>
+                                    <p className="mt-1 text-[10px] text-blue-500">
+                                        {checkinToEdit?.notes}
                                     </p>
                                 </div>
                                 <button
@@ -1082,7 +1103,7 @@ export default function CheckinModal({
                                     onClick={() =>
                                         setShowReservationToast(false)
                                     }
-                                    className="text-gray-400 hover:text-gray-600"
+                                    className="text-gray-400 transition hover:text-gray-600"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -2127,7 +2148,6 @@ export default function CheckinModal({
                 }}
             />
 
-            
             <CancelAssignmentModal
                 show={showCancelModal}
                 onClose={() => setShowCancelModal(false)}
