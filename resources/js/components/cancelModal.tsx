@@ -28,7 +28,7 @@ export default function CancelModal({ show, onClose, actionUrl }: CancelModalPro
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
             <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
                 <div className="p-6 text-center">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-red-600">
                         <XCircle className="h-8 w-8" />
                     </div>
                     <h3 className="mb-2 text-xl font-bold text-gray-800">¿Cancelar reserva?</h3>
@@ -47,7 +47,7 @@ export default function CancelModal({ show, onClose, actionUrl }: CancelModalPro
                         <button
                             type="submit"
                             disabled={processing}
-                            className="flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-orange-500 active:scale-95 transition disabled:opacity-50"
+                            className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-red-500 active:scale-95 transition disabled:opacity-50"
                         >
                             {processing ? 'Cancelando...' : <><XCircle className="h-4 w-4" /> Sí, cancelar</>}
                         </button>

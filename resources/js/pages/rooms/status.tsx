@@ -97,10 +97,12 @@ export default function RoomsStatus({
     Schedules,
     reservations,
 }: Props) {
+
+
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
-
+    
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
         show: boolean;
@@ -1016,7 +1018,19 @@ export default function RoomsStatus({
             <PendingReservationsModal
                 show={isPendingModalOpen}
                 onClose={() => setIsPendingModalOpen(false)}
-                reservations={reservations} // <-- Pásale la variable en minúsculas
+                reservations={reservations} 
+                onNewReservation={() => {
+                    setIsPendingModalOpen(false); // 1. Oculta el de pendientes
+                    setIsReservationModalOpen(true); // 2. Abre el de crear reserva
+                }}
+            />
+            {/* MODAL DE NUEVA RESERVA */}
+            <ReservationModal
+                show={isReservationModalOpen}
+                onClose={() => setIsReservationModalOpen(false)}
+                reservationToEdit={null} // Ponemos null porque será una reserva nueva
+                guests={Guests as any}   // Usamos "as any" para evitar errores de TypeScript
+                rooms={Rooms as any}
             />
 
             
@@ -1495,9 +1509,6 @@ function CheckoutConfirmationModal({
                                     </div>
 
                                     {/* Botón Tolerancia Dinámico */}
-                                    {/* Solo se muestra si es VÁLIDO (Tiempo) Y si la estadía es > 1 DÍA */}
-                                    {/* Botón Tolerancia Dinámico */}
-                                    {/* Solo se muestra si: 1. Tiempo es válido | 2. Datos existen | 3. Estancia > 1 noche */}
                                     {exitToleranceStatus.isValid &&
                                         displayData &&
                                         displayData.duration_days > 1 && (
