@@ -111,8 +111,7 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
 
                 <div className="mb-8 flex items-end justify-between">
                     <div>
-                        <h2 className="text-3xl font-bold text-white">Reservas</h2>
-                        <p className="mt-1 text-sm text-gray-400">Gestiona las reservas futuras y retenidas.</p>
+                        <h2 className="text-3xl font-bold text-white">Reservas</h2>                        
                     </div>
                 </div>
 
@@ -129,18 +128,18 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder="Buscar por nombre, CI o ID..."
-                                className="block w-full rounded-xl border-gray-300 bg-white py-2.5 pl-10 text-sm focus:border-green-500 focus:ring-green-500"
+                                className="block w-full rounded-xl border-gray-800 bg-white py-2.5 pl-10 text-base text-gray-900 focus:border-green-500 focus:ring-green-500"
                             />
                         </div>
 
                         <div className="relative w-full sm:w-48">
                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <Filter className="h-4 w-4 text-gray-400" />
+                                <Filter className="h-4 w-4 text-gray-800" />
                             </div>
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="block w-full rounded-xl border-gray-300 bg-white py-2.5 pl-10 text-sm focus:border-green-500 focus:ring-green-500"
+                                className="block w-full rounded-xl border-gray-800 bg-white py-2.5 pl-10 text-sm text-gray-950 focus:border-green-500 focus:ring-green-500"
                             >
                                 <option value="">Todos los Estados</option>
                                 <option value="pendiente">Reservados</option>
@@ -175,9 +174,7 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                             
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold">
-                                                        {res.guest?.full_name?.charAt(0) || <UserIcon className="h-5 w-5" />}
-                                                    </div>
+                                                    
                                                     <div>
                                                         <div className="font-bold text-gray-900">{res.guest?.full_name || 'Sin Nombre'}</div>
                                                         <div className="text-xs text-gray-500">

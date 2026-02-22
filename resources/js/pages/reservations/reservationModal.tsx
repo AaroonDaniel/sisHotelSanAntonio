@@ -123,6 +123,12 @@ const getExactRoomPrice = (room: Room): Price | null => {
     return null;
 };
 
+// 🚀 NUEVAS CONSTANTES CORPORATIVAS
+const CORPORATE_MIN_GUESTS = 30;
+const CORPORATE_RATE_SHARED = 60;
+const CORPORATE_RATE_PRIVATE = 90;
+
+
 export default function ReservationModal({ show, onClose, reservationToEdit, guests, rooms }: Props) {
     const [guestQuery, setGuestQuery] = useState('');
     const [isGuestDropdownOpen, setIsGuestDropdownOpen] = useState(false);
@@ -232,12 +238,39 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
             }
             groups.push(currentGroupSize);
 
+            // =======================================================
+            // 🚀 VERIFICAR SI ENTRA A TARIFA CORPORATIVA
+            // =======================================================
+            const isCorporate = validCount >= 30;
+
             const newDetails: DetailItem[] = groups.map((groupSize, index) => {
                 const existing = prev.details[index];
+                
+                // Recalcular el precio si ya hay una habitación seleccionada
+                let newPrice = existing ? existing.price : 0;
+                
+                if (existing && existing.room_id) {
+                    const room = rooms.find(r => r.id.toString() === existing.room_id);
+                    const p = room ? getExactRoomPrice(room) : null;
+                    
+                    if (p) {
+                        if (isCorporate) {
+                            // Lógica Corporativa: 90 Privado, 60 Compartido
+                            const isPrivate = p.bathroom_type.toLowerCase() === 'private' || p.bathroom_type.toLowerCase() === 'privado';
+                            const rate = isPrivate ? 90 : 60;
+                            newPrice = rate * groupSize; // Tarifa base x cantidad de personas en el grupo
+                        } else {
+                            // Lógica Normal: Precio de la base de datos
+                            newPrice = Number(p.amount);
+                        }
+                    }
+                }
+                // =======================================================
+
                 return {
                     room_id: existing ? existing.room_id : '',
                     price_id: existing ? existing.price_id : '',
-                    price: existing ? existing.price : 0,
+                    price: newPrice, // 🚀 Usamos el precio recalculado
                     _temp_bathroom_filter: existing ? existing._temp_bathroom_filter : '',
                     _temp_room_type_id: existing ? existing._temp_room_type_id : '',
                     _temp_pax_count: groupSize,
@@ -316,10 +349,29 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                 const p = getExactRoomPrice(room);
                 if (p) {
                     newDetails[index].price_id = p.id.toString();
-                    newDetails[index].price = Number(p.amount);
+                    
                     // Rellena el Baño automáticamente
                     newDetails[index]._temp_bathroom_filter = p.bathroom_type.toLowerCase();
+
+                    // =======================================================
+                    // 🚀 LÓGICA DE TARIFA CORPORATIVA (SIN AFECTAR LO DEMÁS)
+                    // =======================================================
+                    const isCorporate = data.guest_count >= 30;
+                    
+                    if (isCorporate) {
+                        const isPrivate = p.bathroom_type.toLowerCase() === 'private' || p.bathroom_type.toLowerCase() === 'privado';
+                        const ratePerPerson = isPrivate ? 90 : 60; // 90 Privado, 60 Compartido
+                        const paxInThisRoom = newDetails[index]._temp_pax_count || 1;
+                        
+                        // Precio = Tarifa por cama * cantidad de personas en esta habitación
+                        newDetails[index].price = ratePerPerson * paxInThisRoom;
+                    } else {
+                        // Si no es corporativa, se mantiene el precio normal de la base de datos
+                        newDetails[index].price = Number(p.amount);
+                    }
+                    // =======================================================
                 }
+                
                 // Rellena el Tipo de Habitación automáticamente
                 const typeId = room.room_type?.id || room.room_type_id;
                 if (typeId) {
@@ -442,16 +494,22 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                         <input type="number" min="1" value={data.duration_days} onChange={(e) => setData('duration_days', Number(e.target.value))} className="w-full rounded-xl border border-gray-400 py-2 text-center text-sm font-bold text-black focus:border-green-500 focus:ring-green-500" />
                                     </div>
                                     <div>
-                                        <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">Total Personas</label>
+                                        <label className="mb-1.5 flex justify-between text-xs font-bold text-gray-500 uppercase">
+                                            <span>Total Personas</span>
+                                            {/* LETRERO CORPORATIVO */}
+                                            {data.guest_count >= CORPORATE_MIN_GUESTS && (
+                                                <span className="animate-in fade-in rounded bg-purple-100 px-1.5 py-0.5 text-[9px] text-purple-700">TARIFA CORPORATIVA</span>
+                                            )}
+                                        </label>
                                         <div className="relative">
                                             <Users className="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-gray-400" />
-                                            <input type="number" min="1" max="100" value={data.guest_count} onChange={(e) => handleGuestCountChange(Number(e.target.value))} className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm font-bold text-blue-600 focus:border-blue-500 focus:ring-blue-500" />
+                                            <input type="number" min="1" max="100" value={data.guest_count} onChange={(e) => handleGuestCountChange(Number(e.target.value))} className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm font-bold text-gray-900 focus:border-gray-500 focus:ring-gray-500" />
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
-                                <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-blue-800 uppercase">
+                                <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-gray-800 uppercase">
                                     <Info className="h-4 w-4" /> Distribución ({data.guest_count})
                                 </h3>
                                 <div className="space-y-2">
@@ -472,7 +530,7 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                                         <div key={`grid-${blockIndex}`} className="flex flex-wrap justify-start gap-1 rounded-lg border border-blue-100 bg-white p-2">
                                                             {accumulatedSingles.map((singleGroup) => (
                                                                 <div key={singleGroup[0]} className="flex items-center">
-                                                                    <div className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-blue-100 ${singleGroup[0] === 0 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                                                                    <div className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-green-100 ${singleGroup[0] === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                                                                         {singleGroup[0] + 1}
                                                                     </div>
                                                                     <button type="button" onClick={() => toggleBreak(singleGroup[0])} className="mx-0.5 text-gray-300 transition-colors hover:text-green-500"><LinkIcon className="h-3 w-3" /></button>
@@ -490,14 +548,14 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                                             </div>
                                                         )}
                                                         <div className="relative flex w-full flex-wrap items-center justify-start gap-2 rounded-lg border border-blue-200 bg-white p-2 shadow-sm">
-                                                            <div className="absolute top-0 bottom-0 left-0 w-1 rounded-l-lg bg-blue-600"></div>
+                                                            <div className="absolute top-0 bottom-0 left-0 w-1 rounded-l-lg bg-green-600"></div>
                                                             <span className="ml-2 text-[9px] font-bold text-gray-400">HAB</span>
                                                             {block.map((guestIdx, localIdx) => (
                                                                 <div key={guestIdx} className="flex items-center">
-                                                                    <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold ${guestIdx === 0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{guestIdx + 1}</div>
+                                                                    <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold ${guestIdx === 0 ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{guestIdx + 1}</div>
                                                                     {localIdx < block.length - 1 && (
                                                                         <div className="mx-1">
-                                                                            <button type="button" onClick={() => toggleBreak(guestIdx)} className="flex h-5 w-5 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-400 transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-500"><Unlink className="h-3 w-3" /></button>
+                                                                            <button type="button" onClick={() => toggleBreak(guestIdx)} className="flex h-5 w-5 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-green-400 transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-500"><Unlink className="h-3 w-3" /></button>
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -522,8 +580,8 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                                             const isLastAbsolute = guestIdx === data.guest_count - 1;
                                                             return (
                                                                 <div key={guestIdx} className="flex items-center">
-                                                                    <div className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-blue-100 ${guestIdx === 0 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>{guestIdx + 1}</div>
-                                                                    {!isLastAbsolute && (<button type="button" onClick={() => toggleBreak(guestIdx)} className="mx-0.5 p-0.5 text-gray-300 transition-all hover:scale-125 hover:text-green-500"><LinkIcon className="h-3 w-3" /></button>)}
+                                                                    <div className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-green-500 ${guestIdx === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-green-500 bg-green-50 text-green-500'}`}>{guestIdx + 1}</div>
+                                                                    {!isLastAbsolute && (<button type="button" onClick={() => toggleBreak(guestIdx)} className="mx-0.5 p-0.5 text-green-300 transition-all hover:scale-125 hover:text-green-500"><LinkIcon className="h-3 w-3" /></button>)}
                                                                 </div>
                                                             );
                                                         })}
@@ -584,7 +642,7 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                         <div key={index} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
                                             <div className="flex flex-col gap-4">
                                                 <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{index + 1}</div>
+                                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-600 text-[10px] font-bold text-white">{index + 1}</div>
                                                     <span className="text-xs font-bold text-gray-500 uppercase">
                                                         Habitación para {detail._temp_pax_count} persona(s)
                                                     </span>
@@ -599,7 +657,7 @@ export default function ReservationModal({ show, onClose, reservationToEdit, gue
                                                             <select 
                                                                 value={detail._temp_bathroom_filter || ''} 
                                                                 onChange={(e) => updateDetailRow(index, '_temp_bathroom_filter', e.target.value)} 
-                                                                className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold uppercase text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                                                className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold uppercase text-gray-700 focus:border-green-500 focus:ring-green-500"
                                                             >
                                                                 <option value="">Elegir...</option>
                                                                 <option value="private">Privado</option>
