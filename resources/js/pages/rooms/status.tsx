@@ -1,6 +1,6 @@
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios'; // Importante para la petición del PDF sin recarga
 import {
     AlertTriangle,
@@ -21,7 +21,6 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { usePage } from '@inertiajs/react';
 
 import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
@@ -32,6 +31,7 @@ import CheckinModal, {
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
+import ReservationModal from '../reservations/reservationModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -99,6 +99,8 @@ export default function RoomsStatus({
 }: Props) {
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+    const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
         show: boolean;
@@ -137,11 +139,17 @@ export default function RoomsStatus({
 
     const { flash } = usePage<any>().props;
     useEffect(() => {
-        if (flash.auto_open_checkins && Array.isArray(flash.auto_open_checkins) && flash.auto_open_checkins.length > 0) {
-            sessionStorage.setItem('pendingCheckinsQueue', JSON.stringify(flash.auto_open_checkins));
+        if (
+            flash.auto_open_checkins &&
+            Array.isArray(flash.auto_open_checkins) &&
+            flash.auto_open_checkins.length > 0
+        ) {
+            sessionStorage.setItem(
+                'pendingCheckinsQueue',
+                JSON.stringify(flash.auto_open_checkins),
+            );
         }
     }, [flash.auto_open_checkins]);
-
 
     useEffect(() => {
         const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
@@ -152,17 +160,23 @@ export default function RoomsStatus({
             // 🚀 BUCLE: Avanza instantáneamente ignorando las habitaciones ya completadas
             while (queue.length > 0 && !openedModal) {
                 const nextCheckinId = queue[0];
-                
-                const roomWithCheckin = Rooms.find(r => 
-                    r.checkins && r.checkins.some(c => c.id === nextCheckinId)
+
+                const roomWithCheckin = Rooms.find(
+                    (r) =>
+                        r.checkins &&
+                        r.checkins.some((c) => c.id === nextCheckinId),
                 );
-                
+
                 if (roomWithCheckin) {
-                    const checkin = roomWithCheckin.checkins!.find(c => c.id === nextCheckinId);
+                    const checkin = roomWithCheckin.checkins!.find(
+                        (c) => c.id === nextCheckinId,
+                    );
                     if (checkin) {
-                        const isTitularIncomplete = checkin.guest?.profile_status === 'INCOMPLETE';
-                        const isOriginMissing = !checkin.origin || checkin.origin.trim() === '';
-                        
+                        const isTitularIncomplete =
+                            checkin.guest?.profile_status === 'INCOMPLETE';
+                        const isOriginMissing =
+                            !checkin.origin || checkin.origin.trim() === '';
+
                         if (isTitularIncomplete || isOriginMissing) {
                             // FALTAN DATOS: Nos detenemos aquí y abrimos el modal
                             setCheckinToEdit(checkin);
@@ -183,7 +197,10 @@ export default function RoomsStatus({
 
             // Actualizamos la memoria
             if (queue.length > 0) {
-                sessionStorage.setItem('pendingCheckinsQueue', JSON.stringify(queue));
+                sessionStorage.setItem(
+                    'pendingCheckinsQueue',
+                    JSON.stringify(queue),
+                );
             } else {
                 sessionStorage.removeItem('pendingCheckinsQueue');
             }
@@ -210,27 +227,47 @@ export default function RoomsStatus({
 
             if (activeCheckin) {
                 const guest = activeCheckin.guest as Guest | undefined;
-                const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
-                const companions = activeCheckin.companions as Guest[] | undefined;
+                const isTitularIncomplete =
+                    guest?.profile_status === 'INCOMPLETE';
+                const companions = activeCheckin.companions as
+                    | Guest[]
+                    | undefined;
                 const isAnyCompanionIncomplete = companions?.some(
                     (c) => c.profile_status === 'INCOMPLETE',
                 );
 
-                const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
+                const isOriginMissing =
+                    !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-                console.log(`[DEBUG] -> ¿Titular Incompleto?: ${isTitularIncomplete} (Profile Status: ${guest?.profile_status})`);
-                console.log(`[DEBUG] -> ¿Origin Faltante?: ${isOriginMissing} (Valor actual: "${activeCheckin.origin}")`);
-                console.log(`[DEBUG] -> ¿Acompañante Incompleto?: ${isAnyCompanionIncomplete}`);
+                console.log(
+                    `[DEBUG] -> ¿Titular Incompleto?: ${isTitularIncomplete} (Profile Status: ${guest?.profile_status})`,
+                );
+                console.log(
+                    `[DEBUG] -> ¿Origin Faltante?: ${isOriginMissing} (Valor actual: "${activeCheckin.origin}")`,
+                );
+                console.log(
+                    `[DEBUG] -> ¿Acompañante Incompleto?: ${isAnyCompanionIncomplete}`,
+                );
 
-                if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
-                    console.log(`[DEBUG] 🎯 RESULTADO PARA HAB ${room.number} -> INCOMPLETE (Debería ser Ámbar)`);
+                if (
+                    isTitularIncomplete ||
+                    isAnyCompanionIncomplete ||
+                    isOriginMissing
+                ) {
+                    console.log(
+                        `[DEBUG] 🎯 RESULTADO PARA HAB ${room.number} -> INCOMPLETE (Debería ser Ámbar)`,
+                    );
                     return 'incomplete';
                 }
             } else {
-                console.log(`[DEBUG] ⚠️ ADVERTENCIA: La habitación está en OCUPADO en BD, pero NO TIENE array de 'checkins' asociado en la respuesta del servidor.`);
+                console.log(
+                    `[DEBUG] ⚠️ ADVERTENCIA: La habitación está en OCUPADO en BD, pero NO TIENE array de 'checkins' asociado en la respuesta del servidor.`,
+                );
             }
 
-            console.log(`[DEBUG] 🟢 RESULTADO PARA HAB ${room.number} -> OCCUPIED (Pasa directo a Cian)`);
+            console.log(
+                `[DEBUG] 🟢 RESULTADO PARA HAB ${room.number} -> OCCUPIED (Pasa directo a Cian)`,
+            );
             return 'occupied';
             // =========================================================
         }
@@ -612,18 +649,14 @@ export default function RoomsStatus({
 
                             <button
                                 onClick={() => setIsPendingModalOpen(true)}
-                                className={`flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-bold uppercase transition-all ${
+                                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold uppercase transition-colors ${
                                     PendingReservationsModal.length > 0
-                                        ? 'animate-bounce bg-gray-800 text-white shadow-lg hover:scale-105 hover:bg-gray-700'
+                                        ? 'bg-gray-800 text-white shadow-lg hover:bg-gray-700'
                                         : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-500'
                                 }`}
                             >
                                 <CalendarClock className="h-4 w-4" /> Reservas
-                                {PendingReservationsModal.length > 0 && (
-                                    <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-purple-600">
-                                        {PendingReservationsModal.length}
-                                    </span>
-                                )}
+                                
                             </button>
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
@@ -907,7 +940,12 @@ export default function RoomsStatus({
                     checkinToEdit.origin !== 'null' && // 🚀 Blindaje contra la palabra "null"
                     checkinToEdit.origin !== undefined &&
                     checkinToEdit.origin.trim() !== '' &&
-                    !(checkinToEdit.companions && checkinToEdit.companions.some((c: any) => c.profile_status === 'INCOMPLETE'))
+                    !(
+                        checkinToEdit.companions &&
+                        checkinToEdit.companions.some(
+                            (c: any) => c.profile_status === 'INCOMPLETE',
+                        )
+                    )
                 }
             />
 
@@ -980,6 +1018,8 @@ export default function RoomsStatus({
                 onClose={() => setIsPendingModalOpen(false)}
                 reservations={reservations} // <-- Pásale la variable en minúsculas
             />
+
+            
         </AuthenticatedLayout>
     );
 }
@@ -1028,7 +1068,7 @@ function CheckoutConfirmationModal({
     } | null>(null);
 
     // --- EFECTO DE CARGA ROBUSTO (PLAN A + PLAN B) ---
-    
+
     useEffect(() => {
         setLoadingDetails(true);
 
