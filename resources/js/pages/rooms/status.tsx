@@ -1067,21 +1067,16 @@ function CheckoutConfirmationModal({
     const [tipoDocumento, setTipoDocumento] = useState<
         'factura' | 'recibo' | null
     >(null);
-
-    // Datos de la factura
-    // ... (otros estados como tipoDocumento, etc.)
-
-    // --- ESTADOS DE FACTURACIÓN ---
+    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(null);
+    
     const [nombreFactura, setNombreFactura] = useState(
         checkin?.guest?.full_name || '',
     );
     const [nitFactura, setNitFactura] = useState(
         checkin?.guest?.identification_number || '',
     );
-
-    // Estado para controlar si los datos vienen de la base de datos (Vinculado)
-    // Si al inicio ya hay datos del huésped, asumimos que está "vinculado"
     const [isLinked, setIsLinked] = useState(!!checkin?.guest?.id);
+    const [qrBank, setQrBank] = useState<string | null>(null);
 
     // Estados del Buscador
     const [filteredGuests, setFilteredGuests] = useState<any[]>([]);
@@ -1250,14 +1245,27 @@ function CheckoutConfirmationModal({
     // --- ACCIONES ---
     const handleConfirmAndPreview = async () => {
         if (!displayData) return;
+        
         setProcessing(true);
+        
         try {
+            // 1. Guardamos la salida y los datos de facturación/pago
             await axios.put(`/checks/${checkin.id}/checkout`, {
-                tipo_documento: tipoDocumento,
+                // Datos base
                 check_out_date: displayData.check_out_date,
                 waive_penalty: waivePenalty,
+                tipo_documento: tipoDocumento,
+
+                // 👇 NUEVOS DATOS: Facturación (solo si es factura)
+                nombre_factura: tipoDocumento === 'factura' ? nombreFactura : null,
+                nit_factura:    tipoDocumento === 'factura' ? nitFactura    : null,
+
+                // 👇 NUEVO DATO: Método de Pago
+                metodo_pago: metodoPago ,
+                qr_bank: metodoPago === 'qr' ? qrBank : null,
             });
 
+            // 2. Una vez guardado, pedimos el PDF correspondiente
             const endpoint =
                 tipoDocumento === 'recibo'
                     ? `/checks/${checkin.id}/checkout-receipt`
@@ -1266,10 +1274,13 @@ function CheckoutConfirmationModal({
             const response = await axios.get(endpoint, {
                 responseType: 'blob',
             });
+
             const url = window.URL.createObjectURL(
                 new Blob([response.data], { type: 'application/pdf' }),
             );
+            
             setPdfUrl(url);
+
         } catch (error) {
             console.error(error);
             alert('Error al procesar la salida.');
@@ -1646,57 +1657,100 @@ function CheckoutConfirmationModal({
                                                 </div>
                                             )}
 
-                                        <div className="mt-4 text-center">
-                                            <h4 className="text-xl font-bold text-gray-800">
-                                                ¿Confirmar salida?
-                                            </h4>
-                                            <div className="mt-4 flex justify-center gap-4">
-                                                <button
-                                                    onClick={() =>
-                                                        setTipoDocumento(
-                                                            'recibo',
-                                                        )
-                                                    }
-                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
-                                                >
-                                                    <div
-                                                        className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                        {/* SECCIÓN 1: TIPO DE DOCUMENTO */}
+                                            <div className="mt-4 text-center">
+                                                <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-3">
+                                                    1. Tipo de Documento
+                                                </h4>
+                                                <div className="flex justify-center gap-3">
+                                                    <button
+                                                        onClick={() => setTipoDocumento('recibo')}
+                                                        className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                     >
-                                                        {tipoDocumento ===
-                                                            'recibo' && (
-                                                            <div className="h-2 w-2 rounded-full bg-emerald-600" />
-                                                        )}
-                                                    </div>
-                                                    <span className="text-sm font-bold uppercase">
-                                                        Sin Factura
-                                                    </span>
-                                                </button>
-                                                <button
-                                                    onClick={() =>
-                                                        setTipoDocumento(
-                                                            'factura',
-                                                        )
-                                                    }
-                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
-                                                >
-                                                    <div
-                                                        className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                                        <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}>
+                                                            {tipoDocumento === 'recibo' && <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />}
+                                                        </div>
+                                                        <span className="text-xs font-bold uppercase">Sin Factura</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setTipoDocumento('factura')}
+                                                        className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                     >
-                                                        {tipoDocumento ===
-                                                            'factura' && (
-                                                            <div className="h-2 w-2 rounded-full bg-blue-600" />
-                                                        )}
-                                                    </div>
-                                                    <span className="text-sm font-bold uppercase">
-                                                        Con Factura
-                                                    </span>
-                                                </button>
+                                                        <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}>
+                                                            {tipoDocumento === 'factura' && <div className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
+                                                        </div>
+                                                        <span className="text-xs font-bold uppercase">Con Factura</span>
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <p className="mt-4 text-[11px] text-gray-400 italic">
-                                                Pasará a{' '}
-                                                <strong>LIMPIEZA</strong>.
+
+                                            {/* SECCIÓN 2: MÉTODO DE PAGO */}
+                                            {tipoDocumento && (
+                                                <div className="mt-5 text-center animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-3">
+                                                        2. Método de Pago
+                                                    </h4>
+                                                    
+                                                    {/* BOTONES PRINCIPALES: EFECTIVO vs QR */}
+                                                    <div className="flex justify-center gap-3 mb-3">
+                                                        <button
+                                                            onClick={() => { setMetodoPago('efectivo'); setQrBank(null); }}
+                                                            className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-3 py-3 transition-all ${metodoPago === 'efectivo' ? 'border-green-600 bg-green-50 text-green-800 shadow-md ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                        >
+                                                            
+                                                            <span className="text-[10px] font-bold uppercase">Efectivo</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setMetodoPago('qr')}
+                                                            className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-3 py-3 transition-all ${metodoPago === 'qr' ? 'border-purple-600 bg-purple-50 text-purple-800 shadow-md ring-1 ring-purple-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                        >
+                                                            
+                                                            <span className="text-[10px] font-bold uppercase">QR Simple</span>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* SUB-SECCIÓN: BANCOS QR (Solo visible si metodoPago === 'qr') */}
+                                                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${metodoPago === 'qr' ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                                        <label className="text-[10px] font-bold text-purple-600 uppercase mb-2 block">
+                                                            Seleccione Banco (QR)
+                                                        </label>
+                                                        <div className="grid grid-cols-4 gap-2 px-1">
+                                                            {[
+                                                                { id: 'YAPE', logo: '/images/bancos/yape.png', ring: 'ring-purple-500' },
+                                                                { id: 'FIE', logo: '/images/bancos/fie.png', ring: 'ring-orange-500' },
+                                                                { id: 'BNB', logo: '/images/bancos/bnb.png', ring: 'ring-green-500' },
+                                                                { id: 'ECO', logo: '/images/bancos/eco.png', ring: 'ring-blue-500' },
+                                                            ].map((banco) => {
+                                                                const isSelected = qrBank === banco.id;
+                                                                return (
+                                                                    <button
+                                                                        key={banco.id}
+                                                                        type="button"
+                                                                        onClick={() => setQrBank(banco.id)}
+                                                                        className={`relative h-12 rounded-xl border transition-all duration-200 active:scale-95 ${
+                                                                            isSelected
+                                                                                ? `ring-2 ${banco.ring} shadow-md scale-105 border-transparent`
+                                                                                : 'border-gray-200 bg-white hover:border-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        <img
+                                                                            src={banco.logo}
+                                                                            alt={banco.id}
+                                                                            className={`absolute inset-0 w-full h-full object-contain p-1.5 transition-all ${
+                                                                                isSelected ? '' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'
+                                                                            }`}
+                                                                        />
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <p className="mt-6 text-center text-[10px] text-gray-400 italic">
+                                                Al confirmar, la habitación pasará a estado <strong>LIMPIEZA</strong>.
                                             </p>
-                                        </div>
                                     </div>
 
                                     {/* --- COLUMNA 2: VISTA DE FACTURACIÓN --- */}
@@ -1952,7 +2006,7 @@ function CheckoutConfirmationModal({
                                 onClick={handleConfirmAndPreview}
                                 className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50"
                                 disabled={
-                                    processing || !tipoDocumento || !displayData
+                                    processing || !tipoDocumento || !displayData || !metodoPago || (metodoPago === 'qr' && !qrBank)
                                 }
                             >
                                 {processing ? (

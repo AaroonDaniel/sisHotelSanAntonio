@@ -316,26 +316,50 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
                                                         </div>
 
                                                         {/* FILA INFERIOR: BANCO QR */}
-                                                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${paymentData.payment_method === 'QR' ? 'max-h-20 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
-                                                            <label className="text-[9px] font-bold text-purple-600 uppercase ml-1 mb-1 block">Banco (QR)</label>
-                                                            <div className="grid grid-cols-4 gap-1">
-                                                                {[{ id: 'YAPE', color: 'bg-purple-50 text-purple-700 border-purple-200 ring-purple-500' }, { id: 'FIE', color: 'bg-orange-50 text-orange-700 border-orange-200 ring-orange-500' }, { id: 'BNB', color: 'bg-green-50 text-green-700 border-green-200 ring-green-500' }, { id: 'ECO', color: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-500' }].map((banco) => (
-                                                                    <button
-                                                                        key={banco.id}
-                                                                        type="button"
-                                                                        onClick={() => setPaymentData('qr_bank', banco.id)}
-                                                                        className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${
-                                                                            paymentData.qr_bank === banco.id
-                                                                                ? `ring-1 ring-offset-0 scale-105 shadow-sm ${banco.color}`
-                                                                                : 'border-gray-100 bg-white text-gray-400 hover:border-gray-300'
-                                                                        }`}
-                                                                    >
-                                                                        {banco.id}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
+                                                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+    paymentData.payment_method === 'QR'
+        ? 'max-h-24 opacity-100 mt-1'
+        : 'max-h-0 opacity-0'
+}`}>
+    
+    <label className="text-[9px] font-bold text-purple-600 uppercase ml-1 mb-1 block">
+        Banco (QR)
+    </label>
 
+    <div className="grid grid-cols-4 gap-1">
+        {[
+            { id: 'YAPE', logo: '/images/bancos/yape.png', ring: 'ring-purple-500' },
+            { id: 'FIE', logo: '/images/bancos/fie.png', ring: 'ring-orange-500' },
+            { id: 'BNB', logo: '/images/bancos/bnb.png', ring: 'ring-green-500' },
+            { id: 'ECO', logo: '/images/bancos/eco.png', ring: 'ring-blue-500' },
+        ].map((banco) => {
+            const isSelected = paymentData.qr_bank === banco.id;
+
+            return (
+                <button
+                    key={banco.id}
+                    type="button"
+                    onClick={() => setPaymentData('qr_bank', banco.id)}
+                    className={`relative h-10 rounded-xl border transition-all duration-200 active:scale-95 ${
+                        isSelected
+                            ? `ring-1 ${banco.ring} shadow-md scale-105`
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                >
+                    <img
+                        src={banco.logo}
+                        alt={banco.id}
+                        className={`absolute inset-0 w-full h-full object-contain p-1 transition-all ${
+                            isSelected
+                                ? ''
+                                : 'grayscale opacity-60'
+                        }`}
+                    />
+                </button>
+            );
+        })}
+    </div>
+</div>
                                                         {/* ERROR VISUAL */}
                                                         {Number(paymentData.amount) > 0 && paymentData.payment_method === 'QR' && !paymentData.qr_bank && (
                                                             <div className="flex items-center justify-center gap-1 rounded bg-red-50 p-1 text-[9px] font-bold text-red-600 animate-pulse">
