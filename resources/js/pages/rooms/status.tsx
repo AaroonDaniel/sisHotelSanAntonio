@@ -17,6 +17,7 @@ import {
     LogOut,
     Search,
     ShoppingCart,
+    User,
     User as UserIcon,
     X,
 } from 'lucide-react';
@@ -28,10 +29,10 @@ import CheckinModal, {
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
+import ReservationModal from '../reservations/reservationModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
-import ReservationModal from '../reservations/reservationModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -97,12 +98,10 @@ export default function RoomsStatus({
     Schedules,
     reservations,
 }: Props) {
-
-
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
-    
+
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
         show: boolean;
@@ -658,7 +657,6 @@ export default function RoomsStatus({
                                 }`}
                             >
                                 <CalendarClock className="h-4 w-4" /> Reservas
-                                
                             </button>
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
@@ -972,6 +970,7 @@ export default function RoomsStatus({
                         checkin={checkoutData.checkin}
                         room={checkoutData.room}
                         schedules={Schedules}
+                        guests={Guests}
                         onClose={() => {
                             setConfirmCheckoutId(null);
                             setSelectedForAction(null);
@@ -1007,6 +1006,7 @@ export default function RoomsStatus({
                         checkin={checkoutData.checkin}
                         room={checkoutData.room}
                         schedules={Schedules}
+                        guests={Guests}
                         onClose={() => {
                             setConfirmCheckoutId(null);
                             setSelectedForAction(null);
@@ -1018,7 +1018,7 @@ export default function RoomsStatus({
             <PendingReservationsModal
                 show={isPendingModalOpen}
                 onClose={() => setIsPendingModalOpen(false)}
-                reservations={reservations} 
+                reservations={reservations}
                 onNewReservation={() => {
                     setIsPendingModalOpen(false); // 1. Oculta el de pendientes
                     setIsReservationModalOpen(true); // 2. Abre el de crear reserva
@@ -1029,11 +1029,9 @@ export default function RoomsStatus({
                 show={isReservationModalOpen}
                 onClose={() => setIsReservationModalOpen(false)}
                 reservationToEdit={null} // Ponemos null porque será una reserva nueva
-                guests={Guests as any}   // Usamos "as any" para evitar errores de TypeScript
+                guests={Guests as any} // Usamos "as any" para evitar errores de TypeScript
                 rooms={Rooms as any}
             />
-
-            
         </AuthenticatedLayout>
     );
 }
@@ -1045,11 +1043,13 @@ function CheckoutConfirmationModal({
     room,
     onClose,
     schedules,
+    guests = [],
 }: {
     checkin: any;
     room: any;
     onClose: () => void;
     schedules?: any[];
+    guests?: any[];
 }) {
     if (!checkin) return null;
 
@@ -1067,6 +1067,81 @@ function CheckoutConfirmationModal({
     const [tipoDocumento, setTipoDocumento] = useState<
         'factura' | 'recibo' | null
     >(null);
+
+    // Datos de la factura
+    // ... (otros estados como tipoDocumento, etc.)
+
+    // --- ESTADOS DE FACTURACIÓN ---
+    const [nombreFactura, setNombreFactura] = useState(
+        checkin?.guest?.full_name || '',
+    );
+    const [nitFactura, setNitFactura] = useState(
+        checkin?.guest?.identification_number || '',
+    );
+
+    // Estado para controlar si los datos vienen de la base de datos (Vinculado)
+    // Si al inicio ya hay datos del huésped, asumimos que está "vinculado"
+    const [isLinked, setIsLinked] = useState(!!checkin?.guest?.id);
+
+    // Estados del Buscador
+    const [filteredGuests, setFilteredGuests] = useState<any[]>([]);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // --- LÓGICA IDÉNTICA A CHECKIN/ASIGNACIÓN ---
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value.toUpperCase();
+
+        console.log('📝 [FACTURA] Escribiendo:', newValue);
+
+        // LÓGICA DE LIMPIEZA AUTOMÁTICA (La clave del Checkin)
+        // Si estaba vinculado (isLinked) O si el campo se vacía por completo...
+        const shouldReset = isLinked || newValue === '';
+
+        if (shouldReset) {
+            console.log('🧹 [FACTURA] Rompiendo vínculo o limpiando datos...');
+            setNitFactura(''); // Borramos el NIT/CI porque el nombre cambió o se borró
+            setIsLinked(false); // Ya no está vinculado a un registro de la BD
+        }
+
+        // Siempre actualizamos el nombre visualmente
+        setNombreFactura(newValue);
+
+        // Lógica de filtrado para el dropdown
+        if (newValue.length > 1) {
+            const results = (guests || [])
+                .filter((g) => {
+                    const gName = g.full_name ? g.full_name.toUpperCase() : '';
+                    const gCi = g.identification_number
+                        ? g.identification_number.toString()
+                        : '';
+                    return gName.includes(newValue) || gCi.includes(newValue);
+                })
+                .slice(0, 5);
+
+            setFilteredGuests(results);
+            setIsDropdownOpen(true);
+        } else {
+            setFilteredGuests([]);
+            setIsDropdownOpen(false);
+        }
+    };
+
+    const handleSelectGuest = (guest: any) => {
+        console.log(
+            '✅ [FACTURA] Cliente seleccionado de BD:',
+            guest.full_name,
+        );
+
+        // 1. Llenamos los campos
+        setNombreFactura(guest.full_name);
+        setNitFactura(guest.identification_number || ''); // Si es null, ponemos vacío
+
+        // 2. Establecemos el Vínculo (Candado lógico)
+        setIsLinked(true);
+
+        // 3. Cerramos buscador
+        setIsDropdownOpen(false);
+    };
 
     // Estado unificado para los datos (del servidor o calculados localmente)
     const [displayData, setDisplayData] = useState<{
@@ -1305,8 +1380,15 @@ function CheckoutConfirmationModal({
     // --- RENDERIZADO ---
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
+            {/* 👇 ESTE ES EL DIV QUE CAMBIA SU TAMAÑO 👇 */}
             <div
-                className={`flex w-full animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 zoom-in-95 ${pdfUrl ? 'h-[80vh] max-w-[450px]' : 'max-h-[85vh] max-w-sm'}`}
+                className={`flex w-full animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-300 zoom-in-95 ${
+                    pdfUrl
+                        ? 'h-[80vh] max-w-[470px]'
+                        : tipoDocumento === 'factura'
+                          ? 'max-h-[80vh] max-w-6xl'
+                          : 'max-h-[85vh] max-w-sm'
+                }`}
             >
                 {/* HEADER */}
                 <div
@@ -1338,261 +1420,510 @@ function CheckoutConfirmationModal({
                 {/* CONTENIDO (Con Scroll) */}
                 <div className="flex-1 overflow-y-auto">
                     {!pdfUrl ? (
-                        <div className="p-3">
+                        <div className="p-4">
                             {loadingDetails || !displayData ? (
                                 <div className="flex justify-center py-10">
                                     <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                                 </div>
                             ) : (
-                                <>
+                                <div
+                                    className={`flex flex-col gap-6 ${tipoDocumento === 'factura' ? 'md:flex-row' : ''}`}
+                                >
+                                    {/* --- COLUMNA 1: VISTA ORIGINAL --- */}
                                     <div
-                                        className={`rounded-xl border p-4 text-sm shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
+                                        className={`flex-1 transition-all duration-300 ${tipoDocumento === 'factura' ? 'mx-auto w-full max-w-sm' : ''}`}
                                     >
-                                        <div className="mb-3 text-center">
-                                            <span className="block text-[20px] font-bold text-red-600 uppercase">
-                                                Habitación {room.number}
-                                            </span>
-                                            <span className="text-[13px] font-bold text-black uppercase">
-                                                {displayData.guest?.full_name}
-                                            </span>
-                                        </div>
-
-                                        <div className="mb-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                            <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
-                                                <span className="font-bold">
-                                                    Ingreso:
+                                        <div
+                                            className={`rounded-xl border p-4 text-sm shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
+                                        >
+                                            <div className="mb-3 text-center">
+                                                <span className="block text-[20px] font-bold text-red-600 uppercase">
+                                                    Habitación {room.number}
                                                 </span>
-                                                <span>
-                                                    {new Date(
-                                                        displayData.check_in_date,
-                                                    ).toLocaleDateString()}
-                                                </span>
-                                                <span className="text-right font-bold">
-                                                    Hora:
-                                                </span>
-                                                <span className="text-right">
-                                                    {new Date(
-                                                        displayData.check_in_date,
-                                                    ).toLocaleTimeString([], {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                        hourCycle: 'h23',
-                                                    })}
-                                                </span>
+                                                {/* Se oculta el titular si es Factura */}
+                                                {tipoDocumento !==
+                                                    'factura' && (
+                                                    <span className="mt-1 block animate-in text-[13px] font-bold text-black uppercase fade-in zoom-in">
+                                                        {
+                                                            displayData.guest
+                                                                ?.full_name
+                                                        }
+                                                    </span>
+                                                )}
                                             </div>
 
-                                            <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
-                                                <span className="font-bold">
-                                                    Salida:
-                                                </span>
-                                                <span>
-                                                    {new Date(
-                                                        displayData.check_out_date,
-                                                    ).toLocaleDateString()}
-                                                </span>
-                                                <span className="text-right font-bold">
-                                                    Hora:
-                                                </span>
-                                                <span className="text-right">
-                                                    {new Date(
-                                                        displayData.check_out_date,
-                                                    ).toLocaleTimeString([], {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                        hourCycle: 'h23',
-                                                    })}
-                                                </span>
-                                            </div>
+                                            <div className="mb-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                                <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                    <span className="font-bold">
+                                                        Ingreso:
+                                                    </span>
+                                                    <span>
+                                                        {new Date(
+                                                            displayData.check_in_date,
+                                                        ).toLocaleDateString()}
+                                                    </span>
+                                                    <span className="text-right font-bold">
+                                                        Hora:
+                                                    </span>
+                                                    <span className="text-right">
+                                                        {new Date(
+                                                            displayData.check_in_date,
+                                                        ).toLocaleTimeString(
+                                                            [],
+                                                            {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                hourCycle:
+                                                                    'h23',
+                                                            },
+                                                        )}
+                                                    </span>
+                                                </div>
 
-                                            <div className="col-span-2 my-1 border-t border-dashed border-gray-300"></div>
+                                                <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                    <span className="font-bold">
+                                                        Salida:
+                                                    </span>
+                                                    <span>
+                                                        {new Date(
+                                                            displayData.check_out_date,
+                                                        ).toLocaleDateString()}
+                                                    </span>
+                                                    <span className="text-right font-bold">
+                                                        Hora:
+                                                    </span>
+                                                    <span className="text-right">
+                                                        {new Date(
+                                                            displayData.check_out_date,
+                                                        ).toLocaleTimeString(
+                                                            [],
+                                                            {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                hourCycle:
+                                                                    'h23',
+                                                            },
+                                                        )}
+                                                    </span>
+                                                </div>
 
-                                            <div>
-                                                <span className="font-bold">
-                                                    Permanencia:
-                                                </span>{' '}
-                                                {displayData.duration_days} días
-                                            </div>
-                                            <div></div>
+                                                <div className="col-span-2 my-1 border-t border-dashed border-gray-300"></div>
 
-                                            <div>
-                                                <span>Hospedaje:</span>
-                                            </div>
-                                            <div className="text-right">
-                                                {displayData.accommodation_total.toFixed(
-                                                    2,
-                                                )}{' '}
-                                                Bs
-                                            </div>
+                                                <div>
+                                                    <span className="font-bold">
+                                                        Permanencia:
+                                                    </span>{' '}
+                                                    {displayData.duration_days}{' '}
+                                                    días
+                                                </div>
+                                                <div></div>
 
-                                            {displayData.services_total > 0 && (
-                                                <>
-                                                    <div>
-                                                        <span>Extras:</span>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        {displayData.services_total.toFixed(
+                                                <div>
+                                                    <span>Hospedaje:</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    {displayData.accommodation_total.toFixed(
+                                                        2,
+                                                    )}{' '}
+                                                    Bs
+                                                </div>
+
+                                                {displayData.services_total >
+                                                    0 && (
+                                                    <>
+                                                        <div>
+                                                            <span>Extras:</span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {displayData.services_total.toFixed(
+                                                                2,
+                                                            )}{' '}
+                                                            Bs
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {Number(
+                                                    checkin.advance_payment,
+                                                ) > 0 && (
+                                                    <>
+                                                        <div className="font-bold text-green-600">
+                                                            Adelanto:
+                                                        </div>
+                                                        <div className="text-right font-bold text-green-600">
+                                                            -
+                                                            {Number(
+                                                                checkin.advance_payment,
+                                                            ).toFixed(2)}{' '}
+                                                            Bs
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                <div className="col-span-2 mt-1 flex justify-between border-t border-gray-300 pt-1">
+                                                    <span className="font-bold text-gray-700">
+                                                        Total General:
+                                                    </span>
+                                                    <span className="font-bold text-gray-700">
+                                                        {displayData.balance.toFixed(
                                                             2,
                                                         )}{' '}
                                                         Bs
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
+                                                Obs:{' '}
+                                                {checkin.notes || 'Sin obs.'}
+                                            </div>
+
+                                            {serviceGrouped.length > 0 && (
+                                                <div className="mt-2 border-t border-red-200/50 pt-2">
+                                                    <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
+                                                        Consumos
+                                                    </span>
+                                                    <div className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
+                                                        {serviceGrouped.map(
+                                                            (
+                                                                item: any,
+                                                                idx: number,
+                                                            ) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
+                                                                >
+                                                                    <span className="font-medium text-gray-600">
+                                                                        {
+                                                                            item.count
+                                                                        }{' '}
+                                                                        x{' '}
+                                                                        {
+                                                                            item.service
+                                                                        }
+                                                                    </span>
+                                                                    <span className="font-bold text-gray-900">
+                                                                        {item.subtotal.toFixed(
+                                                                            2,
+                                                                        )}{' '}
+                                                                        Bs
+                                                                    </span>
+                                                                </div>
+                                                            ),
+                                                        )}
                                                     </div>
-                                                </>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {exitToleranceStatus.isValid &&
+                                            displayData &&
+                                            displayData.duration_days > 1 && (
+                                                <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
+                                                    <button
+                                                        type="button"
+                                                        onClick={
+                                                            handleApplyTolerance
+                                                        }
+                                                        className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${waivePenalty ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300' : 'animate-pulse border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                                                        title={
+                                                            waivePenalty
+                                                                ? 'La tolerancia ya ha sido aplicada.'
+                                                                : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
+                                                        }
+                                                    >
+                                                        {waivePenalty ? (
+                                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                                        ) : (
+                                                            <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                        )}
+                                                        <span>
+                                                            {waivePenalty
+                                                                ? 'Tolerancia Aplicada'
+                                                                : 'Aplicar Tolerancia'}
+                                                        </span>
+                                                    </button>
+                                                </div>
                                             )}
 
-                                            {Number(checkin.advance_payment) >
-                                                0 && (
-                                                <>
-                                                    <div className="font-bold text-green-600">
-                                                        Adelanto:
+                                        <div className="mt-4 text-center">
+                                            <h4 className="text-xl font-bold text-gray-800">
+                                                ¿Confirmar salida?
+                                            </h4>
+                                            <div className="mt-4 flex justify-center gap-4">
+                                                <button
+                                                    onClick={() =>
+                                                        setTipoDocumento(
+                                                            'recibo',
+                                                        )
+                                                    }
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
+                                                >
+                                                    <div
+                                                        className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                                    >
+                                                        {tipoDocumento ===
+                                                            'recibo' && (
+                                                            <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                                                        )}
                                                     </div>
-                                                    <div className="text-right font-bold text-green-600">
-                                                        -
-                                                        {Number(
-                                                            checkin.advance_payment,
-                                                        ).toFixed(2)}{' '}
-                                                        Bs
+                                                    <span className="text-sm font-bold uppercase">
+                                                        Sin Factura
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        setTipoDocumento(
+                                                            'factura',
+                                                        )
+                                                    }
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
+                                                >
+                                                    <div
+                                                        className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                                    >
+                                                        {tipoDocumento ===
+                                                            'factura' && (
+                                                            <div className="h-2 w-2 rounded-full bg-blue-600" />
+                                                        )}
                                                     </div>
-                                                </>
-                                            )}
+                                                    <span className="text-sm font-bold uppercase">
+                                                        Con Factura
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <p className="mt-4 text-[11px] text-gray-400 italic">
+                                                Pasará a{' '}
+                                                <strong>LIMPIEZA</strong>.
+                                            </p>
+                                        </div>
+                                    </div>
 
-                                            <div className="col-span-2 mt-1 flex justify-between border-t border-gray-300 pt-1">
-                                                <span className="font-bold text-gray-700">
-                                                    Total General:
+                                    {/* --- COLUMNA 2: VISTA DE FACTURACIÓN --- */}
+                                    {tipoDocumento === 'factura' && (
+                                        <div className="flex h-full flex-1 animate-in flex-col rounded-2xl border border-red-100 bg-red-50/30 p-6 shadow-sm duration-300 fade-in slide-in-from-right-4">
+                                            <div className="mb-5 border-b border-blue-200 pb-5">
+                                                {/* CABECERA: FECHA */}
+                                                <div className="mb-4 flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-gray-800 uppercase">
+                                                        Fecha:{' '}
+                                                        {new Date().toLocaleDateString(
+                                                            'es-BO',
+                                                        )}
+                                                    </span>
+
+                                                    {/* CAMPO: NIT / CI */}
+                                                    <div className="flex items-center gap-3">
+                                                        <label className="text-xs font-bold whitespace-nowrap text-gray-500 uppercase">
+                                                            NIT / CI
+                                                        </label>
+
+                                                        <input
+                                                            type="text"
+                                                            value={nitFactura}
+                                                            onChange={(e) => {
+                                                                console.log(
+                                                                    '✏️ [FACTURA] NIT manual:',
+                                                                    e.target
+                                                                        .value,
+                                                                );
+                                                                setNitFactura(
+                                                                    e.target.value.toUpperCase(),
+                                                                );
+                                                            }}
+                                                            className="w-48 rounded-xl border border-gray-400 px-2 py-2 text-sm text-black uppercase shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                            placeholder="0000000"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* CAMPO: NOMBRE (Con Buscador idéntico a Asignación) */}
+                                                <div className="flex items-center gap-3 smb-4">
+                                                    <label className="mb-1.5 block text-xs font-bold text-gray-800 uppercase">
+                                                        Señor(es)
+                                                    </label>
+                                                    <div className="relative flex-1">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm text-black uppercase shadow-sm placeholder:text-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                                            placeholder="ESCRIBE PARA BUSCAR..."
+                                                            value={
+                                                                nombreFactura
+                                                            }
+                                                            onChange={
+                                                                handleNameChange
+                                                            }
+                                                            onFocus={() => {
+                                                                if (
+                                                                    nombreFactura.length >
+                                                                    1
+                                                                )
+                                                                    setIsDropdownOpen(
+                                                                        true,
+                                                                    );
+                                                            }}
+                                                            autoComplete="off"
+                                                        />
+
+                                                        {/* DROPDOWN DE RESULTADOS */}
+                                                        {isDropdownOpen &&
+                                                            filteredGuests.length >
+                                                                0 && (
+                                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                                    {filteredGuests.map(
+                                                                        (g) => (
+                                                                            <div
+                                                                                key={
+                                                                                    g.id
+                                                                                }
+                                                                                onClick={() =>
+                                                                                    handleSelectGuest(
+                                                                                        g,
+                                                                                    )
+                                                                                }
+                                                                                className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm transition-colors last:border-0 hover:bg-green-50"
+                                                                            >
+                                                                                <div className="font-bold text-gray-800">
+                                                                                    {
+                                                                                        g.full_name
+                                                                                    }
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono font-bold text-gray-600">
+                                                                                        CI:{' '}
+                                                                                        {g.identification_number ||
+                                                                                            'S/N'}
+                                                                                    </span>
+                                                                                    {g.nationality && (
+                                                                                        <span className="text-gray-400">
+                                                                                            •{' '}
+                                                                                            {
+                                                                                                g.nationality
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        ),
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* SECCIÓN DETALLES DE LA FACTURA */}
+                                            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                                                <h4 className="mb-4 border-b border-gray-100 pb-2 text-xs font-bold tracking-wider text-red-600 uppercase">
+                                                    Detalle de la Factura
+                                                </h4>
+                                                
+                                                {/* TABLA DE DETALLES - 3 COLUMNAS */}
+                                                <div className="w-full text-sm">
+                                                    {/* ENCABEZADOS */}
+                                                    <div className="mb-2 grid grid-cols-[1fr_110px_100px] border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
+                                                        <div className="text-left">Descripción</div>
+                                                        <div className="text-right">Precio Unitario</div>
+                                                        <div className="text-right">Total</div>
+                                                    </div>
+
+                                                    {/* 1. HABITACIÓN */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="font-bold text-gray-800">
+                                                            Habitación {room.number}
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right font-bold text-gray-800">
+                                                            {/* El total del hospedaje va aquí */}
+                                                            {displayData.accommodation_total.toFixed(2)}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* 2. TARIFA */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="text-gray-600 pl-2 text-xs">
+                                                            Tarifa
+                                                        </div>
+                                                        <div className="text-right text-gray-800 font-medium text-xs">
+                                                            {parseFloat(room.price?.amount || 0).toFixed(2)}
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                    </div>
+
+                                                    {/* 3. NÚMERO DE PERSONAS */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="text-gray-600 pl-2 text-xs">
+                                                            Número de personas: <span className="font-bold text-gray-800">{1 + (checkin.companions?.length || 0)}</span>
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                    </div>
+
+                                                    {/* 4. LLEGADA */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="text-gray-600 pl-2 text-xs">
+                                                            Llegada: <span className="font-bold text-gray-800">{new Date(displayData.check_in_date).toLocaleDateString('es-BO')}</span>
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                    </div>
+
+                                                    {/* 5. SALIDA */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="text-gray-600 pl-2 text-xs">
+                                                            Salida: <span className="font-bold text-gray-800">{new Date(displayData.check_out_date).toLocaleDateString('es-BO')}</span>
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                    </div>
+
+                                                    {/* 6. TOTAL DE DÍAS */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="text-gray-600 pl-2 text-xs">
+                                                            Total de días: <span className="font-bold text-gray-800">{displayData.duration_days}</span>
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                    </div>
+
+                                                    {/* 7. CONSUMO */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5 border-b border-gray-50">
+                                                        <div className="font-bold text-gray-800">
+                                                            Consumo
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right font-bold text-gray-800">
+                                                            {displayData.services_total.toFixed(2)}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* 8. OTROS */}
+                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5">
+                                                        <div className="font-bold text-gray-800">
+                                                            Otros
+                                                        </div>
+                                                        <div className="text-right text-gray-400">-</div>
+                                                        <div className="text-right font-bold text-gray-800">
+                                                            0.00
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
+                                                <span className="text-sm font-bold tracking-wider uppercase">
+                                                    Total de su factura
                                                 </span>
-                                                <span className="font-bold text-gray-700">
-                                                    {displayData.balance.toFixed(
+                                                <span className="text-2xl font-black">
+                                                    {displayData.grand_total.toFixed(
                                                         2,
                                                     )}{' '}
                                                     Bs
                                                 </span>
                                             </div>
                                         </div>
-
-                                        <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
-                                            Obs: {checkin.notes || 'Sin obs.'}
-                                        </div>
-
-                                        {/* Lista servicios */}
-                                        {serviceGrouped.length > 0 && (
-                                            <div className="mt-2 border-t border-red-200/50 pt-2">
-                                                <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
-                                                    Consumos
-                                                </span>
-                                                <div className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
-                                                    {serviceGrouped.map(
-                                                        (
-                                                            item: any,
-                                                            idx: number,
-                                                        ) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
-                                                            >
-                                                                <span className="font-medium text-gray-600">
-                                                                    {item.count}{' '}
-                                                                    x{' '}
-                                                                    {
-                                                                        item.service
-                                                                    }
-                                                                </span>
-                                                                <span className="font-bold text-gray-900">
-                                                                    {item.subtotal.toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs
-                                                                </span>
-                                                            </div>
-                                                        ),
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Botón Tolerancia Dinámico */}
-                                    {exitToleranceStatus.isValid &&
-                                        displayData &&
-                                        displayData.duration_days > 1 && (
-                                            <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
-                                                <button
-                                                    type="button"
-                                                    onClick={
-                                                        handleApplyTolerance
-                                                    }
-                                                    className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
-                                                        waivePenalty
-                                                            ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300'
-                                                            : 'animate-pulse border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                                    }`}
-                                                    title={
-                                                        waivePenalty
-                                                            ? 'La tolerancia ya ha sido aplicada.'
-                                                            : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
-                                                    }
-                                                >
-                                                    {/* Iconos */}
-                                                    {waivePenalty ? (
-                                                        <CheckCircle2 className="h-3.5 w-3.5" />
-                                                    ) : (
-                                                        <ArrowRightCircle className="h-3.5 w-3.5" />
-                                                    )}
-
-                                                    <span>
-                                                        {waivePenalty
-                                                            ? 'Tolerancia Aplicada'
-                                                            : 'Aplicar Tolerancia'}
-                                                    </span>
-                                                </button>
-                                            </div>
-                                        )}
-
-                                    {/* Botones Selección */}
-                                    <div className="mt-4 text-center">
-                                        <h4 className="text-xl font-bold text-gray-800">
-                                            ¿Confirmar salida?
-                                        </h4>
-                                        <div className="mt-4 flex justify-center gap-4">
-                                            <button
-                                                onClick={() =>
-                                                    setTipoDocumento('recibo')
-                                                }
-                                                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
-                                            >
-                                                <div
-                                                    className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
-                                                >
-                                                    {tipoDocumento ===
-                                                        'recibo' && (
-                                                        <div className="h-2 w-2 rounded-full bg-emerald-600" />
-                                                    )}
-                                                </div>
-                                                <span className="text-sm font-bold uppercase">
-                                                    Sin Factura
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() =>
-                                                    setTipoDocumento('factura')
-                                                }
-                                                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'}`}
-                                            >
-                                                <div
-                                                    className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
-                                                >
-                                                    {tipoDocumento ===
-                                                        'factura' && (
-                                                        <div className="h-2 w-2 rounded-full bg-blue-600" />
-                                                    )}
-                                                </div>
-                                                <span className="text-sm font-bold uppercase">
-                                                    Con Factura
-                                                </span>
-                                            </button>
-                                        </div>
-                                        <p className="mt-4 text-[11px] text-gray-400 italic">
-                                            Pasará a <strong>LIMPIEZA</strong>.
-                                        </p>
-                                    </div>
-                                </>
+                                    )}
+                                </div>
                             )}
                         </div>
                     ) : (

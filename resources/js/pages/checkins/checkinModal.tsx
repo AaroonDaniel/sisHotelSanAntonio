@@ -1952,50 +1952,65 @@ export default function CheckinModal({
                                             </div>
 
                                             {/* GRID DE BANCOS */}
-                                            <div className="grid grid-cols-4 gap-1">
-                                                {[
-                                                    {
-                                                        id: 'YAPE',
-                                                        label: 'YAPE',
-                                                        color: 'border-green-200 bg-green-50 text-green-700',
-                                                    },
-                                                    {
-                                                        id: 'FIE',
-                                                        label: 'FIE',
-                                                        color: 'border-orange-200 bg-orange-50 text-orange-700',
-                                                    },
-                                                    {
-                                                        id: 'BNB',
-                                                        label: 'BNB',
-                                                        color: 'border-blue-200 bg-blue-50 text-blue-700',
-                                                    },
-                                                    {
-                                                        id: 'ECO',
-                                                        label: 'ECO',
-                                                        color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
-                                                    },
-                                                ].map((banco) => (
-                                                    <button
-                                                        key={banco.id}
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setData(
-                                                                'qr_bank',
-                                                                banco.id,
-                                                            )
-                                                        }
-                                                        disabled={!isTitular}
-                                                        className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${
-                                                            data.qr_bank ===
-                                                            banco.id
-                                                                ? `ring-1 ring-purple-500 ring-offset-0 ${banco.color} scale-105 shadow-sm brightness-95`
-                                                                : `border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50`
-                                                        }`}
-                                                    >
-                                                        {banco.label}
-                                                    </button>
-                                                ))}
-                                            </div>
+<div className="grid grid-cols-4 gap-2">
+    {[
+        {
+            id: 'YAPE',
+            label: 'YAPE',
+            logo: '/images/bancos/yape.png',
+            color: 'border-green-300 bg-green-50',
+        },
+        {
+            id: 'FIE',
+            label: 'FIE',
+            logo: '/images/bancos/fie.png',
+            color: 'border-orange-300 bg-orange-50',
+        },
+        {
+            id: 'BNB',
+            label: 'BNB',
+            logo: '/images/bancos/bnb.png',
+            color: 'border-blue-300 bg-blue-50',
+        },
+        {
+            id: 'ECO',
+            label: 'ECO',
+            logo: '/images/bancos/eco.png',
+            color: 'border-yellow-300 bg-yellow-50',
+        },
+    ].map((banco) => {
+        const isSelected = data.qr_bank === banco.id;
+
+        return (
+            <button
+                key={banco.id}
+                type="button"
+                onClick={() => setData('qr_bank', banco.id)}
+                disabled={!isTitular}
+                className={`relative h-12 rounded-lg border transition-all duration-200 active:scale-95 overflow-hidden ${
+                    isSelected
+                        ? `${banco.color} ring-2 ring-purple-500 shadow-md scale-105`
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+            >
+                {/* Logo como fondo */}
+                <div
+                    className={`absolute inset-0 bg-center bg-no-repeat bg-contain transition-all duration-200 ${
+                        isSelected ? '' : 'grayscale opacity-60'
+                    }`}
+                    style={{
+                        backgroundImage: `url(${banco.logo})`,
+                    }}
+                />
+
+                {/* Capa ligera para que el seleccionado tenga más presencia */}
+                {isSelected && (
+                    <div className="absolute inset-0 bg-white/10" />
+                )}
+            </button>
+        );
+    })}
+</div>
 
                                             {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
                                             {data.advance_payment > 0 &&
