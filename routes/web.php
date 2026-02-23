@@ -153,9 +153,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Cierre de caja
     Route::get('/reports/financial', [\App\Http\Controllers\ReportController::class, 'financialIndex'])->name('reports.financial');
     Route::get('/reports/financial/pdf', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
-    
+    Route::get('/reports/financial/excel', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
     // Esta ruta la mantuve en el controlador para evitar error 500 en llamadas AJAX antiguas, aunque no se use activamente
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
+
 });
 
 require __DIR__ . '/settings.php';

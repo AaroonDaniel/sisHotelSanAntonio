@@ -817,19 +817,20 @@ class CheckinController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:1',
             'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'qr_bank' => 'nullable|string',
         ]);
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
+            $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
             \App\Models\Payment::create([
                 'checkin_id' => $checkin->id,
                 'user_id' => Auth::id(),
                 'amount' => $request->amount,
                 'method' => $request->payment_method,
+                'bank_name' => $banco,
                 'description' => 'ADELANTO A CUENTA',
                 'type' => 'PAGO'
             ]);
-
-            // --- ESTA ES LA LÍNEA MÁGICA QUE FALTABA ---
             // Actualiza el acumulado en la tabla principal para que se vea al instante
             $checkin->increment('advance_payment', $request->amount);
         });

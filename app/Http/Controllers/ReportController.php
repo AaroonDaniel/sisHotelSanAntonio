@@ -376,4 +376,70 @@ class ReportController extends Controller
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="cierre-caja-' . $startDate . '.pdf"');
     }
+
+    // =========================================================
+    // 3. GENERADOR EXCEL/CSV: CIERRE DE CAJA
+    // =========================================================
+    public function generateFinancialReportExcel(Request $request)
+    {
+        $startDate = $request->query('start_date', now()->toDateString());
+        $endDate = $request->query('end_date', now()->toDateString());
+
+        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+            ->orderBy('user_id')
+            ->orderBy('created_at')
+            ->get();
+
+        $fileName = 'cierre-caja-' . $startDate . '.csv';
+
+        // Cabeceras HTTP para forzar la descarga
+        $headers = array(
+            "Content-type"        => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        $columns = ['Fecha', 'Hora', 'Cajero', 'Habitacion', 'Huesped', 'Metodo', 'Banco/QR', 'Tipo', 'Monto (Bs)'];
+
+        $callback = function() use($payments, $columns) {
+            $file = fopen('php://output', 'w');
+            
+            // Agregar BOM para que Excel lea los tildes (UTF-8) correctamente
+            fputs($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            
+            // Escribir cabeceras (usamos ; como separador porque Excel en español lo lee mejor)
+            fputcsv($file, $columns, ';'); 
+
+            $granTotal = 0;
+
+            foreach ($payments as $p) {
+                $montoReal = $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+                $granTotal += $montoReal;
+
+                $row = [
+                    $p->created_at->format('d/m/Y'),
+                    $p->created_at->format('H:i'),
+                    $p->user->name ?? 'Desconocido',
+                    $p->checkin->room->number ?? '-',
+                    $p->checkin->guest->full_name ?? 'Sin Huésped',
+                    $p->method,
+                    $p->bank_name ?? '-',
+                    $p->type,
+                    number_format($montoReal, 2, '.', '')
+                ];
+
+                fputcsv($file, $row, ';');
+            }
+
+            // Fila de Total Neto al final
+            fputcsv($file, ['', '', '', '', '', '', '', 'TOTAL NETO', number_format($granTotal, 2, '.', '')], ';');
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }

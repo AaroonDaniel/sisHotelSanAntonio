@@ -141,8 +141,8 @@ export default function Dashboard({ auth }: DashboardProps) {
                         <h2 className="text-3xl font-bold text-white">
                             Panel de Control
                         </h2>
-                        <p className="mt-2 text-gray-500">
-                            Bienvenido de nuevo, <span className="font-semibold text-gray-800 dark:text-gray-200">{auth.user.name}</span>.
+                        <p className="mt-2 text-gray-100">
+                            Bienvenido de nuevo, <span className="font-semibold text-white dark:text-gray-100">{auth.user.name}</span>.
                         </p>
                     </div>
                     <div className="hidden text-right sm:block">

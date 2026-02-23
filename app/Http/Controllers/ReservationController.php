@@ -18,9 +18,9 @@ class ReservationController extends Controller
     public function index()
     {
         $pendingReservations = Reservation::with(['guest', 'details.room.roomType'])
-        ->where('status', 'pendiente') // O el estado que uses para "pendiente"
-        // ->whereDate('expected_check_in', today()) // Opcional: solo las de hoy
-        ->get();
+            ->where('status', 'pendiente') // O el estado que uses para "pendiente"
+            // ->whereDate('expected_check_in', today()) // Opcional: solo las de hoy
+            ->get();
         return Inertia::render('reservations/index', [
             'Reservations' => Reservation::with([
                 'guest',
@@ -55,6 +55,7 @@ class ReservationController extends Controller
                 'duration_days' => 'required|integer|min:1',
                 'advance_payment' => 'nullable|numeric|min:0',
                 'payment_type' => 'required|string',
+                'qr_bank' => 'nullable|string',
                 'details' => 'required|array|min:1',
                 'details.*.room_id' => 'required',
                 'details.*.price_id' => 'required',
@@ -73,7 +74,7 @@ class ReservationController extends Controller
                 Log::info('Iniciando transacción de Base de Datos...');
 
                 $guestId = $request->guest_id;
-                
+
                 // Si es un huésped nuevo, lo creamos primero
                 if ($request->is_new_guest) {
                     Log::info('Creando nuevo huésped...');
@@ -111,7 +112,7 @@ class ReservationController extends Controller
                         'price_id' => $detail['price_id'],
                         'price' => $detail['price'],
                     ]);
-                    
+
                     // Pasamos la habitación a RESERVADO
                     Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
                     Log::info("Habitación {$detail['room_id']} apartada y marcada como RESERVADO.");
@@ -120,11 +121,16 @@ class ReservationController extends Controller
                 // Registramos el pago si dejó algún adelanto
                 if ($request->advance_payment > 0) {
                     Log::info("Registrando pago de adelanto por: {$request->advance_payment}");
+
+                    // 1. Verificamos si es QR/TRANSFERENCIA para guardar el banco, si es EFECTIVO se guarda como null
+                    $banco = ($request->payment_type === 'EFECTIVO') ? null : $request->qr_bank;
+
                     Payment::create([
                         'reservation_id' => $reservation->id,
                         'user_id' => Auth::id(),
                         'amount' => $request->advance_payment,
                         'method' => $request->payment_type,
+                        'bank_name' => $banco, // <-- ¡AQUÍ ESTÁ LA MAGIA QUE FALTABA!
                         'type' => 'INGRESO',
                         'description' => 'ADELANTO RESERVA #' . $reservation->id
                     ]);
@@ -133,7 +139,6 @@ class ReservationController extends Controller
 
             Log::info('=== CREACIÓN DE RESERVA FINALIZADA CON ÉXITO ===');
             return redirect()->back()->with('success', 'Reserva registrada correctamente');
-            
         } catch (\Exception $e) {
             // Si cualquier consulta SQL falla, explotará aquí
             Log::error("❌ Error CRÍTICO en la Base de Datos (store): " . $e->getMessage());
@@ -159,7 +164,7 @@ class ReservationController extends Controller
 
                 // React manda 'cancelado', evaluamos 'CANCELADO'
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
-                    
+
                     // Lo guardamos en la BD tal cual lo exige el ENUM
                     $reservation->update(['status' => 'cancelada']);
                     \Illuminate\Support\Facades\Log::info("✅ Reserva actualizada a 'cancelada' en la BD.");
@@ -172,16 +177,16 @@ class ReservationController extends Controller
                 }
                 // Si en algún momento confirmas, también debes respetar el ENUM ('confirmada')
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
-                    
-                    $reservation->update(['status' => 'confirmada']); 
-                    
+
+                    $reservation->update(['status' => 'confirmada']);
+
                     // ========================================================
                     // 🚨 CREAR EL CHECK-IN AUTOMÁTICAMENTE AL CONFIRMAR 🚨
                     // ========================================================
                     $primerCheckinId = null;
 
                     foreach ($reservation->details as $index => $detail) {
-                        
+
                         // 🚀 AQUÍ ESTÁ LA NUEVA LÓGICA: Etiquetar las habitaciones secundarias
                         $notaAsignacion = 'Reserva' . $reservation->id;
                         if ($index > 0) {
@@ -196,7 +201,7 @@ class ReservationController extends Controller
                             'check_in_date' => $reservation->arrival_date ?? now(),
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
-                            'advance_payment' => 0, 
+                            'advance_payment' => 0,
                             'origin' => null, // 🚨 ESTO ES CLAVE: Fuerza a React a mostrar "Faltan Datos" (Ámbar)
                             'status' => 'activo',
                             'is_temporary' => false,
@@ -221,23 +226,22 @@ class ReservationController extends Controller
                         foreach ($pagos as $pago) {
                             $pago->update([
                                 'checkin_id' => $primerCheckinId,
-                                'reservation_id' => null 
+                                'reservation_id' => null
                             ]);
                         }
-                        
+
                         // Actualizar el saldo visible
                         $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                         \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
                     }
                     // ========================================================
-                }
-                else {
+                } else {
                     $reservation->update($request->only([
                         'arrival_date',
                         'arrival_time',
                         'guest_count',
                         // Si actualizas otros estados desde otro lado, ten cuidado de mandar las minúsculas exactas
-                        'status' 
+                        'status'
                     ]));
                 }
             });
@@ -253,7 +257,6 @@ class ReservationController extends Controller
 
             // Si fue otra acción (Cancelar, etc), vuelve a donde estaba
             return redirect()->back()->with('success', 'Reserva actualizada.');
-            
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error("❌ ERROR: " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error al actualizar: ' . $e->getMessage()]);
