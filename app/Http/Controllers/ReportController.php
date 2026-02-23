@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Checkin;
 use App\Models\Guest;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Fpdf;
@@ -196,5 +197,183 @@ class ReportController extends Controller
     public function checkDailyBookStatus()
     {
         return response()->json(['can_generate' => true]);
+    }
+    // =========================================================
+    // 1. VISTA: CIERRE DE CAJA (FRONTEND)
+    // =========================================================
+    public function financialIndex(Request $request)
+    {
+        $startDate = $request->query('start_date', now()->toDateString());
+        $endDate = $request->query('end_date', now()->toDateString());
+
+        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id' => $p->id,
+                    'user_name' => $p->user->name ?? 'Desconocido',
+                    'amount' => (float) $p->amount,
+                    'method' => $p->method,
+                    'bank_name' => $p->bank_name,
+                    'type' => $p->type, // PAGO o DEVOLUCION
+                    'date' => $p->created_at->format('d/m/Y'),
+                    'time' => $p->created_at->format('H:i'),
+                    'room_number' => $p->checkin->room->number ?? '-',
+                    'guest_name' => $p->checkin->guest->full_name ?? 'Sin Huésped',
+                ];
+            });
+
+        return Inertia::render('reports/financial', [
+            'Payments' => $payments,
+            'Filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ]
+        ]);
+    }
+
+    // =========================================================
+    // 2. GENERADOR PDF: CIERRE DE CAJA
+    // =========================================================
+    public function generateFinancialReportPdf(Request $request)
+    {
+        $startDate = $request->query('start_date', now()->toDateString());
+        $endDate = $request->query('end_date', now()->toDateString());
+
+        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+            ->orderBy('user_id')
+            ->orderBy('created_at')
+            ->get();
+
+        $pdf = new \FPDF('P', 'mm', 'Letter');
+        $pdf->SetMargins(15, 15, 15);
+        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->AddPage();
+
+        // CABECERA
+        $logoPath = public_path('images/logo_camara.png');
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 15, 10, 20);
+        }
+
+        $pdf->SetFont('Arial', 'B', 14);
+        $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(0, 6, utf8_decode('REPORTE DE INGRESOS Y CIERRE DE CAJA'), 0, 1, 'C');
+
+        $pdf->SetFont('Arial', '', 9);
+        $rangoTexto = "Desde: " . \Carbon\Carbon::parse($startDate)->format('d/m/Y') . "  Hasta: " . \Carbon\Carbon::parse($endDate)->format('d/m/Y');
+        $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'C');
+        $pdf->Ln(5);
+
+        if ($payments->isEmpty()) {
+            $pdf->SetFont('Arial', 'I', 10);
+            $pdf->Cell(0, 10, 'No hay transacciones registradas en este rango de fechas.', 0, 1, 'C');
+            return response($pdf->Output('S'), 200)->header('Content-Type', 'application/pdf');
+        }
+
+        $grouped = $payments->groupBy('user_id');
+        $granTotal = 0;
+        $granTotalEfectivo = 0;
+        $granTotalQR = 0;
+
+        foreach ($grouped as $userId => $userPayments) {
+            $userName = $userPayments->first()->user->name ?? 'Desconocido';
+
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->SetFillColor(200, 220, 255);
+            $pdf->Cell(0, 6, utf8_decode(' CAJERO / USUARIO: ' . strtoupper($userName)), 1, 1, 'L', true);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->SetFillColor(240, 240, 240);
+            $pdf->Cell(15, 5, 'Fecha', 1, 0, 'C', true);
+            $pdf->Cell(12, 5, 'Hora', 1, 0, 'C', true);
+            $pdf->Cell(12, 5, 'Hab', 1, 0, 'C', true);
+            $pdf->Cell(65, 5, 'Huesped', 1, 0, 'L', true);
+            $pdf->Cell(33, 5, 'Metodo', 1, 0, 'C', true);
+            $pdf->Cell(24, 5, 'Tipo', 1, 0, 'C', true);
+            $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
+
+            $pdf->SetFont('Arial', '', 7);
+
+            $subEfectivo = 0;
+            $subQR = 0;
+            $qrPorBanco = [];
+
+            foreach ($userPayments as $p) {
+                $montoReal = $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+
+                if (strtoupper($p->method) === 'EFECTIVO') {
+                    $subEfectivo += $montoReal;
+                } else {
+                    $subQR += $montoReal;
+                    $banco = strtoupper($p->bank_name ?: 'OTROS');
+                    if (!isset($qrPorBanco[$banco])) $qrPorBanco[$banco] = 0;
+                    $qrPorBanco[$banco] += $montoReal;
+                }
+
+                $pdf->Cell(15, 5, $p->created_at->format('d/m'), 1, 0, 'C');
+                $pdf->Cell(12, 5, $p->created_at->format('H:i'), 1, 0, 'C');
+                $pdf->Cell(12, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
+                $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
+
+                $metodoText = $p->method . ($p->bank_name ? ' (' . $p->bank_name . ')' : '');
+                $pdf->Cell(33, 5, utf8_decode(substr($metodoText, 0, 18)), 1, 0, 'C');
+
+                if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
+                $pdf->Cell(24, 5, utf8_decode($p->type), 1, 0, 'C');
+                $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');
+                $pdf->SetTextColor(0, 0, 0);
+            }
+
+            $subTotal = $subEfectivo + $subQR;
+            $granTotal += $subTotal;
+            $granTotalEfectivo += $subEfectivo;
+            $granTotalQR += $subQR;
+
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(137, 5, '', 0, 0);
+            $pdf->Cell(24, 5, 'Efectivo:', 1, 0, 'R');
+            $pdf->Cell(25, 5, number_format($subEfectivo, 2), 1, 1, 'R');
+
+            if ($subQR > 0) {
+                foreach ($qrPorBanco as $bco => $mnt) {
+                    $pdf->Cell(137, 5, '', 0, 0);
+                    $pdf->Cell(24, 5, substr("QR $bco:", 0, 12), 1, 0, 'R');
+                    $pdf->Cell(25, 5, number_format($mnt, 2), 1, 1, 'R');
+                }
+            }
+            $pdf->Cell(137, 5, '', 0, 0);
+            $pdf->SetFillColor(220, 255, 220);
+            $pdf->Cell(24, 5, 'TOTAL:', 1, 0, 'R', true);
+            $pdf->Cell(25, 5, number_format($subTotal, 2), 1, 1, 'R', true);
+            $pdf->Ln(4);
+        }
+
+        $pdf->Ln(2);
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->SetFillColor(180, 255, 180);
+        $pdf->Cell(137, 7, '', 0, 0);
+        $pdf->Cell(49, 7, 'RECAUDACION TOTAL:', 1, 0, 'R', true);
+        $pdf->Ln();
+
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell(137, 6, '', 0, 0);
+        $pdf->Cell(24, 6, 'Efectivo:', 1, 0, 'R');
+        $pdf->Cell(25, 6, number_format($granTotalEfectivo, 2) . ' Bs', 1, 1, 'R');
+        $pdf->Cell(137, 6, '', 0, 0);
+        $pdf->Cell(24, 6, 'QR/Bancos:', 1, 0, 'R');
+        $pdf->Cell(25, 6, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R');
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(137, 8, '', 0, 0);
+        $pdf->Cell(24, 8, 'NETO:', 1, 0, 'R', true);
+        $pdf->Cell(25, 8, number_format($granTotal, 2) . ' Bs', 1, 1, 'R', true);
+
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="cierre-caja-' . $startDate . '.pdf"');
     }
 }

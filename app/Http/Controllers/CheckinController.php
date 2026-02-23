@@ -740,8 +740,8 @@ class CheckinController extends Controller
     // --- NUEVO: Obtener detalles antes de finalizar ---
     public function getCheckoutDetails(Request $request, Checkin $checkin)
     {
-        // 1. Cargar relaciones
-        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
+        // 1. Cargar relaciones (Añadimos 'companions' para el cálculo corporativo)
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions']);
 
         // 2. Determinar si se aplica la tolerancia
         $waivePenalty = $request->boolean('waive_penalty', false);
@@ -766,6 +766,21 @@ class CheckinController extends Controller
 
         // 5. Calcular Costos
         $price = $checkin->room->price->amount ?? 0;
+
+        // ==========================================================
+        // 🚀 LÓGICA CORPORATIVA: 60/90 Bs por persona si tiene la etiqueta
+        // ==========================================================
+        if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+            $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
+            $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+            $ratePerPerson = $isPrivate ? 90 : 60;
+            
+            // PaxCount = 1 Titular + N Acompañantes
+            $paxCount = 1 + $checkin->companions->count(); 
+            $price = $ratePerPerson * $paxCount;
+        }
+        // ==========================================================
+
         $accommodationTotal = $days * $price;
 
         $servicesTotal = 0;
@@ -783,7 +798,7 @@ class CheckinController extends Controller
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
             'check_out_date' => $checkOutDate->toIso8601String(), // Devuelve la fecha usada (Real o Ajustada)
             'duration_days' => $days,
-            'price_per_night' => $price,
+            'price_per_night' => $price, // Ahora mandará la tarifa calculada correctamente
             'accommodation_total' => $accommodationTotal,
             'services_total' => $servicesTotal,
             'advance_payment' => $checkin->advance_payment,
@@ -1023,10 +1038,11 @@ class CheckinController extends Controller
 
 
     // --GENERACION DE BOLETA --
+    // --GENERACION DE BOLETA --
     public function generateCheckoutReceipt(Checkin $checkin)
     {
-        // 1. CARGAR RELACIONES CORRECTAS (Agregamos 'schedule' para la nueva lógica)
-        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
+        // 1. CARGAR RELACIONES CORRECTAS (Agregamos 'schedule' y 'companions' para la nueva lógica)
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions']);
 
         // --- LÓGICA DE DÍAS (NUEVA: Usando tolerancias) ---
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
@@ -1040,6 +1056,21 @@ class CheckinController extends Controller
 
         // --- CÁLCULOS ECONÓMICOS ---
         $precioUnitario = $checkin->room->price->amount ?? 0;
+
+        // ==========================================================
+        // 🚀 LÓGICA CORPORATIVA
+        // ==========================================================
+        if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+            $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
+            $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+            $ratePerPerson = $isPrivate ? 90 : 60;
+            
+            // PaxCount = 1 Titular + N Acompañantes
+            $paxCount = 1 + $checkin->companions->count();
+            $precioUnitario = $ratePerPerson * $paxCount;
+        }
+        // ==========================================================
+
         $totalHospedaje = $precioUnitario * $diasACobrar; // Usamos el cálculo inteligente
 
         // Calcular Servicios usando CheckinDetails (Lógica original intacta)
@@ -1200,8 +1231,8 @@ class CheckinController extends Controller
     public function generateCheckoutInvoice(Checkin $checkin)
     {
         try {
-            // 1. CARGAR RELACIONES (Agregamos 'schedule' para que funcione la tolerancia)
-            $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule']);
+            // 1. CARGAR RELACIONES (Agregamos 'schedule' y 'companions' para la tolerancia y lo corporativo)
+            $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions']);
 
             // --- CÁLCULOS CON TOLERANCIA ---
             $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
@@ -1212,6 +1243,21 @@ class CheckinController extends Controller
             $diasReales = $this->calculateBillableDays($checkin, $salida);
 
             $precioUnitario = $checkin->room->price->amount ?? 0;
+
+            // ==========================================================
+            // 🚀 LÓGICA CORPORATIVA
+            // ==========================================================
+            if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+                $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
+                $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+                $ratePerPerson = $isPrivate ? 90 : 60;
+                
+                // PaxCount = 1 Titular + N Acompañantes
+                $paxCount = 1 + $checkin->companions->count();
+                $precioUnitario = $ratePerPerson * $paxCount;
+            }
+            // ==========================================================
+
             $totalHospedaje = $precioUnitario * $diasReales;
 
             $totalServicios = 0;
@@ -1615,10 +1661,19 @@ class CheckinController extends Controller
 
             $primerCheckinId = null;
 
+            // 🚀 VERIFICAMOS SI LA RESERVA ERA CORPORATIVA
+            $isCorporate = ($reservation->guest_count ?? 0) >= 30;
+
             // Recorremos CADA HABITACIÓN reservada
             foreach ($reservation->details as $index => $detail) {
                 
                 $arrivalDate = $reservation->arrival_date ?? now();
+
+                // 🚀 PREPARAMOS LAS NOTAS (Agregando la etiqueta corporativa si corresponde)
+                $baseNotes = 'Generado desde Reserva #' . $reservation->id;
+                if ($isCorporate) {
+                    $baseNotes .= ' [CORPORATIVO]';
+                }
 
                 $checkin = \App\Models\Checkin::create([
                     'guest_id' => $reservation->guest_id,
@@ -1631,7 +1686,7 @@ class CheckinController extends Controller
                     'origin' => null, // 🚨 ESTO ES CLAVE: El sistema detectará que "Faltan Datos"
                     'status' => 'activo',
                     'is_temporary' => false,
-                    'notes' => 'Generado desde Reserva #' . $reservation->id,
+                    'notes' => strtoupper($baseNotes), // 🚀 Guardamos con la etiqueta
                     'schedule_id' => $reservation->schedule_id, // Sin el error de clone
                 ]);
 

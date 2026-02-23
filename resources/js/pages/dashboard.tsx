@@ -18,7 +18,8 @@ import {
     X,             // Icono cerrar
     FileText,
     Briefcase,
-    Clock,      // Icono archivo
+    Clock,
+    Wallet,      // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
@@ -74,6 +75,7 @@ const hotelModules = [
             
             { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
             { name: 'Libro Diario', icon: BookDown, url: '#' }, 
+            { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
         ],
     },
 ];

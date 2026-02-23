@@ -506,12 +506,13 @@ export default function CheckinModal({
                 // ===============================================
 
                 // 🚀 CORRECCIÓN: Verificamos si aún falta llenar la procedencia
-                const isOriginMissing = !checkinToEdit.origin || checkinToEdit.origin.trim() === '';
+                const isOriginMissing =
+                    !checkinToEdit.origin || checkinToEdit.origin.trim() === '';
 
                 // 🚀 DETECTAMOS SI ES UNA HABITACIÓN "ADICIONAL" DE UNA RESERVA Y ESTÁ PENDIENTE
-                const isSecondaryRoom = checkinToEdit.notes
-                    ?.toLowerCase()
-                    .includes('adicional') && isOriginMissing;
+                const isSecondaryRoom =
+                    checkinToEdit.notes?.toLowerCase().includes('adicional') &&
+                    isOriginMissing;
 
                 // Si es adicional y está pendiente, no bloqueamos como existente para obligar a buscar/crear
                 setIsExistingGuest(!isSecondaryRoom);
@@ -1788,13 +1789,52 @@ export default function CheckinModal({
                                                         Number(data.room_id) ||
                                                     r.id === initialRoomId,
                                             );
-                                            const price =
+
+                                            let price =
                                                 selectedRoom?.price?.amount ||
                                                 0;
+
+                                            // ==========================================================
+                                            // 🚀 LÓGICA CORPORATIVA FRONTEND
+                                            // ==========================================================
+                                            const isCorporate = data.notes
+                                                ?.toUpperCase()
+                                                .includes('CORPORATIVO');
+
+                                            if (isCorporate && selectedRoom) {
+                                                // Usamos "any" para silenciar el error estricto de TypeScript
+                                                const roomAny =
+                                                    selectedRoom as any;
+
+                                                const bathroomType =
+                                                    roomAny.price?.bathroom_type?.toLowerCase() ||
+                                                    roomAny.room_type?.bathroom_type?.toLowerCase() ||
+                                                    '';
+
+                                                const isPrivate =
+                                                    bathroomType ===
+                                                        'private' ||
+                                                    bathroomType === 'privado';
+                                                const rate = isPrivate
+                                                    ? 90
+                                                    : 60;
+
+                                                // PaxCount = 1 Titular + N Acompañantes registrados en el frontend
+                                                const paxCount =
+                                                    1 +
+                                                    (data.companions?.length ||
+                                                        0);
+
+                                                // El nuevo precio unitario por noche de TODA la habitación
+                                                price = rate * paxCount;
+                                            }
+                                            // ==========================================================
+
                                             const total =
                                                 price *
                                                 (Number(data.duration_days) ||
                                                     0);
+
                                             return (
                                                 <span className="animate-in text-sm font-black text-green-600 fade-in">
                                                     Total: {total} Bs
