@@ -170,6 +170,7 @@ class RoomController
             'room.price',     // 👈 Asegúrate que diga room.price
             'room.roomType',  // 👈 Y room.roomType
             'services',
+            // [DOC] AGREGADO: Necesario para que el buscador sepa cuánto se ha pagado realmente
             'payments'
         ])
             ->where('status', 'activo')

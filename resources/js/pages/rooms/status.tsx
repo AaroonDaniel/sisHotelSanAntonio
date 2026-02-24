@@ -1064,7 +1064,7 @@ export default function RoomsStatus({
 
 // --- COMPONENTE MODAL MODIFICADO ---
 // Reemplaza toda la función CheckoutConfirmationModal con esto:
-function CheckoutConfirmationModal({
+function CheckoutConfirmationModal({ 
     checkin,
     room,
     onClose,
@@ -1079,89 +1079,49 @@ function CheckoutConfirmationModal({
 }) {
     if (!checkin) return null;
 
-    const [tolModal, setTolModal] = useState<{
-        show: boolean;
-        type: 'allowed' | 'denied';
-        time: string;
-        minutes: number;
-    }>({ show: false, type: 'allowed', time: '', minutes: 0 });
-
+    const [tolModal, setTolModal] = useState<{show: boolean;type: 'allowed' | 'denied';time: string;minutes: number;}>({ show: false, type: 'allowed', time: '', minutes: 0 });
     const [processing, setProcessing] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [waivePenalty, setWaivePenalty] = useState(false);
-    const [tipoDocumento, setTipoDocumento] = useState<
-        'factura' | 'recibo' | null
-    >(null);
-    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(
-        null,
-    );
-
-    const [nombreFactura, setNombreFactura] = useState(
-        checkin?.guest?.full_name || '',
-    );
-    const [nitFactura, setNitFactura] = useState(
-        checkin?.guest?.identification_number || '',
-    );
+    const [tipoDocumento, setTipoDocumento] = useState<'factura' | 'recibo' | null>(null);
+    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(null,);
+    const [nombreFactura, setNombreFactura] = useState(checkin?.guest?.full_name || '',);
+    const [nitFactura, setNitFactura] = useState(checkin?.guest?.identification_number || '',);
     const [isLinked, setIsLinked] = useState(!!checkin?.guest?.id);
     const [qrBank, setQrBank] = useState<string | null>(null);
-
-    // Estados del Buscador
     const [filteredGuests, setFilteredGuests] = useState<any[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-    // --- LÓGICA IDÉNTICA A CHECKIN/ASIGNACIÓN ---
+    // [DOC] Manejadores de formulario (handleNameChange, handleSelectGuest) 
+    // Formulario manejo sobre handleNameChange, hanleSelectGuest
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value.toUpperCase();
-
-        //console.log('📝 [FACTURA] Escribiendo:', newValue);
-
-        // LÓGICA DE LIMPIEZA AUTOMÁTICA (La clave del Checkin)
-        // Si estaba vinculado (isLinked) O si el campo se vacía por completo...
         const shouldReset = isLinked || newValue === '';
-
-        if (shouldReset) {
-            //console.log('🧹 [FACTURA] Rompiendo vínculo o limpiando datos...');
-            setNitFactura(''); // Borramos el NIT/CI porque el nombre cambió o se borró
-            setIsLinked(false); // Ya no está vinculado a un registro de la BD
-        }
-
-        // Siempre actualizamos el nombre visualmente
+        if (shouldReset) { setNitFactura(''); setIsLinked(false); }
         setNombreFactura(newValue);
-
-        // Lógica de filtrado para el dropdown
         if (newValue.length > 1) {
-            const results = (guests || [])
-                .filter((g) => {
-                    const gName = g.full_name ? g.full_name.toUpperCase() : '';
-                    const gCi = g.identification_number
-                        ? g.identification_number.toString()
-                        : '';
-                    return gName.includes(newValue) || gCi.includes(newValue);
-                })
-                .slice(0, 5);
-
+            const results = (guests || []).filter((g) => {
+                const gName = g.full_name ? g.full_name.toUpperCase() : '';
+                const gCi = g.identification_number ? g.identification_number.toString() : '';
+                return gName.includes(newValue) || gCi.includes(newValue);
+            }).slice(0, 5);
             setFilteredGuests(results);
             setIsDropdownOpen(true);
-        } else {
-            setFilteredGuests([]);
-            setIsDropdownOpen(false);
-        }
+        } else { setFilteredGuests([]); setIsDropdownOpen(false); }
     };
+    
 
     const handleSelectGuest = (guest: any) => {
         // 1. Llenamos los campos
         setNombreFactura(guest.full_name);
         setNitFactura(guest.identification_number || ''); // Si es null, ponemos vacío
-
         // 2. Establecemos el Vínculo (Candado lógico)
         setIsLinked(true);
-
         // 3. Cerramos buscador
         setIsDropdownOpen(false);
     };
 
-    // Estado unificado para los datos (del servidor o calculados localmente)
+    // Estado principal de datos visuales
     const [displayData, setDisplayData] = useState<{
         duration_days: number;
         accommodation_total: number;
@@ -1172,121 +1132,103 @@ function CheckoutConfirmationModal({
         check_in_date: string;
         servicios: any[];
         guest: any;
+        total_pagado?: number; // [DOC] Nueva propiedad para almacenar lo pagado realmente
     } | null>(null);
+    
+    // Logica de tolerancia (getExitToleranceStatus)
+    const getExitToleranceStatus = () => {
+        if (!checkin) return { isValid: false, message: 'No data', limitTime: '' };
+        const safeSchedules = schedules || [];
+        let schedule = safeSchedules.find((s: any) => String(s.id) === String(checkin.schedule_id));
+        if (!schedule) schedule = safeSchedules.find((s: any) => s.is_active === true || s.is_active === 1);
+        if (!schedule) return { isValid: false, message: 'Sin Horario', limitTime: '' };
+        const now = new Date();
+        const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
+        const exitDeadline = new Date();
+        exitDeadline.setHours(hours, minutes, 0, 0);
+        const toleranceLimit = new Date(exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000);
+        return {
+            isValid: now <= toleranceLimit,
+            limitTime: toleranceLimit.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
+            officialTime: schedule.check_out_time.substring(0, 5),
+        };
+    };
+    const exitToleranceStatus = getExitToleranceStatus();
 
-    // --- EFECTO DE CARGA ROBUSTO (PLAN A + PLAN B) ---
-
-    // --- EFECTO DE CARGA Y CÁLCULO DE SALDOS ---
+    // ---           CALCULO DE SALDOS           ---
     useEffect(() => {
         setLoadingDetails(true);
 
-        // 1. Obtener servicios del huésped
-        const fetchServices = axios
-            .get('/guests/view-detail', {
-                params: { guest_id: checkin.guest_id },
-            })
-            .then((res) =>
-                res.data.status === 'success' ? res.data.data.servicios : [],
-            )
+        const fetchServices = axios.get('/guests/view-detail', { params: { guest_id: checkin.guest_id } })
+            .then((res) => res.data.status === 'success' ? res.data.data.servicios : [])
             .catch(() => []);
 
-        // 2. Obtener cálculo del servidor (para referencias)
-        const fetchServerCalc = axios
-            .get(`/checks/${checkin.id}/checkout-details`, {
-                params: { waive_penalty: waivePenalty ? 1 : 0 },
-            })
+        const fetchServerCalc = axios.get(`/checks/${checkin.id}/checkout-details`, { params: { waive_penalty: waivePenalty ? 1 : 0 } })
             .then((res) => res.data)
             .catch(() => null);
 
-        Promise.all([fetchServices, fetchServerCalc])
-            .then(([servicios, serverResponse]) => {
-                // Calcular total de servicios (Consumos)
-                const servicesTotal = servicios.reduce(
-                    (acc: number, item: any) =>
-                        acc + (parseFloat(item.subtotal) || 0),
-                    0,
-                );
+        Promise.all([fetchServices, fetchServerCalc]).then(([servicios, serverResponse]) => {
+            // [DOC] Calcular total consumos
+            const servicesTotal = servicios.reduce((acc: number, item: any) => acc + (parseFloat(item.subtotal) || 0), 0);
 
-                // -------------------------------------------------------------
-                // 💰 PASO CRÍTICO: CALCULAR EL TOTAL PAGADO REAL (Historial)
-                // -------------------------------------------------------------
-                let totalPagadoReal = 0;
-                if (checkin.payments && checkin.payments.length > 0) {
-                    // Sumar todos los pagos registrados en la base de datos
-                    totalPagadoReal = checkin.payments.reduce(
-                        (acc: number, p: any) => {
-                            const monto = parseFloat(p.amount) || 0;
-                            return p.type === 'DEVOLUCION'
-                                ? acc - monto
-                                : acc + monto;
-                        },
-                        0,
-                    );
-                } else {
-                    // Si es antiguo y no tiene pagos detallados, usar el adelanto simple
-                    totalPagadoReal = parseFloat(checkin.advance_payment || 0);
+            // [DOC] CALCULO ROBUSTO DE PAGOS: Sumamos todo el historial 'payments'
+            let totalPagadoReal = 0;
+            if (checkin.payments && checkin.payments.length > 0) {
+                totalPagadoReal = checkin.payments.reduce((acc: number, p: any) => {
+                    const monto = parseFloat(p.amount) || 0;
+                    return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
+                }, 0);
+            } else {
+                // [DOC] Fallback: Si no hay historial, usamos el adelanto inicial
+                totalPagadoReal = parseFloat(checkin.advance_payment || 0);
+            }
+
+            if (serverResponse) {
+                // [DOC] Opción A: Servidor. RECALCULAMOS EL BALANCE para asegurar que reste el totalPagadoReal
+                const serverGrandTotal = parseFloat(serverResponse.grand_total) || 0;
+                const balanceCorregido = serverGrandTotal - totalPagadoReal;
+
+                setDisplayData({
+                    ...serverResponse,
+                    balance: balanceCorregido, // [DOC] Sobreescribimos con el saldo correcto
+                    servicios: servicios,
+                    services_total: serverResponse.services_total ?? servicesTotal,
+                    guest: checkin.guest,
+                    total_pagado: totalPagadoReal // [DOC] Guardamos para la vista
+                });
+            } else {
+                // [DOC] Opción B: Local. Cálculo manual si falla el servidor
+                const ingreso = new Date(checkin.check_in_date);
+                let salida = new Date();
+                if (waivePenalty && exitToleranceStatus.officialTime) {
+                    const [hours, minutes] = exitToleranceStatus.officialTime.split(':').map(Number);
+                    salida.setHours(hours, minutes, 0, 0);
                 }
+                const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                const price = parseFloat(room.price?.amount || 0);
+                const accomTotal = diffDays * price;
+                const grandTotal = accomTotal + servicesTotal;
+                
+                // [DOC] Resta final correcta
+                const balanceFinal = grandTotal - totalPagadoReal;
 
-                if (serverResponse) {
-                    // OPCIÓN A: El servidor respondió
-                    // Forzamos el recálculo del balance usando NUESTRO totalPagadoReal
-                    const serverGrandTotal =
-                        parseFloat(serverResponse.grand_total) || 0;
-                    const balanceCorregido = serverGrandTotal - totalPagadoReal;
+                setDisplayData({
+                    duration_days: diffDays,
+                    accommodation_total: accomTotal,
+                    services_total: servicesTotal,
+                    grand_total: grandTotal,
+                    balance: balanceFinal,
+                    check_out_date: new Date().toISOString(),
+                    check_in_date: checkin.check_in_date,
+                    servicios: servicios,
+                    guest: checkin.guest,
+                    total_pagado: totalPagadoReal
+                });
+            }
+        }).finally(() => setLoadingDetails(false));
+    }, [checkin.id, waivePenalty, checkin.payments]); // [DOC] Importante: reaccionar a cambios en pagos
 
-                    setDisplayData({
-                        ...serverResponse,
-                        balance: balanceCorregido, // <--- AQUÍ SE ARREGLA EL TOTAL GENERAL
-                        servicios: servicios,
-                        services_total:
-                            serverResponse.services_total ?? servicesTotal,
-                        guest: checkin.guest,
-                        // @ts-ignore
-                        total_pagado: totalPagadoReal, // Guardamos para mostrarlo en rojo/verde
-                    });
-                } else {
-                    // OPCIÓN B: Cálculo Local (Fallback)
-                    const ingreso = new Date(checkin.check_in_date);
-                    let salida = new Date();
-
-                    if (waivePenalty && exitToleranceStatus.officialTime) {
-                        const [hours, minutes] =
-                            exitToleranceStatus.officialTime
-                                .split(':')
-                                .map(Number);
-                        salida.setHours(hours, minutes, 0, 0);
-                    }
-
-                    const diffTime = Math.abs(
-                        salida.getTime() - ingreso.getTime(),
-                    );
-                    const diffDays =
-                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-                    const price = parseFloat(room.price?.amount || 0);
-                    const accomTotal = diffDays * price;
-                    const grandTotal = accomTotal + servicesTotal;
-
-                    // Restamos el total pagado real
-                    const balanceFinal = grandTotal - totalPagadoReal;
-
-                    setDisplayData({
-                        duration_days: diffDays,
-                        accommodation_total: accomTotal,
-                        services_total: servicesTotal,
-                        grand_total: grandTotal,
-                        balance: balanceFinal, // <--- AQUÍ TAMBIÉN SE ARREGLA
-                        check_out_date: new Date().toISOString(),
-                        check_in_date: checkin.check_in_date,
-                        servicios: servicios,
-                        guest: checkin.guest,
-                        // @ts-ignore
-                        total_pagado: totalPagadoReal,
-                    });
-                }
-            })
-            .finally(() => setLoadingDetails(false));
-    }, [checkin.id, waivePenalty]);
     // Limpieza PDF
     useEffect(() => {
         return () => {
@@ -1340,60 +1282,7 @@ function CheckoutConfirmationModal({
         }
     };
 
-    const getExitToleranceStatus = () => {
-        if (!checkin)
-            return { isValid: false, message: 'No data', limitTime: '' };
-
-        const safeSchedules = schedules || [];
-
-        // 1. Intento A: Buscar el horario asignado al checkin
-        let schedule = safeSchedules.find(
-            (s: any) => String(s.id) === String(checkin.schedule_id),
-        );
-
-        // 2. Intento B (FALLBACK): Si no tiene (es antiguo), usar el ACTIVO
-        if (!schedule) {
-            schedule = safeSchedules.find(
-                (s: any) => s.is_active === true || s.is_active === 1,
-            );
-        }
-
-        // Si aún así no hay horario, fallamos
-        if (!schedule) {
-            return {
-                isValid: false,
-                message: 'Sin Horario',
-                limitTime: '',
-            };
-        }
-
-        const now = new Date(); // Hora actual
-
-        // 3. Obtener hora de salida oficial
-        const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
-        const exitDeadline = new Date();
-        exitDeadline.setHours(hours, minutes, 0, 0);
-
-        // 4. Calcular Límite Máximo (+ Minutos de tolerancia)
-        const toleranceLimit = new Date(
-            exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000,
-        );
-
-        // 5. Comparación: ¿Estamos dentro del tiempo extra permitido?
-        // (now <= toleranceLimit)
-        const isWithinTolerance = now <= toleranceLimit;
-
-        return {
-            isValid: isWithinTolerance,
-            limitTime: toleranceLimit.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                hourCycle: 'h23',
-            }),
-            officialTime: schedule.check_out_time.substring(0, 5),
-        };
-    };
-    const exitToleranceStatus = getExitToleranceStatus();
+    
 
     // Nueva función del botón (Reemplaza la anterior handleApplyTolerance)
     const handleApplyTolerance = () => {
@@ -1438,6 +1327,7 @@ function CheckoutConfirmationModal({
               }, {}),
           )
         : [];
+
 
     // --- RENDERIZADO ---
     return (
