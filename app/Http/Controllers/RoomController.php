@@ -142,23 +142,24 @@ class RoomController
     }
     public function status()
     {
-        // 1. Cargamos las habitaciones y le decimos a Laravel que SOLO traiga el Checkin 'activo'
+        // 1. Cargamos las habitaciones
         $rooms = Room::with([
-            'roomType', 
-            'price', 
+            'roomType',
+            'price',
             'checkins' => function ($q) {
-                // 🛑 ESTO ES LO QUE FALTABA: Asegurarnos de traer el activo para que React lo vea
                 $q->where('status', 'activo')
-                  ->with(['guest', 'companions', 'checkinDetails.service', 'services']);
+                    // 👇 AQUÍ AGREGAMOS 'payments' PARA QUE REACT RECIBA EL DINERO
+                    ->with(['guest', 'companions', 'checkinDetails.service', 'services', 'payments']);
             }
         ])->orderBy('number')->get();
 
-        // 2. Obtenemos todos los checkins activos para la búsqueda global en el modal
-        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services'])
+        // 2. Cargamos los checkins activos (para el buscador global)
+        // 👇 AQUÍ TAMBIÉN AGREGAMOS 'payments'
+        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services', 'payments'])
             ->where('status', 'activo')
             ->get();
 
-        // 3. Reservas pendientes
+        // 3. Reservas pendientes (sin cambios)
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
             ->get();

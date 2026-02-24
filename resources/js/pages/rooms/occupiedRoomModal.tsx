@@ -43,25 +43,27 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
     // CORRECCIÓN: EL USEMEMO DEBE IR ANTES DE CUALQUIER "RETURN" O "IF"
     // ------------------------------------------------------------------------------------------
     const totalPaid = useMemo(() => {
-        // Validación de seguridad por si checkin es null al inicio
+        // Validación de seguridad
         if (!checkin) return 0;
 
-        // 1. Rescatamos el adelanto inicial (los 80 Bs)
-        const initialAdvance = parseFloat(checkin.advance_payment) || 0;
+        // 🛑 CORRECCIÓN: Priorizamos el array 'payments'.
+        // Si el backend nos envía la lista de pagos, sumamos SOLO eso.
+        if (checkin.payments && checkin.payments.length > 0) {
+            return checkin.payments.reduce((acc: number, p: any) => {
+                const amount = parseFloat(p.amount) || 0;
+                
+                // Si tienes devoluciones, réstalas
+                if (p.type === 'DEVOLUCION') {
+                    return acc - amount;
+                }
+                return acc + amount;
+            }, 0);
+        }
 
-        // 2. Sumamos los pagos adicionales (si existen)
-        const extraPayments = checkin.payments?.reduce((acc: number, p: any) => {
-            // Opcional: Si tienes devoluciones, réstalas
-            if (p.type === 'DEVOLUCION') {
-                return acc - parseFloat(p.amount);
-            }
-            return acc + parseFloat(p.amount);
-        }, 0) || 0;
-
-        // 3. Retornamos la suma total
-        return initialAdvance + extraPayments;
+        // FALLBACK: Solo si NO hay array de pagos (quizás registros muy antiguos),
+        // usamos la columna 'advance_payment' para no mostrar cero por error.
+        return parseFloat(checkin.advance_payment) || 0;
     }, [checkin]);
-
     // ------------------------------------------------------------------------------------------
     // AHORA SÍ PUEDES PONER EL RETURN CONDICIONAL
     // ------------------------------------------------------------------------------------------
