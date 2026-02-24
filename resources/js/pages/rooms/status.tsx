@@ -270,7 +270,7 @@ export default function RoomsStatus({
             // =========================================================
             //console.log(`\n================================`);
             //console.log(`[DEBUG] Evaluando Habitación: ${room.number}`);
-           // console.log(`[DEBUG] Status en Base de Datos: ${dbStatus}`);
+            // console.log(`[DEBUG] Status en Base de Datos: ${dbStatus}`);
             //console.log(`[DEBUG] Checkin Activo Encontrado:`, activeCheckin);
 
             if (activeCheckin) {
@@ -292,12 +292,10 @@ export default function RoomsStatus({
                     isAnyCompanionIncomplete ||
                     isOriginMissing
                 ) {
-                    
                     return 'incomplete';
                 }
-            } 
+            }
 
-            
             return 'occupied';
             // =========================================================
         }
@@ -1152,8 +1150,6 @@ function CheckoutConfirmationModal({
     };
 
     const handleSelectGuest = (guest: any) => {
-        
-
         // 1. Llenamos los campos
         setNombreFactura(guest.full_name);
         setNitFactura(guest.identification_number || ''); // Si es null, ponemos vacío
@@ -1220,43 +1216,56 @@ function CheckoutConfirmationModal({
                         guest: checkin.guest,
                     });
                 } else {
-                    // OPCIÓN B: Cálculo Local (Si falla el servidor o es muy rápido)
+                    // OPCIÓN B: Cálculo Local
                     // -------------------------------------------------------------
                     const ingreso = new Date(checkin.check_in_date);
-                    let salida = new Date(); // Por defecto: AHORA MISMO
+                    let salida = new Date(); 
 
-                    // --- MAGIA AQUÍ: SI HAY TOLERANCIA, MODIFICAMOS LA HORA ---
+                    // Ajuste de hora si hay tolerancia
                     if (waivePenalty && exitToleranceStatus.officialTime) {
-                        const [hours, minutes] =
-                            exitToleranceStatus.officialTime
-                                .split(':')
-                                .map(Number);
-                        salida.setHours(hours, minutes, 0, 0); // Ajustamos la salida a la hora oficial
+                        const [hours, minutes] = exitToleranceStatus.officialTime
+                            .split(':')
+                            .map(Number);
+                        salida.setHours(hours, minutes, 0, 0); 
                     }
-                    // -----------------------------------------------------------
 
-                    const diffTime = Math.abs(
-                        salida.getTime() - ingreso.getTime(),
-                    );
-                    // Redondear hacia arriba para cobrar días completos
-                    const diffDays =
-                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                    const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
+                    // 1. CALCULAR PRECIOS
                     const price = parseFloat(room.price?.amount || 0);
                     const accomTotal = diffDays * price;
                     const grandTotal = accomTotal + servicesTotal;
-                    const advance = parseFloat(checkin.advance_payment || 0);
+
+                    // 2. CALCULAR TOTAL PAGADO (LA CORRECCIÓN ESTÁ AQUÍ)
+                    let totalPagado = 0;
+                    if (checkin.payments && checkin.payments.length > 0) {
+                        // Suma TODO el historial de pagos
+                        totalPagado = checkin.payments.reduce((acc: number, p: any) => {
+                            const monto = parseFloat(p.amount) || 0;
+                            return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
+                        }, 0);
+                    } else {
+                        // Si no hay historial, usa el adelanto inicial
+                        totalPagado = parseFloat(checkin.advance_payment || 0);
+                    }
+
+                    // 3. CALCULAR BALANCE FINAL
+                    // Aquí es donde baja de 58 a 38, porque ahora resta TODO lo pagado
+                    const balanceFinal = grandTotal - totalPagado;
 
                     setDisplayData({
                         duration_days: diffDays,
                         accommodation_total: accomTotal,
                         services_total: servicesTotal,
                         grand_total: grandTotal,
-                        balance: grandTotal - advance,
+                        balance: balanceFinal, // <--- Dato corregido
                         check_out_date: new Date().toISOString(),
                         check_in_date: checkin.check_in_date,
                         servicios: servicios,
                         guest: checkin.guest,
+                        // @ts-ignore
+                        total_pagado: totalPagado // Guardamos el total pagado para mostrarlo
                     });
                 }
             })
@@ -1309,7 +1318,6 @@ function CheckoutConfirmationModal({
 
             setPdfUrl(url);
         } catch (error) {
-            
             alert('Error al procesar la salida.');
         } finally {
             setProcessing(false);
@@ -1581,17 +1589,22 @@ function CheckoutConfirmationModal({
                                                     </>
                                                 )}
 
-                                                {Number(
-                                                    checkin.advance_payment,
-                                                ) > 0 && (
+                                                {/* CORRECCIÓN VISUAL: Usar el total_pagado calculado */}
+                                                {/* Sección de Adelantos en el HTML */}
+                                                {(displayData as any)
+                                                    ?.total_pagado > 0 && (
                                                     <>
                                                         <div className="font-bold text-green-600">
-                                                            Adelanto:
+                                                            Adelanto Total:
                                                         </div>
                                                         <div className="text-right font-bold text-green-600">
                                                             -
-                                                            {Number(
-                                                                checkin.advance_payment,
+                                                            {(
+                                                                (
+                                                                    displayData as any
+                                                                )
+                                                                    ?.total_pagado ||
+                                                                0
                                                             ).toFixed(2)}{' '}
                                                             Bs
                                                         </div>
@@ -1867,7 +1880,6 @@ function CheckoutConfirmationModal({
                                                             type="text"
                                                             value={nitFactura}
                                                             onChange={(e) => {
-                                                               
                                                                 setNitFactura(
                                                                     e.target.value.toUpperCase(),
                                                                 );
