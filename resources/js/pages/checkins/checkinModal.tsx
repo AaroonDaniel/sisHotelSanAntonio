@@ -883,6 +883,39 @@ export default function CheckinModal({
         }
     };
 
+    // ===============================
+    // AUTOCOMPLETE PROCEDENCIA
+    // ===============================
+
+    const [originList, setOriginList] = useState<string[]>(() => {
+        const saved = localStorage.getItem('originHistory');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [isOriginDropdownOpen, setIsOriginDropdownOpen] = useState(false);
+    const [isOriginOpen, setIsOriginOpen] = useState(false);
+    const originDropdownRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        localStorage.setItem('originHistory', JSON.stringify(originList));
+    }, [originList]);
+    // Filtro tipo buscador universal
+    const filteredOrigins =
+        data.origin && data.origin.length > 1
+            ? originList.filter((o) => {
+                  const term = data.origin.toLowerCase();
+                  return o.toLowerCase().includes(term);
+              })
+            : [];
+
+    // Guardar nueva procedencia si no existe
+    const saveOriginIfNew = (value: string) => {
+        const upperValue = value.toUpperCase();
+
+        if (upperValue && !originList.includes(upperValue)) {
+            setOriginList((prev) => [...prev, upperValue]);
+        }
+    };
+
     const handleCheckout = () => {
         if (!checkinToEdit) return;
         if (
@@ -903,12 +936,6 @@ export default function CheckinModal({
                     },
                 },
             );
-        }
-    };
-
-    const handlePrint = () => {
-        if (checkinToEdit) {
-            window.open(`/checks/${checkinToEdit.id}/receipt`, '_blank');
         }
     };
 
@@ -1437,30 +1464,81 @@ export default function CheckinModal({
 
                             {/* F. FILA PROCEDENCIA Y TELÉFONO */}
                             <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="mb-1 block text-xs font-bold text-gray-500 uppercase">
+                                <div
+                                    className="relative"
+                                    ref={originDropdownRef}
+                                >
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Procedencia
                                     </label>
+
                                     <div className="relative">
-                                        <Globe className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-gray-400" />
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Globe className="h-4 w-4 text-gray-400" />
+                                        </div>
+
                                         <input
                                             type="text"
-                                            className="w-full rounded-lg border border-gray-400 bg-blue-50/20 py-2 pl-9 text-sm font-bold text-blue-900 uppercase focus:border-blue-500 focus:ring-blue-500"
-                                            // ✅ CORRECCIÓN CLAVE:
-                                            // Vinculamos directamente a 'data.origin' (el dato de la asignación)
                                             value={data.origin || ''}
-                                            // ✅ Al escribir, actualizamos directo el formulario principal
-                                            onChange={(e) =>
-                                                setData(
-                                                    'origin',
-                                                    e.target.value.toUpperCase(),
-                                                )
-                                            }
                                             disabled={isReadOnly}
                                             placeholder="EJ: COCHABAMBA"
+                                            autoComplete="off"
+                                            onChange={(e) => {
+                                                const value =
+                                                    e.target.value.toUpperCase();
+                                                setData('origin', value);
+                                                setIsOriginDropdownOpen(true);
+                                            }}
+                                            onFocus={() => {
+                                                if (
+                                                    (data.origin || '').length >
+                                                    1
+                                                )
+                                                    setIsOriginDropdownOpen(
+                                                        true,
+                                                    );
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    setIsOriginDropdownOpen(
+                                                        false,
+                                                    );
+                                                    saveOriginIfNew(
+                                                        data.origin || '',
+                                                    );
+                                                }, 150);
+                                            }}
+                                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black uppercase focus:border-blue-500 focus:ring-blue-500"
                                         />
+
+                                        {/* Dropdown */}
+                                        {isOriginDropdownOpen &&
+                                            filteredOrigins.length > 0 && (
+                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                    {filteredOrigins.map(
+                                                        (origin, index) => (
+                                                            <div
+                                                                key={index}
+                                                                onClick={() => {
+                                                                    setData(
+                                                                        'origin',
+                                                                        origin,
+                                                                    );
+                                                                    setIsOriginDropdownOpen(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                                className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
+                                                            >
+                                                                {origin}
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            )}
                                     </div>
                                 </div>
+
                                 <div>
                                     <label className="text-xs font-bold text-gray-500">
                                         Teléfono

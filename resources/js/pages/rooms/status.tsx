@@ -139,7 +139,9 @@ export default function RoomsStatus({
         const findFreshCheckin = (targetId: number) => {
             for (const room of Rooms) {
                 if (room.checkins && room.checkins.length > 0) {
-                    const found = room.checkins.find((c: any) => c.id === targetId);
+                    const found = room.checkins.find(
+                        (c: any) => c.id === targetId,
+                    );
                     if (found) return found;
                 }
             }
@@ -154,14 +156,15 @@ export default function RoomsStatus({
 
         // 2. Sincronizar Modal de Finalizar/Editar Estadía
         // [DOC] Cambiamos 'checkinToCheckout' por 'checkinToEdit' que es el que parece que usas
-        if (checkinToEdit) { 
+        if (checkinToEdit) {
             const freshCheckout = findFreshCheckin(checkinToEdit.id);
             if (freshCheckout) {
-                 console.log("🔄 Sync: Actualizando datos del checkout con nuevos pagos");
-                 setCheckinToEdit(freshCheckout);
+                console.log(
+                    '🔄 Sync: Actualizando datos del checkout con nuevos pagos',
+                );
+                setCheckinToEdit(freshCheckout);
             }
         }
-
     }, [Rooms]);
     // Detalles para la tolerancia
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -1046,7 +1049,7 @@ export default function RoomsStatus({
 
 // --- COMPONENTE MODAL MODIFICADO ---
 // Reemplaza toda la función CheckoutConfirmationModal con esto:
-function CheckoutConfirmationModal({ 
+function CheckoutConfirmationModal({
     checkin,
     room,
     onClose,
@@ -1061,37 +1064,59 @@ function CheckoutConfirmationModal({
 }) {
     if (!checkin) return null;
 
-    const [tolModal, setTolModal] = useState<{show: boolean;type: 'allowed' | 'denied';time: string;minutes: number;}>({ show: false, type: 'allowed', time: '', minutes: 0 });
+    const [tolModal, setTolModal] = useState<{
+        show: boolean;
+        type: 'allowed' | 'denied';
+        time: string;
+        minutes: number;
+    }>({ show: false, type: 'allowed', time: '', minutes: 0 });
     const [processing, setProcessing] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [waivePenalty, setWaivePenalty] = useState(false);
-    const [tipoDocumento, setTipoDocumento] = useState<'factura' | 'recibo' | null>(null);
-    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(null,);
-    const [nombreFactura, setNombreFactura] = useState(checkin?.guest?.full_name || '',);
-    const [nitFactura, setNitFactura] = useState(checkin?.guest?.identification_number || '',);
+    const [tipoDocumento, setTipoDocumento] = useState<
+        'factura' | 'recibo' | null
+    >(null);
+    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(
+        null,
+    );
+    const [nombreFactura, setNombreFactura] = useState(
+        checkin?.guest?.full_name || '',
+    );
+    const [nitFactura, setNitFactura] = useState(
+        checkin?.guest?.identification_number || '',
+    );
     const [isLinked, setIsLinked] = useState(!!checkin?.guest?.id);
     const [qrBank, setQrBank] = useState<string | null>(null);
     const [filteredGuests, setFilteredGuests] = useState<any[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    // [DOC] Manejadores de formulario (handleNameChange, handleSelectGuest) 
+    // [DOC] Manejadores de formulario (handleNameChange, handleSelectGuest)
     // Formulario manejo sobre handleNameChange, hanleSelectGuest
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value.toUpperCase();
         const shouldReset = isLinked || newValue === '';
-        if (shouldReset) { setNitFactura(''); setIsLinked(false); }
+        if (shouldReset) {
+            setNitFactura('');
+            setIsLinked(false);
+        }
         setNombreFactura(newValue);
         if (newValue.length > 1) {
-            const results = (guests || []).filter((g) => {
-                const gName = g.full_name ? g.full_name.toUpperCase() : '';
-                const gCi = g.identification_number ? g.identification_number.toString() : '';
-                return gName.includes(newValue) || gCi.includes(newValue);
-            }).slice(0, 5);
+            const results = (guests || [])
+                .filter((g) => {
+                    const gName = g.full_name ? g.full_name.toUpperCase() : '';
+                    const gCi = g.identification_number
+                        ? g.identification_number.toString()
+                        : '';
+                    return gName.includes(newValue) || gCi.includes(newValue);
+                })
+                .slice(0, 5);
             setFilteredGuests(results);
             setIsDropdownOpen(true);
-        } else { setFilteredGuests([]); setIsDropdownOpen(false); }
+        } else {
+            setFilteredGuests([]);
+            setIsDropdownOpen(false);
+        }
     };
-    
 
     const handleSelectGuest = (guest: any) => {
         // 1. Llenamos los campos
@@ -1116,22 +1141,35 @@ function CheckoutConfirmationModal({
         guest: any;
         total_pagado?: number; // [DOC] Nueva propiedad para almacenar lo pagado realmente
     } | null>(null);
-    
+
     // Logica de tolerancia (getExitToleranceStatus)
     const getExitToleranceStatus = () => {
-        if (!checkin) return { isValid: false, message: 'No data', limitTime: '' };
+        if (!checkin)
+            return { isValid: false, message: 'No data', limitTime: '' };
         const safeSchedules = schedules || [];
-        let schedule = safeSchedules.find((s: any) => String(s.id) === String(checkin.schedule_id));
-        if (!schedule) schedule = safeSchedules.find((s: any) => s.is_active === true || s.is_active === 1);
-        if (!schedule) return { isValid: false, message: 'Sin Horario', limitTime: '' };
+        let schedule = safeSchedules.find(
+            (s: any) => String(s.id) === String(checkin.schedule_id),
+        );
+        if (!schedule)
+            schedule = safeSchedules.find(
+                (s: any) => s.is_active === true || s.is_active === 1,
+            );
+        if (!schedule)
+            return { isValid: false, message: 'Sin Horario', limitTime: '' };
         const now = new Date();
         const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
         const exitDeadline = new Date();
         exitDeadline.setHours(hours, minutes, 0, 0);
-        const toleranceLimit = new Date(exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000);
+        const toleranceLimit = new Date(
+            exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000,
+        );
         return {
             isValid: now <= toleranceLimit,
-            limitTime: toleranceLimit.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
+            limitTime: toleranceLimit.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+            }),
             officialTime: schedule.check_out_time.substring(0, 5),
         };
     };
@@ -1141,74 +1179,101 @@ function CheckoutConfirmationModal({
     useEffect(() => {
         setLoadingDetails(true);
 
-        const fetchServices = axios.get('/guests/view-detail', { params: { guest_id: checkin.guest_id } })
-            .then((res) => res.data.status === 'success' ? res.data.data.servicios : [])
+        const fetchServices = axios
+            .get('/guests/view-detail', {
+                params: { guest_id: checkin.guest_id },
+            })
+            .then((res) =>
+                res.data.status === 'success' ? res.data.data.servicios : [],
+            )
             .catch(() => []);
 
-        const fetchServerCalc = axios.get(`/checks/${checkin.id}/checkout-details`, { params: { waive_penalty: waivePenalty ? 1 : 0 } })
+        const fetchServerCalc = axios
+            .get(`/checks/${checkin.id}/checkout-details`, {
+                params: { waive_penalty: waivePenalty ? 1 : 0 },
+            })
             .then((res) => res.data)
             .catch(() => null);
 
-        Promise.all([fetchServices, fetchServerCalc]).then(([servicios, serverResponse]) => {
-            // [DOC] Calcular total consumos
-            const servicesTotal = servicios.reduce((acc: number, item: any) => acc + (parseFloat(item.subtotal) || 0), 0);
+        Promise.all([fetchServices, fetchServerCalc])
+            .then(([servicios, serverResponse]) => {
+                // [DOC] Calcular total consumos
+                const servicesTotal = servicios.reduce(
+                    (acc: number, item: any) =>
+                        acc + (parseFloat(item.subtotal) || 0),
+                    0,
+                );
 
-            // [DOC] CALCULO ROBUSTO DE PAGOS: Sumamos todo el historial 'payments'
-            let totalPagadoReal = 0;
-            if (checkin.payments && checkin.payments.length > 0) {
-                totalPagadoReal = checkin.payments.reduce((acc: number, p: any) => {
-                    const monto = parseFloat(p.amount) || 0;
-                    return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
-                }, 0);
-            } else {
-                // [DOC] Fallback: Si no hay historial, usamos el adelanto inicial
-                totalPagadoReal = parseFloat(checkin.advance_payment || 0);
-            }
-
-            if (serverResponse) {
-                // [DOC] Opción A: Servidor. RECALCULAMOS EL BALANCE para asegurar que reste el totalPagadoReal
-                const serverGrandTotal = parseFloat(serverResponse.grand_total) || 0;
-                const balanceCorregido = serverGrandTotal - totalPagadoReal;
-
-                setDisplayData({
-                    ...serverResponse,
-                    balance: balanceCorregido, // [DOC] Sobreescribimos con el saldo correcto
-                    servicios: servicios,
-                    services_total: serverResponse.services_total ?? servicesTotal,
-                    guest: checkin.guest,
-                    total_pagado: totalPagadoReal // [DOC] Guardamos para la vista
-                });
-            } else {
-                // [DOC] Opción B: Local. Cálculo manual si falla el servidor
-                const ingreso = new Date(checkin.check_in_date);
-                let salida = new Date();
-                if (waivePenalty && exitToleranceStatus.officialTime) {
-                    const [hours, minutes] = exitToleranceStatus.officialTime.split(':').map(Number);
-                    salida.setHours(hours, minutes, 0, 0);
+                // [DOC] CALCULO ROBUSTO DE PAGOS: Sumamos todo el historial 'payments'
+                let totalPagadoReal = 0;
+                if (checkin.payments && checkin.payments.length > 0) {
+                    totalPagadoReal = checkin.payments.reduce(
+                        (acc: number, p: any) => {
+                            const monto = parseFloat(p.amount) || 0;
+                            return p.type === 'DEVOLUCION'
+                                ? acc - monto
+                                : acc + monto;
+                        },
+                        0,
+                    );
+                } else {
+                    // [DOC] Fallback: Si no hay historial, usamos el adelanto inicial
+                    totalPagadoReal = parseFloat(checkin.advance_payment || 0);
                 }
-                const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-                const price = parseFloat(room.price?.amount || 0);
-                const accomTotal = diffDays * price;
-                const grandTotal = accomTotal + servicesTotal;
-                
-                // [DOC] Resta final correcta
-                const balanceFinal = grandTotal - totalPagadoReal;
 
-                setDisplayData({
-                    duration_days: diffDays,
-                    accommodation_total: accomTotal,
-                    services_total: servicesTotal,
-                    grand_total: grandTotal,
-                    balance: balanceFinal,
-                    check_out_date: new Date().toISOString(),
-                    check_in_date: checkin.check_in_date,
-                    servicios: servicios,
-                    guest: checkin.guest,
-                    total_pagado: totalPagadoReal
-                });
-            }
-        }).finally(() => setLoadingDetails(false));
+                if (serverResponse) {
+                    // [DOC] Opción A: Servidor. RECALCULAMOS EL BALANCE para asegurar que reste el totalPagadoReal
+                    const serverGrandTotal =
+                        parseFloat(serverResponse.grand_total) || 0;
+                    const balanceCorregido = serverGrandTotal - totalPagadoReal;
+
+                    setDisplayData({
+                        ...serverResponse,
+                        balance: balanceCorregido, // [DOC] Sobreescribimos con el saldo correcto
+                        servicios: servicios,
+                        services_total:
+                            serverResponse.services_total ?? servicesTotal,
+                        guest: checkin.guest,
+                        total_pagado: totalPagadoReal, // [DOC] Guardamos para la vista
+                    });
+                } else {
+                    // [DOC] Opción B: Local. Cálculo manual si falla el servidor
+                    const ingreso = new Date(checkin.check_in_date);
+                    let salida = new Date();
+                    if (waivePenalty && exitToleranceStatus.officialTime) {
+                        const [hours, minutes] =
+                            exitToleranceStatus.officialTime
+                                .split(':')
+                                .map(Number);
+                        salida.setHours(hours, minutes, 0, 0);
+                    }
+                    const diffTime = Math.abs(
+                        salida.getTime() - ingreso.getTime(),
+                    );
+                    const diffDays =
+                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                    const price = parseFloat(room.price?.amount || 0);
+                    const accomTotal = diffDays * price;
+                    const grandTotal = accomTotal + servicesTotal;
+
+                    // [DOC] Resta final correcta
+                    const balanceFinal = grandTotal - totalPagadoReal;
+
+                    setDisplayData({
+                        duration_days: diffDays,
+                        accommodation_total: accomTotal,
+                        services_total: servicesTotal,
+                        grand_total: grandTotal,
+                        balance: balanceFinal,
+                        check_out_date: new Date().toISOString(),
+                        check_in_date: checkin.check_in_date,
+                        servicios: servicios,
+                        guest: checkin.guest,
+                        total_pagado: totalPagadoReal,
+                    });
+                }
+            })
+            .finally(() => setLoadingDetails(false));
     }, [checkin.id, waivePenalty, checkin.payments]); // [DOC] Importante: reaccionar a cambios en pagos
 
     // Limpieza PDF
@@ -1264,8 +1329,6 @@ function CheckoutConfirmationModal({
         }
     };
 
-    
-
     // Nueva función del botón (Reemplaza la anterior handleApplyTolerance)
     const handleApplyTolerance = () => {
         // CASO ROJO: Fuera de rango
@@ -1309,7 +1372,6 @@ function CheckoutConfirmationModal({
               }, {}),
           )
         : [];
-
 
     // --- RENDERIZADO ---
     return (
@@ -1747,10 +1809,11 @@ function CheckoutConfirmationModal({
                                     </div>
 
                                     {/* --- COLUMNA 2: VISTA DE FACTURACIÓN --- */}
+                                    {/* --- COLUMNA 2: VISTA DE FACTURACIÓN (CORREGIDA) --- */}
                                     {tipoDocumento === 'factura' && (
                                         <div className="flex h-full flex-1 animate-in flex-col rounded-2xl border border-red-100 bg-red-50/30 p-6 shadow-sm duration-300 fade-in slide-in-from-right-4">
+                                            {/* CABECERA: FECHA Y DATOS (Se mantiene igual) */}
                                             <div className="mb-5 border-b border-blue-200 pb-5">
-                                                {/* CABECERA: FECHA */}
                                                 <div className="mb-4 flex items-center justify-between">
                                                     <span className="text-xs font-bold text-gray-800 uppercase">
                                                         Fecha:{' '}
@@ -1758,28 +1821,24 @@ function CheckoutConfirmationModal({
                                                             'es-BO',
                                                         )}
                                                     </span>
-
-                                                    {/* CAMPO: NIT / CI */}
                                                     <div className="flex items-center gap-3">
                                                         <label className="text-xs font-bold whitespace-nowrap text-gray-500 uppercase">
                                                             NIT / CI
                                                         </label>
-
                                                         <input
                                                             type="text"
                                                             value={nitFactura}
-                                                            onChange={(e) => {
+                                                            onChange={(e) =>
                                                                 setNitFactura(
                                                                     e.target.value.toUpperCase(),
-                                                                );
-                                                            }}
+                                                                )
+                                                            }
                                                             className="w-48 rounded-xl border border-gray-400 px-2 py-2 text-sm text-black uppercase shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                                             placeholder="0000000"
                                                         />
                                                     </div>
                                                 </div>
 
-                                                {/* CAMPO: NOMBRE (Con Buscador idéntico a Asignación) */}
                                                 <div className="smb-4 flex items-center gap-3">
                                                     <label className="mb-1.5 block text-xs font-bold text-gray-800 uppercase">
                                                         Señor(es)
@@ -1806,8 +1865,6 @@ function CheckoutConfirmationModal({
                                                             }}
                                                             autoComplete="off"
                                                         />
-
-                                                        {/* DROPDOWN DE RESULTADOS */}
                                                         {isDropdownOpen &&
                                                             filteredGuests.length >
                                                                 0 && (
@@ -1860,9 +1917,7 @@ function CheckoutConfirmationModal({
                                                     Detalle de la Factura
                                                 </h4>
 
-                                                {/* TABLA DE DETALLES - 3 COLUMNAS */}
                                                 <div className="w-full text-sm">
-                                                    {/* ENCABEZADOS */}
                                                     <div className="mb-2 grid grid-cols-[1fr_110px_100px] border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
                                                         <div className="text-left">
                                                             Descripción
@@ -1885,7 +1940,6 @@ function CheckoutConfirmationModal({
                                                             -
                                                         </div>
                                                         <div className="text-right font-bold text-gray-800">
-                                                            {/* El total del hospedaje va aquí */}
                                                             {displayData.accommodation_total.toFixed(
                                                                 2,
                                                             )}
@@ -2014,15 +2068,40 @@ function CheckoutConfirmationModal({
                                                             0.00
                                                         </div>
                                                     </div>
+
+                                                    {/* [DOC] AQUÍ SE AGREGA LA FILA DEL ADELANTO EN VERDE */}
+                                                    {(displayData as any)
+                                                        ?.total_pagado > 0 && (
+                                                        <div className="grid grid-cols-[1fr_110px_100px] border-t border-dashed border-gray-200 bg-green-50/50 py-1.5 font-bold text-green-600">
+                                                            <div className="pl-2">
+                                                                Adelantos/Pagos
+                                                                previos
+                                                            </div>
+                                                            <div className="text-right">
+                                                                -
+                                                            </div>
+                                                            <div className="text-right">
+                                                                -
+                                                                {(
+                                                                    (
+                                                                        displayData as any
+                                                                    )
+                                                                        ?.total_pagado ||
+                                                                    0
+                                                                ).toFixed(2)}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
+                                            {/* [DOC] TOTAL FINAL CORREGIDO (BALANCE EN LUGAR DE GRAND_TOTAL) */}
                                             <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
                                                 <span className="text-sm font-bold tracking-wider uppercase">
-                                                    Total de su factura
+                                                    Saldo Pendiente de Cobro
                                                 </span>
                                                 <span className="text-2xl font-black">
-                                                    {displayData.grand_total.toFixed(
+                                                    {displayData.balance.toFixed(
                                                         2,
                                                     )}{' '}
                                                     Bs
