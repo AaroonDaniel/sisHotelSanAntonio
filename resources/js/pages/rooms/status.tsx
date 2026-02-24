@@ -134,53 +134,35 @@ export default function RoomsStatus({
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
 
+    // [DOC] SINCRONIZADOR MAESTRO DE DATOS (Actualiza TODOS los modales al hacer pagos)
     useEffect(() => {
-        // Solo ejecutamos si el modal está abierto y hay datos viejos
-        if (isOccupiedModalOpen && occupiedCheckinData) {
-            console.log(
-                '🔄 INERTIA ACTUALIZÓ DATOS: Buscando versión fresca del checkin...',
-            );
-
-            // Buscamos el mismo checkin (por ID) dentro de la data NUEVA que llegó del servidor (Rooms)
-            let checkinEncontrado = null;
-
+        const findFreshCheckin = (targetId: number) => {
             for (const room of Rooms) {
                 if (room.checkins && room.checkins.length > 0) {
-                    const encontrado = room.checkins.find(
-                        (c: any) => c.id === occupiedCheckinData.id,
-                    );
-                    if (encontrado) {
-                        checkinEncontrado = encontrado;
-                        break;
-                    }
+                    const found = room.checkins.find((c: any) => c.id === targetId);
+                    if (found) return found;
                 }
             }
+            return null;
+        };
 
-            if (checkinEncontrado) {
-                console.log(
-                    '✅ CHECKIN ACTUALIZADO ENCONTRADO:',
-                    checkinEncontrado,
-                );
-                console.log(
-                    '💰 Pagos nuevos:',
-                    (checkinEncontrado as any).payments,
-                );
-                console.log(
-                    '🛒 Servicios nuevos:',
-                    (checkinEncontrado as any).services,
-                );
-                console.log('🛒 Servicios nuevos:', checkinEncontrado.services);
+        // 1. Sincronizar Modal de Habitación Ocupada
+        if (occupiedCheckinData) {
+            const fresh = findFreshCheckin(occupiedCheckinData.id);
+            if (fresh) setOccupiedCheckinData(fresh);
+        }
 
-                // Actualizamos el estado para que el modal se repinte
-                setOccupiedCheckinData(checkinEncontrado);
-            } else {
-                console.warn(
-                    '⚠️ No se encontró el checkin actualizado en la data nueva.',
-                );
+        // 2. Sincronizar Modal de Finalizar/Editar Estadía
+        // [DOC] Cambiamos 'checkinToCheckout' por 'checkinToEdit' que es el que parece que usas
+        if (checkinToEdit) { 
+            const freshCheckout = findFreshCheckin(checkinToEdit.id);
+            if (freshCheckout) {
+                 console.log("🔄 Sync: Actualizando datos del checkout con nuevos pagos");
+                 setCheckinToEdit(freshCheckout);
             }
         }
-    }, [Rooms]);
 
+    }, [Rooms]);
     // Detalles para la tolerancia
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [checkinForTransfer, setCheckinForTransfer] = useState<any>(null);

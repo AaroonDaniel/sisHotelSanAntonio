@@ -257,6 +257,9 @@ export default function CheckinModal({
     availableServices = [],
     isReadOnly = false,
 }: CheckinModalProps) {
+    // Const para el desplazamiento de caja de text
+    const professionRef = useRef<HTMLInputElement | null>(null);
+
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
         show: boolean;
@@ -1399,6 +1402,12 @@ export default function CheckinModal({
                                                     e.target.value,
                                                 )
                                             }
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Tab') {
+                                                    e.preventDefault(); // cancela comportamiento nativo
+                                                    professionRef.current?.focus(); // mueve foco directo
+                                                }
+                                            }}
                                         />
                                         <span className="pl-1 text-xs font-bold text-gray-700">
                                             {displayAge
@@ -1411,6 +1420,7 @@ export default function CheckinModal({
                                             Profesión
                                         </label>
                                         <input
+                                            ref={professionRef}
                                             className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
                                             value={currentPerson.profession}
                                             disabled={isReadOnly}
@@ -1952,65 +1962,76 @@ export default function CheckinModal({
                                             </div>
 
                                             {/* GRID DE BANCOS */}
-<div className="grid grid-cols-4 gap-2">
-    {[
-        {
-            id: 'YAPE',
-            label: 'YAPE',
-            logo: '/images/bancos/yape.png',
-            color: 'border-green-300 bg-green-50',
-        },
-        {
-            id: 'FIE',
-            label: 'FIE',
-            logo: '/images/bancos/fie.png',
-            color: 'border-orange-300 bg-orange-50',
-        },
-        {
-            id: 'BNB',
-            label: 'BNB',
-            logo: '/images/bancos/bnb.png',
-            color: 'border-blue-300 bg-blue-50',
-        },
-        {
-            id: 'ECO',
-            label: 'ECO',
-            logo: '/images/bancos/eco.png',
-            color: 'border-yellow-300 bg-yellow-50',
-        },
-    ].map((banco) => {
-        const isSelected = data.qr_bank === banco.id;
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    {
+                                                        id: 'YAPE',
+                                                        label: 'YAPE',
+                                                        logo: '/images/bancos/yape.png',
+                                                        color: 'border-green-300 bg-green-50',
+                                                    },
+                                                    {
+                                                        id: 'FIE',
+                                                        label: 'FIE',
+                                                        logo: '/images/bancos/fie.png',
+                                                        color: 'border-orange-300 bg-orange-50',
+                                                    },
+                                                    {
+                                                        id: 'BNB',
+                                                        label: 'BNB',
+                                                        logo: '/images/bancos/bnb.png',
+                                                        color: 'border-blue-300 bg-blue-50',
+                                                    },
+                                                    {
+                                                        id: 'ECO',
+                                                        label: 'ECO',
+                                                        logo: '/images/bancos/eco.png',
+                                                        color: 'border-yellow-300 bg-yellow-50',
+                                                    },
+                                                ].map((banco) => {
+                                                    const isSelected =
+                                                        data.qr_bank ===
+                                                        banco.id;
 
-        return (
-            <button
-                key={banco.id}
-                type="button"
-                onClick={() => setData('qr_bank', banco.id)}
-                disabled={!isTitular}
-                className={`relative h-12 rounded-lg border transition-all duration-200 active:scale-95 overflow-hidden ${
-                    isSelected
-                        ? `${banco.color} ring-2 ring-purple-500 shadow-md scale-105`
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-            >
-                {/* Logo como fondo */}
-                <div
-                    className={`absolute inset-0 bg-center bg-no-repeat bg-contain transition-all duration-200 ${
-                        isSelected ? '' : 'grayscale opacity-60'
-                    }`}
-                    style={{
-                        backgroundImage: `url(${banco.logo})`,
-                    }}
-                />
+                                                    return (
+                                                        <button
+                                                            key={banco.id}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setData(
+                                                                    'qr_bank',
+                                                                    banco.id,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                !isTitular
+                                                            }
+                                                            className={`relative h-12 overflow-hidden rounded-lg border transition-all duration-200 active:scale-95 ${
+                                                                isSelected
+                                                                    ? `${banco.color} scale-105 shadow-md ring-2 ring-purple-500`
+                                                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                                            }`}
+                                                        >
+                                                            {/* Logo como fondo */}
+                                                            <div
+                                                                className={`absolute inset-0 bg-contain bg-center bg-no-repeat transition-all duration-200 ${
+                                                                    isSelected
+                                                                        ? ''
+                                                                        : 'opacity-60 grayscale'
+                                                                }`}
+                                                                style={{
+                                                                    backgroundImage: `url(${banco.logo})`,
+                                                                }}
+                                                            />
 
-                {/* Capa ligera para que el seleccionado tenga más presencia */}
-                {isSelected && (
-                    <div className="absolute inset-0 bg-white/10" />
-                )}
-            </button>
-        );
-    })}
-</div>
+                                                            {/* Capa ligera para que el seleccionado tenga más presencia */}
+                                                            {isSelected && (
+                                                                <div className="absolute inset-0 bg-white/10" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
 
                                             {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
                                             {data.advance_payment > 0 &&
