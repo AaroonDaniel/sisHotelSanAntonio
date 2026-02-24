@@ -20,9 +20,8 @@ Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // Vista previa de servicios adicionales huesped
-    Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
-
+    // --- CORRECCIÓN 1: Borrada la ruta duplicada de aquí arriba ---
+    // (La dejé solo abajo para mantener el orden, o puedes descomentarla aquí y borrar la de abajo)
 
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
@@ -30,7 +29,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     //Habitaciones
     Route::get('/gestion-habitaciones', function () {
-        // Cambia 'Rooms/Menu' por 'rooms/Menu' (o como esté tu carpeta)
         return Inertia::render('rooms/menu');
     })->name('rooms.menu');
 
@@ -41,7 +39,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
     Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
     Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
-
 
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
@@ -93,43 +90,41 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/servicios/{service}/toggle', [ServiceController::class, 'toggleStatus'])->name('services.toggle');
 
     // --- RECEPCIÓN (CHECKS) ---
-    // Nota: El parámetro en la URL es {checkin} para coincidir con el controlador
     Route::get('/checks', [CheckinController::class, 'index'])->name('checks.index');
     Route::get('/checks/crear', [CheckinController::class, 'create'])->name('checks.create');
     Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
-    // 1. Ruta para finalizar la estadía (Checkout) - Usamos() PUT
+    
+    // Rutas adicionales de checks
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
-    // 2. Ruta para el PDF de salida (vista de recibo)
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
-    // 3. Rruta para el PDF de salida (vista de factura)
     Route::get('/checks/{checkin}/checkout-invoice', [CheckinController::class, 'generateCheckoutInvoice']);
-    // 3. Ruta para el PDF de ingreso (Solo asignación)
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
-    // Ruta para cancelar asignación (Agregar debajo de checks.destroy)
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
-    // Ruta para registrar el tipo de pago
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
-    // Ruta de transferencia
+
+    // --- CORRECCIÓN 2: Diferenciación de nombres en Transferencia ---
+    // Ruta Original (POST)
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
-    // Ruta para guardar adelantos
-    Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])
-        ->name('checkins.addPayment');
-    // Ruta de agregar reserva a checkin
+    
+    // Ruta de Tolerancia (PUT) - LE CAMBIÉ EL NOMBRE A .update_transfer
+    Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.update_transfer'); 
+    
+    Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])->name('checkins.addPayment');
     Route::post('/checkins/from-reservation', [App\Http\Controllers\CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
 
-    // Ruta de Tolerancia
-    Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer'); // <--- NUEVO
-    Route::put('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');       // <--- NUEVO
+    // Ruta de Merge
+    Route::put('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
 
-    // Detalle de asignacionb
+    // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
     Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
     Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
-    // Vista previa de servicios adicionales huesped
+    
+    // Vista previa de servicios adicionales huesped (Esta es la que vale, borré la de arriba)
     Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
     Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
 
@@ -146,7 +141,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
 
-
     //Reportes 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
@@ -154,7 +148,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/financial', [\App\Http\Controllers\ReportController::class, 'financialIndex'])->name('reports.financial');
     Route::get('/reports/financial/pdf', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
     Route::get('/reports/financial/excel', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
-    // Esta ruta la mantuve en el controlador para evitar error 500 en llamadas AJAX antiguas, aunque no se use activamente
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
 
 });
