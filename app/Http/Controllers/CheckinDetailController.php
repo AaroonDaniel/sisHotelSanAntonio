@@ -70,7 +70,7 @@ class CheckinDetailController extends Controller
         }
 
         // Para tu VISTA ACTUAL: Esto forzará a Inertia a recargar los datos
-        return Redirect::back()->with('success', 'Servicio agregado correctamente.');
+        return redirect()->back()->with('success', 'Servicio agregado');
     }
     public function update(Request $request, $id)
     {

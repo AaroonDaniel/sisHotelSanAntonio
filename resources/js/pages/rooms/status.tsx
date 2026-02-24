@@ -978,14 +978,6 @@ export default function RoomsStatus({
                     />
                 )}
 
-            {/* INTEGRACIÓN DEL NUEVO MODAL */}
-            <OccupiedRoomModal
-                show={isOccupiedModalOpen}
-                onClose={() => setIsOccupiedModalOpen(false)}
-                checkin={occupiedCheckinData}
-                onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
-            />
-
             {/* MODAL DE TRANSFERENCIA */}
             <TransferModal
                 show={isTransferModalOpen}
@@ -1031,6 +1023,13 @@ export default function RoomsStatus({
                 reservationToEdit={null} // Ponemos null porque será una reserva nueva
                 guests={Guests as any} // Usamos "as any" para evitar errores de TypeScript
                 rooms={Rooms as any}
+            />
+            <OccupiedRoomModal
+                show={isOccupiedModalOpen}
+                onClose={() => setIsOccupiedModalOpen(false)}
+                checkin={occupiedCheckinData}
+                services={services}  // <--- ESTA ES LA CLAVE
+                onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
             />
         </AuthenticatedLayout>
     );
@@ -2036,6 +2035,7 @@ function CheckoutConfirmationModal({
                     action: 'exit', // Importante: 'exit' para mensaje de salida
                 }}
             />
+            
         </div>
     );
 }

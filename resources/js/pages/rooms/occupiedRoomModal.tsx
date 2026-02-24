@@ -19,14 +19,16 @@ import {
 // Importamos los componentes de accesibilidad del Dialog
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import CheckinDetailModal from '../checkindetails/checkindetailModal';
+import checkins from '../checkins';
 interface ModalProps {
     show: boolean;
     onClose: () => void;
     checkin: any | null;
+    services: any[]; // <--- AGREGAR ESTA LÍNEA
     onTransfer: () => void;
 }
 
-export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }: ModalProps) {
+export default function OccupiedRoomModal({ show, onClose, checkin, services, onTransfer }: ModalProps) {
 
     const [expandedGuestId, setExpandedGuestId] = useState<number | null>(null);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -413,6 +415,12 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
                                     <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                                         <Utensils className="h-4 w-4 text-orange-500" /> Consumo Extra
                                     </h3>
+                                    <button 
+            onClick={() => setShowServiceModal(true)}
+            className="flex items-center gap-1 rounded bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-600 hover:bg-orange-100 transition"
+        >
+            <PlusCircle className="h-3 w-3" /> AGREGAR
+        </button>
                                     {checkin.services?.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
                                             {checkin.services.map((service: any) => (
@@ -495,6 +503,12 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
                     </div>
                 </DialogContent>
             </Dialog>
+            <CheckinDetailModal
+                show={showServiceModal}
+                onClose={() => setShowServiceModal(false)}
+                checkins={checkin ? [checkin] : []} // <--- CORRECCIÓN 1: Pasarlo dentro de corchetes []
+                services={services}                 // <--- CORRECCIÓN 2: Pasar la lista de servicios
+            />
         </>
     );
 }
