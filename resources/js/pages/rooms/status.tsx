@@ -1176,10 +1176,11 @@ function CheckoutConfirmationModal({
 
     // --- EFECTO DE CARGA ROBUSTO (PLAN A + PLAN B) ---
 
+    // --- EFECTO DE CARGA Y CÁLCULO DE SALDOS ---
     useEffect(() => {
         setLoadingDetails(true);
 
-        // 1. Obtener servicios
+        // 1. Obtener servicios del huésped
         const fetchServices = axios
             .get('/guests/view-detail', {
                 params: { guest_id: checkin.guest_id },
@@ -1189,88 +1190,103 @@ function CheckoutConfirmationModal({
             )
             .catch(() => []);
 
-        // 2. Obtener cálculo del servidor (Enviando si hay tolerancia o no)
+        // 2. Obtener cálculo del servidor (para referencias)
         const fetchServerCalc = axios
             .get(`/checks/${checkin.id}/checkout-details`, {
-                params: { waive_penalty: waivePenalty ? 1 : 0 }, // <--- IMPORTANTE: Le decimos al server si aplicamos tolerancia
+                params: { waive_penalty: waivePenalty ? 1 : 0 },
             })
             .then((res) => res.data)
             .catch(() => null);
 
         Promise.all([fetchServices, fetchServerCalc])
             .then(([servicios, serverResponse]) => {
-                // Suma total de servicios
+                // Calcular total de servicios (Consumos)
                 const servicesTotal = servicios.reduce(
                     (acc: number, item: any) =>
                         acc + (parseFloat(item.subtotal) || 0),
                     0,
                 );
 
+                // -------------------------------------------------------------
+                // 💰 PASO CRÍTICO: CALCULAR EL TOTAL PAGADO REAL (Historial)
+                // -------------------------------------------------------------
+                let totalPagadoReal = 0;
+                if (checkin.payments && checkin.payments.length > 0) {
+                    // Sumar todos los pagos registrados en la base de datos
+                    totalPagadoReal = checkin.payments.reduce(
+                        (acc: number, p: any) => {
+                            const monto = parseFloat(p.amount) || 0;
+                            return p.type === 'DEVOLUCION'
+                                ? acc - monto
+                                : acc + monto;
+                        },
+                        0,
+                    );
+                } else {
+                    // Si es antiguo y no tiene pagos detallados, usar el adelanto simple
+                    totalPagadoReal = parseFloat(checkin.advance_payment || 0);
+                }
+
                 if (serverResponse) {
-                    // OPCIÓN A: El servidor respondió bien (Ideal)
+                    // OPCIÓN A: El servidor respondió
+                    // Forzamos el recálculo del balance usando NUESTRO totalPagadoReal
+                    const serverGrandTotal =
+                        parseFloat(serverResponse.grand_total) || 0;
+                    const balanceCorregido = serverGrandTotal - totalPagadoReal;
+
                     setDisplayData({
                         ...serverResponse,
+                        balance: balanceCorregido, // <--- AQUÍ SE ARREGLA EL TOTAL GENERAL
                         servicios: servicios,
                         services_total:
                             serverResponse.services_total ?? servicesTotal,
                         guest: checkin.guest,
+                        // @ts-ignore
+                        total_pagado: totalPagadoReal, // Guardamos para mostrarlo en rojo/verde
                     });
                 } else {
-                    // OPCIÓN B: Cálculo Local
-                    // -------------------------------------------------------------
+                    // OPCIÓN B: Cálculo Local (Fallback)
                     const ingreso = new Date(checkin.check_in_date);
-                    let salida = new Date(); 
+                    let salida = new Date();
 
-                    // Ajuste de hora si hay tolerancia
                     if (waivePenalty && exitToleranceStatus.officialTime) {
-                        const [hours, minutes] = exitToleranceStatus.officialTime
-                            .split(':')
-                            .map(Number);
-                        salida.setHours(hours, minutes, 0, 0); 
+                        const [hours, minutes] =
+                            exitToleranceStatus.officialTime
+                                .split(':')
+                                .map(Number);
+                        salida.setHours(hours, minutes, 0, 0);
                     }
 
-                    const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                    const diffTime = Math.abs(
+                        salida.getTime() - ingreso.getTime(),
+                    );
+                    const diffDays =
+                        Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-                    // 1. CALCULAR PRECIOS
                     const price = parseFloat(room.price?.amount || 0);
                     const accomTotal = diffDays * price;
                     const grandTotal = accomTotal + servicesTotal;
 
-                    // 2. CALCULAR TOTAL PAGADO (LA CORRECCIÓN ESTÁ AQUÍ)
-                    let totalPagado = 0;
-                    if (checkin.payments && checkin.payments.length > 0) {
-                        // Suma TODO el historial de pagos
-                        totalPagado = checkin.payments.reduce((acc: number, p: any) => {
-                            const monto = parseFloat(p.amount) || 0;
-                            return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
-                        }, 0);
-                    } else {
-                        // Si no hay historial, usa el adelanto inicial
-                        totalPagado = parseFloat(checkin.advance_payment || 0);
-                    }
-
-                    // 3. CALCULAR BALANCE FINAL
-                    // Aquí es donde baja de 58 a 38, porque ahora resta TODO lo pagado
-                    const balanceFinal = grandTotal - totalPagado;
+                    // Restamos el total pagado real
+                    const balanceFinal = grandTotal - totalPagadoReal;
 
                     setDisplayData({
                         duration_days: diffDays,
                         accommodation_total: accomTotal,
                         services_total: servicesTotal,
                         grand_total: grandTotal,
-                        balance: balanceFinal, // <--- Dato corregido
+                        balance: balanceFinal, // <--- AQUÍ TAMBIÉN SE ARREGLA
                         check_out_date: new Date().toISOString(),
                         check_in_date: checkin.check_in_date,
                         servicios: servicios,
                         guest: checkin.guest,
                         // @ts-ignore
-                        total_pagado: totalPagado // Guardamos el total pagado para mostrarlo
+                        total_pagado: totalPagadoReal,
                     });
                 }
             })
             .finally(() => setLoadingDetails(false));
-    }, [checkin.id, waivePenalty]); // <--- ¡ESTO ES LO QUE FALTABA! (Escuchar cambios en el botón)
+    }, [checkin.id, waivePenalty]);
     // Limpieza PDF
     useEffect(() => {
         return () => {
@@ -1591,11 +1607,12 @@ function CheckoutConfirmationModal({
 
                                                 {/* CORRECCIÓN VISUAL: Usar el total_pagado calculado */}
                                                 {/* Sección de Adelantos en el HTML */}
+                                                {/* MOSTRAR EL TOTAL PAGADO REAL */}
                                                 {(displayData as any)
                                                     ?.total_pagado > 0 && (
                                                     <>
                                                         <div className="font-bold text-green-600">
-                                                            Adelanto Total:
+                                                            Adelanto / Pagado:
                                                         </div>
                                                         <div className="text-right font-bold text-green-600">
                                                             -
