@@ -85,10 +85,11 @@ class Checkin extends Model
     }
 
     // Relacion con los servicios consumidos durante la estadía
-    public function services(): BelongsToMany
+    public function services()
     {
+        // Es vital el 'withPivot' para que React pueda leer s.pivot.quantity y s.pivot.selling_price
         return $this->belongsToMany(Service::class, 'checkin_details')
-            ->withPivot('quantity', 'selling_price') // Campos extra de la tabla intermedia
+            ->withPivot('id', 'quantity', 'selling_price')
             ->withTimestamps();
     }
     //Relacion con los acompañantes de la estadia

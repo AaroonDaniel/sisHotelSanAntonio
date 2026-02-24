@@ -322,7 +322,7 @@ class CheckinController extends Controller
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
                         'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia (Origen)', 
+                        'origin' => 'Procedencia (Origen)',
                         'profession' => 'Profesión',
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
@@ -692,7 +692,7 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-           $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
+            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
             if (!$isEverythingComplete) {
                 $mensaje = 'Faltan datos.';
@@ -701,7 +701,7 @@ class CheckinController extends Controller
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
                         'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia (Origen)', 
+                        'origin' => 'Procedencia (Origen)',
                         'profession' => 'Profesión',
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
@@ -775,9 +775,9 @@ class CheckinController extends Controller
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
             $ratePerPerson = $isPrivate ? 90 : 60;
-            
+
             // PaxCount = 1 Titular + N Acompañantes
-            $paxCount = 1 + $checkin->companions->count(); 
+            $paxCount = 1 + $checkin->companions->count();
             $price = $ratePerPerson * $paxCount;
         }
         // ==========================================================
@@ -815,14 +815,19 @@ class CheckinController extends Controller
     // adelanto 
     public function addPayment(Request $request, Checkin $checkin)
     {
+        // 1. Validación
         $request->validate([
-            'amount' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:0.5', // Permitir centavos si es necesario
             'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
         ]);
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
+        // 2. Transacción
+        DB::transaction(function () use ($request, $checkin) {
+
             $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
+
+            // Creamos el registro en la tabla payments
             \App\Models\Payment::create([
                 'checkin_id' => $checkin->id,
                 'user_id' => Auth::id(),
@@ -832,12 +837,11 @@ class CheckinController extends Controller
                 'description' => 'ADELANTO A CUENTA',
                 'type' => 'PAGO'
             ]);
-            // Actualiza el acumulado en la tabla principal para que se vea al instante
-            $checkin->increment('advance_payment', $request->amount);
         });
-        return redirect()->back()->with('success', 'Adelanto de ' . $request->amount . ' Bs registrado correctamente.');
-    }
 
+        // 3. Respuesta para Inertia (Recarga automática)
+        return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
+    }
     public function checkout(Request $request, Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
@@ -1066,7 +1070,7 @@ class CheckinController extends Controller
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
             $ratePerPerson = $isPrivate ? 90 : 60;
-            
+
             // PaxCount = 1 Titular + N Acompañantes
             $paxCount = 1 + $checkin->companions->count();
             $precioUnitario = $ratePerPerson * $paxCount;
@@ -1253,7 +1257,7 @@ class CheckinController extends Controller
                 $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
                 $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
                 $ratePerPerson = $isPrivate ? 90 : 60;
-                
+
                 // PaxCount = 1 Titular + N Acompañantes
                 $paxCount = 1 + $checkin->companions->count();
                 $precioUnitario = $ratePerPerson * $paxCount;
@@ -1510,67 +1514,67 @@ class CheckinController extends Controller
     }
 
     public function generateViewDetail(Request $request)
-{
-    // ... (validaciones iniciales) ...
+    {
+        // ... (validaciones iniciales) ...
 
-    // 1. Cargamos la relación payments
-    $checkin = \App\Models\Checkin::with(['checkinDetails.service', 'room', 'guest', 'payments'])
-        ->where('guest_id', $request->guest_id)
-        ->where('status', 'activo')
-        ->first();
+        // 1. Cargamos la relación payments
+        $checkin = \App\Models\Checkin::with(['checkinDetails.service', 'room', 'guest', 'payments'])
+            ->where('guest_id', $request->guest_id)
+            ->where('status', 'activo')
+            ->first();
 
-    if (!$checkin) {
-        return response()->json(['status' => 'error', 'message' => 'No encontrado'], 404);
+        if (!$checkin) {
+            return response()->json(['status' => 'error', 'message' => 'No encontrado'], 404);
+        }
+
+        // Procesar Servicios
+        $detailAdd = $checkin->checkinDetails->map(function ($detail) {
+            return [
+                'id' => $detail->id,
+                'service' => $detail->service->name ?? 'Servicio Eliminado',
+                'count' => (int) $detail->quantity,
+                'unit_price' => (float) $detail->selling_price,
+                'subtotal' => (float) ($detail->quantity * $detail->selling_price),
+            ];
+        });
+
+        $totalServicios = $detailAdd->sum('subtotal');
+
+        // 2. Calcular Pagos
+        $totalPagado = $checkin->payments->reduce(function ($carry, $payment) {
+            // Si es devolución resta, si es pago suma
+            return $payment->type === 'DEVOLUCION' ? ($carry - $payment->amount) : ($carry + $payment->amount);
+        }, 0);
+
+
+        // =================================================================
+        // 🛑 ZONA DE DEBUG (ESTO SALDRÁ EN TU TERMINAL)
+        // =================================================================
+        error_log("---------------- DEBUG GENERATE VIEW DETAIL ----------------");
+        error_log("ID Checkin: " . $checkin->id);
+        error_log("Huésped: " . $checkin->guest->full_name);
+        error_log("Pagos encontrados (Count): " . $checkin->payments->count());
+
+        foreach ($checkin->payments as $p) {
+            error_log(" > Pago ID: {$p->id} | Tipo: {$p->type} | Monto: {$p->amount}");
+        }
+
+        error_log("TOTAL PAGADO FINAL: " . $totalPagado);
+        error_log("------------------------------------------------------------");
+        // =================================================================
+
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'checkin_id' => $checkin->id,
+                'servicios' => $detailAdd,
+                'total_adicional' => $totalServicios,
+                'pagos' => $checkin->payments,
+                'total_pagado' => $totalPagado
+            ]
+        ]);
     }
-
-    // Procesar Servicios
-    $detailAdd = $checkin->checkinDetails->map(function ($detail) {
-        return [
-            'id' => $detail->id,
-            'service' => $detail->service->name ?? 'Servicio Eliminado',
-            'count' => (int) $detail->quantity,
-            'unit_price' => (float) $detail->selling_price,
-            'subtotal' => (float) ($detail->quantity * $detail->selling_price),
-        ];
-    });
-
-    $totalServicios = $detailAdd->sum('subtotal');
-
-    // 2. Calcular Pagos
-    $totalPagado = $checkin->payments->reduce(function ($carry, $payment) {
-        // Si es devolución resta, si es pago suma
-        return $payment->type === 'DEVOLUCION' ? ($carry - $payment->amount) : ($carry + $payment->amount);
-    }, 0);
-
-
-    // =================================================================
-    // 🛑 ZONA DE DEBUG (ESTO SALDRÁ EN TU TERMINAL)
-    // =================================================================
-    error_log("---------------- DEBUG GENERATE VIEW DETAIL ----------------");
-    error_log("ID Checkin: " . $checkin->id);
-    error_log("Huésped: " . $checkin->guest->full_name);
-    error_log("Pagos encontrados (Count): " . $checkin->payments->count());
-    
-    foreach($checkin->payments as $p) {
-        error_log(" > Pago ID: {$p->id} | Tipo: {$p->type} | Monto: {$p->amount}");
-    }
-    
-    error_log("TOTAL PAGADO FINAL: " . $totalPagado);
-    error_log("------------------------------------------------------------");
-    // =================================================================
-
-
-    return response()->json([
-        'status' => 'success',
-        'data' => [
-            'checkin_id' => $checkin->id,
-            'servicios' => $detailAdd,
-            'total_adicional' => $totalServicios,
-            'pagos' => $checkin->payments, 
-            'total_pagado' => $totalPagado 
-        ]
-    ]);
-}
 
     // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
     private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal, $waivePenalty = false)
@@ -1686,7 +1690,7 @@ class CheckinController extends Controller
 
             // Recorremos CADA HABITACIÓN reservada
             foreach ($reservation->details as $index => $detail) {
-                
+
                 $arrivalDate = $reservation->arrival_date ?? now();
 
                 // 🚀 PREPARAMOS LAS NOTAS (Agregando la etiqueta corporativa si corresponde)
@@ -1699,10 +1703,10 @@ class CheckinController extends Controller
                     'guest_id' => $reservation->guest_id,
                     'room_id'  => $detail->room_id,
                     'user_id'  => \Illuminate\Support\Facades\Auth::id() ?? 1,
-                    'check_in_date' => now(), 
+                    'check_in_date' => now(),
                     'actual_arrival_date' => now(),
                     'duration_days' => $reservation->duration_days ?? 1,
-                    'advance_payment' => 0, 
+                    'advance_payment' => 0,
                     'origin' => null, // 🚨 ESTO ES CLAVE: El sistema detectará que "Faltan Datos"
                     'status' => 'activo',
                     'is_temporary' => false,
@@ -1724,10 +1728,10 @@ class CheckinController extends Controller
                 foreach ($pagos as $pago) {
                     $pago->update([
                         'checkin_id' => $primerCheckinId,
-                        'reservation_id' => null 
+                        'reservation_id' => null
                     ]);
                 }
-                
+
                 // Actualizamos el total acumulado
                 $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                 \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);

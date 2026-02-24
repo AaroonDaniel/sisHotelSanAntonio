@@ -50,22 +50,26 @@ class CheckinDetailController extends Controller
             'quantity' => 'required|integer|min:1',
         ]);
 
-        $service = Service::findOrFail($validated['service_id']);
+        $service = \App\Models\Service::findOrFail($validated['service_id']);
 
-        // 1. Guardamos el registro en una variable
-        $detail = CheckinDetail::create([
+        // 1. Crear el registro
+        \App\Models\CheckinDetail::create([
             'checkin_id' => $validated['checkin_id'],
             'service_id' => $validated['service_id'],
             'quantity' => $validated['quantity'],
             'selling_price' => $service->price
         ]);
 
-        // 2. Si la petición quiere JSON (Axios), devolvemos el objeto con su ID
-        if ($request->wantsJson()) {
-            return response()->json($detail, 201);
+        // --- SOLUCIÓN INTELIGENTE ---
+        // Solo devolvemos JSON si NO es una petición de Inertia.
+        // Así aseguramos que tu modal se actualice (porque Inertia recibirá el redirect)
+        // pero si usas esto desde una API externa, seguirá funcionando.
+        
+        if ($request->wantsJson() && !$request->header('X-Inertia')) {
+            return response()->json(['message' => 'Creado', 'data' => $validated], 201);
         }
 
-        // Retorno normal para Inertia (si se usara submit normal)
+        // Para tu VISTA ACTUAL: Esto forzará a Inertia a recargar los datos
         return Redirect::back()->with('success', 'Servicio agregado correctamente.');
     }
     public function update(Request $request, $id)
