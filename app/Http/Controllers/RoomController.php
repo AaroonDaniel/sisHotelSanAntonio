@@ -148,14 +148,30 @@ class RoomController
             'price',
             'checkins' => function ($q) {
                 $q->where('status', 'activo')
-                    // 👇 AQUÍ AGREGAMOS 'payments' PARA QUE REACT RECIBA EL DINERO
-                    ->with(['guest', 'companions', 'checkinDetails.service', 'services', 'payments']);
+                    ->with([
+                        'guest',
+                        'companions',
+                        'checkinDetails.service',
+                        'services',
+                        'payments',
+                        // 👇 ESTAS 2 LÍNEAS SON LA SOLUCIÓN AL "0.00"
+                        'room.price',
+                        'room.roomType'
+                    ]);
             }
         ])->orderBy('number')->get();
 
         // 2. Cargamos los checkins activos (para el buscador global)
         // 👇 AQUÍ TAMBIÉN AGREGAMOS 'payments'
-        $activeCheckins = \App\Models\Checkin::with(['guest', 'companions', 'checkinDetails.service', 'room', 'services', 'payments'])
+        $activeCheckins = \App\Models\Checkin::with([
+            'guest',
+            'companions',
+            'checkinDetails.service',
+            'room.price',     // 👈 Asegúrate que diga room.price
+            'room.roomType',  // 👈 Y room.roomType
+            'services',
+            'payments'
+        ])
             ->where('status', 'activo')
             ->get();
 

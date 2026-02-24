@@ -96,9 +96,13 @@ export default function OccupiedRoomModal({ show, onClose, checkin, services, on
 
     const oldDebt = parseFloat(checkin.carried_balance || 0);
     const currentRoomCost = days * (checkin.room?.price?.amount || 0);
-    const servicesCost = checkin.services?.reduce((acc: number, s: any) => 
-        acc + (parseFloat(s.pivot.selling_price) * s.pivot.quantity), 0) || 0;
+    const servicesCost = checkin.services?.reduce((acc: number, s: any) => {
+    // Usamos ( || 0) para convertir nulos o indefinidos a cero y evitar NaN
+    const precio = parseFloat(s.pivot?.selling_price) || 0;
+    const cantidad = parseFloat(s.pivot?.quantity) || 0;
     
+    return acc + (precio * cantidad);
+}, 0) || 0;
     // Cálculos finales usando el totalPaid que definimos arriba
     const grandTotal = oldDebt + currentRoomCost + servicesCost;
     const balanceDue = grandTotal - totalPaid;
