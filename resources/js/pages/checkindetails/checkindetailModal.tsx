@@ -66,15 +66,22 @@ export default function CheckinDetailModal({
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        const onSuccess = () => {
-            reset();
-            onClose();
+        const options = {
+            preserveScroll: true, // <--- IMPORTANTE: Evita que la pantalla salte
+            onSuccess: () => {
+                reset(); // Limpia el formulario
+                onClose(); // Cierra el modal
+                // Aquí Inertia ya habrá actualizado los datos de fondo automáticamente
+            },
+            onError: () => {
+                // Opcional: Manejo de errores si fallara
+            }
         };
 
         if (detailToEdit && detailToEdit.id) {
-            put(`/checkin-details/${detailToEdit.id}`, { onSuccess });
+            put(`/checkin-details/${detailToEdit.id}`, options);
         } else {
-            post('/checkin-details', { onSuccess });
+            post('/checkin-details', options);
         }
     };
 

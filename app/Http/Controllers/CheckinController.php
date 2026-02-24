@@ -1510,49 +1510,67 @@ class CheckinController extends Controller
     }
 
     public function generateViewDetail(Request $request)
-    {
-        // Verificación del huesped
-        if (!$request->filled('guest_id')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'El ID del huesped es obligatorio'
-            ], 400);
-        }
+{
+    // ... (validaciones iniciales) ...
 
-        $checkin = \App\Models\Checkin::with(['checkinDetails.service', 'room', 'guest'])
-            ->where('guest_id', $request->guest_id)
-            ->where('status', 'activo')
-            ->first();
+    // 1. Cargamos la relación payments
+    $checkin = \App\Models\Checkin::with(['checkinDetails.service', 'room', 'guest', 'payments'])
+        ->where('guest_id', $request->guest_id)
+        ->where('status', 'activo')
+        ->first();
 
-        if (!$checkin) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No se encontró una estadía activa para este huésped'
-            ], 404);
-        }
-
-        // CORRECCIÓN: Usar la propiedad sin paréntesis ->checkinDetails
-        $detailAdd = $checkin->checkinDetails->map(function ($detail) {
-            return [
-                'id' => $detail->id,
-                'service' => $detail->service->name ?? 'Servicio Eliminado',
-                'count' => $detail->quantity, // <--- Corregido 'quiantity' a 'quantity'
-                'unit_price' => (float) $detail->selling_price,
-                'subtotal' => (float) ($detail->quantity * $detail->selling_price),
-            ];
-        });
-
-        // CORRECCIÓN: La clave debe coincidir exactamente con la del array ('subtotal')
-        $total = $detailAdd->sum('subtotal');
-
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'servicios' => $detailAdd,
-                'total_adicional' => $total,
-            ]
-        ]);
+    if (!$checkin) {
+        return response()->json(['status' => 'error', 'message' => 'No encontrado'], 404);
     }
+
+    // Procesar Servicios
+    $detailAdd = $checkin->checkinDetails->map(function ($detail) {
+        return [
+            'id' => $detail->id,
+            'service' => $detail->service->name ?? 'Servicio Eliminado',
+            'count' => (int) $detail->quantity,
+            'unit_price' => (float) $detail->selling_price,
+            'subtotal' => (float) ($detail->quantity * $detail->selling_price),
+        ];
+    });
+
+    $totalServicios = $detailAdd->sum('subtotal');
+
+    // 2. Calcular Pagos
+    $totalPagado = $checkin->payments->reduce(function ($carry, $payment) {
+        // Si es devolución resta, si es pago suma
+        return $payment->type === 'DEVOLUCION' ? ($carry - $payment->amount) : ($carry + $payment->amount);
+    }, 0);
+
+
+    // =================================================================
+    // 🛑 ZONA DE DEBUG (ESTO SALDRÁ EN TU TERMINAL)
+    // =================================================================
+    error_log("---------------- DEBUG GENERATE VIEW DETAIL ----------------");
+    error_log("ID Checkin: " . $checkin->id);
+    error_log("Huésped: " . $checkin->guest->full_name);
+    error_log("Pagos encontrados (Count): " . $checkin->payments->count());
+    
+    foreach($checkin->payments as $p) {
+        error_log(" > Pago ID: {$p->id} | Tipo: {$p->type} | Monto: {$p->amount}");
+    }
+    
+    error_log("TOTAL PAGADO FINAL: " . $totalPagado);
+    error_log("------------------------------------------------------------");
+    // =================================================================
+
+
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'checkin_id' => $checkin->id,
+            'servicios' => $detailAdd,
+            'total_adicional' => $totalServicios,
+            'pagos' => $checkin->payments, 
+            'total_pagado' => $totalPagado 
+        ]
+    ]);
+}
 
     // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
     private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal, $waivePenalty = false)

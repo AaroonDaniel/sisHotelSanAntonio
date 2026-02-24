@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState , useMemo} from 'react';
 import { useForm } from '@inertiajs/react';
 import {
     BedDouble,
@@ -12,12 +12,13 @@ import {
     ArrowRightLeft,
     Banknote, // Icono para dinero
     Wallet,   // Icono para saldo
-    AlertCircle // Icono para alertas
+    AlertCircle, // Icono para alertas
+    PlusCircle
 } from 'lucide-react';
 
 // Importamos los componentes de accesibilidad del Dialog
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-
+import CheckinDetailModal from '../checkindetails/checkindetailModal';
 interface ModalProps {
     show: boolean;
     onClose: () => void;
@@ -30,7 +31,7 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
     const [expandedGuestId, setExpandedGuestId] = useState<number | null>(null);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-
+    const [showServiceModal, setShowServiceModal] = useState(false);
     // --- FORMULARIO DE ADELANTO ---
     const { data: paymentData, setData: setPaymentData, post: postPayment, processing: processingPayment, reset: resetPayment } = useForm({
         amount: '',
@@ -38,6 +39,32 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
         qr_bank: '' 
     });
 
+    // ------------------------------------------------------------------------------------------
+    // CORRECCIÓN: EL USEMEMO DEBE IR ANTES DE CUALQUIER "RETURN" O "IF"
+    // ------------------------------------------------------------------------------------------
+    const totalPaid = useMemo(() => {
+        // Validación de seguridad por si checkin es null al inicio
+        if (!checkin) return 0;
+
+        // 1. Rescatamos el adelanto inicial (los 80 Bs)
+        const initialAdvance = parseFloat(checkin.advance_payment) || 0;
+
+        // 2. Sumamos los pagos adicionales (si existen)
+        const extraPayments = checkin.payments?.reduce((acc: number, p: any) => {
+            // Opcional: Si tienes devoluciones, réstalas
+            if (p.type === 'DEVOLUCION') {
+                return acc - parseFloat(p.amount);
+            }
+            return acc + parseFloat(p.amount);
+        }, 0) || 0;
+
+        // 3. Retornamos la suma total
+        return initialAdvance + extraPayments;
+    }, [checkin]);
+
+    // ------------------------------------------------------------------------------------------
+    // AHORA SÍ PUEDES PONER EL RETURN CONDICIONAL
+    // ------------------------------------------------------------------------------------------
     if (!show || !checkin) return null;
 
     const handleClose = () => {
@@ -68,10 +95,7 @@ export default function OccupiedRoomModal({ show, onClose, checkin, onTransfer }
     const servicesCost = checkin.services?.reduce((acc: number, s: any) => 
         acc + (parseFloat(s.pivot.selling_price) * s.pivot.quantity), 0) || 0;
     
-    // Suma de pagos existentes
-    const totalPaid = checkin.payments?.reduce((acc: number, p: any) => 
-        acc + parseFloat(p.amount), 0) || 0;
-
+    // Cálculos finales usando el totalPaid que definimos arriba
     const grandTotal = oldDebt + currentRoomCost + servicesCost;
     const balanceDue = grandTotal - totalPaid;
 
