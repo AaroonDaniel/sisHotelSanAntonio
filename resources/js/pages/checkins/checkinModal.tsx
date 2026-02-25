@@ -3,6 +3,7 @@ import { router, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
+    AlertTriangle,
     ArrowRightCircle,
     Bed,
     CheckCircle2,
@@ -25,7 +26,6 @@ const civilStatusOptions = [
     { value: 'MARRIED', label: 'CASADO(A)' },
     { value: 'DIVORCED', label: 'DIVORCIADO(A)' },
     { value: 'WIDOWED', label: 'VIUDO(A)' },
-    { value: 'CONCUBINAGE', label: 'CONCUBINATO' },
 ];
 
 const countries = [
@@ -1090,35 +1090,6 @@ export default function CheckinModal({
                         </div>
                     )}
 
-                    {/* TOAST 2: AVISO FALTAN DATOS (ÁMBAR - CONSTANTE) */}
-                    {/*}
-                    {isTitular &&
-                        (isProfileIncomplete ||
-                            (checkinToEdit &&
-                                (!data.origin ||
-                                    data.origin.trim() === ''))) && (
-                            <div className="pointer-events-auto fixed left-1/2 top-[15%] z-50 w-80 -translate-x-1/2 -translate-y-1/2 animate-in flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-4 shadow-xl duration-300 fade-in zoom-in-95">
-                                <div className="flex items-start gap-3">
-                                    <div className="rounded-full bg-amber-100 p-2 text-amber-600">
-                                        <AlertTriangle className="h-5 w-5" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-sm font-bold text-gray-900">
-                                            Algunos campos faltan llenar
-                                        </h3>
-                                        <p className="mt-0.5 text-xs font-medium text-amber-700">
-                                            Complete la{' '}
-                                            <span className="font-bold">
-                                                Procedencia
-                                            </span>{' '}
-                                            y los datos para habilitar el
-                                            Check-in.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    {*/}
                     {/* TOAST 3: INFO DE RESERVA (AZUL - 10 SEGUNDOS) */}
                     {showReservationToast && (
                         <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-blue-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
@@ -1162,6 +1133,23 @@ export default function CheckinModal({
                     {/* --- COLUMNA IZQUIERDA: CARRUSEL DE PERSONAS --- */}
                     <div className="relative flex-1 overflow-y-auto border-r border-gray-100 bg-white p-6">
                         <div className="space-y-4">
+                            {/* ========================================================= */}
+                            {/* ALERTA DE DATOS FALTANTES (Incrustada en la columna)      */}
+                            {/* ========================================================= */}
+                            {isTitular &&
+                                isProfileIncomplete &&
+                                data.full_name.length > 3 && (
+                                    <div className="absolute -top-2 left-0 z-50 w-full px-5 pt-2">
+                                        <div className="flex animate-in items-center justify-between rounded-lg border border-amber-200 bg-amber-50/95 px-4 py-0.5 shadow-md backdrop-blur-sm duration-300 slide-in-from-top-2">
+                                            <span className="flex items-center gap-2 text-[12px] font-bold text-amber-700">
+                                                <AlertTriangle className="h-3.5 w-3.5" />
+                                                PERFIL PENDIENTE: Se guardará
+                                                solo con el nombre.
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                             {/* C. INPUT NOMBRE (Conectado a currentPerson) */}
                             <div className="relative" ref={dropdownRef}>
                                 <label className="mb-1.5 block text-center text-base font-bold text-red-700 uppercase">
