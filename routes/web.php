@@ -104,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
+    Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
 
     // --- CORRECCIÓN 2: Diferenciación de nombres en Transferencia ---
     // Ruta Original (POST)

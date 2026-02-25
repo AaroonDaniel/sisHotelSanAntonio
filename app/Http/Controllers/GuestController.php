@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Guest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-
+use App\Models\Checkin;
+use Illuminate\Support\Facades\Log;
 
 class GuestController extends Controller
 {
@@ -26,10 +27,10 @@ class GuestController extends Controller
         if (!$request->filled('guest_id')) {
             // --- CASO: NUEVO HUÉSPED (Con Verificación de Duplicados) ---
             $isComplete = $request->filled('identification_number');
-            
+
             $request->validate([
                 'full_name' => 'required|string|max:150',
-                'identification_number' => 'nullable|string|max:50', 
+                'identification_number' => 'nullable|string|max:50',
                 'nationality' => 'nullable|string',
                 'civil_status' => 'nullable|string',
                 'birth_date' => 'nullable|date',
@@ -51,7 +52,7 @@ class GuestController extends Controller
             // Refinamos: Si hay fecha de nacimiento, esa es la llave maestra (la más segura)
             if (!empty($birthDate)) {
                 $query->where('birth_date', $birthDate);
-            } 
+            }
             // Si no hay fecha, usamos el CI como respaldo
             elseif (!empty($idNumber)) {
                 $query->where('identification_number', $idNumber);
@@ -90,11 +91,10 @@ class GuestController extends Controller
                 ]);
                 $guestId = $guest->id;
             }
-
         } else {
             // --- CASO: HUÉSPED EXISTENTE (Seleccionado por ID) ---
             $guestId = $request->guest_id;
-            
+
             // Actualizamos el teléfono si enviaron uno nuevo
             if ($request->filled('phone')) {
                 $existingGuest = \App\Models\Guest::find($guestId);
@@ -106,7 +106,7 @@ class GuestController extends Controller
 
         // 2. Crear Check-in si envían room_id (Lógica Original Mantenida)
         if ($request->filled('room_id')) {
-            
+
             $validatedCheckin = $request->validate([
                 'room_id' => 'required|exists:rooms,id',
                 'check_in_date' => 'required|date',
@@ -129,7 +129,7 @@ class GuestController extends Controller
             if ($request->has('selected_services')) {
                 $checkin->services()->sync($request->selected_services);
             }
-            
+
             \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
         }
 
@@ -163,5 +163,29 @@ class GuestController extends Controller
         return redirect()->back();
     }
 
-    
+    public function searchOrigins(Request $request)
+    {
+        try {
+            $term = $request->input('query');
+
+            if (!$term) {
+                return response()->json([]);
+            }
+
+            // CAMBIO 2: Buscamos en el modelo 'Checkin'
+            $origins = Checkin::where('origin', 'LIKE', "%{$term}%")
+                ->select('origin')
+                ->distinct()
+                ->whereNotNull('origin') // Buena práctica: evitar nulos
+                ->limit(10)
+                ->pluck('origin');
+
+            return response()->json($origins);
+
+        } catch (\Exception $e) {
+            Log::error("Error en searchOrigins: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
 }

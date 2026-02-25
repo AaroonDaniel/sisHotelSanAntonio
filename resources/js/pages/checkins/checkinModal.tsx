@@ -1,5 +1,6 @@
 import ToleranceModal from '@/components/ToleranceModal';
 import { router, useForm } from '@inertiajs/react';
+import axios from 'axios';
 import {
     AlertCircle,
     ArrowRightCircle,
@@ -324,6 +325,10 @@ export default function CheckinModal({
     // REFS PARA DETECTAR CLICS FUERA
     const dropdownRef = useRef<HTMLDivElement>(null);
     const nationalityRef = useRef<HTMLDivElement>(null);
+
+    const originDropdownRef = useRef<HTMLDivElement>(null); // <--- AGREGAR ESTA LÍNEA
+
+    const [isOriginOpen, setIsOriginOpen] = useState(false);
 
     const [displayAge, setDisplayAge] = useState<number | string>('');
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
@@ -884,37 +889,41 @@ export default function CheckinModal({
     };
 
     // ===============================
-    // AUTOCOMPLETE PROCEDENCIA
+    // AUTOCOMPLETE PROCEDENCIA (BD)
     // ===============================
 
-    const [originList, setOriginList] = useState<string[]>(() => {
-        const saved = localStorage.getItem('originHistory');
-        return saved ? JSON.parse(saved) : [];
-    });
+    // Estado para las sugerencias que vienen de la Base de Datos
+    const [originSuggestions, setOriginSuggestions] = useState<string[]>([]);
     const [isOriginDropdownOpen, setIsOriginDropdownOpen] = useState(false);
-    const [isOriginOpen, setIsOriginOpen] = useState(false);
-    const originDropdownRef = useRef<HTMLDivElement | null>(null);
 
-    useEffect(() => {
-        localStorage.setItem('originHistory', JSON.stringify(originList));
-    }, [originList]);
-    // Filtro tipo buscador universal
-    const filteredOrigins =
-        data.origin && data.origin.length > 1
-            ? originList.filter((o) => {
-                  const term = data.origin.toLowerCase();
-                  return o.toLowerCase().includes(term);
-              })
-            : [];
+    // Función para buscar en el Backend
+    const searchOrigins = async (query: string) => {
+        // Solo buscamos si hay al menos 2 letras para no saturar
+        if (!query || query.length < 2) {
+            setOriginSuggestions([]);
+            return;
+        }
 
-    // Guardar nueva procedencia si no existe
-    const saveOriginIfNew = (value: string) => {
-        const upperValue = value.toUpperCase();
-
-        if (upperValue && !originList.includes(upperValue)) {
-            setOriginList((prev) => [...prev, upperValue]);
+        try {
+            const response = await axios.get('/search/origins', {
+                params: { query: query },
+            });
+            setOriginSuggestions(response.data);
+        } catch (error) {
+            console.error('Error buscando procedencias:', error);
         }
     };
+
+    // Esta función se llamará en el onChange del input
+    const handleOriginInput = (val: string) => {
+        const upperVal = val.toUpperCase();
+        setData('origin', upperVal);
+        setIsOriginDropdownOpen(true);
+        searchOrigins(upperVal);
+    };
+
+    // La variable que usarás para el .map en el dropdown ahora es originSuggestions
+    // (Ya no necesitas 'filteredOrigins' porque el filtro lo hace la BD)
 
     const handleCheckout = () => {
         if (!checkinToEdit) return;
@@ -938,7 +947,6 @@ export default function CheckinModal({
             );
         }
     };
-
     // Visuales
     const durationVal = Number(data.duration_days) || 0;
     const estimatedCheckout = new Date(data.check_in_date);
@@ -1483,39 +1491,39 @@ export default function CheckinModal({
                                             disabled={isReadOnly}
                                             placeholder="EJ: COCHABAMBA"
                                             autoComplete="off"
-                                            onChange={(e) => {
-                                                const value =
-                                                    e.target.value.toUpperCase();
-                                                setData('origin', value);
-                                                setIsOriginDropdownOpen(true);
-                                            }}
+                                            onChange={(e) =>
+                                                handleOriginInput(
+                                                    e.target.value,
+                                                )
+                                            }
                                             onFocus={() => {
+                                                // Si ya hay texto escrito, volvemos a buscar para mostrar opciones
                                                 if (
                                                     (data.origin || '').length >
                                                     1
-                                                )
+                                                ) {
                                                     setIsOriginDropdownOpen(
                                                         true,
                                                     );
+                                                    searchOrigins(data.origin);
+                                                }
                                             }}
                                             onBlur={() => {
+                                                // Pequeño retraso para permitir el click en la opción antes de cerrar
                                                 setTimeout(() => {
                                                     setIsOriginDropdownOpen(
                                                         false,
                                                     );
-                                                    saveOriginIfNew(
-                                                        data.origin || '',
-                                                    );
-                                                }, 150);
+                                                }, 200);
                                             }}
                                             className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black uppercase focus:border-blue-500 focus:ring-blue-500"
                                         />
 
-                                        {/* Dropdown */}
+                                        {/* Dropdown conectado a la Base de Datos (originSuggestions) */}
                                         {isOriginDropdownOpen &&
-                                            filteredOrigins.length > 0 && (
+                                            originSuggestions.length > 0 && (
                                                 <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                    {filteredOrigins.map(
+                                                    {originSuggestions.map(
                                                         (origin, index) => (
                                                             <div
                                                                 key={index}

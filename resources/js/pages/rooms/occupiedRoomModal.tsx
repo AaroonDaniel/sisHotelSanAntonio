@@ -419,12 +419,7 @@ export default function OccupiedRoomModal({ show, onClose, checkin, services, on
                                     <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                                         <Utensils className="h-4 w-4 text-orange-500" /> Consumo Extra
                                     </h3>
-                                    <button 
-            onClick={() => setShowServiceModal(true)}
-            className="flex items-center gap-1 rounded bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-600 hover:bg-orange-100 transition"
-        >
-            <PlusCircle className="h-3 w-3" /> AGREGAR
-        </button>
+                                    
                                     {checkin.services?.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
                                             {checkin.services.map((service: any) => (

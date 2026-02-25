@@ -1,7 +1,7 @@
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
-import axios from 'axios'; // Importante para la petición del PDF sin recarga
+import axios from 'axios'; 
 import {
     AlertTriangle,
     ArrowLeft,
