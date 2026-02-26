@@ -169,7 +169,11 @@ class CheckinController extends Controller
             }
         }
 
-        // Asignacion unica
+        // =========================================================
+        // CASO 3: ASIGNACIÓN ÚNICA (NO TOCAR)
+        // Se mantiene intacto. Si el huésped ya es titular de una
+        // habitación activa, aborta la transacción inmediatamente.
+        // =========================================================
         $ocupacionPrevia = \App\Models\Checkin::with('room')
             ->where('guest_id', $guestId)
             ->where('status', 'activo')
@@ -311,11 +315,33 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 🛑 6. EL BLOQUEO ESTRICTO DE RESPUESTA (LO ÚNICO QUE REEMPLAZA EL FINAL ANTERIOR)
+            // 🛑 6. LÓGICA AISLADA DE CASOS DE USO (Rápido vs Completo)
             // =========================================================
+            // MODIFICACIÓN: Se eliminó el `throw ValidationException` que 
+            // causaba un rollback y borraba todo cuando faltaban datos.
+            // En su lugar, evaluamos si todo está completo para separar 
+            // el Caso 1 (Asignación Rápida) del Caso 2 (Check-in Completo).
+            
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
-            if (!$isEverythingComplete) {
+            if ($isEverythingComplete) {
+                // ------------------------------------------------------------------
+                // CASO 2: CHECK-IN COMPLETO
+                // ------------------------------------------------------------------
+                // POR QUÉ: Al estar el 100% de la información (Titular + Acompañantes),
+                // las reglas del negocio indican que la habitación ya puede
+                // bloquearse formalmente.
+                \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+                return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
+            } else {
+                // ------------------------------------------------------------------
+                // CASO 1: ASIGNACIÓN RÁPIDA (FALTAN DATOS)
+                // ------------------------------------------------------------------
+                // POR QUÉ: Queremos que el Check-in (con lo poco que hay, ej. Nombre) 
+                // se guarde en la BD para que el huésped entre, pero NO cambiamos 
+                // la habitación a 'OCUPADO' forzando al staff a completarlo después.
+                
                 $mensaje = 'Faltan datos.';
 
                 if (!$isTitularComplete) {
@@ -334,16 +360,10 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
                 }
 
-                // 🛑 Lanza una excepción. Cancela todo y no deja que pase a Ocupado.
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'origin' => $mensaje . ' Complete la información para que la habitación pase a Ocupado.'
-                ]);
+                // Hacemos el return con un mensaje de éxito, pero avisando de la falta de datos.
+                // Como NO lanzamos una excepción, la Transacción hace COMMIT (guarda los datos).
+                return redirect()->back()->with('success', 'Asignación Rápida registrada. ATENCIÓN: ' . $mensaje . ' Por favor edite y complete los datos para cambiar el estado a OCUPADO.');
             }
-
-            // 7. Actualizar Estado Habitación (AHORA SÍ, DE FORMA SEGURA PORQUE YA VALIDÓ)
-            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
-
-            return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente.');
         });
     }
 
@@ -665,7 +685,11 @@ class CheckinController extends Controller
             // 5. CAMBIO DE HABITACIÓN
             if ($checkin->room_id != $validated['room_id']) {
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
-                \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
+                // OJO: Si cambia de habitación, NO la forzamos a OCUPADO aquí. 
+                // Se actualizará correctamente en el bloque final si todos los datos están listos.
+                if ($isEverythingComplete) {
+                    \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
+                }
             }
 
             // 6. ACTUALIZAR CHECKIN
@@ -692,9 +716,24 @@ class CheckinController extends Controller
                 $checkin->services()->sync($syncData);
             }
 
-            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
+            // =========================================================
+            // 🛑 8. LÓGICA FINAL DE ACTUALIZACIÓN (Completo vs Incompleto)
+            // =========================================================
+            // MODIFICACIÓN: Se eliminó el `throw ValidationException`.
+            // Ahora la base de datos SIEMPRE guarda los datos que se hayan llenado,
+            // pero la habitación solo pasa a 'OCUPADO' si el 100% de la info está lista.
 
-            if (!$isEverythingComplete) {
+            if ($isEverythingComplete) {
+                // ------------------------------------------------------------------
+                // CASO 2: CHECK-IN COMPLETO (Se terminaron de llenar los datos)
+                // ------------------------------------------------------------------
+                \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+
+                return redirect()->back()->with('success', 'Check-in actualizado y COMPLETADO. La habitación ahora está OCUPADA.');
+            } else {
+                // ------------------------------------------------------------------
+                // CASO 1: ASIGNACIÓN SIGUE INCOMPLETA (Faltan datos)
+                // ------------------------------------------------------------------
                 $mensaje = 'Faltan datos.';
 
                 if (!$isTitularComplete) {
@@ -713,16 +752,9 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
                 }
 
-                // Lanza excepción: Aborta el guardado en BD, evita que pase a OCUPADO y muestra el error rojo en React
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'origin' => $mensaje . ' Complete la información para poder Registrar.'
-                ]);
+                // Guardamos la actualización (hace COMMIT a la BD) pero enviamos la advertencia.
+                return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
             }
-
-            // Si TODO está completo, pasamos la habitación a OCUPADO
-            \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
-
-            return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente.');
         });
     }
 
