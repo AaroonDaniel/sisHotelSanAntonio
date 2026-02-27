@@ -76,8 +76,10 @@ export default function DetailModal({
         'ALL' | 'DESAYUNO' | 'GARAJE'
     >('ALL');
 
+
     // Lista visual de lo que acabamos de agregar (con IDs reales)
     const [recentlyAdded, setRecentlyAdded] = useState<AddedItem[]>([]);
+    const [editingDbId, setEditingDbId] = useState<number | null>(null);
 
     // --- 2. EFECTO AL ABRIR EL MODAL (Tu lógica original + Carga inicial) ---
     useEffect(() => {
@@ -150,11 +152,8 @@ export default function DetailModal({
         if (!data.service_id) return;
 
         setProcessing(true);
-        const selectedService = services.find(
-            (s) => s.id.toString() === data.service_id,
-        );
 
-        // Si es edición usamos el método put de Inertia (flujo normal)
+        // 1. MANTENIDO: Si es edición desde la tabla principal (fuera del modal), usamos Inertia
         if (detailToEdit && detailToEdit.id) {
             put(`/checkin-details/${detailToEdit.id}`, {
                 onSuccess: () => {
@@ -167,39 +166,38 @@ export default function DetailModal({
             return;
         }
 
-        // Si es CREACIÓN usamos Axios para obtener el ID y mantenernos en el modal
+        // 2. MODIFICADO: Lógica interna del modal (Agregados ahora)
         try {
-            const response = await axios.post('/checkin-details', {
-                checkin_id: data.checkin_id,
-                service_id: data.service_id,
-                quantity: data.quantity,
-            });
-
-            // El backend debe devolver el objeto creado (ver paso 1 del backend)
-            const newDetail = response.data;
-
-            if (selectedService && newDetail.id) {
-                // Agregamos a la lista visual con el ID REAL de la BD
-                setRecentlyAdded((prev) => [
-                    {
-                        dbId: newDetail.id, // <--- ID REAL PARA PODER BORRAR LUEGO
-                        serviceId: selectedService.id,
-                        name: selectedService.name,
-                        price: selectedService.price,
-                        quantity: data.quantity,
-                    },
-                    ...prev,
-                ]);
+            // Evaluamos si estamos editando un producto desde la lista temporal del modal
+            if (editingDbId) {
+                // Actualizar ítem existente en la lista
+                await axios.put(`/checkin-details/${editingDbId}`, {
+                    quantity: data.quantity,
+                    service_id: data.service_id,
+                });
+                setEditingDbId(null); // Salimos del modo edición interno
+            } else {
+                // Agregar nuevo ítem (El backend ahora sabe si debe crear nueva fila o sumar cantidad)
+                await axios.post('/checkin-details', {
+                    checkin_id: data.checkin_id,
+                    service_id: data.service_id,
+                    quantity: data.quantity,
+                });
             }
 
-            // Refrescamos los datos de fondo de Inertia sin recargar la página completa
+            // EL CAMBIO CLAVE: Ya no usamos "setRecentlyAdded" manualmente.
+            // Consultamos la BD para traer la lista exacta y evitar el error de IDs duplicados.
+            await fetchExistingDetails(data.checkin_id);
+
+            // 3. MANTENIDO: Refrescamos los datos de fondo de Inertia en las otras tablas
             router.reload({ only: ['checkindetails', 'checkins'] });
 
-            // Reseteamos solo los campos de servicio para seguir agregando
+            // 4. MANTENIDO: Reseteamos solo los controles de la derecha para seguir agregando
             setData((prev) => ({ ...prev, service_id: '', quantity: 1 }));
+            
         } catch (error) {
             console.error('Error al guardar', error);
-            alert('Ocurrió un error al guardar el servicio.');
+            alert('Ocurrió un error al procesar el servicio.');
         } finally {
             setProcessing(false);
         }
@@ -365,7 +363,7 @@ export default function DetailModal({
                                                     type="button"
                                                     onClick={() => handleDeleteItem(item.dbId)}
                                                     className="rounded-full p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                                                    title="Eliminar de la base de datos"
+                                                    title="Descartar este producto"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>

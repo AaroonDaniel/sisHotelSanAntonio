@@ -4,7 +4,7 @@ import { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import { 
     Printer, Calendar, Banknote, QrCode, Layers, FileText, 
-    FileSpreadsheet, X, Loader2, ArrowLeft 
+    FileSpreadsheet, X, Loader2, ArrowLeft, User as UserIcon
 } from 'lucide-react';
 import { useState, FormEventHandler } from 'react';
 
@@ -12,16 +12,19 @@ interface Props {
     auth: {
         user: User;
     };
+    users?: User[]; // Lista de usuarios enviada desde el backend
     Filters?: {
         start_date?: string;
         end_date?: string;
+        user_id?: string;
     };
 }
 
-export default function FinancialReport({ auth, Filters }: Props) {
+export default function FinancialReport({ auth, users = [], Filters }: Props) {
     // Estados del formulario
     const [fechaInicio, setFechaInicio] = useState(Filters?.start_date || '');
     const [fechaFin, setFechaFin] = useState(Filters?.end_date || '');
+    const [userId, setUserId] = useState(Filters?.user_id || auth.user.id.toString());
     const [tipoRegistro, setTipoRegistro] = useState<'efectivo' | 'bancos' | 'ambos'>('ambos');
     const [formato, setFormato] = useState<'pdf' | 'excel'>('pdf');
     
@@ -32,6 +35,7 @@ export default function FinancialReport({ auth, Filters }: Props) {
     const handleLimpiar = () => {
         setFechaInicio('');
         setFechaFin('');
+        setUserId(auth.user.id.toString());
         setTipoRegistro('ambos');
         setFormato('pdf');
     };
@@ -44,37 +48,31 @@ export default function FinancialReport({ auth, Filters }: Props) {
         setIsGenerating(true);
         setPdfUrl(null);
 
-        // Construimos los parámetros para el ReportController
         const params = new URLSearchParams({
             start_date: fechaInicio,
             end_date: fechaFin,
-            // Aquí puedes enviar tipoRegistro si lo implementas luego en backend
+            user_id: userId,
         });
 
-        // Retraso simulado para la animación de carga
         setTimeout(() => {
             setIsGenerating(false);
             
             if (formato === 'pdf') {
-                // Generamos la URL con un timestamp para evitar la caché del navegador
                 setPdfUrl(`/reports/financial/pdf?${params.toString()}&t=${Date.now()}`);
             } else {
-                // Redirección directa para forzar la descarga de Excel/CSV
                 window.location.href = `/reports/financial/excel?${params.toString()}`;
             }
         }, 600); 
     };
 
     return (
-        // 2. Envuelves todo con el Layout y le pasas el usuario
         <AuthenticatedLayout user={auth.user}>
             <Head title="Cierre de Caja" />
             
-            {/* 3. Tu contenido va aquí (Hereda el alto total restando el navbar para que el PDF se vea bien) */}
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-12 flex flex-col h-[calc(100vh-4rem)]">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-7 pb-10 flex flex-col h-[calc(120vh-5rem)]">
                 
                 {/* ENCABEZADO: Título y Volver */}
-                <div className="mb-3 flex-shrink-0">
+                <div className="mb-1 flex-shrink-0 pt-0">
                     <button 
                         onClick={() => window.history.back()} 
                         className="group flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-white transition-colors mb-4"
@@ -90,12 +88,11 @@ export default function FinancialReport({ auth, Filters }: Props) {
                 </div>
 
                 {/* ZONA DE CONTENIDO CENTRAL */}
-                <div className="flex-1 flex justify-center items-start overflow-hidden pt-4">
+                <div className="flex-1 flex justify-center items-start overflow-hidden pb-4">
                     
                     {/* VISTA PREVIA PDF */}
                     {pdfUrl && formato === 'pdf' ? (
                         <div className="w-full h-full flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-gray-200 animate-in zoom-in-95 duration-200">
-                            {/* Cabecera del PDF (Estilo Modal) */}
                             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                     <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
@@ -112,7 +109,6 @@ export default function FinancialReport({ auth, Filters }: Props) {
                                 </button>
                             </div>
                             
-                            {/* Visor PDF integrado */}
                             <div className="flex-1 bg-gray-300/50 p-2">
                                 <iframe
                                     src={pdfUrl}
@@ -124,10 +120,11 @@ export default function FinancialReport({ auth, Filters }: Props) {
                     ) : (
                         
                         /* TARJETA DEL FORMULARIO */
-                        <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100">
+                        /* CAMBIO: Se ajustó max-h-full y flex-col para que el formulario no se desborde */
+                        <div className="w-full max-w-2xl flex flex-col max-h-full overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100">
                             
-                            {/* Header Formulario */}
-                            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                            {/* Header Formulario Fijo */}
+                            <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                     <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                                         <Printer className="h-5 w-5" />
@@ -136,10 +133,40 @@ export default function FinancialReport({ auth, Filters }: Props) {
                                 </h2>
                             </div>
 
-                            {/* Body Formulario */}
-                            <form onSubmit={handleGenerar} className="p-6">
-                                <div className="space-y-6">
+                            {/* Body Formulario - CAMBIO: flex-1 y min-h-0 para permitir scroll interno */}
+                            <form onSubmit={handleGenerar} className="flex flex-col flex-1 min-h-0">
+                                
+                                {/* ZONA DE INPUTS (CON SCROLL SI ES NECESARIO) */}
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                     
+                                    {/* 0. Usuario */}
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-semibold text-gray-700">Usuario de Caja</label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                                <UserIcon className="h-4 w-4 text-gray-400" />
+                                            </div>
+                                            <select
+                                                value={userId}
+                                                onChange={(e) => setUserId(e.target.value)}
+                                                className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0 appearance-none bg-white"
+                                            >
+                                                <option value="todos">Todos</option>
+                                                {users && users.length > 0 ? (
+                                                    users.map(user => (
+                                                        <option key={user.id} value={user.id}>
+                                                            {user.full_name || user.full_name} {user.id === auth.user.id ? '(Tú)' : ''}
+                                                        </option>
+                                                    ))
+                                                ) : (
+                                                    <option value={auth.user.id}>
+                                                        {auth.user.full_name} (Tú)
+                                                    </option>
+                                                )}
+                                            </select>
+                                        </div>
+                                    </div>
+
                                     {/* 1. Fechas */}
                                     <div className="flex flex-col sm:flex-row gap-4">
                                         <div className="w-full sm:w-1/2">
@@ -231,8 +258,8 @@ export default function FinancialReport({ auth, Filters }: Props) {
 
                                 </div>
 
-                                {/* Footer Formulario */}
-                                <div className="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-4">
+                                {/* FOOTER DEL FORMULARIO (BOTONES SIEMPRE VISIBLES) */}
+                                <div className="flex-shrink-0 flex justify-end gap-3 border-t border-gray-100 bg-gray-50/50 px-6 py-4">
                                     <button
                                         type="button"
                                         onClick={handleLimpiar}
@@ -252,6 +279,7 @@ export default function FinancialReport({ auth, Filters }: Props) {
                                         )}
                                     </button>
                                 </div>
+
                             </form>
                         </div>
                     )}

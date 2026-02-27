@@ -142,6 +142,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
 
+    //Facturacion
+    Route::get('/facturacion', [\App\Http\Controllers\InvoiceController::class, 'index'])->name('invoices.index');
+
     //Reportes 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');

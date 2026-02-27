@@ -62,7 +62,7 @@ const hotelModules = [
             { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservas' },
             { name: 'Asignación', icon: BedDouble, url: '/checks' },
             { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
-            { name: 'Facturación', icon: Receipt, url: '/invoices' },
+            { name: 'Facturación', icon: Receipt, url: '/facturacion' },
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
         ],

@@ -16,13 +16,13 @@ class CheckinDetailController extends Controller
      */
     public function index()
     {
-       $checkins = Checkin::with([
-            'guest:id,full_name,identification_number', 
+        $checkins = Checkin::with([
+            'guest:id,full_name,identification_number',
             'room:id,number'
         ])
-        ->where('status', 'activo') 
-        ->orderBy('created_at', 'desc')
-        ->get();
+            ->where('status', 'activo')
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $services = Service::all();
 
@@ -44,29 +44,45 @@ class CheckinDetailController extends Controller
     public function create() {}
     public function store(Request $request)
     {
+        // validamos los atos de entrada 
         $validated = $request->validate([
             'checkin_id' => 'required|exists:checkins,id',
             'service_id' => 'required|exists:services,id',
             'quantity' => 'required|integer|min:1',
         ]);
 
+        //buscador del servicio para obtener su precio actual
         $service = \App\Models\Service::findOrFail($validated['service_id']);
 
-        // 1. Crear el registro
-        \App\Models\CheckinDetail::create([
-            'checkin_id' => $validated['checkin_id'],
-            'service_id' => $validated['service_id'],
-            'quantity' => $validated['quantity'],
-            'selling_price' => $service->price
-        ]);
+        // Buscador si ya existe el consumo para editarlo
+        $detalleExistente = \App\Models\CheckinDetail::where('checkin_id', $validated['checkin_id'])
+            ->where('service_id', $validated['service_id'])
+            ->first();
+
+            
+        if ($detalleExistente) {
+            $detalleExistente->quantity += $validated['quantity'];
+            $detalleExistente->save();
+            $nuevoDetalle = $detalleExistente; // Para devolver el detalle actualizado
+        } else {
+            // 1. Crear el registro
+            $nuevoDetalle = \App\Models\CheckinDetail::create([
+                'checkin_id' => $validated['checkin_id'],
+                'service_id' => $validated['service_id'],
+                'quantity' => $validated['quantity'],
+                'selling_price' => $service->price
+            ]);
+        }
+
+
 
         // --- SOLUCIÓN INTELIGENTE ---
         // Solo devolvemos JSON si NO es una petición de Inertia.
         // Así aseguramos que tu modal se actualice (porque Inertia recibirá el redirect)
         // pero si usas esto desde una API externa, seguirá funcionando.
-        
+
         if ($request->wantsJson() && !$request->header('X-Inertia')) {
-            return response()->json(['message' => 'Creado', 'data' => $validated], 201);
+            return response()->json($nuevoDetalle, 201);
         }
 
         // Para tu VISTA ACTUAL: Esto forzará a Inertia a recargar los datos

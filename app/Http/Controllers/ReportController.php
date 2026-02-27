@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Checkin;
 use App\Models\Guest;
+use App\Models\User;
 use App\Models\Payment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -217,7 +218,7 @@ class ReportController extends Controller
                     'amount' => (float) $p->amount,
                     'method' => $p->method,
                     'bank_name' => $p->bank_name,
-                    'type' => $p->type, // PAGO o DEVOLUCION
+                    'type' => $p->type, 
                     'date' => $p->created_at->format('d/m/Y'),
                     'time' => $p->created_at->format('H:i'),
                     'room_number' => $p->checkin->room->number ?? '-',
@@ -230,7 +231,9 @@ class ReportController extends Controller
             'Filters' => [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
-            ]
+            ],
+            // CAMBIO: Ahora enviamos todos los usuarios activos al frontend
+            'users' => User::where('is_active', true)->get(['id', 'full_name', 'nickname']),
         ]);
     }
 
@@ -241,10 +244,19 @@ class ReportController extends Controller
     {
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate = $request->query('end_date', now()->toDateString());
+        // CAMBIO: Recibimos el parámetro del usuario (por defecto 'todos')
+        $userId = $request->query('user_id', 'todos');
 
-        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->orderBy('user_id')
+        // CAMBIO: Construimos la consulta base
+        $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+
+        // CAMBIO: Si el usuario no es 'todos', filtramos por ese usuario en específico
+        if ($userId !== 'todos') {
+            $query->where('user_id', $userId);
+        }
+
+        $payments = $query->orderBy('user_id')
             ->orderBy('created_at')
             ->get();
 
@@ -253,6 +265,8 @@ class ReportController extends Controller
         $pdf->SetAutoPageBreak(true, 15);
         $pdf->AddPage();
 
+        /* ... AQUI VA EL RESTO DEL CÓDIGO DE TU PDF EXACTAMENTE IGUAL COMO LO TIENES ... */
+        
         // CABECERA
         $logoPath = public_path('images/logo_camara.png');
         if (file_exists($logoPath)) {
@@ -280,7 +294,7 @@ class ReportController extends Controller
         $granTotalEfectivo = 0;
         $granTotalQR = 0;
 
-        foreach ($grouped as $userId => $userPayments) {
+        foreach ($grouped as $grupoUserId => $userPayments) {
             $userName = $userPayments->first()->user->name ?? 'Desconocido';
 
             $pdf->SetFont('Arial', 'B', 9);
@@ -384,10 +398,19 @@ class ReportController extends Controller
     {
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate = $request->query('end_date', now()->toDateString());
+        // CAMBIO: Recibimos el parámetro del usuario (por defecto 'todos')
+        $userId = $request->query('user_id', 'todos');
 
-        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->orderBy('user_id')
+        // CAMBIO: Construimos la consulta base
+        $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+
+        // CAMBIO: Si el usuario no es 'todos', filtramos por ese usuario
+        if ($userId !== 'todos') {
+            $query->where('user_id', $userId);
+        }
+
+        $payments = $query->orderBy('user_id')
             ->orderBy('created_at')
             ->get();
 
