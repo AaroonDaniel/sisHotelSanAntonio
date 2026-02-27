@@ -258,6 +258,9 @@ export default function CheckinModal({
     availableServices = [],
     isReadOnly = false,
 }: CheckinModalProps) {
+
+    // Estado para manejar la alerta de huesped ocupado
+    const [guestConflictError, setGuestConflictError] = useState<string | null>(null);
     // Const para el desplazamiento de caja de text
     const professionRef = useRef<HTMLInputElement | null>(null);
 
@@ -685,6 +688,7 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit]); // Se dispara cada vez que 'show' cambia
 
+
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
     // A. Variables calculadas
@@ -875,38 +879,51 @@ export default function CheckinModal({
         !isExistingGuest &&
         (!data.identification_number || data.identification_number.length < 3);
 
-    const submit: FormEventHandler = (e) => {
+   const submit: FormEventHandler = (e) => {
+        // 1. Prevenir recarga: Evita que la página web entera parpadee o se recargue al enviar el formulario (Comportamiento SPA moderno).
         e.preventDefault();
 
-        // 🚀 1. AQUÍ VEMOS EXACTAMENTE QUÉ SE ENVÍA
-        console.log("===================================");
-        console.log("🚀 INICIANDO ENVÍO AL SERVIDOR...");
-        console.log("📦 Datos del formulario:", data);
-        console.log("===================================");
-
+        // 2. Camino de Éxito (onSuccess): Se ejecuta SOLAMENTE si el backend (Laravel) guarda todo correctamente.
         const onSuccess = (page: any) => {
             console.log("✅ RESPUESTA EXITOSA DEL SERVIDOR:", page);
-            reset();
-            onClose(true);
+            reset(); // Función de Inertia: Limpia los campos del formulario para que no queden datos sucios la próxima vez.
+            onClose(true); // Cierra la ventana modal y le avisa al panel principal (true) que debe actualizar la vista y colores.
         };
 
-        // 🛑 2. AQUÍ ATRAPAMOS CUALQUIER RECHAZO DEL SERVIDOR
+        // =========================================================
+        // 🛑 3. Camino de Error (onError): AQUÍ ATRAPAMOS LOS RECHAZOS
+        // Se ejecuta si Laravel devuelve un error (HTTP 422), como la regla de Asignación Única.
+        // =========================================================
         const onError = (errors: any) => {
             console.error("❌ EL SERVIDOR RECHAZÓ LOS DATOS:", errors);
+
+            // CONTROL DE DUPLICADOS: Detectamos si el servidor nos mandó la alerta en el campo 'guest_id'
+            if (errors.guest_id) {
+                // A) Mostramos la alerta roja pasándole el mensaje exacto que envió Laravel
+                setGuestConflictError(errors.guest_id); 
+                
+                // B) Temporizador automático: Ocultamos la alerta después de 7 segundos (7000ms)
+                setTimeout(() => {
+                    setGuestConflictError(null);
+                }, 7000);
+            }
         };
 
+        // 4. Lógica de Envío (Routing): Decide si estamos creando o completando un registro
         if (checkinToEdit) {
+            // MODO EDICIÓN (PUT): Si entramos haciendo clic a una habitación Naranja (Asignación Incompleta).
             console.log("-> Método: PUT (Actualizar)");
             put(`/checks/${checkinToEdit.id}`, { 
-                onSuccess, 
-                onError,
-                onFinish: () => console.log("🏁 Petición PUT terminada.") 
+                onSuccess, // Inyectamos qué hacer si todo va bien
+                onError,   // Inyectamos qué hacer si hay error (activará la alerta roja si es duplicado)
+                onFinish: () => console.log("🏁 Petición PUT terminada.") // Se ejecuta siempre al final, pase lo que pase.
             });
         } else {
+            // MODO CREACIÓN (POST): Si entramos haciendo clic a una habitación Verde (Completamente Libre).
             console.log("-> Método: POST (Nuevo Registro)");
             post('/checks', { 
                 onSuccess, 
-                onError,
+                onError,   // Inyectamos la misma lógica de errores para registros nuevos
                 onFinish: () => console.log("🏁 Petición POST terminada.") 
             });
         }
@@ -1107,6 +1124,31 @@ export default function CheckinModal({
                                     type="button"
                                     onClick={() => setShowErrorToast(false)}
                                     className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {/* TOAST 2: ALERTA DE HUÉSPED DUPLICADO (DISEÑO TOAST) */}
+                    {guestConflictError && (
+                        <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-red-300 bg-red-50 p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                            <div className="flex items-start gap-3">
+                                <div className="rounded-full bg-red-200 p-2 text-red-700 shadow-sm">
+                                    <AlertTriangle className="h-5 w-5 animate-pulse" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-bold text-red-800">
+                                        Asignación Bloqueada
+                                    </h3>
+                                    <p className="mt-1 text-xs font-semibold text-red-600 leading-tight">
+                                        {guestConflictError}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setGuestConflictError(null)}
+                                    className="text-red-400 hover:text-red-700 transition-colors"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
