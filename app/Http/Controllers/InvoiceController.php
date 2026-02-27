@@ -13,18 +13,23 @@ class InvoiceController extends Controller
      */
     public function index()
     {
+        // 1. Obtenemos las facturas con sus relaciones
         $invoices = Invoice::with([
-            'checkin.guest', // Para el nombre del huésped
-            'checkin.room',  // Para el número de habitación
-            'user'           // Para el nombre del cajero/recepcionista
+            'checkin.guest', 
+            'checkin.room',  
+            'user'           
         ])
+        // FILTRO: Solo traemos facturas de estadías que YA finalizaron (no activos)
+        ->whereHas('checkin', function ($query) {
+            $query->where('status', '!=', 'activo'); 
+        })
         ->orderBy('issue_date', 'desc')
         ->orderBy('issue_time', 'desc')
         ->get()
         ->map(function ($invoice) {
-            // Formateamos los datos para que el frontend los reciba listos
             return [
                 'id' => $invoice->id,
+                'checkin_id' => $invoice->checkin_id, // <-- IMPORTANTE: Lo necesitamos para el PDF
                 'invoice_number' => $invoice->invoice_number ?? 'S/N',
                 'issue_date' => $invoice->issue_date ? $invoice->issue_date->format('d/m/Y') : '-',
                 'issue_time' => $invoice->issue_time ? $invoice->issue_time->format('H:i') : '-',
@@ -37,7 +42,6 @@ class InvoiceController extends Controller
             ];
         });
 
-        // 2. Retornamos la vista de Inertia pasándole los datos
         return Inertia::render('invoices/index', [
             'Invoices' => $invoices
         ]);
