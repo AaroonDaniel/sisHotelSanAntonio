@@ -241,77 +241,54 @@ export default function RoomsStatus({
     }, [Rooms, isCheckinModalOpen]);
 
     // --- LÓGICA DE ESTADO ---
+    // =========================================================
+    // 1. LÓGICA DE ESTADO (Corregida para detectar libres con checkin)
+    // =========================================================
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
+        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
-        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) {
-            const activeCheckin =
-                room.checkins && room.checkins.length > 0
-                    ? room.checkins[0]
-                    : null;
+        // 🛑 LA MAGIA: Si la BD dice que está LIBRE, pero encontramos un Checkin activo adentro
+        if (['available', 'disponible', 'libre'].includes(dbStatus) && activeCheckin) {
+            // Evaluamos si le faltan datos
+            const guest = activeCheckin.guest as Guest | undefined;
+            const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
+            
+            const companions = activeCheckin.companions as Guest[] | undefined;
+            const isAnyCompanionIncomplete = companions?.some(c => c.profile_status === 'INCOMPLETE');
+            
+            const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            // =========================================================
-            // 🔍 CONSOLE.LOGS DE DEPURACIÓN PARA ENCONTRAR EL ERROR
-            // =========================================================
-            //console.log(`\n================================`);
-            //console.log(`[DEBUG] Evaluando Habitación: ${room.number}`);
-            // console.log(`[DEBUG] Status en Base de Datos: ${dbStatus}`);
-            //console.log(`[DEBUG] Checkin Activo Encontrado:`, activeCheckin);
-
-            if (activeCheckin) {
-                const guest = activeCheckin.guest as Guest | undefined;
-                const isTitularIncomplete =
-                    guest?.profile_status === 'INCOMPLETE';
-                const companions = activeCheckin.companions as
-                    | Guest[]
-                    | undefined;
-                const isAnyCompanionIncomplete = companions?.some(
-                    (c) => c.profile_status === 'INCOMPLETE',
-                );
-
-                const isOriginMissing =
-                    !activeCheckin.origin || activeCheckin.origin.trim() === '';
-
-                if (
-                    isTitularIncomplete ||
-                    isAnyCompanionIncomplete ||
-                    isOriginMissing
-                ) {
-                    return 'incomplete';
-                }
+            if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
+                return 'incomplete'; // Cambia el estado a INCOMPLETO
             }
-
-            return 'occupied';
-            // =========================================================
         }
 
-        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) {
-            return 'reserved';
-        }
-        if (['available', 'disponible', 'libre'].includes(dbStatus))
-            return 'available';
-        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
-            return 'cleaning';
-        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus))
-            return 'maintenance';
+        // Si está Ocupada formalmente
+        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) return 'occupied';
+        // Si está realmente libre y no tiene checkins
+        if (['available', 'disponible', 'libre'].includes(dbStatus)) return 'available';
+        
+        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) return 'reserved';
+        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus)) return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus)) return 'maintenance';
+        
         return 'unknown';
     };
 
+    // =========================================================
+    // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
+    // =========================================================
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
 
-        // --- NUEVO: Lógica para Ocupado (Vista de Resumen) ---
         if (status === 'occupied') {
-            // Buscamos el checkin con todos sus detalles en la lista global
-            const fullCheckinData = Checkins.find(
-                (c) => c.room_id === room.id && c.status === 'activo',
-            );
+            const fullCheckinData = Checkins?.find((c) => c.room_id === room.id && c.status === 'activo');
 
             if (fullCheckinData) {
                 setOccupiedCheckinData({ ...fullCheckinData, room });
                 setIsOccupiedModalOpen(true);
             } else {
-                // Fallback si no está en la lista global
                 const localCheckin = room.checkins?.[0];
                 if (localCheckin) {
                     setOccupiedCheckinData({ ...localCheckin, room });
@@ -321,17 +298,14 @@ export default function RoomsStatus({
             return;
         }
 
-        // --- ESTRUCTURA ORIGINAL MANTENIDA ---
         setSelectedForAction(null);
+        
         if (status === 'available') {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
             setIsCheckinModalOpen(true);
         } else if (status === 'incomplete') {
-            const activeCheckin =
-                room.checkins && room.checkins.length > 0
-                    ? room.checkins[0]
-                    : null;
+            const activeCheckin = room.checkins?.[0];
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);

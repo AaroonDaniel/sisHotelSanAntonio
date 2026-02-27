@@ -877,14 +877,38 @@ export default function CheckinModal({
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        const onSuccess = () => {
+
+        // 🚀 1. AQUÍ VEMOS EXACTAMENTE QUÉ SE ENVÍA
+        console.log("===================================");
+        console.log("🚀 INICIANDO ENVÍO AL SERVIDOR...");
+        console.log("📦 Datos del formulario:", data);
+        console.log("===================================");
+
+        const onSuccess = (page: any) => {
+            console.log("✅ RESPUESTA EXITOSA DEL SERVIDOR:", page);
             reset();
             onClose(true);
         };
+
+        // 🛑 2. AQUÍ ATRAPAMOS CUALQUIER RECHAZO DEL SERVIDOR
+        const onError = (errors: any) => {
+            console.error("❌ EL SERVIDOR RECHAZÓ LOS DATOS:", errors);
+        };
+
         if (checkinToEdit) {
-            put(`/checks/${checkinToEdit.id}`, { onSuccess });
+            console.log("-> Método: PUT (Actualizar)");
+            put(`/checks/${checkinToEdit.id}`, { 
+                onSuccess, 
+                onError,
+                onFinish: () => console.log("🏁 Petición PUT terminada.") 
+            });
         } else {
-            post('/checks', { onSuccess });
+            console.log("-> Método: POST (Nuevo Registro)");
+            post('/checks', { 
+                onSuccess, 
+                onError,
+                onFinish: () => console.log("🏁 Petición POST terminada.") 
+            });
         }
     };
 
