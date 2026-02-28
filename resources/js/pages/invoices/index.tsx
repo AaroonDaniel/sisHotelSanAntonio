@@ -92,10 +92,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                   ? 'Historial de Recibos'
                                   : 'Todos los Documentos'}
                         </h2>
-                        <p className="mt-1 text-sm text-gray-400">
-                            Registro de facturas y recibos de las estadías
-                            finalizadas.
-                        </p>
+                        
                     </div>
 
                     {/* Buscador */}
@@ -157,7 +154,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                 {/* CONTENIDO PRINCIPAL (VISOR PDF O TABLA) */}
                 {pdfUrl ? (
                     <div className="flex flex-1 items-center justify-center">
-                        <div className="flex h-[80vh] w-full max-w-3xl animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl zoom-in-95 fade-in">
+                        <div className="flex h-[70vh] w-full max-w-3xl animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl zoom-in-95 fade-in">
                             <div className="flex-1 bg-gray-200 p-2">
                                 <iframe
                                     src={pdfUrl}
@@ -228,9 +225,9 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                             }
                                                         >
                                                             {isFactura ? (
-                                                                <FileText className="h-4 w-4 text-blue-400" />
+                                                                <FileText className="h-4 w-4 text-green-600" />
                                                             ) : (
-                                                                <Receipt className="h-4 w-4 text-emerald-400" />
+                                                                <Receipt className="h-4 w-4 text-green-400" />
                                                             )}
                                                             {
                                                                 invoice.invoice_number
@@ -272,7 +269,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                                         `/checks/${invoice.checkin_id}/checkout-invoice`,
                                                                     )
                                                                 }
-                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-green-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white"
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-green-600 shadow-sm transition-all hover:bg-green-600 hover:text-white"
                                                             >
                                                                 <FileText className="h-3.5 w-3.5" />
                                                                 Ver Factura

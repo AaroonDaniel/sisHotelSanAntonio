@@ -205,10 +205,46 @@ class CheckinController extends Controller
             'is_temporary' => 'nullable|boolean',
         ]);
 
+        // =========================================================
+        // LOGICA DE AJUSTE AUTOMATICO DE PRECIO (CAPACIDAD VS OCUPACION)
+        // =========================================================
+        $totalGuest = 1;
+        if($request->has('companions') && is_array($request->companions)){
+            foreach($request->companions as $compData){
+                if (!empty($compData['full_name']))
+                    $totalGuest++;
+            }
+        }
+        // Traer la habitacion seleccionada con su Precio y tipo de habitaciones
+        $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validatedCheckin['room_id']);
+
+        //Datos por defecto de la habitacion original
+        $originalPrice = $room->price->amount ?? 0;
+        $bathroomType = $room->price->bathroom_type ?? null;
+        $roomCapacity = $room->roomType->capacity ?? 1;
+
+        // Inicializacion el precio a cobrar como el original
+        $agreedPrice = $originalPrice;
+
+        // Regla de la definicion del precio segun la capacidad y ocupacion
+        if ($totalGuest < $roomCapacity && $bathroomType) {
+            // Se busca un precio activo que coincida 
+            $adjuntedPrice = \App\Models\Price::where('is_active', true)
+            ->where('bathroom_type', $bathroomType)
+            ->whereHas('roomType', function($query) use ($totalGuest){
+                $query->where('capacity', $totalGuest);
+            })
+            ->first();
+            if($adjuntedPrice){
+                $agreedPrice = $adjuntedPrice->amount;
+            }
+        }
+
+
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
         // Pasamos también $missingField a la transacción
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice) {
 
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
@@ -222,7 +258,7 @@ class CheckinController extends Controller
 
                 // Mantenemos esta columna para reportes viejos, pero la verdad está en la tabla 'payments'
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-
+                'agreed_price' => $agreedPrice,
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
 

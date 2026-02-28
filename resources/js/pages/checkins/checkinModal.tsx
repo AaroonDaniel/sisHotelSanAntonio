@@ -285,6 +285,10 @@ export default function CheckinModal({
     // Alerta flotante asignacion unica
     const [showErrorToast, setShowErrorToast] = useState(false);
 
+    // Estados para advertencia de capacidad
+    const [showCapacityWarning, setShowCapacityWarning] = useState(false);
+    const [missingGuestsCount, setMissingGuestsCount] = useState(0);
+
     // [NUEVO] Estado para la navegación del carrusel (0 = Titular)
     const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -879,54 +883,79 @@ export default function CheckinModal({
         !isExistingGuest &&
         (!data.identification_number || data.identification_number.length < 3);
 
-   const submit: FormEventHandler = (e) => {
-        // 1. Prevenir recarga: Evita que la página web entera parpadee o se recargue al enviar el formulario (Comportamiento SPA moderno).
-        e.preventDefault();
+    // =========================================================
+    // 🚀 LÓGICA DE ENVÍO Y ADVERTENCIA DE CAPACIDAD (ACTUALIZADO)
+    // =========================================================
 
-        // 2. Camino de Éxito (onSuccess): Se ejecuta SOLAMENTE si el backend (Laravel) guarda todo correctamente.
+    // A. NUEVA FUNCIÓN: Se encarga ÚNICAMENTE de hablar con el Backend (Laravel)
+    // Hemos movido aquí tu código original intacto.
+    const executeSubmit = () => {
+        // Camino de Éxito (onSuccess): Se ejecuta SOLAMENTE si el backend (Laravel) guarda todo correctamente.
         const onSuccess = (page: any) => {
             console.log("✅ RESPUESTA EXITOSA DEL SERVIDOR:", page);
-            reset(); // Función de Inertia: Limpia los campos del formulario para que no queden datos sucios la próxima vez.
-            onClose(true); // Cierra la ventana modal y le avisa al panel principal (true) que debe actualizar la vista y colores.
+            reset(); // Limpia los campos del formulario.
+            onClose(true); // Cierra la ventana modal y actualiza la vista.
         };
 
-        // =========================================================
-        // 🛑 3. Camino de Error (onError): AQUÍ ATRAPAMOS LOS RECHAZOS
-        // Se ejecuta si Laravel devuelve un error (HTTP 422), como la regla de Asignación Única.
-        // =========================================================
+        // Camino de Error (onError): Atrapa rechazos (ej. Asignación Única o errores de validación)
         const onError = (errors: any) => {
             console.error("❌ EL SERVIDOR RECHAZÓ LOS DATOS:", errors);
 
-            // CONTROL DE DUPLICADOS: Detectamos si el servidor nos mandó la alerta en el campo 'guest_id'
+            // CONTROL DE DUPLICADOS: Alerta si el huésped ya está ocupando otra habitación
             if (errors.guest_id) {
-                // A) Mostramos la alerta roja pasándole el mensaje exacto que envió Laravel
                 setGuestConflictError(errors.guest_id); 
-                
-                // B) Temporizador automático: Ocultamos la alerta después de 7 segundos (7000ms)
                 setTimeout(() => {
                     setGuestConflictError(null);
                 }, 7000);
             }
         };
 
-        // 4. Lógica de Envío (Routing): Decide si estamos creando o completando un registro
+        // Lógica de Envío (Routing): Decide si actualiza o crea
         if (checkinToEdit) {
-            // MODO EDICIÓN (PUT): Si entramos haciendo clic a una habitación Naranja (Asignación Incompleta).
+            // MODO EDICIÓN (PUT): Para habitaciones Naranjas
             console.log("-> Método: PUT (Actualizar)");
             put(`/checks/${checkinToEdit.id}`, { 
-                onSuccess, // Inyectamos qué hacer si todo va bien
-                onError,   // Inyectamos qué hacer si hay error (activará la alerta roja si es duplicado)
-                onFinish: () => console.log("🏁 Petición PUT terminada.") // Se ejecuta siempre al final, pase lo que pase.
+                onSuccess, 
+                onError,   
+                onFinish: () => console.log("🏁 Petición PUT terminada.") 
             });
         } else {
-            // MODO CREACIÓN (POST): Si entramos haciendo clic a una habitación Verde (Completamente Libre).
+            // MODO CREACIÓN (POST): Para habitaciones Verdes
             console.log("-> Método: POST (Nuevo Registro)");
             post('/checks', { 
                 onSuccess, 
-                onError,   // Inyectamos la misma lógica de errores para registros nuevos
+                onError,   
                 onFinish: () => console.log("🏁 Petición POST terminada.") 
             });
         }
+    };
+
+    // B. FUNCIÓN MODIFICADA: Actúa como "Interceptor" cuando el usuario presiona "Guardar"
+    const submit: FormEventHandler = (e) => {
+        // 1. Evita que la página parpadee o se recargue.
+        e.preventDefault();
+
+        // 2. CÁLCULO DE CAPACIDAD: ¿Cuántas camas quedan libres?
+        // maxCapacity viene del RoomType y totalPeople es la cantidad de tabs llenadas en el carrusel.
+        const faltantes = maxCapacity - totalPeople;
+
+        // 3. LA CONDICIÓN DE INTERCEPCIÓN
+        // Si NO estamos editando (!checkinToEdit) Y faltan personas (faltantes > 0)
+        if (!checkinToEdit && faltantes > 0) {
+            
+            // Guardamos el número de faltantes para mostrarlo en el texto del modal
+            setMissingGuestsCount(faltantes);
+            
+            // Hacemos visible el Modal de Advertencia Naranja
+            setShowCapacityWarning(true);
+            
+            // DETENEMOS la ejecución con 'return'. El código no llega a ejecutar executeSubmit() aún.
+            return; 
+        }
+
+        // 4. FLUJO NORMAL: Si la habitación está llena (faltantes = 0) o estamos editando,
+        // simplemente procedemos a enviar los datos a Laravel como siempre se hizo.
+        executeSubmit();
     };
 
     // ===============================
@@ -2373,6 +2402,51 @@ export default function CheckinModal({
                 onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
             />
+
+            {showCapacityWarning && (
+                <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
+                    <div className="w-full max-w-md scale-100 rounded-2xl bg-white p-6 shadow-2xl transition-transform duration-200 zoom-in-95">
+                        <h3 className="flex items-center gap-2 text-lg font-black text-amber-600">
+                            <AlertTriangle className="h-6 w-6" />
+                            Capacidad Incompleta
+                        </h3>
+                        
+                        <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 border border-amber-200">
+                            <p>
+                                Está a punto de asignar una habitación de <strong>capacidad {maxCapacity}</strong> a solo <strong>{totalPeople} persona(s)</strong>.
+                            </p>
+                            <p className="mt-2 font-bold text-red-600 uppercase">
+                                Faltan datos de {missingGuestsCount} persona(s).
+                            </p>
+                        </div>
+
+                        <p className="mt-4 text-sm text-gray-600 font-medium leading-relaxed">
+                            Si continúa, el sistema ajustará automáticamente la tarifa al equivalente de una habitación para <strong className="text-black">{totalPeople} persona(s)</strong> con el mismo tipo de baño. ¿Desea continuar?
+                        </p>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowCapacityWarning(false)}
+                                className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-200 active:scale-95"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCapacityWarning(false);
+                                    executeSubmit(); // Ejecutamos el envío final
+                                }}
+                                className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-amber-500 active:scale-95"
+                            >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Sí, Asignar y Ajustar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
