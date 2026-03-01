@@ -77,13 +77,13 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                 <div className="mb-4 flex flex-shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
-                            <div className="rounded-xl border border-gray-700 bg-gray-800 p-2">
+                            <div className="rounded-xl border border-green-100 bg-green-100 p-2">
                                 {activeTab === 'facturas' ? (
-                                    <FileText className="h-8 w-8 text-green-400" />
+                                    <FileText className="h-8 w-8 text-green-600" />
                                 ) : activeTab === 'recibos' ? (
-                                    <Receipt className="h-8 w-8 text-green-400" />
+                                    <Receipt className="h-8 w-8 text-green-600" />
                                 ) : (
-                                    <Layers className="h-8 w-8 text-green-400" />
+                                    <Layers className="h-8 w-8 text-green-600" />
                                 )}
                             </div>
                             {activeTab === 'facturas'

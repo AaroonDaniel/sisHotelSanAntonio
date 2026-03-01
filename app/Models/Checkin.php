@@ -29,7 +29,8 @@ class Checkin extends Model
         'carried_balance',
         'is_temporary',
         'parent_checkin_id',
-        'transfer_reason'
+        'transfer_reason',
+        'agreed_price',
     ];
 
     protected $uppercaseFields = [
