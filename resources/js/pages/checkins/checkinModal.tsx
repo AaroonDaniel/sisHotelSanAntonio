@@ -162,6 +162,7 @@ export interface CheckinData {
     check_in_date: string;
     duration_days: number;
     advance_payment: number;
+    agreed_price: number;
     notes?: string;
     services?: string[];
     guest?: Guest;
@@ -1884,60 +1885,85 @@ export default function CheckinModal({
                                             // Buscamos la habitación seleccionada
                                             const selectedRoom = rooms.find(
                                                 (r) =>
-                                                    r.id ===
-                                                        Number(data.room_id) ||
+                                                    r.id === Number(data.room_id) ||
                                                     r.id === initialRoomId,
                                             );
-                                            let basePrice =
-                                                selectedRoom?.price?.amount ||
-                                                0;
+                                            
+                                            const originalPrice = selectedRoom?.price?.amount || 0;
+                                            let basePrice = originalPrice;
+                                            let isAdjusted = false;
+
+                                            // =======================================================
+                                            // LÓGICA VISUAL ESTÁTICA (Lee de la BD)
+                                            // Si estamos EDITANDO un registro, leemos la tarifa real.
+                                            // Si es NUEVO, se mantiene el precio original estático.
+                                            // =======================================================
+                                            if (checkinToEdit && checkinToEdit.agreed_price) {
+                                                basePrice = checkinToEdit.agreed_price;
+                                                if (basePrice !== originalPrice) {
+                                                    isAdjusted = true;
+                                                }
+                                            }
 
                                             // Lógica Corporativa
-                                            const isCorporate = data.notes
-                                                ?.toUpperCase()
-                                                .includes('CORPORATIVO');
+                                            const isCorporate = data.notes?.toUpperCase().includes('CORPORATIVO');
                                             if (isCorporate && selectedRoom) {
-                                                const roomAny =
-                                                    selectedRoom as any;
+                                                const roomAny = selectedRoom as any;
                                                 const bathroomType =
                                                     roomAny.price?.bathroom_type?.toLowerCase() ||
                                                     roomAny.room_type?.bathroom_type?.toLowerCase() ||
                                                     '';
                                                 const isPrivate =
-                                                    bathroomType ===
-                                                        'private' ||
-                                                    bathroomType === 'privado';
-                                                basePrice =
-                                                    (isPrivate ? 90 : 60) *
-                                                    (1 +
-                                                        (data.companions
-                                                            ?.length || 0));
+                                                    bathroomType === 'private' || bathroomType === 'privado';
+                                                basePrice = (isPrivate ? 90 : 60) * totalPeople;
+                                                isAdjusted = false; // Sobrescribe etiqueta
                                             }
 
                                             // Calculamos el total
-                                            const noches =
-                                                Number(data.duration_days) || 0;
+                                            const noches = Number(data.duration_days) || 0;
                                             const total = basePrice * noches;
 
                                             return (
-                                                <div className="mx-auto flex h-6 max-w-md items-center justify-between">
+                                                <div className="mx-auto flex h-auto max-w-md items-center justify-between">
                                                     {/* IZQUIERDA: Habitación + Costo por 1 Noche */}
-                                                    <div className="flex items-baseline gap-3">
-                                                        <label className="flex items-center gap-2 text-2xl font-black text-green-700">
-                                                            HAB{' '}
-                                                            {selectedRoom?.number ||
-                                                                'N/A'}
+                                                    <div className="flex flex-col items-start">
+                                                        <label className="flex items-center gap-2 text-2xl leading-none font-black text-green-700">
+                                                            HAB {selectedRoom?.number || 'N/A'}
                                                         </label>
+                                                        <div className="mt-1 flex items-center gap-2">
+                                                            {isAdjusted ? (
+                                                                <>
+                                                                    <span className="text-sm font-bold text-gray-400 line-through">
+                                                                        {originalPrice} Bs
+                                                                    </span>
+                                                                    <span className="text-sm font-black text-green-800">
+                                                                        {basePrice} Bs / noche
+                                                                    </span>
+                                                                    <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700 uppercase tracking-wider shadow-sm">
+                                                                        Tarifa Ajustada
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-sm font-bold text-green-800">
+                                                                    {basePrice} Bs / noche
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
 
                                                     {/* DERECHA: Total a cobrar */}
                                                     <div className="flex flex-col border-l border-green-200 pl-4 text-right">
                                                         <span className="mb-0.5 text-xs font-bold text-green-600 uppercase">
-                                                            Total a cobrar
+                                                            {isAdjusted ? 'Total a cobrar' : 'Total sugerido'}
                                                         </span>
                                                         <span className="text-2xl leading-none font-black text-gray-900">
                                                             {total} Bs
                                                         </span>
+                                                        {isAdjusted && noches > 1 && (
+                                                            <span className="mt-0.5 text-[10px] font-medium text-gray-500">
+                                                                {basePrice} x {noches} noches
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -2412,76 +2438,77 @@ export default function CheckinModal({
                             </div>
                         </div>
 
-                        {/* PIE DEL FORMULARIO CON BOTONES */}
-                        <div className="shrink-0">
-                            <div className="flex items-center justify-end gap-3">
-                                {checkinToEdit && canCancel() && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowCancelModal(true)}
-                                        className="mr-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                        <span className="hidden sm:inline">
-                                            Cancelar Asignación
-                                        </span>
-                                    </button>
-                                )}
+                       {/* PIE DEL FORMULARIO CON BOTONES */}
+<div className="shrink-0 border-t border-gray-100 pt-2 -mt-12">
+    <div className="flex items-center justify-between gap-3">
 
-                                {!isReadOnly &&
-                                    checkinToEdit &&
-                                    !canCancel() && (
-                                        <div className="mr-auto flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
-                                            <AlertCircle className="h-3 w-3" />
-                                            <span>Asignación confirmada</span>
-                                        </div>
-                                    )}
+        {/* IZQUIERDA */}
+        <div className="flex items-center gap-3">
 
-                                <div className="-mt-10 flex items-center justify-end gap-3 border-t border-gray-100 pt-5">
-                                    <button
-                                        type="button"
-                                        onClick={() => onClose(false)}
-                                        className="rounded-xl px-5 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 active:scale-95"
-                                    >
-                                        {isReadOnly ? 'Cerrar' : 'Cancelar'}
-                                    </button>
+            {checkinToEdit && canCancel() && (
+                <button
+                    type="button"
+                    onClick={() => setShowCancelModal(true)}
+                    className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">
+                        Cancelar Asignación
+                    </span>
+                </button>
+            )}
 
-                                    {/* TU BOTÓN ORIGINAL INTACTO */}
-                                    {!isReadOnly && (
-                                        <button
-                                            type="submit"
-                                            disabled={processing}
-                                            className={`flex items-center gap-4 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${
-                                                isProfileIncomplete ||
-                                                (checkinToEdit &&
-                                                    (!data.origin ||
-                                                        data.origin.trim() ===
-                                                            ''))
-                                                    ? 'bg-amber-600 hover:bg-amber-500'
-                                                    : 'bg-green-600 hover:bg-green-500'
-                                            }`}
-                                        >
-                                            {processing ? (
-                                                'Procesando...'
-                                            ) : (
-                                                <>
-                                                    <Save className="h-4 w-4" />
-                                                    {checkinToEdit
-                                                        ? !data.origin ||
-                                                          data.origin.trim() ===
-                                                              ''
-                                                            ? 'Completar Check-in'
-                                                            : 'Actualizar'
-                                                        : isProfileIncomplete
-                                                          ? 'Asignación Rápida'
-                                                          : 'Registrar'}
-                                                </>
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+            {!isReadOnly && checkinToEdit && !canCancel() && (
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-400 select-none">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Asignación confirmada</span>
+                </div>
+            )}
+        </div>
+
+        {/* DERECHA */}
+        <div className="flex items-center gap-3">
+            <button
+                type="button"
+                onClick={() => onClose(false)}
+                className="rounded-xl px-5 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+            >
+                {isReadOnly ? 'Cerrar' : 'Cancelar'}
+            </button>
+
+            {!isReadOnly && (
+                <button
+                    type="submit"
+                    disabled={processing}
+                    className={`flex items-center gap-4 rounded-xl px-6 py-2 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50 ${
+                        isProfileIncomplete ||
+                        (checkinToEdit &&
+                            (!data.origin ||
+                                data.origin.trim() === ''))
+                            ? 'bg-amber-600 hover:bg-amber-500'
+                            : 'bg-green-600 hover:bg-green-500'
+                    }`}
+                >
+                    {processing ? (
+                        'Procesando...'
+                    ) : (
+                        <>
+                            <Save className="h-4 w-4" />
+                            {checkinToEdit
+                                ? !data.origin ||
+                                  data.origin.trim() === ''
+                                    ? 'Completar Check-in'
+                                    : 'Actualizar'
+                                : isProfileIncomplete
+                                  ? 'Asignación Rápida'
+                                  : 'Registrar'}
+                        </>
+                    )}
+                </button>
+            )}
+        </div>
+    </div>
+</div>
                     </div>
                 </form>
             </div>
