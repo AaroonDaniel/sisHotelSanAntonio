@@ -489,6 +489,7 @@ export default function CheckinsIndex({
                     guests={Guests}
                     rooms={Rooms}
                     schedules={Schedules}
+                    isReceptionView={false}
                 />
 
                 <DeleteModal

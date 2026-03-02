@@ -904,6 +904,7 @@ export default function RoomsStatus({
 
             <CheckinModal
                 show={isCheckinModalOpen}
+                isReceptionView={true}
                 onClose={(isSuccess?: boolean) => {
                     setIsCheckinModalOpen(false);
                     setSelectedRoomId(null);

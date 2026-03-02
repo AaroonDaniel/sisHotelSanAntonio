@@ -194,6 +194,7 @@ interface CheckinModalProps {
     initialRoomId?: number | null;
     availableServices?: any[];
     isReadOnly?: boolean;
+    isReceptionView?: boolean;
 }
 
 interface CompanionData {
@@ -257,10 +258,12 @@ export default function CheckinModal({
     initialRoomId,
     availableServices = [],
     isReadOnly = false,
+    isReceptionView = false,
 }: CheckinModalProps) {
-
     // Estado para manejar la alerta de huesped ocupado
-    const [guestConflictError, setGuestConflictError] = useState<string | null>(null);
+    const [guestConflictError, setGuestConflictError] = useState<string | null>(
+        null,
+    );
     // Const para el desplazamiento de caja de text
     const professionRef = useRef<HTMLInputElement | null>(null);
 
@@ -692,7 +695,6 @@ export default function CheckinModal({
         }
     }, [show, checkinToEdit]); // Se dispara cada vez que 'show' cambia
 
-
     // --- LÓGICA MAESTRA (CARRUSEL Y EDICIÓN) ---
 
     // A. Variables calculadas
@@ -892,18 +894,18 @@ export default function CheckinModal({
     const executeSubmit = () => {
         // Camino de Éxito (onSuccess): Se ejecuta SOLAMENTE si el backend (Laravel) guarda todo correctamente.
         const onSuccess = (page: any) => {
-            console.log("✅ RESPUESTA EXITOSA DEL SERVIDOR:", page);
+            console.log('✅ RESPUESTA EXITOSA DEL SERVIDOR:', page);
             reset(); // Limpia los campos del formulario.
             onClose(true); // Cierra la ventana modal y actualiza la vista.
         };
 
         // Camino de Error (onError): Atrapa rechazos (ej. Asignación Única o errores de validación)
         const onError = (errors: any) => {
-            console.error("❌ EL SERVIDOR RECHAZÓ LOS DATOS:", errors);
+            console.error('❌ EL SERVIDOR RECHAZÓ LOS DATOS:', errors);
 
             // CONTROL DE DUPLICADOS: Alerta si el huésped ya está ocupando otra habitación
             if (errors.guest_id) {
-                setGuestConflictError(errors.guest_id); 
+                setGuestConflictError(errors.guest_id);
                 setTimeout(() => {
                     setGuestConflictError(null);
                 }, 7000);
@@ -913,19 +915,19 @@ export default function CheckinModal({
         // Lógica de Envío (Routing): Decide si actualiza o crea
         if (checkinToEdit) {
             // MODO EDICIÓN (PUT): Para habitaciones Naranjas
-            console.log("-> Método: PUT (Actualizar)");
-            put(`/checks/${checkinToEdit.id}`, { 
-                onSuccess, 
-                onError,   
-                onFinish: () => console.log("🏁 Petición PUT terminada.") 
+            console.log('-> Método: PUT (Actualizar)');
+            put(`/checks/${checkinToEdit.id}`, {
+                onSuccess,
+                onError,
+                onFinish: () => console.log('🏁 Petición PUT terminada.'),
             });
         } else {
             // MODO CREACIÓN (POST): Para habitaciones Verdes
-            console.log("-> Método: POST (Nuevo Registro)");
-            post('/checks', { 
-                onSuccess, 
-                onError,   
-                onFinish: () => console.log("🏁 Petición POST terminada.") 
+            console.log('-> Método: POST (Nuevo Registro)');
+            post('/checks', {
+                onSuccess,
+                onError,
+                onFinish: () => console.log('🏁 Petición POST terminada.'),
             });
         }
     };
@@ -942,15 +944,14 @@ export default function CheckinModal({
         // 3. LA CONDICIÓN DE INTERCEPCIÓN
         // Si NO estamos editando (!checkinToEdit) Y faltan personas (faltantes > 0)
         if (!checkinToEdit && faltantes > 0) {
-            
             // Guardamos el número de faltantes para mostrarlo en el texto del modal
             setMissingGuestsCount(faltantes);
-            
+
             // Hacemos visible el Modal de Advertencia Naranja
             setShowCapacityWarning(true);
-            
+
             // DETENEMOS la ejecución con 'return'. El código no llega a ejecutar executeSubmit() aún.
-            return; 
+            return;
         }
 
         // 4. FLUJO NORMAL: Si la habitación está llena (faltantes = 0) o estamos editando,
@@ -1170,14 +1171,14 @@ export default function CheckinModal({
                                     <h3 className="text-sm font-bold text-red-800">
                                         Asignación Bloqueada
                                     </h3>
-                                    <p className="mt-1 text-xs font-semibold text-red-600 leading-tight">
+                                    <p className="mt-1 text-xs leading-tight font-semibold text-red-600">
                                         {guestConflictError}
                                     </p>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setGuestConflictError(null)}
-                                    className="text-red-400 hover:text-red-700 transition-colors"
+                                    className="text-red-400 transition-colors hover:text-red-700"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -1401,7 +1402,7 @@ export default function CheckinModal({
                             {/* D. FILA CARNET Y NACIONALIDAD */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Carnet (CI)
                                     </label>
                                     <input
@@ -1420,7 +1421,7 @@ export default function CheckinModal({
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Expedido
                                     </label>
                                     <input
@@ -1437,7 +1438,7 @@ export default function CheckinModal({
                                     />
                                 </div>
                                 <div className="relative" ref={nationalityRef}>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Nacionalidad
                                     </label>
                                     <input
@@ -1479,7 +1480,7 @@ export default function CheckinModal({
                             {/* E. FILA ESTADO CIVIL Y FECHA */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Estado Civil
                                     </label>
                                     <select
@@ -1506,7 +1507,7 @@ export default function CheckinModal({
                                 </div>
                                 <div className="col-span-2 flex gap-2">
                                     <div className="flex-1">
-                                        <label className="text-xs font-bold text-gray-500">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
                                         </label>
                                         <input
@@ -1534,7 +1535,7 @@ export default function CheckinModal({
                                         </span>
                                     </div>
                                     <div className="flex-1">
-                                        <label className="text-xs font-bold text-gray-500">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">
                                             Profesión
                                         </label>
                                         <input
@@ -1631,7 +1632,7 @@ export default function CheckinModal({
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">
                                         Teléfono
                                     </label>
                                     <div className="relative">
@@ -1769,71 +1770,192 @@ export default function CheckinModal({
                     </div>
 
                     {/* DERECHAAAAA - ASIGNACIÓN */}
-                    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-                        <div className="space-y-5">
-                            <div>
-                                <div className="flex w-full items-center justify-between">
-                                    {/* IZQUIERDA */}
-                                    <label className="flex items-center gap-2 text-base font-bold text-green-700">
-                                        <Bed className="h-4 w-4" />
-                                        HABITACIÓN{' '}
-                                        <span className="text-black">
-                                            {data.room_id}
-                                        </span>
-                                    </label>
-
-                                    {/* DERECHA: Checkbox Temporal */}
-                                    <div className="flex items-center gap-2">
-                                        <label
-                                            htmlFor="is_temporary"
-                                            className={`cursor-pointer text-xs font-bold transition-colors select-none ${
-                                                data.is_temporary
-                                                    ? 'text-amber-600'
-                                                    : 'text-gray-400'
-                                            }`}
-                                        >
-                                            Asig. TEMPORAL:
+                    <div className="flex-1 overflow-y-auto bg-gray-50 p-3">
+                        <div className="space-y-4.5">
+                            {/* ========================================================= */}
+                            {/* CAJA CONDICIONADA: VISTA ADMIN VS VISTA RECEPCIÓN         */}
+                            {/* ========================================================= */}
+                            {!isReceptionView ? (
+                                /* ------------------------------------------------ */
+                                /* VISTA 1: ADMINISTRADOR (Selector de habitación)  */
+                                /* ------------------------------------------------ */
+                                <div>
+                                    <div className="flex w-full items-center justify-between">
+                                        {/* IZQUIERDA */}
+                                        <label className="flex items-center gap-2 text-base font-bold text-green-700">
+                                            <Bed className="h-4 w-4" />
+                                            HABITACIÓN{' '}
+                                            <span className="text-black">
+                                                {data.room_id}
+                                            </span>
                                         </label>
 
-                                        <input
-                                            id="is_temporary"
-                                            type="checkbox"
-                                            checked={data.is_temporary}
-                                            onChange={(e) =>
-                                                setData(
-                                                    'is_temporary',
-                                                    e.target.checked,
-                                                )
+                                        {/* DERECHA: Checkbox Temporal */}
+                                        <div className="flex items-center gap-2">
+                                            <label
+                                                htmlFor="is_temporary"
+                                                className={`cursor-pointer text-xs font-bold transition-colors select-none ${
+                                                    data.is_temporary
+                                                        ? 'text-amber-600'
+                                                        : 'text-gray-400'
+                                                }`}
+                                            >
+                                                Asig. TEMPORAL:
+                                            </label>
+
+                                            <input
+                                                id="is_temporary"
+                                                type="checkbox"
+                                                checked={data.is_temporary}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'is_temporary',
+                                                        e.target.checked,
+                                                    )
+                                                }
+                                                disabled={isReadOnly}
+                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* --- CAMPO SELECT --- */}
+                                    <select
+                                        value={data.room_id}
+                                        onChange={(e) =>
+                                            setData('room_id', e.target.value)
+                                        }
+                                        disabled={
+                                            !!checkinToEdit || !!initialRoomId
+                                        }
+                                        className="mt-2 block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
+                                    >
+                                        <option value="">
+                                            Seleccione una habitación...
+                                        </option>
+                                        {rooms.map((room) => (
+                                            <option
+                                                key={room.id}
+                                                value={room.id}
+                                            >
+                                                {room.number} - Costo{' '}
+                                                {room.price?.amount} Bs.
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                /* ------------------------------------------------ */
+                                /* VISTA 2: RECEPCIONISTA (Diseño Limpio y Directo) */
+                                /* ------------------------------------------------ */
+                                <div className="mb-1">
+                                    {/* 1. CHECKBOX TEMPORAL (Fuera del contenedor, arriba a la derecha) */}
+                                    <div className="mb-1 flex justify-end">
+                                        <div className="flex items-center gap-2">
+                                            <label
+                                                htmlFor="is_temporary_rec"
+                                                className={`cursor-pointer text-xs font-bold transition-colors select-none ${
+                                                    data.is_temporary
+                                                        ? 'text-amber-600'
+                                                        : 'text-gray-500'
+                                                }`}
+                                            >
+                                                Asig. TEMPORAL:
+                                            </label>
+                                            <input
+                                                id="is_temporary_rec"
+                                                type="checkbox"
+                                                checked={data.is_temporary}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'is_temporary',
+                                                        e.target.checked,
+                                                    )
+                                                }
+                                                disabled={isReadOnly}
+                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
+                                    <div className="rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
+                                        {(() => {
+                                            // Buscamos la habitación seleccionada
+                                            const selectedRoom = rooms.find(
+                                                (r) =>
+                                                    r.id ===
+                                                        Number(data.room_id) ||
+                                                    r.id === initialRoomId,
+                                            );
+                                            let basePrice =
+                                                selectedRoom?.price?.amount ||
+                                                0;
+
+                                            // Lógica Corporativa
+                                            const isCorporate = data.notes
+                                                ?.toUpperCase()
+                                                .includes('CORPORATIVO');
+                                            if (isCorporate && selectedRoom) {
+                                                const roomAny =
+                                                    selectedRoom as any;
+                                                const bathroomType =
+                                                    roomAny.price?.bathroom_type?.toLowerCase() ||
+                                                    roomAny.room_type?.bathroom_type?.toLowerCase() ||
+                                                    '';
+                                                const isPrivate =
+                                                    bathroomType ===
+                                                        'private' ||
+                                                    bathroomType === 'privado';
+                                                basePrice =
+                                                    (isPrivate ? 90 : 60) *
+                                                    (1 +
+                                                        (data.companions
+                                                            ?.length || 0));
                                             }
-                                            disabled={isReadOnly}
-                                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-                                        />
+
+                                            // Calculamos el total
+                                            const noches =
+                                                Number(data.duration_days) || 0;
+                                            const total = basePrice * noches;
+
+                                            return (
+                                                <div className="mx-auto flex h-6 max-w-md items-center justify-between">
+                                                    {/* IZQUIERDA: Habitación + Costo por 1 Noche */}
+                                                    <div className="flex items-baseline gap-3">
+                                                        <label className="flex items-center gap-2 text-2xl font-black text-green-700">
+                                                            HAB{' '}
+                                                            {selectedRoom?.number ||
+                                                                'N/A'}
+                                                        </label>
+                                                    </div>
+
+                                                    {/* DERECHA: Total a cobrar */}
+                                                    <div className="flex flex-col border-l border-green-200 pl-4 text-right">
+                                                        <span className="mb-0.5 text-xs font-bold text-green-600 uppercase">
+                                                            Total a cobrar
+                                                        </span>
+                                                        <span className="text-2xl leading-none font-black text-gray-900">
+                                                            {total} Bs
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
+                            )}
 
-                                {/* --- CAMPO BLOQUEADO (DISABLED) --- */}
-                                <select
-                                    value={data.room_id}
-                                    onChange={(e) =>
-                                        setData('room_id', e.target.value)
-                                    }
-                                    disabled={
-                                        !!checkinToEdit || !!initialRoomId
-                                    }
-                                    className="block w-full cursor-not-allowed rounded-xl border-gray-300 bg-gray-100 py-2.5 pl-3 text-base font-bold text-black shadow-sm focus:ring-green-500"
-                                >
-                                    {rooms.map((room) => (
-                                        <option key={room.id} value={room.id}>
-                                            {room.number} - Costo{' '}
-                                            {room.price?.amount} Bs.
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            {/* ========================================================= */}
+                            {/* 👇 CAMPOS COMPARTIDOS (Fecha, Noches, Precio, etc.) 👇     */}
+                            {/* ESTO VA FUERA DE LA CONDICIÓN PARA QUE SE VEA EN AMBAS VISTAS */}
+                            {/* ========================================================= */}
+
+                            {/* Caja de fecha de ingreso y Noches */}
                             <div className="grid grid-cols-[1fr_160px] gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
-                                <div className="relative flex flex-grow flex-col">
-                                    {/* 1. Header con etiqueta y Badge de Horario */}
+                                <div className="relative flex flex-col">
+                                    {/* 1. Header con etiqueta */}
                                     <div className="mb-0.5 flex min-h-[20px] items-center gap-2">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Ingreso (Check-In)
@@ -1841,10 +1963,9 @@ export default function CheckinModal({
                                     </div>
 
                                     {/* 2. BOTÓN TOLERANCIA (FLOTANTE / ABSOLUTO) */}
-                                    {/* Se posiciona 'encima' del layout en la esquina derecha. No empuja nada. */}
                                     {data.schedule_id &&
                                         toleranceStatus.isValid && (
-                                            <div className="absolute top-0 right-3 z-10">
+                                            <div className="absolute top-0 right-1 z-10">
                                                 <button
                                                     type="button"
                                                     onClick={
@@ -1882,7 +2003,7 @@ export default function CheckinModal({
                                             </div>
                                         )}
 
-                                    {/* 3. Input de Fecha (Se mantiene igual) */}
+                                    {/* 3. Input de Fecha (AJUSTADO AL TAMAÑO SOLICITADO) */}
                                     <input
                                         type="datetime-local"
                                         value={formatDateForInput(
@@ -1895,7 +2016,8 @@ export default function CheckinModal({
                                             )
                                         }
                                         disabled={isReadOnly}
-                                        className="w-full rounded-lg border border-gray-400 text-sm font-bold text-black disabled:bg-gray-100"
+                                        // Clases actualizadas para coincidir con el diseño de Fecha Nac.
+                                        className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100"
                                     />
                                 </div>
 
@@ -1907,7 +2029,7 @@ export default function CheckinModal({
                                             Noches:
                                         </label>
 
-                                        {/* Lógica de Salida (Movida aquí arriba) */}
+                                        {/* Lógica de Salida */}
                                         {(() => {
                                             const schedule = schedules.find(
                                                 (s) =>
@@ -1932,8 +2054,31 @@ export default function CheckinModal({
                                         })()}
                                     </div>
 
-                                    {/* 2. INPUT NOCHES */}
-                                    <div className="relative">
+                                    {/* 2. INPUT NOCHES CON BOTONES - / + (Diseño Compacto) */}
+                                    <div className="flex h-[38px] w-full items-center overflow-hidden rounded-lg border border-gray-400 bg-white focus-within:border-green-500 focus-within:ring-1 focus-within:ring-green-500">
+                                        {/* Botón Restar (-) */}
+                                        <button
+                                            type="button"
+                                            disabled={
+                                                isReadOnly ||
+                                                Number(data.duration_days) <= 1
+                                            }
+                                            onClick={() => {
+                                                const current =
+                                                    Number(
+                                                        data.duration_days,
+                                                    ) || 1;
+                                                setData(
+                                                    'duration_days',
+                                                    Math.max(1, current - 1),
+                                                );
+                                            }}
+                                            className="flex h-full w-10 items-center justify-center border-r border-gray-400 bg-gray-100 text-lg font-black text-gray-600 transition-colors hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50"
+                                        >
+                                            -
+                                        </button>
+
+                                        {/* Input Central (Número) */}
                                         <input
                                             type="number"
                                             min="1"
@@ -1951,75 +2096,29 @@ export default function CheckinModal({
                                                           ),
                                                 );
                                             }}
-                                            className="w-full rounded-lg border border-gray-400 pr-2 pl-3 text-right text-sm font-black text-blue-900 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
+                                            // Clases para quitar las flechitas por defecto y centrar
+                                            className="h-full w-full [appearance:textfield] border-none bg-transparent p-0 text-center text-sm font-black text-gray-900 focus:ring-0 disabled:bg-gray-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                             placeholder="1"
                                         />
-                                        <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[10px] font-bold text-gray-400">
-                                            #
-                                        </span>
-                                    </div>
 
-                                    {/* 3. PRECIO TOTAL (Debajo del input) */}
-                                    <div className="mt-0.5 flex justify-end">
-                                        {(() => {
-                                            const selectedRoom = rooms.find(
-                                                (r) =>
-                                                    r.id ===
-                                                        Number(data.room_id) ||
-                                                    r.id === initialRoomId,
-                                            );
-
-                                            let price =
-                                                selectedRoom?.price?.amount ||
-                                                0;
-
-                                            // ==========================================================
-                                            // 🚀 LÓGICA CORPORATIVA FRONTEND
-                                            // ==========================================================
-                                            const isCorporate = data.notes
-                                                ?.toUpperCase()
-                                                .includes('CORPORATIVO');
-
-                                            if (isCorporate && selectedRoom) {
-                                                // Usamos "any" para silenciar el error estricto de TypeScript
-                                                const roomAny =
-                                                    selectedRoom as any;
-
-                                                const bathroomType =
-                                                    roomAny.price?.bathroom_type?.toLowerCase() ||
-                                                    roomAny.room_type?.bathroom_type?.toLowerCase() ||
-                                                    '';
-
-                                                const isPrivate =
-                                                    bathroomType ===
-                                                        'private' ||
-                                                    bathroomType === 'privado';
-                                                const rate = isPrivate
-                                                    ? 90
-                                                    : 60;
-
-                                                // PaxCount = 1 Titular + N Acompañantes registrados en el frontend
-                                                const paxCount =
-                                                    1 +
-                                                    (data.companions?.length ||
-                                                        0);
-
-                                                // El nuevo precio unitario por noche de TODA la habitación
-                                                price = rate * paxCount;
-                                            }
-                                            // ==========================================================
-
-                                            const total =
-                                                price *
-                                                (Number(data.duration_days) ||
-                                                    0);
-
-                                            return (
-                                                <span className="animate-in text-sm font-black text-green-600 fade-in">
-                                                    Total: {total} Bs
-                                                </span>
-                                            );
-                                        })()}
+                                        {/* Botón Sumar (+) */}
+                                        <button
+                                            type="button"
+                                            disabled={isReadOnly}
+                                            onClick={() => {
+                                                const current =
+                                                    Number(
+                                                        data.duration_days,
+                                                    ) || 0;
+                                                setData(
+                                                    'duration_days',
+                                                    current + 1,
+                                                );
+                                            }}
+                                            className="flex h-full w-10 items-center justify-center border-l border-gray-400 bg-gray-100 text-lg font-black text-gray-600 transition-colors hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50"
+                                        >
+                                            +
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -2027,30 +2126,33 @@ export default function CheckinModal({
                             {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
                             <div>
                                 {/* ELIMINADA LA CONDICIÓN isTitular && AQUÍ */}
-                                <div className="relative -top-3 -mt-4 animate-in duration-300 fade-in slide-in-from-top-2">
+                                <div className="relative -mt-3 animate-in duration-300 fade-in slide-in-from-top-2">
                                     <div className="flex flex-col gap-2">
                                         {/* FILA SUPERIOR: SELECCIÓN DE MÉTODO + MONTO */}
                                         <div className="flex gap-2">
                                             {/* A. SELECTOR TIPO DE PAGO (IZQUIERDA) */}
-                                            <div className="w-1/2">
-                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                    Método
-                                                </label>
-                                                <div className="flex rounded-lg bg-gray-100 p-0.5">
+                                            <div className="flex w-1/2 flex-col">
+                                                {/* Etiqueta alineada con altura mínima para igualar al de la derecha */}
+                                                <div className="mb-0.5 flex min-h-[20px] items-center">
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">
+                                                        Método
+                                                    </label>
+                                                </div>
+                                                
+                                                {/* Contenedor principal con altura fija de 38px */}
+                                                <div className="flex h-[38px] w-full rounded-lg border border-gray-300 bg-gray-100 p-[3px]">
                                                     <button
                                                         type="button"
                                                         onClick={() =>
                                                             setData((prev) => ({
                                                                 ...prev,
-                                                                payment_method:
-                                                                    'EFECTIVO',
+                                                                payment_method: 'EFECTIVO',
                                                                 qr_bank: '',
                                                             }))
                                                         }
                                                         disabled={!isTitular} // Bloquear si no es titular (opcional)
-                                                        className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${
-                                                            data.payment_method ===
-                                                            'EFECTIVO'
+                                                        className={`flex h-full flex-1 items-center justify-center rounded text-xs font-bold transition-all ${
+                                                            data.payment_method === 'EFECTIVO'
                                                                 ? 'bg-white text-green-700 shadow-sm ring-1 ring-gray-200'
                                                                 : 'text-gray-400 hover:text-gray-600'
                                                         }`}
@@ -2060,15 +2162,11 @@ export default function CheckinModal({
                                                     <button
                                                         type="button"
                                                         onClick={() =>
-                                                            setData(
-                                                                'payment_method',
-                                                                'QR',
-                                                            )
+                                                            setData('payment_method', 'QR')
                                                         }
                                                         disabled={!isTitular}
-                                                        className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${
-                                                            data.payment_method ===
-                                                            'QR'
+                                                        className={`flex h-full flex-1 items-center justify-center rounded text-xs font-bold transition-all ${
+                                                            data.payment_method === 'QR'
                                                                 ? 'bg-white text-purple-700 shadow-sm ring-1 ring-gray-200'
                                                                 : 'text-gray-400 hover:text-gray-600'
                                                         }`}
@@ -2079,13 +2177,16 @@ export default function CheckinModal({
                                             </div>
 
                                             {/* B. INPUT DE MONTO (DERECHA) */}
-                                            <div className="w-1/2">
-                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                    Adelanto
-                                                </label>
-                                                <div className="relative">
+                                            <div className="flex w-1/2 flex-col">
+                                                <div className="mb-0.5 flex min-h-[20px] items-center gap-2">
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">
+                                                        Adelanto
+                                                    </label>
+                                                </div>
+                                                {/* Contenedor relative con la altura forzada de 38px para igualar a los demás */}
+                                                <div className="relative h-[38px]">
                                                     <span
-                                                        className={`absolute inset-y-0 left-2 flex items-center text-[10px] font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
+                                                        className={`absolute inset-y-0 left-3 flex items-center text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
                                                     >
                                                         Bs
                                                     </span>
@@ -2106,10 +2207,17 @@ export default function CheckinModal({
                                                             )
                                                         }
                                                         disabled={!isTitular}
-                                                        className="w-full rounded-lg border border-gray-400 py-1 pl-6 text-xs font-black text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                        // py-2, text-sm y h-full hacen que sea idéntico a las otras cajas
+                                                        // pl-9 empuja los números a la derecha para que no tapen el "Bs"
+                                                        className="h-full w-full rounded-lg border border-gray-400 py-2 pr-3 pl-9 text-sm font-black text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
+                                                {errors.advance_payment && (
+                                                    <p className="mt-1 text-[10px] font-bold text-red-500">
+                                                        {errors.advance_payment}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
 
@@ -2121,14 +2229,7 @@ export default function CheckinModal({
                                                     : 'invisible opacity-0'
                                             }`}
                                         >
-                                            <div className="mb-1 flex items-center justify-between">
-                                                {/* Badge pequeño que muestra qué banco se eligió */}
-                                                {data.qr_bank && (
-                                                    <span className="rounded bg-purple-100 text-[8px] font-bold text-purple-700">
-                                                        {data.qr_bank}
-                                                    </span>
-                                                )}
-                                            </div>
+                                            
 
                                             {/* GRID DE BANCOS */}
                                             <div className="grid grid-cols-4 gap-2">
@@ -2215,9 +2316,9 @@ export default function CheckinModal({
                                 </div>
                                 {/* ELIMINADA LA LLAVE DE CIERRE AQUÍ */}
                             </div>
-
-                            <div className="relative -top-7">
-                                <label className="text-xs font-bold text-gray-500">
+                            {/* Campo de observaciones*/}
+                            <div className="relative -top-4">
+                                <label className="text-xs font-bold text-gray-500 uppercase">
                                     Observaciones
                                 </label>
                                 <div className="relative">
@@ -2236,9 +2337,9 @@ export default function CheckinModal({
                                     />
                                 </div>
                             </div>
-
+                            {/*Caja de texto de servicio*/}
                             <div className="relative -top-10">
-                                <label className="mb-2 block text-xs font-bold text-gray-500">
+                                <label className="text-xs font-bold text-gray-500 uppercase">
                                     Servicios
                                 </label>
 
@@ -2312,7 +2413,6 @@ export default function CheckinModal({
                         </div>
 
                         {/* PIE DEL FORMULARIO CON BOTONES */}
-                        {/* 3. FOOTER DE BOTONES (ESTÁTICO - FUERA DEL SCROLL) */}
                         <div className="shrink-0">
                             <div className="flex items-center justify-end gap-3">
                                 {checkinToEdit && canCancel() && (
@@ -2410,18 +2510,25 @@ export default function CheckinModal({
                             <AlertTriangle className="h-6 w-6" />
                             Capacidad Incompleta
                         </h3>
-                        
-                        <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 border border-amber-200">
+
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                             <p>
-                                Está a punto de asignar una habitación de <strong>capacidad {maxCapacity}</strong> a solo <strong>{totalPeople} persona(s)</strong>.
+                                Está a punto de asignar una habitación de{' '}
+                                <strong>capacidad {maxCapacity}</strong> a solo{' '}
+                                <strong>{totalPeople} persona(s)</strong>.
                             </p>
                             <p className="mt-2 font-bold text-red-600 uppercase">
                                 Faltan datos de {missingGuestsCount} persona(s).
                             </p>
                         </div>
 
-                        <p className="mt-4 text-sm text-gray-600 font-medium leading-relaxed">
-                            Si continúa, el sistema ajustará automáticamente la tarifa al equivalente de una habitación para <strong className="text-black">{totalPeople} persona(s)</strong> con el mismo tipo de baño. ¿Desea continuar?
+                        <p className="mt-4 text-sm leading-relaxed font-medium text-gray-600">
+                            Si continúa, el sistema ajustará automáticamente la
+                            tarifa al equivalente de una habitación para{' '}
+                            <strong className="text-black">
+                                {totalPeople} persona(s)
+                            </strong>{' '}
+                            con el mismo tipo de baño. ¿Desea continuar?
                         </p>
 
                         <div className="mt-6 flex justify-end gap-3">
