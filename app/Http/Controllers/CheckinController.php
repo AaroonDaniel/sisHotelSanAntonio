@@ -39,6 +39,33 @@ class CheckinController extends Controller
             'RoomTypes' => $roomTypes,
         ]);
     }
+
+    // Funcion Caluclo de precio acordado segun ocupacion y capacidad
+    public function calculateAgreedPrice($roomId, $totalGuests){
+        $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
+
+        //Datos por defecto de la habilitacion original
+        $originalPrice = $room->price->amount ?? 0;
+        $bathroomType = $room->price->bathroom_type ?? null;
+        $roomCapacity = $room->roomType->capacity ?? 1;
+
+        $agreedPrice = $originalPrice;
+
+        if($totalGuests < $roomCapacity && $bathroomType){
+            $adjuntedPrice = \App\Models\Price::where('is_active', true)
+            ->where('bathroom_type', $bathroomType)
+            ->whereHas('roomType', function($query) use ($totalGuests){
+                $query->where('capacity', $totalGuests);
+            })
+            ->first();
+            if($adjuntedPrice){
+                $agreedPrice = $adjuntedPrice->amount;
+            }
+        }
+
+        return $agreedPrice;
+    }
+
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
@@ -207,43 +234,23 @@ class CheckinController extends Controller
 
         // =========================================================
         // LOGICA DE AJUSTE AUTOMATICO DE PRECIO (CAPACIDAD VS OCUPACION)
+        // MODIFICADO: Ahora llama a la función externa calculateAgreedPrice
         // =========================================================
         $totalGuest = 1;
         if($request->has('companions') && is_array($request->companions)){
             foreach($request->companions as $compData){
-                if (!empty($compData['full_name']))
+                if (!empty($compData['full_name'])) {
                     $totalGuest++;
+                }
             }
         }
-        // Traer la habitacion seleccionada con su Precio y tipo de habitaciones
-        $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validatedCheckin['room_id']);
-
-        //Datos por defecto de la habitacion original
-        $originalPrice = $room->price->amount ?? 0;
-        $bathroomType = $room->price->bathroom_type ?? null;
-        $roomCapacity = $room->roomType->capacity ?? 1;
-
-        // Inicializacion el precio a cobrar como el original
-        $agreedPrice = $originalPrice;
-
-        // Regla de la definicion del precio segun la capacidad y ocupacion
-        if ($totalGuest < $roomCapacity && $bathroomType) {
-            // Se busca un precio activo que coincida 
-            $adjuntedPrice = \App\Models\Price::where('is_active', true)
-            ->where('bathroom_type', $bathroomType)
-            ->whereHas('roomType', function($query) use ($totalGuest){
-                $query->where('capacity', $totalGuest);
-            })
-            ->first();
-            if($adjuntedPrice){
-                $agreedPrice = $adjuntedPrice->amount;
-            }
-        }
-
+        
+        // Llamamos a la nueva función que pegaste arriba
+        $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // Pasamos también $missingField a la transacción
+        // Pasamos también $missingField y $agreedPrice a la transacción
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice) {
 
             $checkin = \App\Models\Checkin::create([
@@ -415,20 +422,31 @@ class CheckinController extends Controller
             $ahora = now();
             $ingreso = Carbon::parse($checkin->check_in_date);
 
+            // Calculamos cuántos huéspedes son en total (lo usamos en ambos casos)
+            $totalGuests = 1 + $checkin->companions()->count();
+
             // 1. VERIFICAR CAMBIO RÁPIDO (Mismo día)
             if ($ingreso->isSameDay($ahora)) {
-                // ... (Lógica de cambio rápido se mantiene igual) ...
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
                 \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
-                $checkin->update(['room_id' => $newRoomId, 'notes' => $checkin->notes . " | CAMBIO RÁPIDO"]);
-                return redirect()->back()->with('success', 'Cambio rápido realizado.');
+                
+                // [CORRECCIÓN]: Recalculamos el precio para que tome el valor de la NUEVA habitación
+                $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+
+                // Actualizamos el cuarto y el NUEVO precio
+                $checkin->update([
+                    'room_id' => $newRoomId, 
+                    'agreed_price' => $nuevoAgreedPrice, // <-- AÑADIDO
+                    'notes' => $checkin->notes . " | CAMBIO RÁPIDO"
+                ]);
+                return redirect()->back()->with('success', 'Cambio rápido realizado. La tarifa se ajustó a la nueva habitación.');
             }
 
             // 2. TRANSFERENCIA CON ARRASTRE DE HISTORIAL
             else {
                 // A. Calcular Costo de la Habitación Vieja (BRUTO)
                 $diasACobrar = $this->calculateBillableDays($checkin, $ahora);
-                $precioVieja = $checkin->room->price->amount ?? 0;
+                $precioVieja = $checkin->agreed_price ?? $checkin->room->price->amount ?? 0;
 
                 // Este es el costo PURO del hospedaje anterior. NO RESTAMOS PAGOS AÚN.
                 $deudaHospedajeAnterior = $diasACobrar * $precioVieja;
@@ -442,6 +460,10 @@ class CheckinController extends Controller
                 ]);
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
 
+                // Nuevo Calcular precio para la nueva habitacion 
+                // [CORRECCIÓN TYPO]: La "P" debe ser mayúscula
+                $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                
                 // C. Crear Checkin Nuevo
                 $nuevoCheckin = Checkin::create([
                     'guest_id' => $checkin->guest_id,
@@ -452,6 +474,7 @@ class CheckinController extends Controller
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
                     'advance_payment' => 0, // Se calcula dinámicamente con la tabla payments
+                    'agreed_price' => $nuevoAgreedPrice,
                     'parent_checkin_id' => $checkin->id,
                     // Guardamos la DEUDA BRUTA de la habitación anterior
                     'carried_balance' => $deudaHospedajeAnterior,
@@ -653,12 +676,18 @@ class CheckinController extends Controller
 
             // 3.5 ACTUALIZAR ACOMPAÑANTES
             $allCompanionsComplete = true;
+            $totalGuests = 1;
 
             if ($request->has('companions')) {
                 $idsParaSincronizar = [];
 
                 foreach ($request->companions as $compData) {
                     // Verificación de acompañante individual
+                    if (empty($compData['full_name'])) {
+                        continue; 
+                    }
+
+                    $totalGuests++;
                     $isThisCompanionComplete = true;
                     $compRequired = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
 
@@ -702,6 +731,7 @@ class CheckinController extends Controller
             } else {
                 $checkin->companions()->detach();
             }
+            $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
 
             // 4. LÓGICA DE FECHAS
             // Solo si TODO es verdadero (incluida la procedencia válida)
@@ -736,6 +766,7 @@ class CheckinController extends Controller
                 'duration_days' => $validated['duration_days'],
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
+                'agreed_price' => $updatedAgreedPrice, 
                 'notes' => strtoupper($validated['notes'] ?? ''),
 
                 // ✅ GUARDAR ÚNICAMENTE LA PROCEDENCIA LIMPIA
@@ -809,8 +840,8 @@ class CheckinController extends Controller
     // --- NUEVO: Obtener detalles antes de finalizar ---
     public function getCheckoutDetails(Request $request, Checkin $checkin)
     {
-        // 1. Cargar relaciones (Añadimos 'companions' para el cálculo corporativo)
-        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions']);
+        // 1. Cargar relaciones (Añadimos 'payments' para que coincida con los recibos)
+        $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
         // 2. Determinar si se aplica la tolerancia
         $waivePenalty = $request->boolean('waive_penalty', false);
@@ -819,22 +850,19 @@ class CheckinController extends Controller
         $checkOutDate = now(); // Por defecto: AHORA
 
         // --- LÓGICA DE TOLERANCIA ---
-        // Si el usuario pidió perdonar la multa Y existe un horario asociado
         if ($waivePenalty && $checkin->schedule) {
-            // Obtenemos la hora oficial de salida (ej: "14:00:00")
             $officialExitTime = $checkin->schedule->check_out_time;
-
-            // Ajustamos la fecha de salida a HOY pero con la HORA OFICIAL
-            // Esto "borra" el retraso matemáticamente
             $checkOutDate = now()->setTimeFromTimeString($officialExitTime);
         }
-        // ----------------------------
 
         // 4. Calcular días usando la fecha ajustada
         $days = $this->calculateBillableDays($checkin, $checkOutDate);
 
-        // 5. Calcular Costos
-        $price = $checkin->room->price->amount ?? 0;
+        // ==========================================================
+        // 5. --- [MODIFICADO] PRECIO UNITARIO ---
+        // Ahora lee el agreed_price en lugar del precio base.
+        // ==========================================================
+        $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
         // ==========================================================
         // 🚀 LÓGICA CORPORATIVA: 60/90 Bs por persona si tiene la etiqueta
@@ -859,18 +887,37 @@ class CheckinController extends Controller
         }
 
         $grandTotal = $accommodationTotal + $servicesTotal;
-        $balance = $grandTotal - ($checkin->advance_payment ?? 0);
+
+        // ==========================================================
+        // --- [MODIFICADO] CÁLCULO DE PAGOS REALES ---
+        // Sincronizamos la misma lógica de los PDFs para que la ventana
+        // de React muestre exactamente los mismos montos.
+        // ==========================================================
+        $totalPagadoReal = 0;
+        if ($checkin->payments->count() > 0) {
+            foreach ($checkin->payments as $pago) {
+                if ($pago->type === 'DEVOLUCION') {
+                    $totalPagadoReal -= $pago->amount;
+                } else {
+                    $totalPagadoReal += $pago->amount;
+                }
+            }
+        } else {
+            $totalPagadoReal = $checkin->advance_payment ?? 0;
+        }
+
+        $balance = $grandTotal - $totalPagadoReal;
 
         return response()->json([
             'guest' => $checkin->guest,
             'room' => $checkin->room,
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
-            'check_out_date' => $checkOutDate->toIso8601String(), // Devuelve la fecha usada (Real o Ajustada)
+            'check_out_date' => $checkOutDate->toIso8601String(), 
             'duration_days' => $days,
-            'price_per_night' => $price, // Ahora mandará la tarifa calculada correctamente
+            'price_per_night' => $price, 
             'accommodation_total' => $accommodationTotal,
             'services_total' => $servicesTotal,
-            'advance_payment' => $checkin->advance_payment,
+            'advance_payment' => $totalPagadoReal, // Mandamos el total de pagos real
             'grand_total' => $grandTotal,
             'balance' => $balance,
             'notes' => $checkin->notes
@@ -968,7 +1015,9 @@ class CheckinController extends Controller
     // --- GENERACIÓN DE RECIBOS ---
     public function generateAssignmentReceipt(Checkin $checkin)
     {
-        $checkin->load(['guest', 'room']);
+        // [MODIFICADO] Añadimos 'room.price' por precaución para los fallbacks
+        $checkin->load(['guest', 'room.price']); 
+        
         // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150));
         $pdf->SetMargins(4, 4, 4);
@@ -991,7 +1040,7 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(12, 4, 'Nombre:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L'); // MultiCell para nombres largos
+        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L'); 
 
         // Nacionalidad
         $pdf->SetFont('Arial', 'B', 7);
@@ -1006,7 +1055,7 @@ class CheckinController extends Controller
         $pdf->Cell(20, 4, $checkin->guest->identification_number, 0, 0);
 
         $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(15, 4, 'Otorgado:', 0, 0); // Etiqueta corta
+        $pdf->Cell(15, 4, 'Otorgado:', 0, 0); 
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(0, 4, utf8_decode($checkin->guest->issued_in), 0, 1);
 
@@ -1039,7 +1088,8 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        //$pdf->Cell(0, 4, utf8_decode($checkin->guest->origin), 0, 1);
+        // [CORRECCIÓN] Descomentado y arreglado. 'origin' pertenece a 'checkin', no a 'guest'.
+        $pdf->Cell(0, 4, utf8_decode($checkin->origin ?? '-'), 0, 1);
 
         // --- DATOS DE INGRESO ---
         $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');
@@ -1061,6 +1111,16 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(0, 4, $checkin->duration_days, 0, 1);
 
+        // =========================================================
+        // [NUEVO] TARIFA ACORDADA 
+        // Mostrar la tarifa calculada para mayor transparencia
+        // =========================================================
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(28, 4, 'Tarifa por noche:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $tarifa = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
+        $pdf->Cell(0, 4, number_format($tarifa, 2) . ' Bs.', 0, 1);
+
         // Total Cancelado (Adelanto)
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(28, 4, 'Total cancelado:', 0, 0);
@@ -1069,7 +1129,7 @@ class CheckinController extends Controller
 
         // Observaciones (Multilinea)
         $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, 'Observaciones:', 0, 1); // Salto de línea para escribir abajo
+        $pdf->Cell(28, 4, 'Observaciones:', 0, 1); 
         $pdf->SetFont('Arial', '', 7);
         if ($checkin->notes) {
             $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
@@ -1077,32 +1137,28 @@ class CheckinController extends Controller
             $pdf->Cell(0, 4, '-', 0, 1);
         }
 
-        // Celular (Usando el dato guardado en guest)
+        // Celular
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(15, 4, 'Celular:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        // CAMBIO: Se lee del modelo guest, no del checkin
         $telefono = $checkin->guest->phone ? $checkin->guest->phone : '___________________';
         $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
 
         // --- FIRMA ---
-        $pdf->Ln(10); // Espacio vertical generoso para la firma
+        $pdf->Ln(10); 
 
-        // Calculamos posición para centrar la línea
-        $pageWidth = $pdf->GetPageWidth(); // 80mm
+        $pageWidth = $pdf->GetPageWidth(); 
         $margins = 4;
-        $printableWidth = $pageWidth - ($margins * 2); // 72mm
-        $lineLength = 50; // Longitud de la línea de firma
+        $lineLength = 50; 
 
-        $x = ($pageWidth - $lineLength) / 2; // Centrado matemático
+        $x = ($pageWidth - $lineLength) / 2; 
         $y = $pdf->GetY();
 
-        $pdf->Line($x, $y, $x + $lineLength, $y); // Dibuja la línea
-
-        $pdf->Ln(2); // Pequeño espacio entre línea y texto
+        $pdf->Line($x, $y, $x + $lineLength, $y); 
+        $pdf->Ln(2); 
 
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C'); // Centrado
+        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C'); 
 
         // 4. Salida
         return response($pdf->Output('S'), 200)
@@ -1127,10 +1183,14 @@ class CheckinController extends Controller
         $diasExcedidos = $diasACobrar - max(1, intval($checkin->duration_days));
         if ($diasExcedidos < 0) $diasExcedidos = 0;
 
-        // --- CÁLCULOS ECONÓMICOS ---
-        $precioUnitario = $checkin->room->price->amount ?? 0;
+        // ==========================================================================
+        // --- [MODIFICADO] CÁLCULOS ECONÓMICOS ---
+        // Ahora lee el agreed_price en lugar del precio base de la habitación.
+        // Si por alguna razón agreed_price es null, usa el precio base como fallback.
+        // ==========================================================================
+        $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        // LÓGICA CORPORATIVA (Mantiene tu lógica de PAX count)
+        // LÓGICA CORPORATIVA (Mantiene tu lógica de PAX count, sobrescribe el agreed_price si aplica)
         if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
@@ -1308,7 +1368,12 @@ class CheckinController extends Controller
             $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
 
             $diasReales = $this->calculateBillableDays($checkin, $salida);
-            $precioUnitario = $checkin->room->price->amount ?? 0;
+            
+            // ==========================================================================
+            // --- [MODIFICADO] PRECIO UNITARIO ---
+            // Ahora lee el agreed_price (precio ajustado por ocupación).
+            // ==========================================================================
+            $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
             // LÓGICA CORPORATIVA
             if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
@@ -1720,7 +1785,6 @@ class CheckinController extends Controller
     /*Fucion a futuro* */
     // Ejemplo lógico (no copres esto todavía, es para que entiendas el flujo)
 
-    // --- CONVERSIÓN DE RESERVA A CHECK-IN ---
     // --- CONVERSIÓN DE RESERVA A CHECK-IN ---
     public function storeFromReservation(Request $request)
     {
