@@ -230,6 +230,7 @@ class CheckinController extends Controller
 
             // --- ASIGNACIÓN TEMPORAL (NUEVO) ---
             'is_temporary' => 'nullable|boolean',
+            'discount' => 'nullable|numeric|min:0',
         ]);
 
         // =========================================================
@@ -247,6 +248,13 @@ class CheckinController extends Controller
         
         // Llamamos a la nueva función que pegaste arriba
         $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
+        // Funcion para el descuento manual
+        if ($request->filled('discount') && is_numeric($request->discount)) {
+            $minAllowed = $agreedPrice * 0.5; // El límite es la mitad (50%)
+            
+            // max() asegura que si envían un precio menor al 50%, se quede en el límite mínimo.
+            $agreedPrice = max(floatval($request->discount), $minAllowed);
+        }
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
@@ -560,6 +568,7 @@ class CheckinController extends Controller
             'advance_payment' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
             'origin' => 'nullable|string|max:150',
+            'discount' => 'nullable|numeric|min:0',
 
             // Datos del Huésped Titular
             'full_name' => 'required|string|max:150',
@@ -733,6 +742,11 @@ class CheckinController extends Controller
             }
             $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
 
+            // Aplicacion de nuevo precio con descuento
+            if ($request->filled('discount') && is_numeric($request->discount)) {
+                $minAllowed = $updatedAgreedPrice * 0.5;
+                $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
+            }
             // 4. LÓGICA DE FECHAS
             // Solo si TODO es verdadero (incluida la procedencia válida)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
