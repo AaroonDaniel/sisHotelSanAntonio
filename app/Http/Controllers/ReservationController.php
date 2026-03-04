@@ -56,14 +56,19 @@ class ReservationController extends Controller
                 'advance_payment' => 'nullable|numeric|min:0',
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
-                'details' => 'required|array|min:1',
-                'details.*.room_id' => 'required',
-                'details.*.price_id' => 'required',
-                'details.*.price' => 'required|numeric',
+                
+                // =====================================================================
+                // 🚀 INICIO MODULO: RESERVAS AVANZADAS (FASE 2)
+                // Permitimos que 'details' sea nulo o un array vacío para "Reserva Rápida"
+                // =====================================================================
+                'details' => 'nullable|array', 
+                'details.*.room_id' => 'required_with:details',
+                'details.*.price_id' => 'required_with:details',
+                'details.*.price' => 'required_with:details|numeric',
+                // =====================================================================
             ]);
             Log::info('✅ Validación superada con éxito.');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            // Si la validación falla, lo guardamos en el Log y retornamos el error
             Log::error('❌ Falló la validación de los datos:', $e->errors());
             return redirect()->back()->withErrors($e->errors());
         }
@@ -80,7 +85,7 @@ class ReservationController extends Controller
                     Log::info('Creando nuevo huésped...');
                     $newGuest = Guest::create([
                         'full_name' => strtoupper($request->new_guest_name),
-                        'identification_number' => $request->new_guest_ci ?? null, // Manejo seguro de null
+                        'identification_number' => $request->new_guest_ci ?? null,
                         'nationality' => 'BOLIVIA',
                         'profile_status' => 'INCOMPLETE',
                     ]);
@@ -103,26 +108,34 @@ class ReservationController extends Controller
                 ]);
                 Log::info("Reserva principal creada con ID: {$reservation->id}");
 
-                // Agregamos los detalles (Habitaciones)
-                Log::info('Procesando ' . count($request->details) . ' habitaciones...');
-                foreach ($request->details as $detail) {
-                    ReservationDetail::create([
-                        'reservation_id' => $reservation->id,
-                        'room_id' => $detail['room_id'],
-                        'price_id' => $detail['price_id'],
-                        'price' => $detail['price'],
-                    ]);
+                // =====================================================================
+                // 🚀 INICIO MODULO: RESERVAS AVANZADAS (FASE 2)
+                // Agregamos los detalles SOLO si fueron enviados (Reserva Completa).
+                // Si es Reserva Rápida, este bloque se salta sin dar error.
+                // =====================================================================
+                if (!empty($request->details)) {
+                    Log::info('Procesando ' . count($request->details) . ' habitaciones...');
+                    foreach ($request->details as $detail) {
+                        ReservationDetail::create([
+                            'reservation_id' => $reservation->id,
+                            'room_id' => $detail['room_id'],
+                            'price_id' => $detail['price_id'],
+                            'price' => $detail['price'],
+                        ]);
 
-                    // Pasamos la habitación a RESERVADO
-                    Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
-                    Log::info("Habitación {$detail['room_id']} apartada y marcada como RESERVADO.");
+                        // Pasamos la habitación a RESERVADO
+                        Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
+                        Log::info("Habitación {$detail['room_id']} apartada y marcada como RESERVADO.");
+                    }
+                } else {
+                    Log::info('Es una RESERVA RÁPIDA (Pendiente de asignar habitaciones en el futuro).');
                 }
+                // =====================================================================
 
                 // Registramos el pago si dejó algún adelanto
                 if ($request->advance_payment > 0) {
                     Log::info("Registrando pago de adelanto por: {$request->advance_payment}");
 
-                    // 1. Verificamos si es QR/TRANSFERENCIA para guardar el banco, si es EFECTIVO se guarda como null
                     $banco = ($request->payment_type === 'EFECTIVO') ? null : $request->qr_bank;
 
                     Payment::create([
@@ -130,7 +143,7 @@ class ReservationController extends Controller
                         'user_id' => Auth::id(),
                         'amount' => $request->advance_payment,
                         'method' => $request->payment_type,
-                        'bank_name' => $banco, // <-- ¡AQUÍ ESTÁ LA MAGIA QUE FALTABA!
+                        'bank_name' => $banco,
                         'type' => 'INGRESO',
                         'description' => 'ADELANTO RESERVA #' . $reservation->id
                     ]);
@@ -140,7 +153,6 @@ class ReservationController extends Controller
             Log::info('=== CREACIÓN DE RESERVA FINALIZADA CON ÉXITO ===');
             return redirect()->back()->with('success', 'Reserva registrada correctamente');
         } catch (\Exception $e) {
-            // Si cualquier consulta SQL falla, explotará aquí
             Log::error("❌ Error CRÍTICO en la Base de Datos (store): " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error al guardar en la BD: ' . $e->getMessage()]);
         }
@@ -278,4 +290,86 @@ class ReservationController extends Controller
             return redirect()->back()->withErrors(['error' => 'Error: ' . $e->getMessage()]);
         }
     }
+
+    // =====================================================================
+    // 🚀 INICIO MODULO: RESERVAS AVANZADAS (DISPONIBILIDAD PREDICTIVA)
+    // Descripción: Calcula la disponibilidad real y futura de las habitaciones.
+    // =====================================================================
+    public function checkAvailability(\Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'arrival_date' => 'required|date',
+        ]);
+
+        $targetDate = \Carbon\Carbon::parse($request->arrival_date)->startOfDay();
+        $today = now()->startOfDay();
+
+        // Traemos todas las habitaciones activas con sus tipos
+        $rooms = \App\Models\Room::with('roomType')->where('status', '!=', ['MANTENIMIENTO', 'INHABILITADO'])->get();
+
+        $availableRooms = [];
+        $freeingUpRooms = [];
+
+        // 1. REGLA ESTRICTA: Si la reserva es para HOY o MAÑANA
+        if ($targetDate->diffInDays($today) <= 1) {
+            foreach ($rooms as $room) {
+                if ($room->status === 'LIBRE') {
+                    $availableRooms[] = $room;
+                }
+            }
+        } 
+        // 2. REGLA PREDICTIVA: Reserva a 2 días o más
+        else {
+            foreach ($rooms as $room) {
+                if ($room->status === 'LIBRE') {
+                    $availableRooms[] = $room;
+                } 
+                elseif ($room->status === 'OCUPADO' || $room->status === 'RESERVADO') {
+                    // Buscamos el check-in activo de esta habitación para ver cuándo sale
+                    $activeCheckin = \App\Models\Checkin::where('room_id', $room->id)
+                        ->where('status', 'activo')
+                        ->latest()
+                        ->first();
+
+                    if ($activeCheckin) {
+                        // Calculamos la fecha de salida (Check-in + días de duración)
+                        $expectedCheckout = \Carbon\Carbon::parse($activeCheckin->actual_arrival_date ?? $activeCheckin->check_in_date)
+                            ->addDays($activeCheckin->duration_days)
+                            ->startOfDay();
+
+                        // Si el huésped sale ANTES o el MISMO DÍA de la nueva reserva
+                        if ($expectedCheckout->lte($targetDate)) {
+                            // Esta habitación se desocupará a tiempo
+                            $freeingUpRooms[] = [
+                                'room' => $room,
+                                'expected_checkout' => $expectedCheckout->format('Y-m-d')
+                            ];
+                            // También la contamos como disponible
+                            $availableRooms[] = $room;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Agrupamos la disponibilidad por tipo de habitación para que React lo dibuje fácil
+        $groupedByType = collect($availableRooms)->groupBy(function ($room) {
+            return $room->roomType->name;
+        })->map(function ($rooms) {
+            return count($rooms);
+        });
+
+        return response()->json([
+            'target_date' => $targetDate->format('Y-m-d'),
+            'is_predictive_mode' => $targetDate->diffInDays($today) > 1,
+            'total_available' => count($availableRooms),
+            'currently_free' => count($availableRooms) - count($freeingUpRooms),
+            'will_be_freed' => count($freeingUpRooms),
+            'grouped_by_type' => $groupedByType,
+            'freeing_up_details' => $freeingUpRooms // Para mostrarle al recepcionista "La 101 sale el martes"
+        ]);
+    }
+    // =====================================================================
+    // 🛑 FIN MODULO: RESERVAS AVANZADAS
+    // =====================================================================
 }

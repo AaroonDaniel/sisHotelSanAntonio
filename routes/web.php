@@ -141,6 +141,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/reservas', [ReservationController::class, 'store'])->name('reservations.store');
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
+    Route::get('/api/reservations/availability', [ReservationController::class, 'checkAvailability'])->name('reservations.availability');
 
     //Facturacion
     Route::get('/facturacion', [\App\Http\Controllers\InvoiceController::class, 'index'])->name('invoices.index');
