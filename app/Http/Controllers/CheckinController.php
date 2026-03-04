@@ -249,12 +249,11 @@ class CheckinController extends Controller
         // Llamamos a la nueva función que pegaste arriba
         $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         // Funcion para el descuento manual
-        if ($request->filled('discount') && is_numeric($request->discount)) {
-            $minAllowed = $agreedPrice * 0.5; // El límite es la mitad (50%)
-            
-            // max() asegura que si envían un precio menor al 50%, se quede en el límite mínimo.
-            $agreedPrice = max(floatval($request->discount), $minAllowed);
-        }
+        // Funcion para el descuento manual
+if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+    $minAllowed = $agreedPrice * 0.5; // El límite es la mitad (50%)
+    $agreedPrice = max(floatval($request->discount), $minAllowed);
+}
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
@@ -743,10 +742,10 @@ class CheckinController extends Controller
             $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
 
             // Aplicacion de nuevo precio con descuento
-            if ($request->filled('discount') && is_numeric($request->discount)) {
-                $minAllowed = $updatedAgreedPrice * 0.5;
-                $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
-            }
+            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+    $minAllowed = $updatedAgreedPrice * 0.5;
+    $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
+}
             // 4. LÓGICA DE FECHAS
             // Solo si TODO es verdadero (incluida la procedencia válida)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;

@@ -117,7 +117,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/from-reservation', [App\Http\Controllers\CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
 
     // Ruta de Merge
-    Route::put('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
+    Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
 
     // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');

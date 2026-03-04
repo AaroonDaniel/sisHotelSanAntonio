@@ -88,21 +88,27 @@ export default function OccupiedRoomModal({ show, onClose, checkin, services, on
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(amount);
 
-    const checkInDate = new Date(checkin.check_in_date);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - checkInDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    const days = diffDays > 0 ? diffDays : 1;
+    // 1. Usar las noches reales registradas en la base de datos
+    const days = Number(checkin.duration_days) > 0 ? Number(checkin.duration_days) : 1;
 
     const oldDebt = parseFloat(checkin.carried_balance || 0);
-    const currentRoomCost = days * (checkin.room?.price?.amount || 0);
+
+    // 2. Usar el precio acordado (agreed_price) que incluye descuentos o tarifas corporativas.
+    // Si es null o no existe, usamos el precio base de la habitación como respaldo.
+    const pricePerNight = parseFloat(checkin.agreed_price) || parseFloat(checkin.room?.price?.amount) || 0;
+
+    // 3. Calculamos el costo total del hospedaje con las noches y precio correctos
+    const currentRoomCost = days * pricePerNight;
+
+    // 4. El cálculo de servicios extra se mantiene igual (es correcto)
     const servicesCost = checkin.services?.reduce((acc: number, s: any) => {
-    // Usamos ( || 0) para convertir nulos o indefinidos a cero y evitar NaN
-    const precio = parseFloat(s.pivot?.selling_price) || 0;
-    const cantidad = parseFloat(s.pivot?.quantity) || 0;
+        // Usamos ( || 0) para convertir nulos o indefinidos a cero y evitar NaN
+        const precio = parseFloat(s.pivot?.selling_price) || 0;
+        const cantidad = parseFloat(s.pivot?.quantity) || 0;
+        
+        return acc + (precio * cantidad);
+    }, 0) || 0;
     
-    return acc + (precio * cantidad);
-}, 0) || 0;
     // Cálculos finales usando el totalPaid que definimos arriba
     const grandTotal = oldDebt + currentRoomCost + servicesCost;
     const balanceDue = grandTotal - totalPaid;
