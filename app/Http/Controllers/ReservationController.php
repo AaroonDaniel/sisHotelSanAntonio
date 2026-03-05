@@ -61,10 +61,12 @@ class ReservationController extends Controller
                 // 🚀 INICIO MODULO: RESERVAS AVANZADAS (FASE 2)
                 // Permitimos que 'details' sea nulo o un array vacío para "Reserva Rápida"
                 // =====================================================================
-                'details' => 'nullable|array', 
-                'details.*.room_id' => 'required_with:details',
-                'details.*.price_id' => 'required_with:details',
-                'details.*.price' => 'required_with:details|numeric',
+                'details' => 'required|array|min:1', // Ahora SIEMPRE enviaremos detalles (aunque estén vacíos de habitación)
+                'details.*.room_id' => 'nullable', // Permitimos que la habitación esté vacía
+                'details.*.requested_room_type_id' => 'nullable', // Guardamos lo que pide
+                'details.*.requested_bathroom' => 'nullable', // Guardamos el baño que pide
+                'details.*.price_id' => 'nullable',
+                'details.*.price' => 'nullable|numeric',
                 // =====================================================================
             ]);
             Log::info('✅ Validación superada con éxito.');
@@ -114,21 +116,28 @@ class ReservationController extends Controller
                 // Si es Reserva Rápida, este bloque se salta sin dar error.
                 // =====================================================================
                 if (!empty($request->details)) {
-                    Log::info('Procesando ' . count($request->details) . ' habitaciones...');
+                    Log::info('Procesando ' . count($request->details) . ' habitaciones/requerimientos...');
+                    
                     foreach ($request->details as $detail) {
+                        $roomId = $detail['room_id'] ?? null;
+
                         ReservationDetail::create([
                             'reservation_id' => $reservation->id,
-                            'room_id' => $detail['room_id'],
-                            'price_id' => $detail['price_id'],
-                            'price' => $detail['price'],
+                            'room_id' => $roomId, // Puede ser null si es Reserva Rápida
+                            'requested_room_type_id' => $detail['requested_room_type_id'] ?? null,
+                            'requested_bathroom' => $detail['requested_bathroom'] ?? null,
+                            'price_id' => $detail['price_id'] ?? null,
+                            'price' => $detail['price'] ?? null,
                         ]);
 
-                        // Pasamos la habitación a RESERVADO
-                        Room::where('id', $detail['room_id'])->update(['status' => 'RESERVADO']);
-                        Log::info("Habitación {$detail['room_id']} apartada y marcada como RESERVADO.");
+                        // Pasamos la habitación a RESERVADO SOLO si se designó una (Reserva Completa)
+                        if ($roomId) {
+                            Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
+                            Log::info("Habitación {$roomId} apartada y marcada como RESERVADO.");
+                        } else {
+                            Log::info("Hueco de reserva creado exitosamente esperando asignación futura.");
+                        }
                     }
-                } else {
-                    Log::info('Es una RESERVA RÁPIDA (Pendiente de asignar habitaciones en el futuro).');
                 }
                 // =====================================================================
 
@@ -302,71 +311,44 @@ class ReservationController extends Controller
         ]);
 
         $targetDate = \Carbon\Carbon::parse($request->arrival_date)->startOfDay();
-        $today = now()->startOfDay();
 
-        // Traemos todas las habitaciones activas con sus tipos
-        $rooms = \App\Models\Room::with('roomType')->where('status', '!=', ['MANTENIMIENTO', 'INHABILITADO'])->get();
+        // 🔴 CORRECCIÓN: Laravel usa whereNotIn para arrays
+        $rooms = \App\Models\Room::with('roomType')->whereNotIn('status', ['MANTENIMIENTO', 'INHABILITADO'])->get();
 
         $availableRooms = [];
         $freeingUpRooms = [];
 
-        // 1. REGLA ESTRICTA: Si la reserva es para HOY o MAÑANA
-        if ($targetDate->diffInDays($today) <= 1) {
-            foreach ($rooms as $room) {
-                if ($room->status === 'LIBRE') {
-                    $availableRooms[] = $room;
-                }
-            }
-        } 
-        // 2. REGLA PREDICTIVA: Reserva a 2 días o más
-        else {
-            foreach ($rooms as $room) {
-                if ($room->status === 'LIBRE') {
-                    $availableRooms[] = $room;
-                } 
-                elseif ($room->status === 'OCUPADO' || $room->status === 'RESERVADO') {
-                    // Buscamos el check-in activo de esta habitación para ver cuándo sale
-                    $activeCheckin = \App\Models\Checkin::where('room_id', $room->id)
-                        ->where('status', 'activo')
-                        ->latest()
-                        ->first();
+        foreach ($rooms as $room) {
+            if ($room->status === 'LIBRE') {
+                $availableRooms[] = $room;
+            } 
+            elseif ($room->status === 'OCUPADO' || $room->status === 'RESERVADO') {
+                // Buscamos el checkin activo de ese cuarto
+                $activeCheckin = \App\Models\Checkin::where('room_id', $room->id)
+                    ->where('status', 'activo')
+                    ->latest()
+                    ->first();
 
-                    if ($activeCheckin) {
-                        // Calculamos la fecha de salida (Check-in + días de duración)
-                        $expectedCheckout = \Carbon\Carbon::parse($activeCheckin->actual_arrival_date ?? $activeCheckin->check_in_date)
-                            ->addDays($activeCheckin->duration_days)
-                            ->startOfDay();
+                if ($activeCheckin) {
+                    $startDate = $activeCheckin->actual_arrival_date ?? $activeCheckin->check_in_date;
+                    $expectedCheckout = \Carbon\Carbon::parse($startDate)
+                        ->addDays($activeCheckin->duration_days)
+                        ->startOfDay();
 
-                        // Si el huésped sale ANTES o el MISMO DÍA de la nueva reserva
-                        if ($expectedCheckout->lte($targetDate)) {
-                            // Esta habitación se desocupará a tiempo
-                            $freeingUpRooms[] = [
-                                'room' => $room,
-                                'expected_checkout' => $expectedCheckout->format('Y-m-d')
-                            ];
-                            // También la contamos como disponible
-                            $availableRooms[] = $room;
-                        }
+                    // 🚀 LA MAGIA: Si el checkout es ANTES o EL MISMO DÍA de la nueva reserva
+                    if ($expectedCheckout->lte($targetDate)) {
+                        $freeingUpRooms[] = $room;
+                        $availableRooms[] = $room;
                     }
                 }
             }
         }
 
-        // Agrupamos la disponibilidad por tipo de habitación para que React lo dibuje fácil
-        $groupedByType = collect($availableRooms)->groupBy(function ($room) {
-            return $room->roomType->name;
-        })->map(function ($rooms) {
-            return count($rooms);
-        });
-
         return response()->json([
             'target_date' => $targetDate->format('Y-m-d'),
-            'is_predictive_mode' => $targetDate->diffInDays($today) > 1,
             'total_available' => count($availableRooms),
             'currently_free' => count($availableRooms) - count($freeingUpRooms),
             'will_be_freed' => count($freeingUpRooms),
-            'grouped_by_type' => $groupedByType,
-            'freeing_up_details' => $freeingUpRooms // Para mostrarle al recepcionista "La 101 sale el martes"
         ]);
     }
     // =====================================================================

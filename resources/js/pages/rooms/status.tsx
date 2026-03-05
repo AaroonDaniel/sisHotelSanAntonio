@@ -998,9 +998,10 @@ export default function RoomsStatus({
                 show={isPendingModalOpen}
                 onClose={() => setIsPendingModalOpen(false)}
                 reservations={reservations}
+                rooms={Rooms} // <------ 🚀 AGREGA ESTA LÍNEA AQUÍ
                 onNewReservation={() => {
-                    setIsPendingModalOpen(false); // 1. Oculta el de pendientes
-                    setIsReservationModalOpen(true); // 2. Abre el de crear reserva
+                    setIsPendingModalOpen(false); 
+                    setIsReservationModalOpen(true); 
                 }}
             />
             {/* MODAL DE NUEVA RESERVA */}

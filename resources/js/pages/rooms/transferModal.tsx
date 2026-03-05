@@ -1,5 +1,4 @@
 import ConfirmTransferModal from '@/components/ConfirmTransferModal';
-import { transfer } from '@/routes/checkins';
 import { useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -7,7 +6,6 @@ import {
     BedDouble,
     Building2,
     CheckCircle2,
-    Filter,
     Search,
     Tag,
     Users,
@@ -45,7 +43,7 @@ export default function TransferModal({
 
     const [showConfirm, setShowConfirm] = useState(false);
 
-    const { data, setData, put, processing, reset, clearErrors, post } = useForm({
+    const { data, setData, processing, reset, clearErrors, post } = useForm({
         new_room_id: '',
         target_room_id: '',
         transfer_reason: '',
@@ -80,35 +78,31 @@ export default function TransferModal({
     };
 
     const handleConfirmAction = () => {
-    // Definimos la URL manualmente (SIN Ziggy)
-    const url = mode === 'individual'
-        ? `/checkins/${checkin.id}/transfer`
-        : `/checkins/${checkin.id}/merge`;
+        const url = mode === 'individual'
+            ? `/checkins/${checkin.id}/transfer`
+            : `/checkins/${checkin.id}/merge`;
 
-    // Usamos el método POST
-    post(url, {
-        onSuccess: () => {
-            setShowConfirm(false);
-            resetFilters();
-            onClose();
-        },
-        onError: () => setShowConfirm(false)
-    });
-};
+        post(url, {
+            onSuccess: () => {
+                setShowConfirm(false);
+                resetFilters();
+                onClose();
+            },
+            onError: () => setShowConfirm(false)
+        });
+    };
 
-    // --- LÓGICA DE FILTRADO CORREGIDA ---
+    // --- LÓGICA DE FILTRADO ---
     const baseList = mode === 'individual' ? availableRooms : occupiedRooms;
 
     const filteredRooms = baseList.filter(room => {
         // 1. Excluir habitación actual
         if (room.id === checkin.room_id) return false;
 
-        // 2. Buscador INTELIGENTE (Solución al problema "A" vs "a")
+        // 2. Buscador
         if (searchQuery) {
-            const query = searchQuery.toLowerCase().trim(); // Convertimos búsqueda a minúsculas
-            const roomNumber = String(room.number).toLowerCase(); // Convertimos hab a texto minúsculas
-            
-            // Ahora "a" encontrará "A", "10" encontrará "101", etc.
+            const query = searchQuery.toLowerCase().trim();
+            const roomNumber = String(room.number).toLowerCase();
             if (!roomNumber.includes(query)) return false;
         }
 
@@ -250,7 +244,7 @@ export default function TransferModal({
                     <div className="flex flex-1 flex-col bg-gray-50">
                         
                         {/* --- BARRA DE FILTROS COMPACTA (UNA LÍNEA) --- */}
-                        <div className="border-b border-gray-200 bg-white px-4 py-3 shadow-sm">
+                        <div className="border-b border-gray-200 bg-white px-4 py-3 shadow-sm z-10">
                             <div className="flex flex-wrap items-center gap-2">
                                 
                                 {/* 1. BUSCADOR (Primero, ocupa el espacio sobrante) */}
@@ -260,7 +254,7 @@ export default function TransferModal({
                                     </div>
                                     <input
                                         type="text"
-                                        placeholder="BUSCAR..."
+                                        placeholder="BUSCAR HAB..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 pl-9 pr-2 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
@@ -290,7 +284,7 @@ export default function TransferModal({
                                         onChange={(e) => setSelectedRoomType(e.target.value)}
                                         className="h-8 rounded-lg border-gray-200 bg-gray-50 pl-8 pr-6 text-[10px] font-bold uppercase text-gray-600 focus:border-green-500 focus:ring-green-500 cursor-pointer hover:bg-gray-100"
                                     >
-                                        <option value="">Todos</option>
+                                        <option value="">Tipos</option>
                                         {roomTypes.map((type: any) => (
                                             <option key={type.id} value={type.id}>{type.name}</option>
                                         ))}
@@ -298,16 +292,16 @@ export default function TransferModal({
                                 </div>
 
                                 {/* 4. FILTRO BAÑO */}
-                                <div className="flex rounded-lg bg-gray-100 p-0.5">
+                                <div className="flex rounded-lg bg-gray-100 p-0.5 border border-gray-200">
                                     <button 
                                         onClick={() => setSelectedBathroom(selectedBathroom === 'private' ? '' : 'private')} 
-                                        className={`rounded-md px-2 py-1 text-[9px] font-bold uppercase transition-all ${selectedBathroom === 'private' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                        className={`rounded-md px-3 py-1 text-[9px] font-bold uppercase transition-all ${selectedBathroom === 'private' ? 'bg-green-50 text-green-700 shadow-sm border border-green-200' : 'text-gray-500 hover:text-gray-700'}`}
                                     >
                                         Priv
                                     </button>
                                     <button 
                                         onClick={() => setSelectedBathroom(selectedBathroom === 'shared' ? '' : 'shared')} 
-                                        className={`rounded-md px-2 py-1 text-[9px] font-bold uppercase transition-all ${selectedBathroom === 'shared' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                        className={`rounded-md px-3 py-1 text-[9px] font-bold uppercase transition-all ${selectedBathroom === 'shared' ? 'bg-green-50 text-green-700 shadow-sm border border-green-200' : 'text-gray-500 hover:text-gray-700'}`}
                                     >
                                         Comp
                                     </button>
@@ -316,60 +310,63 @@ export default function TransferModal({
                             </div>
                         </div>
 
-                        {/* --- GRILLA DE HABITACIONES --- */}
-                        <div className="flex-1 overflow-y-auto p-6">
+                        {/* --- GRILLA DE HABITACIONES (ESTILO RESERVA) --- */}
+                        <div className="flex-1 overflow-y-auto p-5">
                             {filteredRooms.length === 0 ? (
-                                <div className="flex h-full flex-col items-center justify-center text-gray-400">
+                                <div className="flex h-full flex-col items-center justify-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300 py-12 shadow-sm">
                                     <BedDouble className="h-12 w-12 opacity-20 mb-3" />
                                     <p className="text-xs font-bold uppercase">
                                         {searchQuery ? `No se encontró "${searchQuery}"` : 'No hay habitaciones disponibles.'}
                                     </p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                                     {filteredRooms.map((room) => {
                                         const isSelected = String(room.id) === String(currentSelectedId);
+                                        const roomBath = room.price?.bathroom_type || 'N/A';
+                                        const translatedBath = roomBath === 'private' ? 'Privado' : roomBath === 'shared' ? 'Compartido' : roomBath;
+
                                         return (
                                             <button
                                                 key={room.id}
                                                 onClick={() => handleSelectRoom(String(room.id))}
-                                                className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all duration-200 ${
+                                                className={`group relative flex flex-col items-center justify-center text-center outline-none border-2 rounded-xl p-4 transition-all duration-200 ${
                                                     isSelected 
-                                                    ? 'scale-95 border-green-500 ring-2 ring-green-500 ring-offset-1 shadow-lg' 
-                                                    : 'border-gray-200 bg-white hover:border-green-300 hover:shadow-md'
+                                                    ? 'border-green-500 bg-green-50 shadow-md scale-105 ring-2 ring-green-200 ring-offset-1' 
+                                                    : 'border-gray-200 bg-white hover:border-green-400 hover:bg-green-50 shadow-sm'
                                                 }`}
                                             >
-                                                <div className={`flex w-full items-center justify-between px-3 py-2 text-[10px] font-black uppercase ${
-                                                    isSelected ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-500 group-hover:text-green-700'
-                                                }`}>
-                                                    <span>Hab. {room.number}</span>
-                                                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5" />}
-                                                </div>
+                                                {isSelected && (
+                                                    <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                    </div>
+                                                )}
                                                 
-                                                <div className="flex flex-1 flex-col items-center justify-center p-3 text-center">
-                                                    <div className={`mb-2 rounded-full p-2 ${isSelected ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400 group-hover:text-green-500'}`}>
-                                                        {mode === 'individual' ? <BedDouble className="h-5 w-5" /> : <Users className="h-5 w-5" />}
-                                                    </div>
-
-                                                    <p className="text-[9px] font-bold uppercase text-gray-500 mb-1">{room.room_type?.name}</p>
-                                                    
-                                                    <div className="flex flex-wrap justify-center gap-1">
-                                                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[8px] font-bold uppercase text-gray-500">
-                                                            {room.price?.bathroom_type === 'private' ? 'PRIV' : 'COMP'}
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                                                    {room.room_type?.name}
+                                                </span>
+                                                
+                                                <span className={`text-3xl font-black ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>
+                                                    {room.number}
+                                                </span>
+                                                
+                                                <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${isSelected ? 'bg-green-200 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                                                        Baño {translatedBath}
+                                                    </span>
+                                                    {mode === 'individual' && (
+                                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${isSelected ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                                            Bs {room.price?.amount}
                                                         </span>
-                                                        {mode === 'individual' && (
-                                                            <span className="rounded bg-green-50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-green-700 border border-green-100">
-                                                                Bs {room.price?.amount}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {mode === 'group' && (
-                                                        <div className="mt-2 w-full truncate rounded bg-cyan-50 px-1 py-1 text-[8px] font-bold uppercase text-cyan-700 border border-cyan-100">
-                                                            {room.checkins?.[0]?.guest?.full_name || 'OCUPADO'}
-                                                        </div>
                                                     )}
                                                 </div>
+
+                                                {/* SI ES MODO GRUPAL, SE MUESTRA EL NOMBRE DEL OCUPANTE ACTUAL DE ESE CUARTO */}
+                                                {mode === 'group' && room.checkins && room.checkins.length > 0 && (
+                                                    <div className="mt-2 w-full truncate rounded bg-cyan-50 px-1.5 py-1 text-[8px] font-bold uppercase text-cyan-700 border border-cyan-100">
+                                                        {room.checkins[0]?.guest?.full_name || 'OCUPADO'}
+                                                    </div>
+                                                )}
                                             </button>
                                         );
                                     })}

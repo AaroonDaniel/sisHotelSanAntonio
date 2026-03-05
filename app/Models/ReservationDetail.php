@@ -9,6 +9,8 @@ class ReservationDetail extends Model
     protected $fillable = [
         'reservation_id',
         'room_id',
+        'requested_room_type_id',
+        'requested_bathroom',     
         'price_id',
         'price', // El precio que se pactó en ese momento
     ];
@@ -21,5 +23,9 @@ class ReservationDetail extends Model
     public function price()
     {
         return $this->belongsTo(Price::class); // Si tienes modelo Price
+    }
+    public function requestedRoomType()
+    {
+        return $this->belongsTo(RoomType::class, 'requested_room_type_id');
     }
 }
