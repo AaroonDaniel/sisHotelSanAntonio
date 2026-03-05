@@ -56,7 +56,7 @@ class ReservationController extends Controller
                 'advance_payment' => 'nullable|numeric|min:0',
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
-                
+
                 // =====================================================================
                 // 🚀 INICIO MODULO: RESERVAS AVANZADAS (FASE 2)
                 // Permitimos que 'details' sea nulo o un array vacío para "Reserva Rápida"
@@ -117,7 +117,7 @@ class ReservationController extends Controller
                 // =====================================================================
                 if (!empty($request->details)) {
                     Log::info('Procesando ' . count($request->details) . ' habitaciones/requerimientos...');
-                    
+
                     foreach ($request->details as $detail) {
                         $roomId = $detail['room_id'] ?? null;
 
@@ -321,8 +321,7 @@ class ReservationController extends Controller
         foreach ($rooms as $room) {
             if ($room->status === 'LIBRE') {
                 $availableRooms[] = $room;
-            } 
-            elseif ($room->status === 'OCUPADO' || $room->status === 'RESERVADO') {
+            } elseif ($room->status === 'OCUPADO' || $room->status === 'RESERVADO') {
                 // Buscamos el checkin activo de ese cuarto
                 $activeCheckin = \App\Models\Checkin::where('room_id', $room->id)
                     ->where('status', 'activo')
@@ -350,6 +349,37 @@ class ReservationController extends Controller
             'currently_free' => count($availableRooms) - count($freeingUpRooms),
             'will_be_freed' => count($freeingUpRooms),
         ]);
+    }
+
+    public function assignRooms(Request $request, Reservation $reservation)
+    {
+        try {
+            DB::transaction(function () use ($request, $reservation) {
+                $assignments = $request->input('assignments'); // Recibe {detail_id: room_id}
+
+                foreach ($assignments as $detailId => $roomId) {
+                    // 1. Actualizar el detalle de la reserva
+                    $detail = ReservationDetail::find($detailId);
+                    if ($detail) {
+                        $detail->room_id = $roomId;
+                        $detail->save();
+                    }
+
+                    // 2. Bloquear la habitación (Ponerla en MORADO)
+                    Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Habitaciones asignadas correctamente.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
     // =====================================================================
     // 🛑 FIN MODULO: RESERVAS AVANZADAS
