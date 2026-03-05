@@ -355,30 +355,29 @@ class ReservationController extends Controller
     {
         try {
             DB::transaction(function () use ($request, $reservation) {
-                $assignments = $request->input('assignments'); // Recibe {detail_id: room_id}
+                $assignments = $request->input('assignments'); // [detail_id => room_id]
 
                 foreach ($assignments as $detailId => $roomId) {
-                    // 1. Actualizar el detalle de la reserva
+                    // 1. Vincular la habitación al detalle de la reserva
                     $detail = ReservationDetail::find($detailId);
                     if ($detail) {
                         $detail->room_id = $roomId;
                         $detail->save();
                     }
 
-                    // 2. Bloquear la habitación (Ponerla en MORADO)
-                    Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
+                    // 2. Cambiar el estado de la habitación a MORADO (RESERVADO)
+                    $room = Room::find($roomId);
+                    if ($room) {
+                        $room->status = 'RESERVADO';
+                        $room->save();
+                    }
                 }
             });
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Habitaciones asignadas correctamente.'
-            ]);
+            return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error("Error asignando habitaciones: " . $e->getMessage());
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
     // =====================================================================
