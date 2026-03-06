@@ -170,6 +170,23 @@ export default function RoomsStatus({
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [checkinForTransfer, setCheckinForTransfer] = useState<any>(null);
 
+     const incompleteCheckins = Rooms?.flatMap((room: any) => 
+        room.checkins?.filter((c: any) => {
+            const isTitularIncomplete = c.guest?.profile_status === 'INCOMPLETE';
+            const isOriginMissing = !c.origin || c.origin.trim() === '';
+            return c.status === 'activo' && (isTitularIncomplete || isOriginMissing);
+        }).map((c: any) => ({ ...c, room })) || []
+    ) || [];
+
+    const handleCompleteCheckin = (room: any) => {
+        const activeCheckin = room.checkins?.find((c: any) => c.status === 'activo');
+        if (activeCheckin) {
+            setCheckinToEdit(activeCheckin);
+            setSelectedRoomId(room.id);
+            setIsCheckinModalOpen(true);
+        }
+    };
+
     const { flash } = usePage<any>().props;
     useEffect(() => {
         // Usamos un bloque try-catch para asegurar que esto ocurra en segundo plano
@@ -260,15 +277,11 @@ export default function RoomsStatus({
     // =========================================================
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
-        const activeCheckin =
-            room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
-        // 🛑 LA MAGIA: Si la BD dice que está LIBRE, pero encontramos un Checkin activo adentro
-        if (
-            ['available', 'disponible', 'libre'].includes(dbStatus) &&
-            activeCheckin
-        ) {
-            // Evaluamos si le faltan datos
+        // 🛑 1. EVALUAR CHECK-IN PRIMERO:
+        // Si hay un huésped asignado, revisamos si completó sus datos
+        if (activeCheckin) {
             const guest = activeCheckin.guest as Guest | undefined;
             const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
 
@@ -277,35 +290,28 @@ export default function RoomsStatus({
                 (c) => c.profile_status === 'INCOMPLETE',
             );
 
-            const isOriginMissing =
-                !activeCheckin.origin || activeCheckin.origin.trim() === '';
+            // Origin missing = Falta de datos (Lo que creamos al confirmar la reserva)
+            const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            if (
-                isTitularIncomplete ||
-                isAnyCompanionIncomplete ||
-                isOriginMissing
-            ) {
-                return 'incomplete'; // Cambia el estado a INCOMPLETO
+            // Si falta algo, forzamos el estado a INCOMPLETO (Amarillo)
+            if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
+                return 'incomplete'; 
             }
+
+            // Si tiene checkin y no le falta nada, es OCUPADO seguro (Azul)
+            return 'occupied';
         }
 
-        // Si está Ocupada formalmente
-        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus))
-            return 'occupied';
-        // Si está realmente libre y no tiene checkins
-        if (['available', 'disponible', 'libre'].includes(dbStatus))
-            return 'available';
-
-        if (['reserved', 'reservado', 'reservada'].includes(dbStatus))
-            return 'reserved';
-        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
-            return 'cleaning';
-        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus))
-            return 'maintenance';
+        // 🛑 2. SI NO HAY CHECK-IN ACTIVO:
+        // Mostramos el estado tal cual viene de la base de datos
+        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) return 'occupied';
+        if (['available', 'disponible', 'libre'].includes(dbStatus)) return 'available';
+        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) return 'reserved';
+        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus)) return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus)) return 'maintenance';
 
         return 'unknown';
     };
-
     // =========================================================
     // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
     // =========================================================
@@ -1293,7 +1299,7 @@ function CheckoutConfirmationModal({
             if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
         };
     }, [pdfUrl]);
-
+   
     // --- ACCIONES ---
     const handleConfirmAndPreview = async () => {
         if (!displayData) return;
