@@ -233,7 +233,7 @@ export default function PendingReservationsModal({
                     
                     {/* PANEL IZQUIERDO: LISTA DE RESERVAS */}
                     <div className="relative flex w-[35%] flex-col overflow-y-auto border-r border-gray-100 bg-white p-6">
-                        <label className="mb-4 block text-xs font-bold text-gray-500 uppercase tracking-widest">Huéspedes Programados</label>
+                        <label className="mb-4 block text-xs font-bold text-gray-800 uppercase tracking-widest">Huéspedes Programados</label>
                         <div className="space-y-3">
                             {reservations.map((res) => {
                                 const isSelected = selectedReservation?.id === res.id;
@@ -247,8 +247,8 @@ export default function PendingReservationsModal({
                                                         {res.guest?.full_name?.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <h3 className="text-sm font-black uppercase leading-tight">{res.guest?.full_name || 'Sin Nombre'}</h3>
-                                                        <p className="text-[10px] font-bold text-gray-500 uppercase mt-0.5">CI: {res.guest?.identification_number || 'S/N'}</p>
+                                                        <h3 className="text-sm font-black uppercase text-gray-800 leading-tight">{res.guest?.full_name || 'Sin Nombre'}</h3>
+                                                        <p className="text-[10px] font-bold text-gray-800 uppercase mt-0.5">CI: {res.guest?.identification_number || 'S/N'}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -357,7 +357,7 @@ export default function PendingReservationsModal({
                                                     const isPerfectMatch = roomItem.room_type?.id.toString() === currentDetail?.requested_room_type_id?.toString() && isMatchingBathroom(roomBath, currentDetail?.requested_bathroom);
                                                     
                                                     return (
-                                                        <button key={roomItem.id} onClick={() => handleSelectRoom(String(roomItem.id))} className={`group relative flex flex-col items-center justify-center text-center outline-none border-2 rounded-xl p-4 transition-all duration-200 ${isSelected ? 'border-green-500 bg-green-50 shadow-md scale-105 ring-2 ring-green-200 ring-offset-1 bg-white' : isPerfectMatch ? 'border-gray-200 bg-white hover:border-green-400 hover:bg-green-50 shadow-sm' : 'border-dashed border-gray-300 bg-gray-50 opacity-60 hover:opacity-100'}`}>
+                                                        <button key={roomItem.id} onClick={() => handleSelectRoom(String(roomItem.id))} className={`group relative flex flex-col items-center justify-center text-center outline-none border-2 rounded-xl p-4 transition-all duration-200 ${isSelected ? 'border-green-500 shadow-md scale-105 ring-2 ring-green-200 ring-offset-1 bg-white' : isPerfectMatch ? 'border-gray-200 bg-white hover:border-green-400 hover:bg-green-50 shadow-sm' : 'border-dashed border-gray-300 bg-gray-50 opacity-60 hover:opacity-100'}`}>
                                                             {isSelected && <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-0.5 shadow-sm"><CheckCircle2 className="w-3 h-3" /></div>}
                                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{roomItem.room_type?.name}</span>
                                                             <span className={`text-3xl font-black ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>{roomItem.number}</span>

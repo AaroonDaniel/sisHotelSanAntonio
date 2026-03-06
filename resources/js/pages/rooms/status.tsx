@@ -15,6 +15,7 @@ import {
     Home,
     Loader2,
     LogOut,
+    Plus,
     Search,
     ShoppingCart,
     User,
@@ -100,6 +101,8 @@ export default function RoomsStatus({
 }: Props) {
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+    const [isNewReservationModalOpen, setIsNewReservationModalOpen] =
+        useState(false);
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
 
     // Modal de alerta Tolerancia
@@ -170,16 +173,27 @@ export default function RoomsStatus({
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [checkinForTransfer, setCheckinForTransfer] = useState<any>(null);
 
-     const incompleteCheckins = Rooms?.flatMap((room: any) => 
-        room.checkins?.filter((c: any) => {
-            const isTitularIncomplete = c.guest?.profile_status === 'INCOMPLETE';
-            const isOriginMissing = !c.origin || c.origin.trim() === '';
-            return c.status === 'activo' && (isTitularIncomplete || isOriginMissing);
-        }).map((c: any) => ({ ...c, room })) || []
-    ) || [];
+    const incompleteCheckins =
+        Rooms?.flatMap(
+            (room: any) =>
+                room.checkins
+                    ?.filter((c: any) => {
+                        const isTitularIncomplete =
+                            c.guest?.profile_status === 'INCOMPLETE';
+                        const isOriginMissing =
+                            !c.origin || c.origin.trim() === '';
+                        return (
+                            c.status === 'activo' &&
+                            (isTitularIncomplete || isOriginMissing)
+                        );
+                    })
+                    .map((c: any) => ({ ...c, room })) || [],
+        ) || [];
 
     const handleCompleteCheckin = (room: any) => {
-        const activeCheckin = room.checkins?.find((c: any) => c.status === 'activo');
+        const activeCheckin = room.checkins?.find(
+            (c: any) => c.status === 'activo',
+        );
         if (activeCheckin) {
             setCheckinToEdit(activeCheckin);
             setSelectedRoomId(room.id);
@@ -277,7 +291,8 @@ export default function RoomsStatus({
     // =========================================================
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
-        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+        const activeCheckin =
+            room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
         // 🛑 1. EVALUAR CHECK-IN PRIMERO:
         // Si hay un huésped asignado, revisamos si completó sus datos
@@ -291,11 +306,16 @@ export default function RoomsStatus({
             );
 
             // Origin missing = Falta de datos (Lo que creamos al confirmar la reserva)
-            const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
+            const isOriginMissing =
+                !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
             // Si falta algo, forzamos el estado a INCOMPLETO (Amarillo)
-            if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
-                return 'incomplete'; 
+            if (
+                isTitularIncomplete ||
+                isAnyCompanionIncomplete ||
+                isOriginMissing
+            ) {
+                return 'incomplete';
             }
 
             // Si tiene checkin y no le falta nada, es OCUPADO seguro (Azul)
@@ -304,11 +324,16 @@ export default function RoomsStatus({
 
         // 🛑 2. SI NO HAY CHECK-IN ACTIVO:
         // Mostramos el estado tal cual viene de la base de datos
-        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) return 'occupied';
-        if (['available', 'disponible', 'libre'].includes(dbStatus)) return 'available';
-        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) return 'reserved';
-        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus)) return 'cleaning';
-        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus)) return 'maintenance';
+        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus))
+            return 'occupied';
+        if (['available', 'disponible', 'libre'].includes(dbStatus))
+            return 'available';
+        if (['reserved', 'reservado', 'reservada'].includes(dbStatus))
+            return 'reserved';
+        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
+            return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus))
+            return 'maintenance';
 
         return 'unknown';
     };
@@ -640,12 +665,7 @@ export default function RoomsStatus({
                 {/* HEADER Y FILTROS (Mismo código de antes) */}
                 <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
                     <div>
-                        <button
-                            onClick={() => window.history.back()}
-                            className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                        >
-                            <ArrowLeft className="h-4 w-4" /> Volver
-                        </button>
+                       
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
@@ -668,19 +688,37 @@ export default function RoomsStatus({
                     </div>
 
                     {/*Filtros por tipo de estados de la habitacion*/}
-                    <div className="flex flex-col items-end gap-4">
+                    <div className="flex flex-col items-end gap-3">
                         <div className="flex flex-row items-center justify-end gap-2">
                             {/* EL BOTÓN ANIMADO DE RESERVAS */}
 
                             <button
+                                onClick={() => setIsReservationModalOpen(true)}
+                                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-extrabold whitespace-nowrap text-white uppercase shadow transition-colors hover:bg-emerald-500"
+                            >
+                                <Plus
+                                    className="h-4 w-4 shrink-0"
+                                    strokeWidth={3}
+                                />
+                                Nueva reserva
+                            </button>
+
+                            <button
                                 onClick={() => setIsPendingModalOpen(true)}
                                 className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold uppercase transition-colors ${
-                                    PendingReservationsModal.length > 0
-                                        ? 'bg-gray-800 text-white shadow-lg hover:bg-gray-700'
-                                        : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-500'
+                                    reservations && reservations.length > 0 // <-- CORRECCIÓN AQUÍ
+                                        ? 'bg-amber-500 text-black shadow-lg hover:bg-amber-400' // Sugerencia: Ámbar si hay pendientes
+                                        : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-700'
                                 }`}
                             >
-                                <CalendarClock className="h-4 w-4" /> Reservas
+                                <CalendarClock className="h-4 w-4" />
+                                Reservas
+                                {/* Opcional: Mostrar un globito con el número de reservas pendientes */}
+                                {reservations && reservations.length > 0 && (
+                                    <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
+                                        {reservations.length}
+                                    </span>
+                                )}
                             </button>
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
@@ -1299,7 +1337,7 @@ function CheckoutConfirmationModal({
             if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
         };
     }, [pdfUrl]);
-   
+
     // --- ACCIONES ---
     const handleConfirmAndPreview = async () => {
         if (!displayData) return;
