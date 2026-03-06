@@ -4,7 +4,6 @@ import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle,
-    ArrowLeft,
     ArrowRightCircle,
     BedDouble,
     Brush,
@@ -104,6 +103,9 @@ export default function RoomsStatus({
     const [isNewReservationModalOpen, setIsNewReservationModalOpen] =
         useState(false);
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+    const [preselectedReservationId, setPreselectedReservationId] = useState<
+        number | null
+    >(null);
 
     // Modal de alerta Tolerancia
     const [tolModal, setTolModal] = useState<{
@@ -215,6 +217,7 @@ export default function RoomsStatus({
                     'pendingCheckinsQueue',
                     JSON.stringify(flash.auto_open_checkins),
                 );
+                setIsPendingModalOpen(false);
 
                 // Opcional: Imprimir en consola solo para confirmar que se guardó bien
                 console.log(
@@ -360,6 +363,20 @@ export default function RoomsStatus({
             }
             return;
         }
+        if (status === 'reserved') {
+            const matchinReservation = reservations?.find((res) =>
+                res.details?.some(
+                    (d: any) => String(d.room_id) === String(room.id),
+                ),
+            );
+            if (matchinReservation) {
+                setPreselectedReservationId(matchinReservation.id);
+            } else {
+                setPreselectedReservationId(null);
+            }
+            setIsPendingModalOpen(true);
+            return;
+        }
 
         setSelectedForAction(null);
 
@@ -502,6 +519,19 @@ export default function RoomsStatus({
         return 'Huésped';
     };
 
+    const getReservationName = (room: Room) => {
+        const matchingReservations = reservations?.find((res) =>
+            res.details?.some(
+                (d: any) => String(d.room_id) === String(room.id),
+            ),
+        );
+        if (matchingReservations && matchingReservations.guest) {
+            const guest = matchingReservations.guest;
+            return guest.full_name || 'Reservado';
+        }
+        return "Reserva no encontrada";
+    };
+
     const getStatusConfig = (room: Room) => {
         const status = getDisplayStatus(room);
         switch (status) {
@@ -573,7 +603,7 @@ export default function RoomsStatus({
                     borderColor: 'border-purple-700',
                     label: 'Reservado',
                     icon: <FileEdit className="h-0 w-10 text-purple-200/50" />,
-                    info: 'Habitacion Reservada',
+                    info: getReservationName(room),
                     actionLabel: 'Ver reserva',
                 };
 
@@ -665,7 +695,6 @@ export default function RoomsStatus({
                 {/* HEADER Y FILTROS (Mismo código de antes) */}
                 <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
                     <div>
-                       
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
@@ -1078,6 +1107,7 @@ export default function RoomsStatus({
                 }}
                 reservations={reservations}
                 rooms={Rooms}
+                initialReservationId={preselectedReservationId}
                 onNewReservation={() => {
                     setIsPendingModalOpen(false);
                     setIsReservationModalOpen(true);

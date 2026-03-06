@@ -26,6 +26,7 @@ export interface PendingReservationsModalProps {
     reservations: any[]; 
     rooms: any[]; 
     onNewReservation?: () => void; 
+    initialReservationId?: number | null;
 }
 
 // --- FUNCIONES DE UTILIDAD ---
@@ -68,6 +69,7 @@ export default function PendingReservationsModal({
     onClose,
     reservations,
     rooms,
+    initialReservationId,
 }: PendingReservationsModalProps) {
     
     // --- ESTADOS PRINCIPALES ---
@@ -95,10 +97,20 @@ export default function PendingReservationsModal({
 
     useEffect(() => {
         if (show) {
+            if (initialReservationId) {
+                // Si abrimos el modal desde una habitación reservada, pre-seleccionar
+                const res = reservations.find(r => r.id === initialReservationId);
+                if (res) {
+                    handleRowClick(res);
+                    return; // Termina la ejecución aquí
+                }
+            }
+            
+            // Si no hay ID (se abrió desde el botón general), limpiar todo
             setSelectedReservation(null);
             resetWizard();
         }
-    }, [show]);
+    }, [show, initialReservationId]);
 
     const resetWizard = () => {
         setAssignments({});
