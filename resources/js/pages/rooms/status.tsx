@@ -1,7 +1,7 @@
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
-import axios from 'axios'; 
+import axios from 'axios';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -172,18 +172,32 @@ export default function RoomsStatus({
 
     const { flash } = usePage<any>().props;
     useEffect(() => {
-        if (
-            flash.auto_open_checkins &&
-            Array.isArray(flash.auto_open_checkins) &&
-            flash.auto_open_checkins.length > 0
-        ) {
-            sessionStorage.setItem(
-                'pendingCheckinsQueue',
-                JSON.stringify(flash.auto_open_checkins),
+        // Usamos un bloque try-catch para asegurar que esto ocurra en segundo plano
+        // y si algo falla (ej. almacenamiento lleno o bloqueado), no rompa la pantalla.
+        try {
+            if (
+                flash?.auto_open_checkins &&
+                Array.isArray(flash.auto_open_checkins) &&
+                flash.auto_open_checkins.length > 0
+            ) {
+                sessionStorage.setItem(
+                    'pendingCheckinsQueue',
+                    JSON.stringify(flash.auto_open_checkins),
+                );
+
+                // Opcional: Imprimir en consola solo para confirmar que se guardó bien
+                console.log(
+                    'Cola de check-ins guardada para procesamiento:',
+                    flash.auto_open_checkins,
+                );
+            }
+        } catch (error) {
+            console.error(
+                'Error silencioso al guardar la cola en sessionStorage:',
+                error,
             );
         }
-    }, [flash.auto_open_checkins]);
-
+    }, [flash?.auto_open_checkins]);
     useEffect(() => {
         const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
         if (queueStr && !isCheckinModalOpen) {
@@ -246,33 +260,49 @@ export default function RoomsStatus({
     // =========================================================
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
-        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+        const activeCheckin =
+            room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
         // 🛑 LA MAGIA: Si la BD dice que está LIBRE, pero encontramos un Checkin activo adentro
-        if (['available', 'disponible', 'libre'].includes(dbStatus) && activeCheckin) {
+        if (
+            ['available', 'disponible', 'libre'].includes(dbStatus) &&
+            activeCheckin
+        ) {
             // Evaluamos si le faltan datos
             const guest = activeCheckin.guest as Guest | undefined;
             const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
-            
-            const companions = activeCheckin.companions as Guest[] | undefined;
-            const isAnyCompanionIncomplete = companions?.some(c => c.profile_status === 'INCOMPLETE');
-            
-            const isOriginMissing = !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            if (isTitularIncomplete || isAnyCompanionIncomplete || isOriginMissing) {
+            const companions = activeCheckin.companions as Guest[] | undefined;
+            const isAnyCompanionIncomplete = companions?.some(
+                (c) => c.profile_status === 'INCOMPLETE',
+            );
+
+            const isOriginMissing =
+                !activeCheckin.origin || activeCheckin.origin.trim() === '';
+
+            if (
+                isTitularIncomplete ||
+                isAnyCompanionIncomplete ||
+                isOriginMissing
+            ) {
                 return 'incomplete'; // Cambia el estado a INCOMPLETO
             }
         }
 
         // Si está Ocupada formalmente
-        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus)) return 'occupied';
+        if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus))
+            return 'occupied';
         // Si está realmente libre y no tiene checkins
-        if (['available', 'disponible', 'libre'].includes(dbStatus)) return 'available';
-        
-        if (['reserved', 'reservado', 'reservada'].includes(dbStatus)) return 'reserved';
-        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus)) return 'cleaning';
-        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus)) return 'maintenance';
-        
+        if (['available', 'disponible', 'libre'].includes(dbStatus))
+            return 'available';
+
+        if (['reserved', 'reservado', 'reservada'].includes(dbStatus))
+            return 'reserved';
+        if (['cleaning', 'limpieza', 'sucio'].includes(dbStatus))
+            return 'cleaning';
+        if (['maintenance', 'mantenimiento', 'reparacion'].includes(dbStatus))
+            return 'maintenance';
+
         return 'unknown';
     };
 
@@ -283,7 +313,9 @@ export default function RoomsStatus({
         const status = getDisplayStatus(room);
 
         if (status === 'occupied') {
-            const fullCheckinData = Checkins?.find((c) => c.room_id === room.id && c.status === 'activo');
+            const fullCheckinData = Checkins?.find(
+                (c) => c.room_id === room.id && c.status === 'activo',
+            );
 
             if (fullCheckinData) {
                 setOccupiedCheckinData({ ...fullCheckinData, room });
@@ -299,7 +331,7 @@ export default function RoomsStatus({
         }
 
         setSelectedForAction(null);
-        
+
         if (status === 'available') {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
@@ -996,12 +1028,15 @@ export default function RoomsStatus({
             {/* MODAL DE RESERVAS PENDIENTES*/}
             <PendingReservationsModal
                 show={isPendingModalOpen}
-                onClose={() => setIsPendingModalOpen(false)}
+                onClose={() => {
+                    console.log('Cerrando desde el padre...');
+                    setIsPendingModalOpen(false);
+                }}
                 reservations={reservations}
-                rooms={Rooms} // <------ 🚀 AGREGA ESTA LÍNEA AQUÍ
+                rooms={Rooms}
                 onNewReservation={() => {
-                    setIsPendingModalOpen(false); 
-                    setIsReservationModalOpen(true); 
+                    setIsPendingModalOpen(false);
+                    setIsReservationModalOpen(true);
                 }}
             />
             {/* MODAL DE NUEVA RESERVA */}
