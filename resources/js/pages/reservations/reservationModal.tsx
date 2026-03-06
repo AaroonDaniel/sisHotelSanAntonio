@@ -145,22 +145,30 @@ export default function ReservationModal({
     const [availabilityData, setAvailabilityData] = useState<any>(null);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
 
-    const { data, setData, post, put, processing, reset, clearErrors } =
-        useForm<ReservationFormData>({
-            is_new_guest: false,
-            guest_id: '',
-            new_guest_name: '',
-            new_guest_ci: '',
-            guest_count: 1,
-            arrival_date: new Date().toISOString().split('T')[0],
-            arrival_time: '14:00',
-            duration_days: 1,
-            advance_payment: 0,
-            payment_type: 'EFECTIVO',
-            qr_bank: '',
-            status: 'pendiente',
-            details: [],
-        });
+    const {
+        data,
+        setData,
+        post,
+        put,
+        processing,
+        reset,
+        clearErrors,
+        transform,
+    } = useForm<ReservationFormData>({
+        is_new_guest: false,
+        guest_id: '',
+        new_guest_name: '',
+        new_guest_ci: '',
+        guest_count: 1,
+        arrival_date: new Date().toISOString().split('T')[0],
+        arrival_time: '14:00',
+        duration_days: 1,
+        advance_payment: 0,
+        payment_type: 'EFECTIVO',
+        qr_bank: '',
+        status: 'pendiente',
+        details: [],
+    });
 
     // 🚀 EFECTO: Consulta la disponibilidad predictiva al cambiar la fecha
     useEffect(() => {
@@ -281,15 +289,28 @@ export default function ReservationModal({
         paxCount: number,
         isCorporate: boolean,
     ) => {
-        if (!typeId || !bath) return { price: 0, priceId: '' };
+        // 1. Si no hay baño, el precio es 0 (Obligatorio)
+        if (!bath) return { price: 0, priceId: '' };
 
-        // Buscamos cualquier habitación que coincida con esos dos datos
+        // 2. 🚀 NUEVO: Si no eligieron tipo de cuarto, asumimos "SIMPLE"
+        let effectiveTypeId = typeId;
+        if (!effectiveTypeId) {
+            const simpleType = uniqueRoomTypes.find((t: any) =>
+                t.name.toUpperCase().includes('SIMPLE'),
+            );
+            if (simpleType) {
+                effectiveTypeId = simpleType.id.toString();
+            }
+        }
+
+        // 3. Buscamos la habitación usando effectiveTypeId en lugar de typeId
         const matchingRoom = rooms.find((r) => {
             const rType =
                 r.room_type?.id?.toString() || r.room_type_id?.toString();
             const p = getExactRoomPrice(r);
             return (
-                rType === typeId && isMatchingBathroom(p?.bathroom_type, bath)
+                rType === effectiveTypeId &&
+                isMatchingBathroom(p?.bathroom_type, bath)
             );
         });
 
@@ -307,7 +328,6 @@ export default function ReservationModal({
         }
         return { price: 0, priceId: '' };
     };
-
     const updateDetailRow = (
         index: number,
         field: keyof DetailItem,
@@ -481,6 +501,17 @@ export default function ReservationModal({
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+
+        // 1. PRIMERO DEBES DECLARAR Y CALCULAR hasEmptyBath
+        const hasEmptyBath = data.details.some(det => !det.requested_bathroom);
+
+        if (hasEmptyBath) {
+            alert(
+                '⚠️ El campo "Tipo de Baño" es obligatorio en todas las habitaciones.',
+            );
+            return;
+        }
+
         if (
             data.payment_type === 'QR' &&
             data.advance_payment > 0 &&
@@ -489,6 +520,20 @@ export default function ReservationModal({
             alert('Seleccione un banco para el pago QR.');
             return;
         }
+
+        // 2. APLICAR LA TRANSFORMACIÓN PARA HABITACIONES VACÍAS (SIMPLE)
+        const simpleType = uniqueRoomTypes.find((t: any) => 
+            t.name.toUpperCase().includes('SIMPLE')
+        );
+
+        transform((currentData) => ({
+            ...currentData,
+            details: currentData.details.map(det => ({
+                ...det,
+                // Si el cuarto está vacío, le pone el ID de Simple automáticamente
+                requested_room_type_id: det.requested_room_type_id || (simpleType ? simpleType.id.toString() : '')
+            }))
+        }));
 
         const options = {
             preserveScroll: true,
@@ -1179,86 +1224,87 @@ export default function ReservationModal({
 
                                                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                                                     {/* 1. TIPO DE BAÑO */}
-                                                    <div>
-                                                        <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">
-                                                            Tipo de Baño
-                                                        </label>
-                                                        <div className="relative">
-                                                            <Bath className="absolute top-2 left-2 h-3.5 w-3.5 text-gray-400" />
-                                                            <select
-                                                                value={
-                                                                    detail.requested_bathroom ||
-                                                                    ''
-                                                                }
-                                                                onChange={(e) =>
-                                                                    updateDetailRow(
-                                                                        index,
-                                                                        'requested_bathroom',
-                                                                        e.target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
-                                                            >
-                                                                <option value="">
-                                                                    Seleccionar...
-                                                                </option>
-                                                                <option value="private">
-                                                                    Privado
-                                                                </option>
-                                                                <option value="shared">
-                                                                    Compartido
-                                                                </option>
-                                                            </select>
-                                                        </div>
+                                                <div>
+                                                    <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">
+                                                        Tipo de Baño
+                                                    </label>
+                                                    <div className="relative">
+                                                        <Bath className="absolute top-2 left-2 h-3.5 w-3.5 text-gray-400" />
+                                                        <select
+                                                            required
+                                                            value={
+                                                                detail.requested_bathroom ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateDetailRow(
+                                                                    index,
+                                                                    'requested_bathroom',
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
+                                                        >
+                                                            <option value="" disabled>
+                                                                Seleccionar...
+                                                            </option>
+                                                            <option value="private">
+                                                                Privado
+                                                            </option>
+                                                            <option value="shared">
+                                                                Compartido
+                                                            </option>
+                                                        </select>
                                                     </div>
+                                                </div>
 
-                                                    {/* 2. TIPO DE HABITACIÓN */}
-                                                    <div>
-                                                        <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">
-                                                            Tipo de Hab.
-                                                        </label>
-                                                        <div className="relative">
-                                                            <select
-                                                                value={
-                                                                    detail.requested_room_type_id ||
-                                                                    ''
-                                                                }
-                                                                onChange={(e) =>
-                                                                    updateDetailRow(
-                                                                        index,
-                                                                        'requested_room_type_id',
-                                                                        e.target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
-                                                            >
-                                                                <option value="">
-                                                                    Seleccionar...
-                                                                </option>
-                                                                {uniqueRoomTypes.map(
-                                                                    (
-                                                                        type: any,
-                                                                    ) => (
-                                                                        <option
-                                                                            key={
-                                                                                type.id
-                                                                            }
-                                                                            value={
-                                                                                type.id
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                type.name
-                                                                            }
-                                                                        </option>
-                                                                    ),
-                                                                )}
-                                                            </select>
-                                                        </div>
+                                                {/* 2. TIPO DE HABITACIÓN */}
+                                                <div>
+                                                    <label className="mb-1 flex justify-between text-[9px] font-bold text-gray-400 uppercase">
+                                                        <span>Tipo de Hab.</span>
+                                                        <span className="text-[8px] font-medium normal-case text-gray-400">(Opcional)</span>
+                                                    </label>
+                                                    <div className="relative">
+                                                        <select
+                                                            value={
+                                                                detail.requested_room_type_id ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateDetailRow(
+                                                                    index,
+                                                                    'requested_room_type_id',
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
+                                                        >
+                                                            <option value="">
+                                                                Seleccionar...
+                                                            </option>
+                                                            {uniqueRoomTypes.map(
+                                                                (
+                                                                    type: any,
+                                                                ) => (
+                                                                    <option
+                                                                        key={
+                                                                            type.id
+                                                                        }
+                                                                        value={
+                                                                            type.id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            type.name
+                                                                        }
+                                                                    </option>
+                                                                ),
+                                                            )}
+                                                        </select>
                                                     </div>
-
+                                                </div>
                                                     {/* 3. PRECIO AUTOMÁTICO */}
                                                     <div>
                                                         <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">

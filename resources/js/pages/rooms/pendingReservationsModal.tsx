@@ -15,7 +15,7 @@ import {
     Tag,
     X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import CancelModal from '@/components/cancelModal';
 import ConfirmModal from '@/components/confirmModal';
@@ -91,6 +91,17 @@ export default function PendingReservationsModal({
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
+
+    // --- Estado para la seleccion de tipo de hab si fue completada o no
+    const filteredReservations = useMemo(() => {
+        if(!reservations) return [];
+        if(initialReservationId) {
+            return reservations.filter(r => r.id === initialReservationId);
+        }
+        return reservations.filter(r => 
+            r.details?.some((d: any) => !d.room_id) 
+        )
+    }, [reservations, initialReservationId]);
 
     const blocks: any[] = Array.from(new Set(rooms?.filter(r => r.block).map(r => r.block.id))).map(id => rooms.find(r => r.block?.id === id)?.block);
     const roomTypes: any[] = Array.from(new Set(rooms?.filter(r => r.room_type).map(r => r.room_type.id))).map(id => rooms.find(r => r.room_type?.id === id)?.room_type);
@@ -247,7 +258,7 @@ export default function PendingReservationsModal({
                     <div className="relative flex w-[35%] flex-col overflow-y-auto border-r border-gray-100 bg-white p-6">
                         <label className="mb-4 block text-xs font-bold text-gray-800 uppercase tracking-widest">Huéspedes Programados</label>
                         <div className="space-y-3">
-                            {reservations.map((res) => {
+                            {filteredReservations.map((res) => {
                                 const isSelected = selectedReservation?.id === res.id;
                                 
                                 return (
