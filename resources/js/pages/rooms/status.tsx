@@ -732,23 +732,34 @@ export default function RoomsStatus({
                                 Nueva reserva
                             </button>
 
-                            <button
-                                onClick={() => setIsPendingModalOpen(true)}
-                                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold uppercase transition-colors ${
-                                    reservations && reservations.length > 0 // <-- CORRECCIÓN AQUÍ
-                                        ? 'bg-amber-500 text-black shadow-lg hover:bg-amber-400' // Sugerencia: Ámbar si hay pendientes
-                                        : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-700'
-                                }`}
-                            >
-                                <CalendarClock className="h-4 w-4" />
-                                Reservas
-                                {/* Opcional: Mostrar un globito con el número de reservas pendientes */}
-                                {reservations && reservations.length > 0 && (
-                                    <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
-                                        {reservations.length}
-                                    </span>
-                                )}
-                            </button>
+                            {/* BOTÓN DE RESERVAS PENDIENTES */}
+                            {(() => {
+                                // 1. Filtramos: Solo nos quedamos con reservas donde al menos un detalle NO tenga room_id
+                                const pendingReservations = reservations?.filter((res: any) => 
+                                    res.details?.some((d: any) => !d.room_id)
+                                ) || [];
+
+                                return (
+                                    <button
+                                        onClick={() => setIsPendingModalOpen(true)}
+                                        className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold uppercase transition-colors ${
+                                            pendingReservations.length > 0
+                                                ? 'bg-amber-500 text-black shadow-lg hover:bg-amber-400'
+                                                : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <CalendarClock className="h-4 w-4" /> 
+                                        Reservas
+                                        
+                                        {/* 2. El globito solo mostrará la cantidad de reservas filtradas */}
+                                        {pendingReservations.length > 0 && (
+                                            <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
+                                                {pendingReservations.length}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })()}
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
