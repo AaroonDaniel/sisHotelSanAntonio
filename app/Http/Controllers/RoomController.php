@@ -181,9 +181,21 @@ class RoomController
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
             ->get();
 
+        // 🚀 NUEVO: 4. Separamos las habitaciones para el Modal de Transferencia
+        $availableRooms = $rooms->filter(function($room) {
+            return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']); // O solo 'LIBRE' según tu regla
+        })->values();
+
+        $occupiedRooms = $rooms->filter(function($room) {
+            return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']); // Incluye ambas por si acaso
+        })->values();
+
+
         return \Inertia\Inertia::render('rooms/status', [
             'Rooms'        => $rooms,
             'Checkins'     => $activeCheckins,
+            'availableRooms' => $availableRooms,
+            'occupiedRooms' => $occupiedRooms,
             'Guests'       => \App\Models\Guest::all(),
             'services'     => \App\Models\Service::all(),
             'Blocks'       => \App\Models\Block::all(),

@@ -127,13 +127,14 @@ export default function TransferModal({
     };
 
     // --- LÓGICA DE FILTRADO ---
+    // --- LÓGICA DE FILTRADO ---
     const baseList = mode === 'individual' ? availableRooms : occupiedRooms;
 
     const filteredRooms = baseList.filter(room => {
-        // 1. Excluir habitación actual
+        // 1. Excluir habitación actual (No puedes fusionarte contigo mismo)
         if (room.id === checkin.room_id) return false;
 
-        // 2. Buscador
+        // 2. Buscador por texto
         if (searchQuery) {
             const query = searchQuery.toLowerCase().trim();
             const roomNumber = String(room.number).toLowerCase();
@@ -144,6 +145,30 @@ export default function TransferModal({
         if (selectedBlock && String(room.block_id) !== selectedBlock) return false;
         if (selectedRoomType && String(room.room_type_id) !== selectedRoomType) return false;
         if (selectedBathroom && room.price?.bathroom_type !== selectedBathroom) return false;
+
+        // 🚀 4. RESTRICCIÓN DE CAPACIDAD (Aplica solo en modo "Fusión")
+        if (mode === 'group') {
+            const activeCheckin = room.checkins?.[0]; // Tomamos el checkin activo de ese cuarto
+            if (activeCheckin) {
+                // Sumamos al Titular (1) + la cantidad de acompañantes actuales
+                const currentOccupants = 1 + (activeCheckin.companions?.length || 0);
+                // Leemos la capacidad máxima permitida para ese tipo de habitación
+                const maxCapacity = room.room_type?.capacity || 1;
+                // Vemos cuántas personas seleccionó el recepcionista para transferir
+                const incomingGuests = data.selected_guests.length;
+
+                // REGLA A: Si la habitación ya está llena (o excedida), NO aparece.
+                if (currentOccupants >= maxCapacity) {
+                    return false;
+                }
+
+                // REGLA B: Si hay espacio, pero NO EL SUFICIENTE para los que se quieren mover, NO aparece.
+                // (Ej: Sobra 1 cama, pero quieren meter a 2 personas).
+                if (currentOccupants + incomingGuests > maxCapacity) {
+                    return false;
+                }
+            }
+        }
 
         return true;
     });

@@ -76,6 +76,8 @@ interface Room extends ModalRoom {
 interface Props {
     auth: { user: User };
     Rooms: Room[];
+    availableRooms: any[];
+    occupiedRooms: any[];
     Guests: Guest[];
     services: any[];
     Blocks: Block[];
@@ -95,6 +97,8 @@ export default function RoomsStatus({
     Checkins,
     Schedules,
     reservations,
+    availableRooms,
+    occupiedRooms,
 }: Props) {
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
@@ -1027,7 +1031,7 @@ export default function RoomsStatus({
                 onClose={() => setIsTransferModalOpen(false)}
                 checkin={checkinForTransfer}
                 availableRooms={availableRoomsForTransfer}
-                occupiedRooms={occupiedRoomsForTransfer}
+                occupiedRooms={occupiedRooms}
                 blocks={Blocks}
                 roomTypes={RoomTypes}
             />
@@ -1551,7 +1555,9 @@ function CheckoutConfirmationModal({
                                                 <div></div>
 
                                                 <div>
-                                                    <span className='font-bold'>Hospedaje:</span>
+                                                    <span className="font-bold">
+                                                        Hospedaje:
+                                                    </span>
                                                 </div>
                                                 <div className="text-right">
                                                     {displayData.accommodation_total.toFixed(
@@ -1970,7 +1976,11 @@ function CheckoutConfirmationModal({
                                                     <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
                                                         <div className="font-bold text-gray-800">
                                                             Habitación{' '}
-                                                            {room.number} - {room.roomType?.name}
+                                                            {room.number} -{' '}
+                                                            {
+                                                                room.roomType
+                                                                    ?.name
+                                                            }
                                                         </div>
                                                         <div className="text-right text-gray-400">
                                                             -
