@@ -7,14 +7,12 @@ import {
     ArrowRightCircle,
     BedDouble,
     Brush,
-    CalendarClock,
     CheckCircle2,
     Construction,
     FileEdit,
     Home,
     Loader2,
     LogOut,
-    Plus,
     Search,
     ShoppingCart,
     User,
@@ -446,7 +444,7 @@ export default function RoomsStatus({
         const currentStatus = getDisplayStatus(room);
         const matchesStatus =
             filterStatus === 'all' || currentStatus === filterStatus;
-        
+
         const matchesBathroom = selectedBathroom
             ? room.price?.bathroom_type === selectedBathroom
             : true;
@@ -454,10 +452,7 @@ export default function RoomsStatus({
             ? room.room_type?.id.toString() === selectedRoomType
             : true;
         return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesBathroom &&
-            matchesRoomType
+            matchesSearch && matchesStatus && matchesBathroom && matchesRoomType
         );
     }).sort((a, b) => {
         return a.number.localeCompare(b.number, undefined, {
@@ -529,7 +524,7 @@ export default function RoomsStatus({
             const guest = matchingReservations.guest;
             return guest.full_name || 'Reservado';
         }
-        return "Reserva no encontrada";
+        return 'Reserva no encontrada';
     };
 
     const getStatusConfig = (room: Room) => {
@@ -719,7 +714,6 @@ export default function RoomsStatus({
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-3">
                         <div className="flex flex-row items-center justify-end gap-2">
-                            
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
@@ -737,8 +731,7 @@ export default function RoomsStatus({
                                     ))}
                                 </select>
                             </div>
-                            
-                            
+
                             {/* Barra de Búsqueda */}
                             <div className="relative w-full max-w-xs">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -993,7 +986,9 @@ export default function RoomsStatus({
                             (c: any) => c.profile_status === 'INCOMPLETE',
                         )
                     ) &&
-                    (1 + (checkinToEdit.companions?.length || 0) >= (Rooms.find(r => r.id === checkinToEdit.room_id)?.room_type?.capacity || 1))
+                    1 + (checkinToEdit.companions?.length || 0) >=
+                        (Rooms.find((r) => r.id === checkinToEdit.room_id)
+                            ?.room_type?.capacity || 1)
                 }
             />
 
@@ -1471,7 +1466,7 @@ function CheckoutConfirmationModal({
                                         className={`flex-1 transition-all duration-300 ${tipoDocumento === 'factura' ? 'mx-auto w-full max-w-sm' : ''}`}
                                     >
                                         <div
-                                            className={`rounded-xl border p-4 text-sm shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
+                                            className={`rounded-xl border p-4 text-base shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
                                         >
                                             <div className="mb-3 text-center">
                                                 <span className="block text-[20px] font-bold text-red-600 uppercase">
@@ -1489,7 +1484,7 @@ function CheckoutConfirmationModal({
                                                 )}
                                             </div>
 
-                                            <div className="mb-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                            <div className="mb-2 grid grid-cols-2 gap-2 text-sm text-gray-800">
                                                 <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
                                                     <span className="font-bold">
                                                         Ingreso:
@@ -1544,19 +1539,19 @@ function CheckoutConfirmationModal({
                                                     </span>
                                                 </div>
 
-                                                <div className="col-span-2 my-1 border-t border-dashed border-gray-300"></div>
+                                                <div className="col-span-2 my-1 border-t border-dashed border-gray-700"></div>
 
-                                                <div>
+                                                <div className="whitespace-nowrap">
                                                     <span className="font-bold">
                                                         Permanencia:
                                                     </span>{' '}
                                                     {displayData.duration_days}{' '}
-                                                    días
+                                                    noche(s)
                                                 </div>
                                                 <div></div>
 
                                                 <div>
-                                                    <span>Hospedaje:</span>
+                                                    <span className='font-bold'>Hospedaje:</span>
                                                 </div>
                                                 <div className="text-right">
                                                     {displayData.accommodation_total.toFixed(

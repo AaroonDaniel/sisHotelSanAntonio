@@ -963,7 +963,7 @@ class CheckinController extends Controller
         // 1. Validar tiempo (10 minutos de tolerancia)
         $diffMinutes = $checkin->created_at->diffInMinutes(now());
 
-        if ($diffMinutes > 10) {
+        if ($diffMinutes > 35) {
             return redirect()->back()->with('error', 'El tiempo de cancelación (10 min) ha expirado. Debes realizar un Checkout normal.');
         }
 

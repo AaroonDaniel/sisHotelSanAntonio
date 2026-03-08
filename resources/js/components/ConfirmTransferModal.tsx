@@ -45,35 +45,15 @@ export default function ConfirmTransferModal({
                             {isMerge ? <Users className="h-8 w-8" /> : <ArrowRightLeft className="h-8 w-8" />}
                         </div>
                         
-                        <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">
-                            Vas a mover a
+                        <p className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                            Se esta transfiriendo al huesped 
                         </p>
                         <h4 className="text-xl font-bold text-gray-800">
                             {guestName}
                         </h4>
-                        <p className="mt-1 text-sm font-bold text-gray-400">
+                        <p className="mt-1 text-sm font-bold text-gray-800">
                              ➔ A la Habitación {targetRoomNumber}
                         </p>
-                    </div>
-
-                    {/* ALERTA DE CONSECUENCIAS */}
-                    <div className={`rounded-xl border p-4 text-xs ${isMerge ? 'border-blue-100 bg-blue-50 text-gray-900' : 'border-blue-200 bg-blue-50 text-gray-900'}`}>
-                        <p className="font-bold mb-1 uppercase">Consecuencias:</p>
-                        <ul className="list-disc pl-4 space-y-1 opacity-90">
-                            <li>La habitación actual pasará a estado <b>LIMPIEZA</b>.</li>
-                            {isMerge ? (
-                                <>
-                                    <li>Se <b>CERRARÁ</b> la cuenta individual de este huésped.</li>
-                                    <li>Se unirá como <b>Acompañante</b> a la cuenta de la Hab. {targetRoomNumber}.</li>
-                                    <li>El cobro lo asumirá el titular de la nueva habitación.</li>
-                                </>
-                            ) : (
-                                <>
-                                    <li>Se mantendrá la cuenta y fecha de ingreso original.</li>
-                                    <li>El costo diario se actualizará a la tarifa de la nueva habitación.</li>
-                                </>
-                            )}
-                        </ul>
                     </div>
 
                     {/* BOTONES */}
