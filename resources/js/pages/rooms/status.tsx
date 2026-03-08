@@ -298,7 +298,6 @@ export default function RoomsStatus({
             room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
         // 🛑 1. EVALUAR CHECK-IN PRIMERO:
-        // Si hay un huésped asignado, revisamos si completó sus datos
         if (activeCheckin) {
             const guest = activeCheckin.guest as Guest | undefined;
             const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
@@ -312,16 +311,22 @@ export default function RoomsStatus({
             const isOriginMissing =
                 !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            // Si falta algo, forzamos el estado a INCOMPLETO (Amarillo)
+            // --- 🚀 NUEVO: VERIFICAR SI FALTAN PERSONAS PARA LLENAR LA CAPACIDAD ---
+            const roomCapacity = room.room_type?.capacity || 1;
+            const totalGuests = 1 + (companions?.length || 0); // 1 Titular + N Acompañantes
+            const isCapacityMissing = totalGuests < roomCapacity;
+
+            // Si falta algún dato O faltan personas para llenar las camas, forzamos el estado a INCOMPLETO (Amarillo)
             if (
                 isTitularIncomplete ||
                 isAnyCompanionIncomplete ||
-                isOriginMissing
+                isOriginMissing ||
+                isCapacityMissing
             ) {
                 return 'incomplete';
             }
 
-            // Si tiene checkin y no le falta nada, es OCUPADO seguro (Azul)
+            // Si tiene checkin, no le falta nada y la habitación está llena, es OCUPADO seguro (Azul)
             return 'occupied';
         }
 
@@ -430,8 +435,6 @@ export default function RoomsStatus({
             setIsDetailsModalOpen(true);
         }
     };
-
-    const [selectedBlock, setSelectedBlock] = useState('');
     const [selectedBathroom, setSelectedBathroom] = useState('');
 
     const filteredRooms = Rooms.filter((room) => {
@@ -443,9 +446,7 @@ export default function RoomsStatus({
         const currentStatus = getDisplayStatus(room);
         const matchesStatus =
             filterStatus === 'all' || currentStatus === filterStatus;
-        const matchesBlock = selectedBlock
-            ? room.block_id?.toString() === selectedBlock
-            : true;
+        
         const matchesBathroom = selectedBathroom
             ? room.price?.bathroom_type === selectedBathroom
             : true;
@@ -455,7 +456,6 @@ export default function RoomsStatus({
         return (
             matchesSearch &&
             matchesStatus &&
-            matchesBlock &&
             matchesBathroom &&
             matchesRoomType
         );
@@ -719,47 +719,7 @@ export default function RoomsStatus({
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-3">
                         <div className="flex flex-row items-center justify-end gap-2">
-                            {/* EL BOTÓN ANIMADO DE RESERVAS */}
-
-                            <button
-                                onClick={() => setIsReservationModalOpen(true)}
-                                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-extrabold whitespace-nowrap text-white uppercase shadow transition-colors hover:bg-emerald-500"
-                            >
-                                <Plus
-                                    className="h-4 w-4 shrink-0"
-                                    strokeWidth={3}
-                                />
-                                Nueva reserva
-                            </button>
-
-                            {/* BOTÓN DE RESERVAS PENDIENTES */}
-                            {(() => {
-                                // 1. Filtramos: Solo nos quedamos con reservas donde al menos un detalle NO tenga room_id
-                                const pendingReservations = reservations?.filter((res: any) => 
-                                    res.details?.some((d: any) => !d.room_id)
-                                ) || [];
-
-                                return (
-                                    <button
-                                        onClick={() => setIsPendingModalOpen(true)}
-                                        className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold uppercase transition-colors ${
-                                            pendingReservations.length > 0
-                                                ? 'bg-amber-500 text-black shadow-lg hover:bg-amber-400'
-                                                : 'border border-gray-700 bg-gray-800 text-white hover:bg-gray-700'
-                                        }`}
-                                    >
-                                        <CalendarClock className="h-4 w-4" /> 
-                                        Reservas
-                                        
-                                        {/* 2. El globito solo mostrará la cantidad de reservas filtradas */}
-                                        {pendingReservations.length > 0 && (
-                                            <span className="ml-1 rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
-                                                {pendingReservations.length}
-                                            </span>
-                                        )}
-                                    </button>
-                                );
-                            })()}
+                            
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
@@ -777,24 +737,8 @@ export default function RoomsStatus({
                                     ))}
                                 </select>
                             </div>
-                            {/* Selector de Bloques */}
-                            <div className="relative">
-                                <select
-                                    value={selectedBlock}
-                                    onChange={(e) =>
-                                        setSelectedBlock(e.target.value)
-                                    }
-                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
-                                >
-                                    <option value="">Todos los Bloques</option>
-                                    {Blocks?.map((block) => (
-                                        <option key={block.id} value={block.id}>
-                                            {block.description}{' '}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
+                            
+                            
                             {/* Barra de Búsqueda */}
                             <div className="relative w-full max-w-xs">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -1048,7 +992,8 @@ export default function RoomsStatus({
                         checkinToEdit.companions.some(
                             (c: any) => c.profile_status === 'INCOMPLETE',
                         )
-                    )
+                    ) &&
+                    (1 + (checkinToEdit.companions?.length || 0) >= (Rooms.find(r => r.id === checkinToEdit.room_id)?.room_type?.capacity || 1))
                 }
             />
 

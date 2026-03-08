@@ -5,7 +5,6 @@ import {
     AlertCircle,
     AlertTriangle,
     ArrowRightCircle,
-    Bed,
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
@@ -294,10 +293,6 @@ export default function CheckinModal({
     // Alerta flotante asignacion unica
     const [showErrorToast, setShowErrorToast] = useState(false);
 
-    // Estados para advertencia de capacidad
-    const [showCapacityWarning, setShowCapacityWarning] = useState(false);
-    const [missingGuestsCount, setMissingGuestsCount] = useState(0);
-
     // [NUEVO] Estado para la navegación del carrusel (0 = Titular)
     const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -383,8 +378,6 @@ export default function CheckinModal({
             qr_bank: '', // Vacío al inicio
             is_temporary: false,
         });
-
-        
 
     // =========================================================================
     //  LÓGICA DE TOLERANCIA (Rango: -350m / +40m ejemplo)
@@ -941,30 +934,8 @@ export default function CheckinModal({
         }
     };
 
-    // B. FUNCIÓN MODIFICADA: Actúa como "Interceptor" cuando el usuario presiona "Guardar"
     const submit: FormEventHandler = (e) => {
-        // 1. Evita que la página parpadee o se recargue.
         e.preventDefault();
-
-        // 2. CÁLCULO DE CAPACIDAD: ¿Cuántas camas quedan libres?
-        // maxCapacity viene del RoomType y totalPeople es la cantidad de tabs llenadas en el carrusel.
-        const faltantes = maxCapacity - totalPeople;
-
-        // 3. LA CONDICIÓN DE INTERCEPCIÓN
-        // Si NO estamos editando (!checkinToEdit) Y faltan personas (faltantes > 0)
-        if (!checkinToEdit && faltantes > 0) {
-            // Guardamos el número de faltantes para mostrarlo en el texto del modal
-            setMissingGuestsCount(faltantes);
-
-            // Hacemos visible el Modal de Advertencia Naranja
-            setShowCapacityWarning(true);
-
-            // DETENEMOS la ejecución con 'return'. El código no llega a ejecutar executeSubmit() aún.
-            return;
-        }
-
-        // 4. FLUJO NORMAL: Si la habitación está llena (faltantes = 0) o estamos editando,
-        // simplemente procedemos a enviar los datos a Laravel como siempre se hizo.
         executeSubmit();
     };
 
@@ -1515,6 +1486,7 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
+                                    {/*}
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -1531,9 +1503,21 @@ export default function CheckinModal({
                                                 )
                                             }
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Tab') {
-                                                    e.preventDefault(); // cancela comportamiento nativo
-                                                    professionRef.current?.focus(); // mueve foco directo
+                                                // TAB hacia adelante (lo controlas tú)
+                                                if (
+                                                    e.key === 'Tab' &&
+                                                    !e.shiftKey
+                                                ) {
+                                                    e.preventDefault();
+                                                    professionRef.current?.focus();
+                                                }
+
+                                                // SHIFT + TAB hacia atrás (comportamiento normal)
+                                                if (
+                                                    e.key === 'Tab' &&
+                                                    e.shiftKey
+                                                ) {
+                                                    // no hacemos nada para que el navegador retroceda libremente
                                                 }
                                             }}
                                         />
@@ -1543,6 +1527,64 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
+                                    */}
+                                    <div className="flex-1">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">
+                                            Año Nac.
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="block w-full rounded-xl border border-gray-400 px-3 py-2 text-sm text-black focus:border-green-500 focus:ring-green-500"
+                                            value={
+                                                currentPerson.birth_date
+                                                    ? currentPerson.birth_date.substring(
+                                                          0,
+                                                          4,
+                                                      )
+                                                    : ''
+                                            }
+                                            disabled={isReadOnly}
+                                            placeholder="EJ: 1990"
+                                            onChange={(e) => {
+                                                // 1. Extraemos solo números (máximo 4 dígitos)
+                                                const year = e.target.value
+                                                    .replace(/\D/g, '')
+                                                    .substring(0, 4);
+
+                                                // 2. Si escribieron algo, autocompletamos mes y día (01-01)
+                                                // Si borran todo, limpiamos la fecha.
+                                                if (year) {
+                                                    handleFieldChange(
+                                                        'birth_date',
+                                                        `${year}`,
+                                                    );
+                                                } else {
+                                                    handleFieldChange(
+                                                        'birth_date',
+                                                        '',
+                                                    );
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                // TAB hacia adelante (pasa a Profesión)
+                                                if (
+                                                    e.key === 'Tab' &&
+                                                    !e.shiftKey
+                                                ) {
+                                                    e.preventDefault();
+                                                    professionRef.current?.focus();
+                                                }
+                                                // SHIFT + TAB hacia atrás fluye con normalidad
+                                            }}
+                                            maxLength={4}
+                                        />
+                                        <span className="pl-1 text-xs font-bold text-gray-700">
+                                            {displayAge
+                                                ? `Edad: ${displayAge}`
+                                                : ''}
+                                        </span>
+                                    </div>
+
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Profesión
@@ -1790,7 +1832,6 @@ export default function CheckinModal({
                                 /* ------------------------------------------------ */
                                 <div>
                                     <div className="mb-2 flex flex-wrap items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 shadow-sm">
-                                        
                                         {/* IZQUIERDA: Checkbox y Caja de Descuento */}
                                         <div className="flex items-center gap-3 pl-1">
                                             <div className="flex items-center gap-2">
@@ -1799,16 +1840,24 @@ export default function CheckinModal({
                                                     id="toggle_discount"
                                                     checked={showDiscount}
                                                     onChange={(e) => {
-                                                        setShowDiscount(e.target.checked);
-                                                        if (!e.target.checked) setData('discount', 0); // Resetea si se desmarca
+                                                        setShowDiscount(
+                                                            e.target.checked,
+                                                        );
+                                                        if (!e.target.checked)
+                                                            setData(
+                                                                'discount',
+                                                                0,
+                                                            ); // Resetea si se desmarca
                                                     }}
                                                     disabled={isReadOnly}
                                                     className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
                                                 />
                                                 <label
                                                     htmlFor="toggle_discount"
-                                                    className={`cursor-pointer select-none text-xs font-bold transition-colors ${
-                                                        showDiscount ? 'text-amber-600' : 'text-gray-500'
+                                                    className={`cursor-pointer text-xs font-bold transition-colors select-none ${
+                                                        showDiscount
+                                                            ? 'text-amber-600'
+                                                            : 'text-gray-500'
                                                     }`}
                                                 >
                                                     DESCUENTO:
@@ -1817,16 +1866,28 @@ export default function CheckinModal({
 
                                             {/* Caja de texto (Aparece en la misma fila) */}
                                             {showDiscount && (
-                                                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
+                                                <div className="flex animate-in items-center gap-2 duration-200 fade-in slide-in-from-left-2">
                                                     <input
                                                         type="number"
-                                                        value={data.discount || ''}
-                                                        onChange={(e) => setData('discount', Number(e.target.value))}
+                                                        value={
+                                                            data.discount || ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'discount',
+                                                                Number(
+                                                                    e.target
+                                                                        .value,
+                                                                ),
+                                                            )
+                                                        }
                                                         disabled={isReadOnly}
                                                         placeholder="Precio final"
-                                                        className="w-24 rounded-md border-gray-300 py-1 px-2 text-xs font-bold text-gray-800 shadow-inner focus:border-amber-500 focus:ring-amber-500"
+                                                        className="w-24 rounded-md border-gray-300 px-2 py-1 text-xs font-bold text-gray-800 shadow-inner focus:border-amber-500 focus:ring-amber-500"
                                                     />
-                                                    <span className="text-[10px] font-bold text-amber-600">Bs.</span>
+                                                    <span className="text-[10px] font-bold text-amber-600">
+                                                        Bs.
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
@@ -1848,7 +1909,10 @@ export default function CheckinModal({
                                                 type="checkbox"
                                                 checked={data.is_temporary}
                                                 onChange={(e) =>
-                                                    setData('is_temporary', e.target.checked)
+                                                    setData(
+                                                        'is_temporary',
+                                                        e.target.checked,
+                                                    )
                                                 }
                                                 disabled={isReadOnly}
                                                 className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
@@ -1885,12 +1949,10 @@ export default function CheckinModal({
                                 /* ------------------------------------------------ */
                                 /* VISTA 2: RECEPCIONISTA (Diseño Limpio y Directo) */
                                 /* ------------------------------------------------ */
-                               
-                               
+
                                 <div className="mb-1">
                                     {/* 1. FILA DE OPCIONES (Descuento Izquierda | Temporal Derecha) */}
                                     <div className="mb-2 flex flex-wrap items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 shadow-sm">
-                                        
                                         {/* IZQUIERDA: Checkbox y Caja de Descuento */}
                                         <div className="flex items-center gap-3 pl-1">
                                             <div className="flex items-center gap-2">
@@ -1899,16 +1961,24 @@ export default function CheckinModal({
                                                     id="toggle_discount"
                                                     checked={showDiscount}
                                                     onChange={(e) => {
-                                                        setShowDiscount(e.target.checked);
-                                                        if (!e.target.checked) setData('discount', 0); // Resetea si se desmarca
+                                                        setShowDiscount(
+                                                            e.target.checked,
+                                                        );
+                                                        if (!e.target.checked)
+                                                            setData(
+                                                                'discount',
+                                                                0,
+                                                            ); // Resetea si se desmarca
                                                     }}
                                                     disabled={isReadOnly}
                                                     className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
                                                 />
                                                 <label
                                                     htmlFor="toggle_discount"
-                                                    className={`cursor-pointer select-none text-xs font-bold transition-colors ${
-                                                        showDiscount ? 'text-amber-600' : 'text-gray-500'
+                                                    className={`cursor-pointer text-xs font-bold transition-colors select-none ${
+                                                        showDiscount
+                                                            ? 'text-amber-600'
+                                                            : 'text-gray-500'
                                                     }`}
                                                 >
                                                     DESCUENTO:
@@ -1917,35 +1987,82 @@ export default function CheckinModal({
 
                                             {/* Caja de texto (Aparece en la misma fila) */}
                                             {showDiscount && (
-                                                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
+                                                <div className="flex animate-in items-center gap-2 duration-200 fade-in slide-in-from-left-2">
                                                     <input
                                                         type="number"
-                                                        value={data.discount === 0 ? '' : data.discount} // Si es 0, muestra vacío para dejar escribir
-                                                        onChange={(e) => setData('discount', Number(e.target.value))}
+                                                        value={
+                                                            data.discount === 0
+                                                                ? ''
+                                                                : data.discount
+                                                        } // Si es 0, muestra vacío para dejar escribir
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'discount',
+                                                                Number(
+                                                                    e.target
+                                                                        .value,
+                                                                ),
+                                                            )
+                                                        }
                                                         onBlur={() => {
                                                             // VALIDACIÓN AL QUITAR EL FOCO DEL INPUT
-                                                            const selectedRoom = rooms.find((r) => r.id === Number(data.room_id) || r.id === initialRoomId);
-                                                            const maxPrice = checkinToEdit?.agreed_price || selectedRoom?.price?.amount || 0;
-                                                            const minPrice = maxPrice * 0.5;
-                                                            let currentVal = Number(data.discount);
+                                                            const selectedRoom =
+                                                                rooms.find(
+                                                                    (r) =>
+                                                                        r.id ===
+                                                                            Number(
+                                                                                data.room_id,
+                                                                            ) ||
+                                                                        r.id ===
+                                                                            initialRoomId,
+                                                                );
+                                                            const maxPrice =
+                                                                checkinToEdit?.agreed_price ||
+                                                                selectedRoom
+                                                                    ?.price
+                                                                    ?.amount ||
+                                                                0;
+                                                            const minPrice =
+                                                                maxPrice * 0.5;
+                                                            let currentVal =
+                                                                Number(
+                                                                    data.discount,
+                                                                );
 
                                                             // Si lo dejó vacío o en 0, no hacemos nada
-                                                            if (currentVal === 0) return;
+                                                            if (
+                                                                currentVal === 0
+                                                            )
+                                                                return;
 
                                                             // Si pone MENOS de la mitad, lo forzamos a la mitad
-                                                            if (currentVal < minPrice) {
-                                                                setData('discount', minPrice);
-                                                            } 
+                                                            if (
+                                                                currentVal <
+                                                                minPrice
+                                                            ) {
+                                                                setData(
+                                                                    'discount',
+                                                                    minPrice,
+                                                                );
+                                                            }
                                                             // Si pone MÁS del precio normal, lo forzamos al precio normal
-                                                            else if (currentVal > maxPrice) {
-                                                                setData('discount', maxPrice);
+                                                            else if (
+                                                                currentVal >
+                                                                maxPrice
+                                                            ) {
+                                                                setData(
+                                                                    'discount',
+                                                                    maxPrice,
+                                                                );
                                                             }
                                                         }}
                                                         disabled={isReadOnly}
                                                         placeholder="Precio final"
-                                                        className="w-24 rounded-md border-gray-300 py-1 px-2 text-xs font-bold text-gray-800 shadow-inner focus:border-amber-500 focus:ring-amber-500"
+                                                        className="w-24 rounded-md border-gray-300 px-2 py-1 text-xs font-bold text-gray-800 shadow-inner focus:border-amber-500 focus:ring-amber-500"
                                                     />
-                                                    <span className="text-[10px] font-bold text-amber-600">Bs.</span>
+                                                    <span className="text-[10px] font-bold text-amber-600">
+                                                        Bs.
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
@@ -1955,7 +2072,9 @@ export default function CheckinModal({
                                             <label
                                                 htmlFor="is_temporary_rec"
                                                 className={`cursor-pointer text-xs font-bold transition-colors select-none ${
-                                                    data.is_temporary ? 'text-amber-600' : 'text-gray-500'
+                                                    data.is_temporary
+                                                        ? 'text-amber-600'
+                                                        : 'text-gray-500'
                                                 }`}
                                             >
                                                 Asig. TEMPORAL:
@@ -1964,7 +2083,12 @@ export default function CheckinModal({
                                                 id="is_temporary_rec"
                                                 type="checkbox"
                                                 checked={data.is_temporary}
-                                                onChange={(e) => setData('is_temporary', e.target.checked)}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'is_temporary',
+                                                        e.target.checked,
+                                                    )
+                                                }
                                                 disabled={isReadOnly}
                                                 className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
                                             />
@@ -1976,51 +2100,95 @@ export default function CheckinModal({
                                         {(() => {
                                             // Buscamos la habitación seleccionada
                                             const selectedRoom = rooms.find(
-                                                (r) => r.id === Number(data.room_id) || r.id === initialRoomId,
+                                                (r) =>
+                                                    r.id ===
+                                                        Number(data.room_id) ||
+                                                    r.id === initialRoomId,
                                             );
 
-                                            const originalPrice = selectedRoom?.price?.amount || 0;
-                                            let autoCalculatedPrice = originalPrice;
+                                            const originalPrice =
+                                                selectedRoom?.price?.amount ||
+                                                0;
+                                            let autoCalculatedPrice =
+                                                originalPrice;
                                             let isAutoAdjusted = false;
 
                                             // Si estamos EDITANDO, leemos el precio real
-                                            if (checkinToEdit && checkinToEdit.agreed_price && (!data.discount || data.discount === 0)) {
-                                                autoCalculatedPrice = checkinToEdit.agreed_price;
-                                                if (autoCalculatedPrice !== originalPrice) {
+                                            if (
+                                                checkinToEdit &&
+                                                checkinToEdit.agreed_price &&
+                                                (!data.discount ||
+                                                    data.discount === 0)
+                                            ) {
+                                                autoCalculatedPrice =
+                                                    checkinToEdit.agreed_price;
+                                                if (
+                                                    autoCalculatedPrice !==
+                                                    originalPrice
+                                                ) {
                                                     isAutoAdjusted = true;
                                                 }
                                             }
 
                                             // Lógica Corporativa
-                                            const isCorporate = data.notes?.toUpperCase().includes('CORPORATIVO');
+                                            const isCorporate = data.notes
+                                                ?.toUpperCase()
+                                                .includes('CORPORATIVO');
                                             if (isCorporate && selectedRoom) {
-                                                const roomAny = selectedRoom as any;
-                                                const bathroomType = roomAny.price?.bathroom_type?.toLowerCase() || roomAny.room_type?.bathroom_type?.toLowerCase() || '';
-                                                const isPrivate = bathroomType === 'private' || bathroomType === 'privado';
-                                                autoCalculatedPrice = (isPrivate ? 90 : 60) * totalPeople;
+                                                const roomAny =
+                                                    selectedRoom as any;
+                                                const bathroomType =
+                                                    roomAny.price?.bathroom_type?.toLowerCase() ||
+                                                    roomAny.room_type?.bathroom_type?.toLowerCase() ||
+                                                    '';
+                                                const isPrivate =
+                                                    bathroomType ===
+                                                        'private' ||
+                                                    bathroomType === 'privado';
+                                                autoCalculatedPrice =
+                                                    (isPrivate ? 90 : 60) *
+                                                    totalPeople;
                                                 isAutoAdjusted = false; // Sobrescribe etiqueta
                                             }
 
                                             // ==========================================
                                             // APLICAMOS EL DESCUENTO A LA VISTA
                                             // ==========================================
-                                            const maxAllowedPrice = autoCalculatedPrice; // Máximo es el precio actual
-                                            const minAllowedPrice = autoCalculatedPrice * 0.5; // Mínimo 50%
-                                            let finalPrice = autoCalculatedPrice;
+                                            const maxAllowedPrice =
+                                                autoCalculatedPrice; // Máximo es el precio actual
+                                            const minAllowedPrice =
+                                                autoCalculatedPrice * 0.5; // Mínimo 50%
+                                            let finalPrice =
+                                                autoCalculatedPrice;
                                             let isManual = false;
 
-                                            if (data.discount && data.discount > 0) {
+                                            if (
+                                                data.discount &&
+                                                data.discount > 0
+                                            ) {
                                                 // Protección robusta en la UI:
-                                                let safeDiscount = data.discount;
-                                                if (safeDiscount < minAllowedPrice) safeDiscount = minAllowedPrice;
-                                                if (safeDiscount > maxAllowedPrice) safeDiscount = maxAllowedPrice;
-                                                
-                                                finalPrice = safeDiscount; 
+                                                let safeDiscount =
+                                                    data.discount;
+                                                if (
+                                                    safeDiscount <
+                                                    minAllowedPrice
+                                                )
+                                                    safeDiscount =
+                                                        minAllowedPrice;
+                                                if (
+                                                    safeDiscount >
+                                                    maxAllowedPrice
+                                                )
+                                                    safeDiscount =
+                                                        maxAllowedPrice;
+
+                                                finalPrice = safeDiscount;
                                                 isManual = true;
                                             }
 
                                             // Calculamos el total
-                                            const noches = Number(data.duration_days) || 0;
+                                            const noches =
+                                                Number(data.duration_days) || 0;
                                             const total = finalPrice * noches;
 
                                             return (
@@ -2028,24 +2196,37 @@ export default function CheckinModal({
                                                     {/* IZQUIERDA: Habitación + Costo por 1 Noche */}
                                                     <div className="flex flex-col items-start">
                                                         <label className="flex items-center gap-2 text-2xl leading-none font-black text-green-700">
-                                                            HAB {selectedRoom?.number || 'N/A'}
+                                                            HAB{' '}
+                                                            {selectedRoom?.number ||
+                                                                'N/A'}
                                                         </label>
                                                         <div className="mt-1 flex items-center gap-2">
-                                                            {isAutoAdjusted || isManual ? (
+                                                            {isAutoAdjusted ||
+                                                            isManual ? (
                                                                 <>
                                                                     <span className="text-sm font-bold text-gray-400 line-through">
-                                                                        {autoCalculatedPrice} Bs
+                                                                        {
+                                                                            autoCalculatedPrice
+                                                                        }{' '}
+                                                                        Bs
                                                                     </span>
                                                                     <span className="text-sm font-black text-green-800">
-                                                                        {finalPrice} Bs / noche
+                                                                        {
+                                                                            finalPrice
+                                                                        }{' '}
+                                                                        Bs /
+                                                                        noche
                                                                     </span>
                                                                     <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-amber-700 uppercase shadow-sm">
-                                                                        {isManual ? 'Descuento' : 'Tarifa Ajustada'}
+                                                                        {isManual
+                                                                            ? 'Descuento'
+                                                                            : 'Tarifa Ajustada'}
                                                                     </span>
                                                                 </>
                                                             ) : (
                                                                 <span className="text-sm font-bold text-green-800">
-                                                                    {finalPrice} Bs / noche
+                                                                    {finalPrice}{' '}
+                                                                    Bs / noche
                                                                 </span>
                                                             )}
                                                         </div>
@@ -2054,16 +2235,23 @@ export default function CheckinModal({
                                                     {/* DERECHA: Total a cobrar */}
                                                     <div className="flex flex-col border-l border-green-200 pl-4 text-right">
                                                         <span className="mb-0.5 text-xs font-bold text-green-600 uppercase">
-                                                            {isAutoAdjusted || isManual ? 'Total a cobrar' : 'Total sugerido'}
+                                                            {isAutoAdjusted ||
+                                                            isManual
+                                                                ? 'Total a cobrar'
+                                                                : 'Total sugerido'}
                                                         </span>
                                                         <span className="text-2xl leading-none font-black text-gray-900">
                                                             {total} Bs
                                                         </span>
-                                                        {(isAutoAdjusted || isManual) && noches > 1 && (
-                                                            <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                {finalPrice} x {noches} noches
-                                                            </span>
-                                                        )}
+                                                        {(isAutoAdjusted ||
+                                                            isManual) &&
+                                                            noches > 1 && (
+                                                                <span className="mt-0.5 text-[10px] font-medium text-gray-500">
+                                                                    {finalPrice}{' '}
+                                                                    x {noches}{' '}
+                                                                    noches
+                                                                </span>
+                                                            )}
                                                     </div>
                                                 </div>
                                             );
@@ -2639,58 +2827,6 @@ export default function CheckinModal({
                 onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
             />
-
-            {showCapacityWarning && (
-                <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
-                    <div className="w-full max-w-md scale-100 rounded-2xl bg-white p-6 shadow-2xl transition-transform duration-200 zoom-in-95">
-                        <h3 className="flex items-center gap-2 text-lg font-black text-amber-600">
-                            <AlertTriangle className="h-6 w-6" />
-                            Capacidad Incompleta
-                        </h3>
-
-                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                            <p>
-                                Está a punto de asignar una habitación de{' '}
-                                <strong>capacidad {maxCapacity}</strong> a solo{' '}
-                                <strong>{totalPeople} persona(s)</strong>.
-                            </p>
-                            <p className="mt-2 font-bold text-red-600 uppercase">
-                                Faltan datos de {missingGuestsCount} persona(s).
-                            </p>
-                        </div>
-
-                        <p className="mt-4 text-sm leading-relaxed font-medium text-gray-600">
-                            Si continúa, el sistema ajustará automáticamente la
-                            tarifa al equivalente de una habitación para{' '}
-                            <strong className="text-black">
-                                {totalPeople} persona(s)
-                            </strong>{' '}
-                            con el mismo tipo de baño. ¿Desea continuar?
-                        </p>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowCapacityWarning(false)}
-                                className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-200 active:scale-95"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowCapacityWarning(false);
-                                    executeSubmit(); // Ejecutamos el envío final
-                                }}
-                                className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-amber-500 active:scale-95"
-                            >
-                                <CheckCircle2 className="h-4 w-4" />
-                                Sí, Asignar y Ajustar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

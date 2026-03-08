@@ -41,36 +41,19 @@ class CheckinController extends Controller
     }
 
     // Funcion Caluclo de precio acordado segun ocupacion y capacidad
-    public function calculateAgreedPrice($roomId, $totalGuests){
+    public function calculateAgreedPrice($roomId, $totalGuests)
+    {
         $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
 
-        //Datos por defecto de la habilitacion original
-        $originalPrice = $room->price->amount ?? 0;
-        $bathroomType = $room->price->bathroom_type ?? null;
-        $roomCapacity = $room->roomType->capacity ?? 1;
-
-        $agreedPrice = $originalPrice;
-
-        if($totalGuests < $roomCapacity && $bathroomType){
-            $adjuntedPrice = \App\Models\Price::where('is_active', true)
-            ->where('bathroom_type', $bathroomType)
-            ->whereHas('roomType', function($query) use ($totalGuests){
-                $query->where('capacity', $totalGuests);
-            })
-            ->first();
-            if($adjuntedPrice){
-                $agreedPrice = $adjuntedPrice->amount;
-            }
-        }
-
-        return $agreedPrice;
+        // Retornamos directamente el precio original sin importar la cantidad de huéspedes
+        return $room->price->amount ?? 0;
     }
 
     // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
     public function store(Request $request)
     {
         // =========================================================
-        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA (SIN CAMBIOS)
+        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
         // =========================================================
         $inputOrigin = $request->input('origin');
         $cleanOrigin = null;
@@ -91,14 +74,14 @@ class CheckinController extends Controller
         // =========================================================
         $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
         $isTitularComplete = true;
-        $missingField = null; // <-- AÑADIDO: Rastrea qué campo exacto falta
+        $missingField = null;
 
         if (!$request->filled('guest_id')) {
             // A. Si es NUEVO: Verificamos que el formulario traiga todo
             foreach ($requiredFields as $field) {
                 if (!$request->filled($field)) {
                     $isTitularComplete = false;
-                    $missingField = $field; // <-- Guardamos el campo
+                    $missingField = $field;
                     break;
                 }
             }
@@ -107,11 +90,10 @@ class CheckinController extends Controller
             $existingGuestCheck = \App\Models\Guest::find($request->guest_id);
             if ($existingGuestCheck) {
                 foreach ($requiredFields as $field) {
-                    // Está completo si: viene en el request O ya lo tiene en la BD
                     $hasData = $request->filled($field) || !empty($existingGuestCheck->$field);
                     if (!$hasData) {
                         $isTitularComplete = false;
-                        $missingField = $field; // <-- Guardamos el campo
+                        $missingField = $field;
                         break;
                     }
                 }
@@ -121,16 +103,15 @@ class CheckinController extends Controller
         // C. Verificar Procedencia (Origin) - CRÍTICO
         if ($isTitularComplete && is_null($cleanOrigin)) {
             $isTitularComplete = false;
-            $missingField = 'origin'; // <-- Guardamos el campo
+            $missingField = 'origin';
         }
 
         // =========================================================
-        // 3. PROCESO DE CREACIÓN / ACTUALIZACIÓN
+        // 3. PROCESO DE CREACIÓN / ACTUALIZACIÓN (CON PROTECCIÓN)
         // =========================================================
 
-        // 1. Validar y Crear/Actualizar al Huésped TITULAR (SIN CAMBIOS)
         if (!$request->filled('guest_id')) {
-            // --- NUEVO TITULAR ---
+            // --- DATOS INGRESADOS MANUALMENTE ---
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50',
@@ -141,7 +122,7 @@ class CheckinController extends Controller
             $birthDate = $request->birth_date;
             $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-            // BÚSQUEDA BLINDADA (Prioridad al Carnet)
+            // BÚSQUEDA BLINDADA
             $existingGuest = null;
             if (!empty($idNumber)) {
                 $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
@@ -155,7 +136,19 @@ class CheckinController extends Controller
             }
 
             if ($existingGuest) {
-                // SI YA EXISTE: Actualizamos
+                // 🛑 BARRERA 1: ¿EL CLIENTE ENCONTRADO YA ESTÁ HOSPEDADO?
+                $ocupacionPrevia = \App\Models\Checkin::with('room')
+                    ->where('guest_id', $existingGuest->id)
+                    ->where('status', 'activo')
+                    ->first();
+
+                if ($ocupacionPrevia) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
+                    ]);
+                }
+
+                // SI PASA LA BARRERA: Recién lo actualizamos
                 $existingGuest->update([
                     'identification_number' => $idNumber ?? $existingGuest->identification_number,
                     'nationality' => $request->nationality ?? $existingGuest->nationality,
@@ -168,7 +161,7 @@ class CheckinController extends Controller
                 ]);
                 $guestId = $existingGuest->id;
             } else {
-                // SI NO EXISTE: Creamos
+                // SI NO EXISTE EN LA BD: Lo Creamos
                 $guest = \App\Models\Guest::create([
                     'full_name' => $fullName,
                     'identification_number' => $idNumber,
@@ -183,11 +176,23 @@ class CheckinController extends Controller
                 $guestId = $guest->id;
             }
         } else {
-            // --- TITULAR EXISTENTE (Seleccionado del buscador) ---
+            // --- CLIENTE SELECCIONADO DESDE EL BUSCADOR ---
             $guestId = $request->guest_id;
-            $existingGuest = \App\Models\Guest::find($guestId);
 
-            // Actualizar teléfono y ESTADO si se envió información nueva
+            // 🛑 BARRERA 2: ¿EL CLIENTE SELECCIONADO YA ESTÁ HOSPEDADO?
+            $ocupacionPrevia = \App\Models\Checkin::with('room')
+                ->where('guest_id', $guestId)
+                ->where('status', 'activo')
+                ->first();
+
+            if ($ocupacionPrevia) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
+                ]);
+            }
+
+            // SI PASA LA BARRERA: Recién lo actualizamos
+            $existingGuest = \App\Models\Guest::find($guestId);
             if ($existingGuest) {
                 $existingGuest->update([
                     'phone' => $request->phone ?? $existingGuest->phone,
@@ -197,22 +202,8 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // CASO 3: ASIGNACIÓN ÚNICA (NO TOCAR)
-        // Se mantiene intacto. Si el huésped ya es titular de una
-        // habitación activa, aborta la transacción inmediatamente.
+        // 4. VALIDACIÓN DE CHECKIN
         // =========================================================
-        $ocupacionPrevia = \App\Models\Checkin::with('room')
-            ->where('guest_id', $guestId)
-            ->where('status', 'activo')
-            ->first();
-
-        if ($ocupacionPrevia) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
-            ]);
-        }
-
-        // 2. Validar datos del Checkin
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -222,43 +213,33 @@ class CheckinController extends Controller
             'notes' => 'nullable|string',
             'companions' => 'nullable|array',
             'selected_services' => 'nullable|array',
-
-            // --- PAGOS ---
             'advance_payment' => 'nullable|numeric|min:0',
             'payment_method' => 'required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
-
-            // --- ASIGNACIÓN TEMPORAL (NUEVO) ---
             'is_temporary' => 'nullable|boolean',
             'discount' => 'nullable|numeric|min:0',
         ]);
 
-        // =========================================================
-        // LOGICA DE AJUSTE AUTOMATICO DE PRECIO (CAPACIDAD VS OCUPACION)
-        // MODIFICADO: Ahora llama a la función externa calculateAgreedPrice
-        // =========================================================
+        // LOGICA DE PRECIO Y CAPACIDAD
         $totalGuest = 1;
-        if($request->has('companions') && is_array($request->companions)){
-            foreach($request->companions as $compData){
+        if ($request->has('companions') && is_array($request->companions)) {
+            foreach ($request->companions as $compData) {
                 if (!empty($compData['full_name'])) {
                     $totalGuest++;
                 }
             }
         }
-        
-        // Llamamos a la nueva función que pegaste arriba
+
         $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
-        // Funcion para el descuento manual
-        // Funcion para el descuento manual
-if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-    $minAllowed = $agreedPrice * 0.5; // El límite es la mitad (50%)
-    $agreedPrice = max(floatval($request->discount), $minAllowed);
-}
+        
+        if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+            $minAllowed = $agreedPrice * 0.5;
+            $agreedPrice = max(floatval($request->discount), $minAllowed);
+        }
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        // Pasamos también $missingField y $agreedPrice a la transacción
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $totalGuest) {
 
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
@@ -269,39 +250,30 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
                 'origin' => $cleanOrigin,
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
-
-                // Mantenemos esta columna para reportes viejos, pero la verdad está en la tabla 'payments'
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
                 'agreed_price' => $agreedPrice,
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
-
-                // --- GUARDAMOS SI ES TEMPORAL ---
                 'is_temporary' => $request->boolean('is_temporary'),
             ]);
 
-            // --- REGISTRAR EL PAGO EN LA BILLETERA (Historial) ---
+            // --- PAGOS ---
             $montoInicial = $validatedCheckin['advance_payment'] ?? 0;
-
             if ($montoInicial > 0) {
-                // Determinamos el banco: Si es EFECTIVO, el banco se guarda como NULL
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
-
                 \App\Models\Payment::create([
                     'checkin_id' => $checkin->id,
-                    'user_id' => $userId, // Guardamos QUÉ recepcionista recibió el dinero
+                    'user_id' => $userId,
                     'amount' => $montoInicial,
-                    'method' => $request->payment_method, // EFECTIVO o QR
-                    'bank_name' => $banco, // BNB, BCP, o NULL
+                    'method' => $request->payment_method,
+                    'bank_name' => $banco,
                     'description' => 'PAGO INICIAL (CHECK-IN)',
                     'type' => 'PAGO'
                 ]);
             }
-            // -----------------------------------------------------------
 
-            // 4. --- LÓGICA DE ACOMPAÑANTES (SIN CAMBIOS ESTRUCTURALES) ---
-            $allCompanionsComplete = true; // <-- AÑADIDO: Verifica si los acompañantes están completos
-
+            // --- ACOMPAÑANTES ---
+            $allCompanionsComplete = true; 
             if ($request->has('companions') && is_array($request->companions)) {
                 $idsParaSincronizar = [];
 
@@ -312,13 +284,11 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                     $compBirthDate = $compData['birth_date'] ?? null;
                     $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
 
-                    // Calculamos estado del acompañante (simple)
                     $compIsComplete = !empty($compIdNumber) && !empty($compData['nationality']);
                     if (!$compIsComplete) {
-                        $allCompanionsComplete = false; // <-- Detectamos si falta data de algún acompañante
+                        $allCompanionsComplete = false;
                     }
 
-                    // BÚSQUEDA BLINDADA ACOMPAÑANTES
                     $companion = null;
                     if (!empty($compIdNumber)) {
                         $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
@@ -359,39 +329,26 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 }
             }
 
-            // 5. Guardar Servicios (SIN CAMBIOS)
+            // --- SERVICIOS ---
             if ($request->has('selected_services')) {
                 $checkin->services()->sync($request->selected_services);
             }
 
             // =========================================================
-            // 🛑 6. LÓGICA AISLADA DE CASOS DE USO (Rápido vs Completo)
+            // 🛑 LÓGICA DE ESTADO (Rápido vs Completo)
             // =========================================================
-            // MODIFICACIÓN: Se eliminó el `throw ValidationException` que 
-            // causaba un rollback y borraba todo cuando faltaban datos.
-            // En su lugar, evaluamos si todo está completo para separar 
-            // el Caso 1 (Asignación Rápida) del Caso 2 (Check-in Completo).
-            
-            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
+            $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
+            $maxCapacity = $roomModel->roomType->capacity ?? 1;
+            $isCapacityFull = ($totalGuest >= $maxCapacity);
+
+            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
             if ($isEverythingComplete) {
-                // ------------------------------------------------------------------
-                // CASO 2: CHECK-IN COMPLETO
-                // ------------------------------------------------------------------
-                // POR QUÉ: Al estar el 100% de la información (Titular + Acompañantes),
-                // las reglas del negocio indican que la habitación ya puede
-                // bloquearse formalmente.
+                // CASO 2: COMPLETO
                 \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
-
                 return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
             } else {
-                // ------------------------------------------------------------------
-                // CASO 1: ASIGNACIÓN RÁPIDA (FALTAN DATOS)
-                // ------------------------------------------------------------------
-                // POR QUÉ: Queremos que el Check-in (con lo poco que hay, ej. Nombre) 
-                // se guarde en la BD para que el huésped entre, pero NO cambiamos 
-                // la habitación a 'OCUPADO' forzando al staff a completarlo después.
-                
+                // CASO 1: ASIGNACIÓN RÁPIDA
                 $mensaje = 'Faltan datos.';
 
                 if (!$isTitularComplete) {
@@ -408,10 +365,11 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                     $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
                 } elseif (!$allCompanionsComplete) {
                     $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
+                } elseif (!$isCapacityFull) {
+                    $faltantes = $maxCapacity - $totalGuest;
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s) para llenar la capacidad de la habitación.";
                 }
 
-                // Hacemos el return con un mensaje de éxito, pero avisando de la falta de datos.
-                // Como NO lanzamos una excepción, la Transacción hace COMMIT (guarda los datos).
                 return redirect()->back()->with('success', 'Asignación Rápida registrada. ATENCIÓN: ' . $mensaje . ' Por favor edite y complete los datos para cambiar el estado a OCUPADO.');
             }
         });
@@ -436,13 +394,13 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
             if ($ingreso->isSameDay($ahora)) {
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
                 \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
-                
+
                 // [CORRECCIÓN]: Recalculamos el precio para que tome el valor de la NUEVA habitación
                 $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
 
                 // Actualizamos el cuarto y el NUEVO precio
                 $checkin->update([
-                    'room_id' => $newRoomId, 
+                    'room_id' => $newRoomId,
                     'agreed_price' => $nuevoAgreedPrice, // <-- AÑADIDO
                     'notes' => $checkin->notes . " | CAMBIO RÁPIDO"
                 ]);
@@ -470,7 +428,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 // Nuevo Calcular precio para la nueva habitacion 
                 // [CORRECCIÓN TYPO]: La "P" debe ser mayúscula
                 $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
-                
+
                 // C. Crear Checkin Nuevo
                 $nuevoCheckin = Checkin::create([
                     'guest_id' => $checkin->guest_id,
@@ -692,7 +650,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 foreach ($request->companions as $compData) {
                     // Verificación de acompañante individual
                     if (empty($compData['full_name'])) {
-                        continue; 
+                        continue;
                     }
 
                     $totalGuests++;
@@ -743,10 +701,13 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
 
             // Aplicacion de nuevo precio con descuento
             if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-    $minAllowed = $updatedAgreedPrice * 0.5;
-    $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
-}
+                $minAllowed = $updatedAgreedPrice * 0.5;
+                $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
+            }
             // 4. LÓGICA DE FECHAS
+            $roomModel = \App\Models\Room::with('roomType')->find($validated['room_id']);
+            $maxCapacity = $roomModel->roomType->capacity ?? 1;
+            $isCapacityFull = ($totalGuests >= $maxCapacity); // Ojo aquí usamos $totalGuests (con 's')
             // Solo si TODO es verdadero (incluida la procedencia válida)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
@@ -779,7 +740,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 'duration_days' => $validated['duration_days'],
                 'check_out_date' => $checkOutDate,
                 'advance_payment' => $validated['advance_payment'],
-                'agreed_price' => $updatedAgreedPrice, 
+                'agreed_price' => $updatedAgreedPrice,
                 'notes' => strtoupper($validated['notes'] ?? ''),
 
                 // ✅ GUARDAR ÚNICAMENTE LA PROCEDENCIA LIMPIA
@@ -833,7 +794,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
                 }
 
                 // Guardamos la actualización (hace COMMIT a la BD) pero enviamos la advertencia.
-                return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
+               return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
             }
         });
     }
@@ -925,9 +886,9 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
             'guest' => $checkin->guest,
             'room' => $checkin->room,
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
-            'check_out_date' => $checkOutDate->toIso8601String(), 
+            'check_out_date' => $checkOutDate->toIso8601String(),
             'duration_days' => $days,
-            'price_per_night' => $price, 
+            'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
             'services_total' => $servicesTotal,
             'advance_payment' => $totalPagadoReal, // Mandamos el total de pagos real
@@ -1029,8 +990,8 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
     public function generateAssignmentReceipt(Checkin $checkin)
     {
         // [MODIFICADO] Añadimos 'room.price' por precaución para los fallbacks
-        $checkin->load(['guest', 'room.price']); 
-        
+        $checkin->load(['guest', 'room.price']);
+
         // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150));
         $pdf->SetMargins(4, 4, 4);
@@ -1053,7 +1014,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(12, 4, 'Nombre:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L'); 
+        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
 
         // Nacionalidad
         $pdf->SetFont('Arial', 'B', 7);
@@ -1068,7 +1029,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
         $pdf->Cell(20, 4, $checkin->guest->identification_number, 0, 0);
 
         $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(15, 4, 'Otorgado:', 0, 0); 
+        $pdf->Cell(15, 4, 'Otorgado:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
         $pdf->Cell(0, 4, utf8_decode($checkin->guest->issued_in), 0, 1);
 
@@ -1142,7 +1103,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
 
         // Observaciones (Multilinea)
         $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, 'Observaciones:', 0, 1); 
+        $pdf->Cell(28, 4, 'Observaciones:', 0, 1);
         $pdf->SetFont('Arial', '', 7);
         if ($checkin->notes) {
             $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
@@ -1158,20 +1119,20 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
         $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
 
         // --- FIRMA ---
-        $pdf->Ln(10); 
+        $pdf->Ln(10);
 
-        $pageWidth = $pdf->GetPageWidth(); 
+        $pageWidth = $pdf->GetPageWidth();
         $margins = 4;
-        $lineLength = 50; 
+        $lineLength = 50;
 
-        $x = ($pageWidth - $lineLength) / 2; 
+        $x = ($pageWidth - $lineLength) / 2;
         $y = $pdf->GetY();
 
-        $pdf->Line($x, $y, $x + $lineLength, $y); 
-        $pdf->Ln(2); 
+        $pdf->Line($x, $y, $x + $lineLength, $y);
+        $pdf->Ln(2);
 
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C'); 
+        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C');
 
         // 4. Salida
         return response($pdf->Output('S'), 200)
@@ -1381,7 +1342,7 @@ if ($request->filled('discount') && is_numeric($request->discount) && $request->
             $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
 
             $diasReales = $this->calculateBillableDays($checkin, $salida);
-            
+
             // ==========================================================================
             // --- [MODIFICADO] PRECIO UNITARIO ---
             // Ahora lee el agreed_price (precio ajustado por ocupación).
