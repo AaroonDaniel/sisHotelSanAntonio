@@ -1970,7 +1970,7 @@ function CheckoutConfirmationModal({
                                                     <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
                                                         <div className="font-bold text-gray-800">
                                                             Habitación{' '}
-                                                            {room.number}
+                                                            {room.number} - {room.roomType?.name}
                                                         </div>
                                                         <div className="text-right text-gray-400">
                                                             -
@@ -2022,7 +2022,7 @@ function CheckoutConfirmationModal({
                                                     {/* 4. LLEGADA */}
                                                     <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
                                                         <div className="pl-2 text-xs text-gray-600">
-                                                            Llegada:{' '}
+                                                            Ingreso:{' '}
                                                             <span className="font-bold text-gray-800">
                                                                 {new Date(
                                                                     displayData.check_in_date,

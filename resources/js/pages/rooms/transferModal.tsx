@@ -47,19 +47,53 @@ export default function TransferModal({
         new_room_id: '',
         target_room_id: '',
         transfer_reason: '',
+        selected_guests: [] as number[],
     });
 
     useEffect(() => {
-        if (!show) {
+        if(show && checkin) {
+            resetFilters();
+            setShowConfirm(false);
+            
+            setData('selected_guests', []);
+        } else if (!show) {
             resetFilters();
             setShowConfirm(false);
         }
-    }, [show]);
+    }, [show, checkin]);
 
+    // ==========================================
+    // 🐞 MODO DEBUG: RASTREADOR DE HABITACIONES
+    // ==========================================
+    useEffect(() => {
+        if (show) {
+            console.group("🔍 DETALLES DEL MODAL DE TRANSFERENCIA");
+            console.log("1. Modo actual:", mode);
+            console.log("2. Habitación del huésped actual (ID):", checkin?.room_id);
+            console.log("3. Habitaciones Libres recibidas (availableRooms):", availableRooms);
+            console.log("4. Habitaciones Ocupadas recibidas (occupiedRooms):", occupiedRooms);
+            console.log("5. Filtros activos:", { searchQuery, selectedBlock, selectedRoomType, selectedBathroom });
+            console.log("6. RESULTADO FINAL MOSTRADO (filteredRooms):", filteredRooms);
+            console.groupEnd();
+        }
+    }, [mode, availableRooms, occupiedRooms, show]);
+    // ==========================================
+
+    // 🚀 RESTAURADO: Función para cambiar el modo
     const handleModeChange = (newMode: 'individual' | 'group') => {
         setMode(newMode);
         resetFilters();
     };
+    
+    const handleToggleGuest = (id: number) => {
+        let newSelected = [...data.selected_guests];
+        if (newSelected.includes(id)){
+            newSelected = newSelected.filter((gId) => gId !== id); 
+        } else {
+            newSelected.push(id);
+        }
+        setData('selected_guests', newSelected);
+    } 
 
     const resetFilters = () => {
         reset();
@@ -128,6 +162,23 @@ export default function TransferModal({
         const room = [...availableRooms, ...occupiedRooms].find(r => String(r.id) === String(currentSelectedId));
         return room ? room.number : '???';
     };
+    const getSelectedGuestNames = () => {
+        if (!checkin || data.selected_guests.length === 0) return '';
+
+        // Juntamos al titular y a los acompañantes en una sola lista
+        const allGuests = [
+            checkin.guest,
+            ...(checkin.companions || [])
+        ].filter(Boolean);
+
+        // Filtramos solo los que están seleccionados y sacamos sus nombres
+        const names = allGuests
+            .filter(g => data.selected_guests.includes(g.id))
+            .map(g => g.full_name);
+
+        // Los unimos con comas (Ej: "Juan Perez, Maria Lopez")
+        return names.join(' - ');
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
@@ -157,22 +208,67 @@ export default function TransferModal({
                     <div className="flex w-full flex-col border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4 overflow-y-auto">
                         
                         <div className="space-y-6">
-                            {/* Datos del Huésped */}
-                            <div>
-                                <label className="mb-2 block text-xs font-bold text-gray-500 uppercase">
-                                    Huésped Actual
+                            
+                            {/* NUEVO BLOQUE: Selección interactiva de huéspedes con PARPADEO */}
+                            <div className={`rounded-xl p-1 transition-all duration-300 ${
+                                data.selected_guests.length === 0 
+                                ? 'animate-pulse ring-2 ring-green-400 ring-offset-1 bg-green-50/50' 
+                                : ''
+                            }`}>
+                                <label className={`mb-2 flex items-center justify-between text-xs font-bold uppercase transition-colors ${
+                                    data.selected_guests.length === 0 ? 'text-green-600' : 'text-gray-500'
+                                }`}>
+                                    <span>
+                                        {data.selected_guests.length === 0 
+                                            ? 'SELECCIONE A QUIÉN MOVER' 
+                                            : 'Huéspedes a transferir'}
+                                    </span>
+                                    <span className="rounded bg-green-50 px-5 py-2 text-[12px] text-center text-green-700 border border-green-100">
+                                        Hab. {checkin.room?.number}
+                                    </span>
                                 </label>
-                                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                                    <h3 className="text-sm font-black text-gray-800 uppercase">{checkin.guest?.full_name}</h3>
-                                    <div className="mt-1 flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Origen</span>
-                                        <span className="rounded bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700 border border-green-100">
-                                            HAB. {checkin.room?.number}
-                                        </span>
-                                    </div>
+                                
+                                <div className={`flex max-h-48 flex-col gap-2 overflow-y-auto rounded-xl border p-3 shadow-sm transition-colors ${
+                                    data.selected_guests.length === 0 ? 'border-green-300 bg-white' : 'border-gray-200 bg-white'
+                                }`}>
+                                    {/* TITULAR */}
+                                    <label className="flex cursor-pointer items-center justify-between rounded-lg border border-transparent p-2 transition-colors hover:border-gray-100 hover:bg-gray-50">
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-gray-800 uppercase">
+                                                {checkin.guest?.full_name}
+                                            </span>
+                                            
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={data.selected_guests.includes(checkin.guest_id)}
+                                            onChange={() => handleToggleGuest(checkin.guest_id)}
+                                            className="h-5 w-5 cursor-pointer rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                        />
+                                    </label>
+                                    
+                                    {/* ACOMPAÑANTES */}
+                                    {checkin.companions?.map((comp: any) => (
+                                        <label
+                                            key={comp.id}
+                                            className="flex cursor-pointer items-center justify-between rounded-lg border border-transparent p-2 transition-colors hover:border-gray-100 hover:bg-gray-50"
+                                        >
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-bold text-gray-800 uppercase">
+                                                    {comp.full_name}
+                                                </span>
+                                                
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={data.selected_guests.includes(comp.id)}
+                                                onChange={() => handleToggleGuest(comp.id)}
+                                                className="h-5 w-5 cursor-pointer rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                            />
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
-
                             {/* Selector de Modo */}
                             <div>
                                 <label className="mb-2 block text-xs font-bold text-gray-500 uppercase">
@@ -209,7 +305,7 @@ export default function TransferModal({
                                         <CheckCircle2 className="h-4 w-4 shrink-0" />
                                         <div>
                                             <p className="font-bold uppercase">CAMBIO SIMPLE</p>
-                                            <p className="mt-1 opacity-80 leading-tight">La habitación actual quedará en LIMPIEZA.</p>
+                                            <p className="mt-1 opacity-80 leading-tight">Mueve a los seleccionados a una habitación vacía.</p>
                                         </div>
                                     </div>
                                 ) : (
@@ -217,26 +313,11 @@ export default function TransferModal({
                                         <AlertTriangle className="h-4 w-4 shrink-0" />
                                         <div>
                                             <p className="font-bold uppercase">UNIR A GRUPO</p>
-                                            <p className="mt-1 opacity-80 leading-tight">Se unirá como acompañante a otra habitación ocupada.</p>
+                                            <p className="mt-1 opacity-80 leading-tight">Mueve a los seleccionados para unirlos a una habitación que ya está ocupada.</p>
                                         </div>
                                     </div>
                                 )}
                             </div>
-                        </div>
-
-                        <div className="mt-auto pt-6 space-y-3">
-                            <button
-                                onClick={handleSubmit}
-                                disabled={processing || !currentSelectedId}
-                                className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    mode === 'individual' ? 'bg-green-600 hover:bg-green-500' : 'bg-green-600 hover:bg-green-500'
-                                }`}
-                            >
-                                {processing ? 'PROCESANDO...' : 'CONFIRMAR CAMBIO'}
-                            </button>
-                            <button onClick={onClose} type="button" className="w-full rounded-xl border border-gray-300 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 uppercase">
-                                Cancelar
-                            </button>
                         </div>
                     </div>
 
@@ -375,6 +456,24 @@ export default function TransferModal({
                         </div>
                     </div>
                 </div>
+
+                {/* --- FOOTER DEL MODAL (NUEVO Y ALINEADO A LA DERECHA) --- */}
+                <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                    <button
+                        onClick={onClose}
+                        type="button"
+                        className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={processing || !currentSelectedId || data.selected_guests.length === 0}
+                        className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {processing ? 'Procesando...' : 'Confirmar Cambio'}
+                    </button>
+                </div>
             </div>
 
             {/* Modal de Confirmación */}
@@ -383,7 +482,7 @@ export default function TransferModal({
                 onClose={() => setShowConfirm(false)}
                 onConfirm={handleConfirmAction}
                 type={mode}
-                guestName={checkin.guest?.full_name}
+                guestName={getSelectedGuestNames()}
                 targetRoomNumber={getTargetRoomNumber()}
                 processing={processing}
             />
