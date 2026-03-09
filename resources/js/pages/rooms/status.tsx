@@ -31,6 +31,7 @@ import ReservationModal from '../reservations/reservationModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
+import MultiCheckoutModal from '../checkins/multiCheckoutModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -467,14 +468,7 @@ export default function RoomsStatus({
         }
     };
     const [selectedBathroom, setSelectedBathroom] = useState('');
-    const [selectedDate, setSelectedDate] = useState(() => {
-        return new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/La_Paz',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-        }).format(new Date());
-    });
+    const [selectedDate, setSelectedDate] = useState('');
 
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch =
@@ -504,15 +498,13 @@ export default function RoomsStatus({
             if (!activeCheckin || !activeCheckin.check_in_date) {
                 matchesDate = false;
             } else {
-                // BD: "2026-03-08 15:30:00" -> Extraemos "03-08" (Desde la posición 5 hasta la 10)
-                const checkinMonthDay = String(
-                    activeCheckin.check_in_date,
-                ).substring(5, 10);
+                // BD: "2026-03-08 15:30:00" -> Extraemos "2026-03-08" (Desde la posición 0 hasta la 10)
+                const checkinDateOnly = String(activeCheckin.check_in_date).substring(0, 10);
+                
+                // Input: "2026-03-08" -> Extraemos "2026-03-08"
+                const selectedDateOnly = String(selectedDate).substring(0, 10);
 
-                // Input: "2026-03-08" -> Extraemos "03-08"
-                const selectedMonthDay = String(selectedDate).substring(5, 10);
-
-                matchesDate = checkinMonthDay === selectedMonthDay;
+                matchesDate = checkinDateOnly === selectedDateOnly;
             }
         }
         return (
@@ -848,7 +840,7 @@ export default function RoomsStatus({
                                     placeholder="BUSCAR HABITACIÓN..."
                                 />
                             </div>
-                            <div className="relative">
+                            <div className="relative flex items-center gap-2">
                                 <input
                                     type="date"
                                     value={selectedDate}
@@ -856,9 +848,21 @@ export default function RoomsStatus({
                                         setSelectedDate(e.target.value)
                                     }
                                     className="block h-9 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                    style={{ colorScheme: 'dark' }} /* 👈 ESTA ES LA MAGIA DEFINITIVA */
-                                    title="Filtrar por fecha de ingreso"
+                                    style={{ colorScheme: 'dark' }}
+                                    title="Filtrar por fecha exacta de ingreso"
                                 />
+                                
+                                {/* Botón extra MÁS VISIBLE para limpiar la fecha */}
+                                {selectedDate && (
+                                    <button
+                                        onClick={() => setSelectedDate('')}
+                                        className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white shadow-md uppercase transition-colors hover:bg-red-500 active:scale-95"
+                                        title="Borrar filtro de fecha"
+                                    >
+                                        <X className="h-4 w-4" />
+                                        Limpiar
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -1180,6 +1184,13 @@ export default function RoomsStatus({
                 checkin={occupiedCheckinData}
                 services={services} // <--- ESTA ES LA CLAVE
                 onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
+            />
+            <MultiCheckoutModal
+                show={showMultiCheckoutModal}
+                selectedRoomIds={selectedRoomsForCheckout}
+                rooms={Rooms}
+                guests={Guests}
+                onClose={() => setShowMultiCheckoutModal(false)}
             />
         </AuthenticatedLayout>
     );
@@ -1521,7 +1532,7 @@ function CheckoutConfirmationModal({
                         ? 'h-[80vh] max-w-[470px]'
                         : tipoDocumento === 'factura'
                           ? 'max-h-[80vh] max-w-6xl'
-                          : 'max-h-[85vh] max-w-sm'
+                          : 'max-h-[80vh] max-w-sm'
                 }`}
             >
                 {/* HEADER */}

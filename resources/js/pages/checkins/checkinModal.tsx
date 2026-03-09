@@ -1485,7 +1485,7 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
-                                    {/*}
+                                    
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -1526,7 +1526,7 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
-                                    */}
+                                    {/*}
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Año Nac.
@@ -1582,7 +1582,7 @@ export default function CheckinModal({
                                                 ? `Edad: ${displayAge}`
                                                 : ''}
                                         </span>
-                                    </div>
+                                    </div>*/}
 
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
