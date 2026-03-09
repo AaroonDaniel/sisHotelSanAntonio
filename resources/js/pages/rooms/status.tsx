@@ -438,6 +438,14 @@ export default function RoomsStatus({
         }
     };
     const [selectedBathroom, setSelectedBathroom] = useState('');
+    const [selectedDate, setSelectedDate] = useState(() => {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/La_Paz',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(new Date());
+    });
 
     const filteredRooms = Rooms.filter((room) => {
         const matchesSearch =
@@ -455,8 +463,35 @@ export default function RoomsStatus({
         const matchesRoomType = selectedRoomType
             ? room.room_type?.id.toString() === selectedRoomType
             : true;
+
+        let matchesDate = true;
+        if (selectedDate) {
+            const activeCheckin =
+                room.checkins && room.checkins.length > 0
+                    ? room.checkins[0]
+                    : null;
+
+            // Si está libre (sin checkin), la ocultamos
+            if (!activeCheckin || !activeCheckin.check_in_date) {
+                matchesDate = false;
+            } else {
+                // BD: "2026-03-08 15:30:00" -> Extraemos "03-08" (Desde la posición 5 hasta la 10)
+                const checkinMonthDay = String(
+                    activeCheckin.check_in_date,
+                ).substring(5, 10);
+
+                // Input: "2026-03-08" -> Extraemos "03-08"
+                const selectedMonthDay = String(selectedDate).substring(5, 10);
+
+                matchesDate = checkinMonthDay === selectedMonthDay;
+            }
+        }
         return (
-            matchesSearch && matchesStatus && matchesBathroom && matchesRoomType
+            matchesSearch &&
+            matchesStatus &&
+            matchesBathroom &&
+            matchesRoomType &&
+            matchesDate
         );
     }).sort((a, b) => {
         return a.number.localeCompare(b.number, undefined, {
@@ -621,12 +656,6 @@ export default function RoomsStatus({
     const countStatus = (targetStatus: string) =>
         Rooms.filter((r) => getDisplayStatus(r) === targetStatus).length;
 
-    const countBlock = (blockId: number) =>
-        Rooms.filter((r) => r.block_id === blockId).length;
-
-    const countBathroom = (type: string) =>
-        Rooms.filter((r) => r.price?.bathroom_type === type).length;
-
     // --- HELPER PARA OBTENER EL OBJETO COMPLETO DE CHECKIN Y ROOM ---
     const getCheckoutData = () => {
         if (!confirmCheckoutId) return null;
@@ -685,7 +714,7 @@ export default function RoomsStatus({
         // E. REGLA FINAL: Solo pasa si hay espacio (Ocupantes < Capacidad)
         return currentOccupants < capacity;
     });
-
+    // ==========================================
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
@@ -698,7 +727,7 @@ export default function RoomsStatus({
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
                             </h2>
-                            {/* Boton que se implementara a futuro
+                            
                             <button
                                 onClick={handleTopCheckoutTrigger}
                                 disabled={!selectedForAction}
@@ -711,7 +740,7 @@ export default function RoomsStatus({
                                     </span>
                                 )}
                             </button>
-                            */}
+                            
                         </div>
                     </div>
 
@@ -725,14 +754,28 @@ export default function RoomsStatus({
                                     onChange={(e) =>
                                         setSelectedRoomType(e.target.value)
                                     }
-                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                    className="block min-w-[160px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
                                 >
-                                    <option value="">Tipo de habitación</option>
+                                    <option value="">TODOS</option>
                                     {RoomTypes?.map((type) => (
                                         <option key={type.id} value={type.id}>
                                             {type.name}
                                         </option>
                                     ))}
+                                </select>
+                            </div>
+
+                            <div className="relative">
+                                <select
+                                    value={selectedBathroom}
+                                    onChange={(e) =>
+                                        setSelectedBathroom(e.target.value)
+                                    }
+                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                >
+                                    <option value="">TIPO DE BAÑO</option>
+                                    <option value="private">PRIVADO</option>
+                                    <option value="shared">COMPARTIDO</option>
                                 </select>
                             </div>
 
@@ -748,40 +791,24 @@ export default function RoomsStatus({
                                         setSearchTerm(e.target.value)
                                     }
                                     className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="Buscar habitación..."
+                                    placeholder="BUSCAR HABITACIÓN..."
+                                />
+                            </div>
+                            <div className="relative">
+                                <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) =>
+                                        setSelectedDate(e.target.value)
+                                    }
+                                    className="block h-9 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                    style={{ colorScheme: 'dark' }} /* 👈 ESTA ES LA MAGIA DEFINITIVA */
+                                    title="Filtrar por fecha de ingreso"
                                 />
                             </div>
                         </div>
 
                         <div className="flex flex-wrap justify-end gap-2">
-                            <Badge
-                                count={countBathroom('private')}
-                                label="Baño Privado"
-                                // Usamos color Teal para características
-                                color="bg-emerald-600"
-                                active={selectedBathroom === 'private'}
-                                onClick={() =>
-                                    setSelectedBathroom(
-                                        selectedBathroom === 'private'
-                                            ? ''
-                                            : 'private',
-                                    )
-                                }
-                            />
-                            <Badge
-                                count={countBathroom('shared')}
-                                label="Baño Compartido"
-                                color="bg-emerald-600"
-                                active={selectedBathroom === 'shared'}
-                                onClick={() =>
-                                    setSelectedBathroom(
-                                        selectedBathroom === 'shared'
-                                            ? ''
-                                            : 'shared',
-                                    )
-                                }
-                            />
-
                             <Badge
                                 count={countStatus('available')}
                                 label="Libre"
