@@ -100,6 +100,14 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
+
+    // Controlador Seleccion multiple 
+    const [isMultiCheckoutMode, setIsMultiCheckoutMode] = useState(false);
+    // guarda los ids de las habitaciones que han sido seleccionadas
+    const [selectedRoomsForCheckout, setSelectedRoomsForCheckout] = useState<number[]>([]);
+    // Consola si el modal de facturacion Consolida esta abierto
+    const [showMultiCheckoutModal, setShowMultiCheckoutModal] = useState(false);
+
     //Estado para el modal de reserva
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [isNewReservationModalOpen, setIsNewReservationModalOpen] =
@@ -353,6 +361,18 @@ export default function RoomsStatus({
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
 
+        if (isMultiCheckoutMode) { // <-- 1. ¿El botón de "Finalizar Estadía Múltiple" está activado?
+            if (status === 'occupied') { // <-- 2. ¿La habitación tocada está ocupada?
+                // 3. Si es así, la agregamos o quitamos de la lista verde
+                setSelectedRoomsForCheckout((prev) => 
+                    prev.includes(room.id)
+                        ? prev.filter((id) => id !== room.id)
+                        : [...prev, room.id]
+                );
+            }
+            return; // <-- 4. ¡DETENTE AQUÍ! No ejecutes el resto del código.
+        }
+
         if (status === 'occupied') {
             const fullCheckinData = Checkins?.find(
                 (c) => c.room_id === room.id && c.status === 'activo',
@@ -407,11 +427,20 @@ export default function RoomsStatus({
     };
 
     const handleTopCheckoutTrigger = () => {
-        if (!selectedForAction) return;
-        const room = Rooms.find((r) => r.id === selectedForAction);
-        const activeCheckin = room?.checkins?.[0];
-        if (activeCheckin) {
-            setConfirmCheckoutId(activeCheckin.id);
+        if (!isMultiCheckoutMode) {
+            // 1. Activar el modo de selección múltiple
+            setIsMultiCheckoutMode(true);
+            setSelectedRoomsForCheckout([]); // Limpiamos por si había algo antes
+            setSelectedForAction(null); // Limpiamos la selección individual anterior
+        } else {
+            // 2. Si ya estamos en modo selección y seleccionó al menos una
+            if (selectedRoomsForCheckout.length > 0) {
+                setShowMultiCheckoutModal(true); // Aquí abriremos el Modal en el Paso 4
+                console.log("Habitaciones seleccionadas para cobrar:", selectedRoomsForCheckout);
+            } else {
+                // 3. Si presionó el botón pero no seleccionó nada, cancelamos el modo
+                setIsMultiCheckoutMode(false);
+            }
         }
     };
 
@@ -728,18 +757,43 @@ export default function RoomsStatus({
                                 Habitaciones
                             </h2>
                             
-                            <button
-                                onClick={handleTopCheckoutTrigger}
-                                disabled={!selectedForAction}
-                                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold uppercase transition-all ${selectedForAction ? 'animate-bounce bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500' : 'cursor-not-allowed border border-gray-700 bg-gray-800 text-gray-500'}`}
-                            >
-                                <LogOut className="h-4 w-4" /> Finalizar Estadía
-                                {selectedForAction && (
-                                    <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">
-                                        !
-                                    </span>
-                                )}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleTopCheckoutTrigger}
+                                    // Deshabilitado solo si el modo está activo pero NO hay habitaciones seleccionadas
+                                    disabled={isMultiCheckoutMode && selectedRoomsForCheckout.length === 0}
+                                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold uppercase transition-all ${
+                                        isMultiCheckoutMode
+                                            ? selectedRoomsForCheckout.length > 0
+                                                ? 'animate-bounce bg-green-600 text-white shadow-lg hover:scale-105 hover:bg-green-500' // Listo para cobrar
+                                                : 'bg-yellow-500 text-white animate-pulse' // Esperando que seleccione
+                                            : 'bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500' // Botón normal inactivo
+                                    }`}
+                                >
+                                    <LogOut className="h-4 w-4" />
+                                    {isMultiCheckoutMode 
+                                        ? (selectedRoomsForCheckout.length > 0 ? `Cobrar ${selectedRoomsForCheckout.length} Hab.` : 'Seleccione Habitaciones...') 
+                                        : 'Finalizar Estadía'}
+                                    
+                                    {/* Mantenemos tu alerta de selección individual por si acaso */}
+                                    {!isMultiCheckoutMode && selectedForAction && (
+                                        <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">!</span>
+                                    )}
+                                </button>
+                                
+                                {/* Botón para cancelar el modo selección rápidamente */}
+                                {isMultiCheckoutMode && (
+    <button
+        onClick={() => {
+            setIsMultiCheckoutMode(false);
+            setSelectedRoomsForCheckout([]);
+        }}
+        className="flex items-center gap-2 rounded-lg px-4 py-4.5 text-sm font-bold uppercase bg-gray-600 text-white shadow-lg transition-all hover:scale-105 hover:bg-gray-500"
+    >
+        Cancelar
+    </button>
+)}
+                            </div>
                             
                         </div>
                     </div>
@@ -882,18 +936,35 @@ export default function RoomsStatus({
                                 ? room.checkins[0]
                                 : null;
                         const isSelected = selectedForAction === room.id;
-
+                        
+                        const isMultiSelected = selectedRoomsForCheckout.includes(room.id);
+                        const isEligibleForMulti = isMultiCheckoutMode && isOccupied;
+                        
                         return (
                             <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} `}
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} 
+                                ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} 
+                                /* 👇 ESTO FALTABA: Efectos visuales de parpadeo y selección verde 👇 */
+                                ${isEligibleForMulti && !isMultiSelected ? 'animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900 z-10' : ''}
+                                ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}
+                                `}
                             >
+                                {/* Check original */}
                                 {isSelected && (
                                     <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in">
                                         <CheckCircle2 className="h-5 w-5" />
                                     </div>
                                 )}
+                                
+                                {/* 👇 ESTO FALTABA: Check verde cuando se selecciona para cobro múltiple 👇 */}
+                                {isMultiSelected && (
+                                    <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in">
+                                        <CheckCircle2 className="h-6 w-6" />
+                                    </div>
+                                )}
+
                                 <div className="absolute -top-2 -right-2 rotate-12 transform opacity-30">
                                     {config.icon}
                                 </div>
