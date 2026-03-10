@@ -1936,4 +1936,323 @@ class CheckinController extends Controller
             return redirect()->back()->with('success', 'Reserva confirmada. Por favor, ingrese a la habitación para completar los datos faltantes del Check-in.');
         });
     }
+
+    // =========================================================================
+    // 🚀 CHECKOUT MÚLTIPLE (FINALIZACIÓN GRUPAL)
+    // =========================================================================
+    public function multiCheckout(Request $request)
+    {
+        $request->validate([
+            'checkin_ids' => 'required|array',
+            'checkin_ids.*' => 'exists:checkins,id',
+            'tipo_documento' => 'required|in:factura,recibo',
+            'nombre_factura' => 'nullable|string',
+            'nit_factura' => 'nullable|string',
+            'metodo_pago' => 'required|string',
+        ]);
+
+        return DB::transaction(function () use ($request) {
+            // 1. Traemos todos los checkins solicitados con sus relaciones necesarias
+            $checkins = Checkin::with(['guest', 'room.price', 'room.roomType', 'checkinDetails.service', 'schedule', 'companions', 'payments'])
+                ->whereIn('id', $request->checkin_ids)
+                ->get();
+
+            $salida = now();
+            $totalAdelantosGlobal = 0;
+            
+            // Variables para estructurar la tabla del PDF
+            $hospedajesPDF = [];
+            $serviciosGlobales = [];
+
+            // =========================================================
+            // PASO 3: Lógica de Habitaciones y Cálculos
+            // =========================================================
+            foreach ($checkins as $checkin) {
+                // Poner la habitación en limpieza
+                $room = Room::find($checkin->room_id);
+                if ($room) {
+                    $room->update(['status' => 'LIMPIEZA']);
+                }
+
+                // Calcular días a cobrar
+                $diasACobrar = $this->calculateBillableDays($checkin, $salida);
+                
+                // Calcular precio unitario (con soporte para tarifas corporativas)
+                $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
+                if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+                    $bathroomType = strtolower($checkin->room->bathroom_type ?? '');
+                    $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+                    $ratePerPerson = $isPrivate ? 90 : 60;
+                    $paxCount = 1 + $checkin->companions->count();
+                    $precioUnitario = $ratePerPerson * $paxCount;
+                }
+
+                $totalHospedaje = $precioUnitario * $diasACobrar;
+
+                // Formatear descripción unificada para el PDF ("Hab 1 Simple Priv")
+                $bType = strtolower($checkin->room->bathroom_type ?? '');
+                $bano = ($bType === 'shared' || $bType === 'compartido') ? 'Comp' : 'Priv';
+                $tipoH = substr($checkin->room->roomType->name ?? 'Hab', 0, 10);
+                $descHospedaje = "Hab {$checkin->room->number} {$tipoH} {$bano}";
+
+                $hospedajesPDF[] = [
+                    'desc' => $descHospedaje,
+                    'cant' => $diasACobrar,
+                    'punit' => $precioUnitario,
+                    'subtot' => $totalHospedaje
+                ];
+
+                // Agrupar Consumos globalmente de todas las habitaciones
+                foreach ($checkin->checkinDetails as $detalle) {
+                    $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                    $subt = $detalle->quantity * $precioReal;
+                    
+                    $nombreSrv = $detalle->service->name ?? 'Servicio';
+                    if (!isset($serviciosGlobales[$nombreSrv])) {
+                        $serviciosGlobales[$nombreSrv] = ['qty' => 0, 'total' => 0];
+                    }
+                    $serviciosGlobales[$nombreSrv]['qty'] += $detalle->quantity;
+                    $serviciosGlobales[$nombreSrv]['total'] += $subt;
+                }
+
+                // Sumar pagos previos (Adelantos del historial)
+                $totalPagadoReal = 0;
+                if ($checkin->payments->count() > 0) {
+                    foreach ($checkin->payments as $pago) {
+                        if ($pago->type === 'DEVOLUCION') {
+                            $totalPagadoReal -= $pago->amount;
+                        } else {
+                            $totalPagadoReal += $pago->amount;
+                        }
+                    }
+                } else {
+                    $totalPagadoReal = $checkin->advance_payment ?? 0;
+                }
+                $totalAdelantosGlobal += $totalPagadoReal;
+
+                // Marcar el Checkin como finalizado
+                $checkin->update([
+                    'check_out_date' => $salida,
+                    'duration_days' => $diasACobrar,
+                    'status' => 'finalizado'
+                ]);
+            }
+
+            // Recalcular Gran Total y Saldo a Pagar
+            $granTotal = collect($hospedajesPDF)->sum('subtot') + collect($serviciosGlobales)->sum('total');
+            $saldoPagar = max(0, $granTotal - $totalAdelantosGlobal);
+
+            // =========================================================
+            // PASO 4: Lógica de Pagos y Caja (Evitando el error 500)
+            // =========================================================
+            $userId = Auth::id() ?? 1;
+            $primerCheckinId = $checkins->first()->id; 
+
+            // Filtro para que el ENUM de BD acepte el banco
+            $metodoRecibido = strtoupper($request->metodo_pago);
+            $bancoRecibido = strtoupper($request->banco_qr ?? '');
+
+            if (in_array($metodoRecibido, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
+                $bancoRecibido = $metodoRecibido;
+                $metodoRecibido = 'QR';
+            }
+
+            if ($request->metodo_pago === 'ambos') {
+                if ($request->monto_efectivo > 0) {
+                    Payment::create([
+                        'checkin_id' => $primerCheckinId,
+                        'user_id' => $userId,
+                        'amount' => $request->monto_efectivo,
+                        'method' => 'EFECTIVO',
+                        'description' => 'PAGO FINAL MÚLTIPLE (MIXTO)',
+                        'type' => 'PAGO'
+                    ]);
+                }
+                if ($request->monto_qr > 0) {
+                    Payment::create([
+                        'checkin_id' => $primerCheckinId,
+                        'user_id' => $userId,
+                        'amount' => $request->monto_qr,
+                        'method' => 'QR',
+                        'bank_name' => $bancoRecibido,
+                        'description' => 'PAGO FINAL MÚLTIPLE (MIXTO)',
+                        'type' => 'PAGO'
+                    ]);
+                }
+            } else {
+                if ($saldoPagar > 0) {
+                    Payment::create([
+                        'checkin_id' => $primerCheckinId,
+                        'user_id' => $userId,
+                        'amount' => $saldoPagar,
+                        'method' => $metodoRecibido,
+                        'bank_name' => $metodoRecibido === 'QR' ? $bancoRecibido : null,
+                        'description' => 'PAGO FINAL MÚLTIPLE',
+                        'type' => 'PAGO'
+                    ]);
+                }
+            }
+
+            // =========================================================
+            // PASO 5: Generación del PDF (Unificado a 4 columnas)
+            // =========================================================
+            $pdfLargo = max(150, 100 + (count($hospedajesPDF) * 5) + (count($serviciosGlobales) * 5));
+            $pdf = new \FPDF('P', 'mm', array(80, $pdfLargo)); 
+            $pdf->SetMargins(4, 4, 4);
+            $pdf->SetAutoPageBreak(true, 2);
+            $pdf->AddPage();
+
+            // CABECERA
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 7);
+            
+            if ($request->tipo_documento === 'factura') {
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
+                $pdf->SetFont('Arial', '', 6);
+                $pdf->Cell(0, 3, 'No. Punto de Venta 0', 0, 1, 'C');
+                $pdf->Cell(0, 3, 'Calle 9 - Potosi', 0, 1, 'C');
+                $pdf->Cell(0, 3, utf8_decode('Teléfono: 70461010'), 0, 1, 'C');
+                $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
+                $pdf->Ln(2);
+                $pdf->SetFont('Arial', 'B', 8);
+                $pdf->Cell(0, 4, 'FACTURA (CHECKOUT GRUPAL)', 0, 1, 'C');
+                $pdf->SetFont('Arial', '', 6);
+                $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+                $pdf->Ln(2);
+
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->Cell(30, 3, 'NIT:', 0, 0, 'R');
+                $pdf->SetFont('Arial', '', 7);
+                $pdf->Cell(35, 3, '3327479013', 0, 1, 'L');
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->Cell(30, 3, utf8_decode('FACTURA N°:'), 0, 0, 'R');
+                $pdf->SetFont('Arial', '', 7);
+                $pdf->Cell(35, 3, str_pad($primerCheckinId, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
+                $pdf->SetFont('Arial', '', 7);
+                $pdf->Cell(35, 3, '456123ABC', 0, 1, 'L');
+                $pdf->Ln(1);
+            } else {
+                $pdf->Cell(0, 4, utf8_decode('Calle Principal #123 - Potosi'), 0, 1, 'C');
+                $pdf->Ln(2);
+                $pdf->SetFont('Arial', 'B', 9);
+                $pdf->Cell(0, 6, 'NOTA DE SALIDA GRUPAL', 0, 1, 'C');
+                $pdf->SetFont('Arial', '', 8);
+                $pdf->Cell(0, 4, 'Ref: ' . str_pad($primerCheckinId, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
+                $pdf->Ln(1);
+            }
+
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            // DATOS CLIENTE
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Fecha:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, now()->format('d/m/Y H:i:s'), 0, 1);
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Cliente:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->MultiCell(0, 4, utf8_decode($request->nombre_factura ?? 'S/N'), 0, 'L');
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, $request->nit_factura ?? '0', 0, 1);
+
+            $pdf->Ln(1);
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            // DETALLE ITEMS UNIFICADOS (4 COLUMNAS)
+            $pdf->SetFont('Arial', 'B', 6);
+            $pdf->Cell(7, 3, 'CNT', 0, 0, 'C');
+            $pdf->Cell(36, 3, 'DETALLE', 0, 0, 'L');
+            $pdf->Cell(12, 3, 'P.UNI', 0, 0, 'R');
+            $pdf->Cell(17, 3, 'TOTAL', 0, 1, 'R');
+            $pdf->Ln(1);
+
+            $pdf->SetFont('Arial', '', 6);
+            
+            // 1. Hospedajes 
+            foreach ($hospedajesPDF as $hosp) {
+                $pdf->Cell(7, 3, $hosp['cant'], 0, 0, 'C');
+                $pdf->Cell(36, 3, utf8_decode(substr($hosp['desc'], 0, 22)), 0, 0, 'L');
+                $pdf->Cell(12, 3, number_format($hosp['punit'], 2), 0, 0, 'R');
+                $pdf->Cell(17, 3, number_format($hosp['subtot'], 2), 0, 1, 'R');
+            }
+
+            // 2. Consumos Globales
+            foreach ($serviciosGlobales as $name => $data) {
+                $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
+                $pdf->Cell(7, 3, $data['qty'], 0, 0, 'C');
+                $pdf->Cell(36, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
+                $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
+                $pdf->Cell(17, 3, number_format($data['total'], 2), 0, 1, 'R');
+            }
+
+            $pdf->Ln(1);
+            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            // TOTALES AL PIE
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(50, 4, 'TOTAL FACTURADO Bs', 0, 0, 'R');
+            $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
+
+            if ($totalAdelantosGlobal > 0) {
+                $pdf->SetFont('Arial', '', 7);
+                $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
+                $pdf->Cell(22, 4, number_format($totalAdelantosGlobal, 2), 0, 1, 'R');
+
+                $pdf->SetFont('Arial', 'B', 8);
+                $pdf->Cell(50, 4, 'A PAGAR EN CAJA:', 0, 0, 'R');
+                $pdf->Cell(22, 4, number_format($saldoPagar, 2), 0, 1, 'R');
+            }
+
+            if ($request->tipo_documento === 'factura') {
+                $pdf->Ln(2);
+                $pdf->SetFont('Arial', '', 7);
+                $montoLetras = $this->convertirNumeroALetras($granTotal);
+                $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
+
+                $pdf->Ln(2);
+                $pdf->SetFont('Arial', 'B', 6);
+                $pdf->Cell(35, 3, utf8_decode('IMPORTE BASE CRÉDITO FISCAL:'), 0, 0, 'L');
+                $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
+                $pdf->Ln(2);
+                $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
+                $pdf->Ln(2);
+
+                $logoPath = public_path('images/qrCop.png');
+                if (file_exists($logoPath)) {
+                    $x = (80 - 22) / 2;
+                    $pdf->Image($logoPath, $x, $pdf->GetY(), 22, 22);
+                    $pdf->Ln(24);
+                } else {
+                    $pdf->Ln(24);
+                }
+
+                $pdf->SetFont('Arial', 'B', 5);
+                $pdf->MultiCell(0, 2.5, utf8_decode('"ESTA FACTURA CONTRIBUYE AL DESARROLLO DEL PAÍS, EL USO ILÍCITO SERÁ SANCIONADO PENALMENTE DE ACUERDO A LEY"'), 0, 'C');
+                $pdf->Ln(1);
+                $pdf->SetFont('Arial', '', 5);
+                $pdf->MultiCell(0, 2.5, utf8_decode('Ley N° 453: Tienes derecho a recibir información correcta, veraz, oportuna y completa sobre las características y contenidos de los productos que compras.'), 0, 'C');
+            } else {
+                $pdf->Ln(6);
+                $pdf->SetFont('Arial', 'I', 7);
+                $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nRevise su cambio antes de retirarse."), 0, 'C');
+            }
+
+            $pdf->Ln(3);
+            $usuario = Auth::user() ? Auth::user()->name : 'Cajero';
+            $pdf->Cell(0, 3, 'Atendido por: ' . utf8_decode($usuario), 0, 1, 'C');
+
+            return response($pdf->Output('S'), 200)
+                ->header('Content-Type', 'application/pdf');
+
+        });
+    }
 }

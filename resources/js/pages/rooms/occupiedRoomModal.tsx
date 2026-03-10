@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowRightLeft,
@@ -23,6 +23,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import CheckinDetailModal from '../checkindetails/checkindetailModal';
+
 interface ModalProps {
     show: boolean;
     onClose: () => void;
@@ -42,6 +43,7 @@ export default function OccupiedRoomModal({
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
+    
     // --- FORMULARIO DE ADELANTO ---
     const {
         data: paymentData,
@@ -56,14 +58,13 @@ export default function OccupiedRoomModal({
     });
 
     // ------------------------------------------------------------------------------------------
-    // CORRECCIÓN: EL USEMEMO DEBE IR ANTES DE CUALQUIER "RETURN" O "IF"
+    // EL USEMEMO DEBE IR ANTES DE CUALQUIER "RETURN" O "IF"
     // ------------------------------------------------------------------------------------------
     const totalPaid = useMemo(() => {
         // Validación de seguridad
         if (!checkin) return 0;
 
-        // 🛑 CORRECCIÓN: Priorizamos el array 'payments'.
-        // Si el backend nos envía la lista de pagos, sumamos SOLO eso.
+        // Priorizamos el array 'payments'.
         if (checkin.payments && checkin.payments.length > 0) {
             return checkin.payments.reduce((acc: number, p: any) => {
                 const amount = parseFloat(p.amount) || 0;
@@ -77,9 +78,9 @@ export default function OccupiedRoomModal({
         }
 
         // FALLBACK: Solo si NO hay array de pagos (quizás registros muy antiguos),
-        // usamos la columna 'advance_payment' para no mostrar cero por error.
         return parseFloat(checkin.advance_payment) || 0;
     }, [checkin]);
+
     // ------------------------------------------------------------------------------------------
     // AHORA SÍ PUEDES PONER EL RETURN CONDICIONAL
     // ------------------------------------------------------------------------------------------
@@ -98,45 +99,35 @@ export default function OccupiedRoomModal({
     };
 
     // --- LÓGICA FINANCIERA ---
-    // Estos valores se recalculan automáticamente cada vez que 'checkin' cambia (al hacer un pago exitoso)
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('es-BO', {
             style: 'currency',
             currency: 'BOB',
         }).format(amount);
 
-    // 1. Usar las noches reales registradas en la base de datos
     const days =
         Number(checkin.duration_days) > 0 ? Number(checkin.duration_days) : 1;
 
     const oldDebt = parseFloat(checkin.carried_balance || 0);
 
-    // 2. Usar el precio acordado (agreed_price) que incluye descuentos o tarifas corporativas.
-    // Si es null o no existe, usamos el precio base de la habitación como respaldo.
     const pricePerNight =
         parseFloat(checkin.agreed_price) ||
         parseFloat(checkin.room?.price?.amount) ||
         0;
 
-    // 3. Calculamos el costo total del hospedaje con las noches y precio correctos
     const currentRoomCost = days * pricePerNight;
 
-    // 4. El cálculo de servicios extra se mantiene igual (es correcto)
     const servicesCost =
         checkin.services?.reduce((acc: number, s: any) => {
-            // Usamos ( || 0) para convertir nulos o indefinidos a cero y evitar NaN
             const precio = parseFloat(s.pivot?.selling_price) || 0;
             const cantidad = parseFloat(s.pivot?.quantity) || 0;
-
             return acc + precio * cantidad;
         }, 0) || 0;
 
-    // Cálculos finales usando el totalPaid que definimos arriba
     const grandTotal = oldDebt + currentRoomCost + servicesCost;
     const balanceDue = grandTotal - totalPaid;
 
     // --- MANEJADORES DE PAGO ---
-
     const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const amountValue = parseFloat(paymentData.amount);
@@ -147,22 +138,19 @@ export default function OccupiedRoomModal({
     };
 
     const confirmPayment = () => {
-        // Usamos la URL manual como pediste
         const url = `/checkins/${checkin.id}/add-payment`;
 
         postPayment(url, {
-            preserveScroll: true, // Mantiene la posición del scroll
-            preserveState: true, // Mantiene el estado de otros componentes
+            preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 console.log(`✅ Pago registrado: ${paymentData.amount} Bs`);
-                // Al ser exitoso, Inertia recargará 'checkin', y los cálculos de arriba se actualizarán solos.
                 resetPayment();
                 setShowPaymentForm(false);
                 setShowConfirmModal(false);
             },
             onError: (errors) => {
                 console.error('Error backend:', errors);
-                // Aquí podrías mostrar un toast de error si tienes uno
             },
             onFinish: () => setShowConfirmModal(false),
         });
@@ -201,8 +189,7 @@ export default function OccupiedRoomModal({
                             Detalle de Habitación {checkin.room?.number}
                         </DialogTitle>
                         <DialogDescription id="main-desc">
-                            Gestión completa de la habitación{' '}
-                            {checkin.room?.number}.
+                            Gestión completa de la habitación {checkin.room?.number}.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -617,10 +604,18 @@ export default function OccupiedRoomModal({
 
                                 {/* --- SECCIÓN DE CONSUMOS --- */}
                                 <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                                    <h3 className="mb-4 flex items-center gap-2 text-xs font-bold tracking-wider text-gray-400 uppercase">
-                                        <Utensils className="h-4 w-4 text-orange-500" />{' '}
-                                        Consumo Extra
-                                    </h3>
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <h3 className="flex items-center gap-2 text-xs font-bold tracking-wider text-gray-400 uppercase">
+                                            <Utensils className="h-4 w-4 text-orange-500" />{' '}
+                                            Consumo Extra
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowServiceModal(true)}
+                                            className="flex items-center gap-1 rounded-md bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-200"
+                                        >
+                                            + AGREGAR
+                                        </button>
+                                    </div>
 
                                     {checkin.services?.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
@@ -744,9 +739,13 @@ export default function OccupiedRoomModal({
             </Dialog>
             <CheckinDetailModal
                 show={showServiceModal}
-                onClose={() => setShowServiceModal(false)}
-                checkins={checkin ? [checkin] : []} // <--- CORRECCIÓN 1: Pasarlo dentro de corchetes []
-                services={services} // <--- CORRECCIÓN 2: Pasar la lista de servicios
+                onClose={() => {
+                    setShowServiceModal(false);
+                    // Magia de actualización de datos
+                    router.reload({ only: ['Checkins', 'Rooms'] });
+                }}
+                checkins={checkin ? [checkin] : []}
+                services={services}
             />
         </>
     );

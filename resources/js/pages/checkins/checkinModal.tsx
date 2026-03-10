@@ -1382,7 +1382,7 @@ export default function CheckinModal({
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-gray-500 uppercase">
-                                        Carnet (CI) o Paa
+                                        Carnet (CI)/Pasaporte
                                     </label>
                                     <input
                                         className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300' : ''}`}

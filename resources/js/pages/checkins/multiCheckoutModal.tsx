@@ -28,7 +28,7 @@ export default function MultiCheckoutModal({
     guests = [],
     onClose,
 }: Props) {
-    if (!show || selectedRoomIds.length === 0) return null;
+   
 
     // Estados de Formulario de Facturación y Buscador
     const [tipoDocumento, setTipoDocumento] = useState<
@@ -336,6 +336,8 @@ export default function MultiCheckoutModal({
         onClose();
         window.location.reload(); 
     };
+
+    if (!show || selectedRoomIds.length === 0) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
