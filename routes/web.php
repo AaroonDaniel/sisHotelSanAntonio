@@ -13,7 +13,7 @@ use App\Http\Controllers\CheckinDetailController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
 use Illuminate\Support\Facades\Route;
-
+use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
 
 Route::redirect('/', '/login');
@@ -105,6 +105,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
+
+    Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
 
     // --- CORRECCIÓN 2: Diferenciación de nombres en Transferencia ---
     // Ruta Original (POST)
