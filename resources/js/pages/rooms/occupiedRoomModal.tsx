@@ -1,4 +1,4 @@
-import { useForm, router } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowRightLeft,
@@ -8,7 +8,7 @@ import {
     CheckCircle2,
     ChevronDown,
     Clock,
-    Utensils, // Icono para dinero
+    Utensils,
     Wallet,
     X,
 } from 'lucide-react';
@@ -28,7 +28,7 @@ interface ModalProps {
     show: boolean;
     onClose: () => void;
     checkin: any | null;
-    services: any[]; // <--- AGREGAR ESTA LÍNEA
+    services: any[];
     onTransfer: () => void;
 }
 
@@ -39,11 +39,50 @@ export default function OccupiedRoomModal({
     services,
     onTransfer,
 }: ModalProps) {
+    const { props } = usePage<any>();
+
+    // --- CHECKIN REACTIVO (EN VIVO) ---
+    const liveCheckin = useMemo(() => {
+        if (!checkin) return null;
+        // Si la página principal tiene un array llamado "Rooms" (como en index.tsx)
+        if (props.Rooms) {
+            for (const room of props.Rooms) {
+                // Si la relación se llama active_checkin
+                if (room.active_checkin?.id === checkin.id) {
+                    
+                    return room.active_checkin;
+                }
+                // Si la relación es un array de checkins
+                if (room.checkins && room.checkins.length > 0) {
+                    const found = room.checkins.find(
+                        (c: any) => c.id === checkin.id,
+                    );
+                    if (found) {
+                        
+                        return found;
+                    }
+                }
+            }
+        }
+
+        // Si la vista envía un array directo de "checkins" (como checkindetails/index)
+        if (props.checkins) {
+            const found = props.checkins.find((c: any) => c.id === checkin.id);
+            if (found) {
+               
+                return found;
+            }
+        }
+
+       
+        return checkin;
+    }, [checkin, props]);
+
     const [expandedGuestId, setExpandedGuestId] = useState<number | null>(null);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
-    
+
     // --- FORMULARIO DE ADELANTO ---
     const {
         data: paymentData,
@@ -57,34 +96,24 @@ export default function OccupiedRoomModal({
         qr_bank: '',
     });
 
-    // ------------------------------------------------------------------------------------------
-    // EL USEMEMO DEBE IR ANTES DE CUALQUIER "RETURN" O "IF"
-    // ------------------------------------------------------------------------------------------
     const totalPaid = useMemo(() => {
-        // Validación de seguridad
-        if (!checkin) return 0;
+        if (!liveCheckin) return 0;
 
-        // Priorizamos el array 'payments'.
-        if (checkin.payments && checkin.payments.length > 0) {
-            return checkin.payments.reduce((acc: number, p: any) => {
+        if (liveCheckin.payments && liveCheckin.payments.length > 0) {
+            return liveCheckin.payments.reduce((acc: number, p: any) => {
+                // Aquí va la lógica completa que faltaba (en lugar del // ...)
                 const amount = parseFloat(p.amount) || 0;
-
-                // Si tienes devoluciones, réstalas
                 if (p.type === 'DEVOLUCION') {
                     return acc - amount;
                 }
                 return acc + amount;
             }, 0);
         }
+        return parseFloat(liveCheckin.advance_payment) || 0;
+    }, [liveCheckin]);
 
-        // FALLBACK: Solo si NO hay array de pagos (quizás registros muy antiguos),
-        return parseFloat(checkin.advance_payment) || 0;
-    }, [checkin]);
-
-    // ------------------------------------------------------------------------------------------
-    // AHORA SÍ PUEDES PONER EL RETURN CONDICIONAL
-    // ------------------------------------------------------------------------------------------
-    if (!show || !checkin) return null;
+    // Retorno condicional después de los hooks
+    if (!show || !liveCheckin) return null;
 
     const handleClose = () => {
         setExpandedGuestId(null);
@@ -106,19 +135,18 @@ export default function OccupiedRoomModal({
         }).format(amount);
 
     const days =
-        Number(checkin.duration_days) > 0 ? Number(checkin.duration_days) : 1;
-
-    const oldDebt = parseFloat(checkin.carried_balance || 0);
-
+        Number(liveCheckin.duration_days) > 0
+            ? Number(liveCheckin.duration_days)
+            : 1;
+    const oldDebt = parseFloat(liveCheckin.carried_balance || 0);
     const pricePerNight =
-        parseFloat(checkin.agreed_price) ||
-        parseFloat(checkin.room?.price?.amount) ||
+        parseFloat(liveCheckin.agreed_price) ||
+        parseFloat(liveCheckin.room?.price?.amount) ||
         0;
-
     const currentRoomCost = days * pricePerNight;
 
     const servicesCost =
-        checkin.services?.reduce((acc: number, s: any) => {
+        liveCheckin.services?.reduce((acc: number, s: any) => {
             const precio = parseFloat(s.pivot?.selling_price) || 0;
             const cantidad = parseFloat(s.pivot?.quantity) || 0;
             return acc + precio * cantidad;
@@ -138,13 +166,13 @@ export default function OccupiedRoomModal({
     };
 
     const confirmPayment = () => {
-        const url = `/checkins/${checkin.id}/add-payment`;
+        const url = `/checkins/${liveCheckin.id}/add-payment`;
 
         postPayment(url, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
-                console.log(`✅ Pago registrado: ${paymentData.amount} Bs`);
+               
                 resetPayment();
                 setShowPaymentForm(false);
                 setShowConfirmModal(false);
@@ -172,24 +200,22 @@ export default function OccupiedRoomModal({
         return `${day} ${month} ${time} ${weekdayCapitalized}`;
     };
 
-    const hasCompanions = checkin.companions && checkin.companions.length > 0;
-    const isTitular = true;
+    const hasCompanions =
+        liveCheckin.companions && liveCheckin.companions.length > 0;
 
     return (
         <>
             {/* MODAL PRINCIPAL */}
             <Dialog open={show} onOpenChange={handleClose}>
-                <DialogContent
-                    className="flex max-h-[90vh] flex-col gap-0 overflow-hidden bg-gray-50/50 p-0 sm:max-w-[1000px]"
-                    aria-describedby="main-desc"
-                >
-                    {/* ACCESIBILIDAD: Header oculto obligatorio */}
+                <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden bg-gray-50/50 p-0 sm:max-w-[1000px]">
+                    {/* ACCESIBILIDAD: Header oculto obligatorio con Title y Description */}
                     <DialogHeader className="sr-only">
                         <DialogTitle>
-                            Detalle de Habitación {checkin.room?.number}
+                            Detalle de Habitación {liveCheckin.room?.number}
                         </DialogTitle>
-                        <DialogDescription id="main-desc">
-                            Gestión completa de la habitación {checkin.room?.number}.
+                        <DialogDescription>
+                            Gestión completa de la habitación{' '}
+                            {liveCheckin.room?.number}.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -201,13 +227,13 @@ export default function OccupiedRoomModal({
                             </div>
                             <div>
                                 <h2 className="text-xl font-bold text-gray-800">
-                                    Habitación {checkin.room?.number}
+                                    Habitación {liveCheckin.room?.number}
                                 </h2>
                                 <p className="text-xs font-bold tracking-wider text-gray-800 uppercase">
-                                    {checkin.room?.room_type?.name ||
+                                    {liveCheckin.room?.room_type?.name ||
                                         'Habitación'}{' '}
                                     •{' '}
-                                    {checkin.room?.price?.bathroom_type ===
+                                    {liveCheckin.room?.price?.bathroom_type ===
                                     'private'
                                         ? 'BAÑO PRIVADO'
                                         : 'BAÑO COMPARTIDO'}{' '}
@@ -234,24 +260,26 @@ export default function OccupiedRoomModal({
 
                                 {!hasCompanions ? (
                                     <StaticGuestCard
-                                        guest={checkin.guest}
-                                        origin={checkin.origin}
+                                        guest={liveCheckin.guest}
+                                        origin={liveCheckin.origin}
                                     />
                                 ) : (
                                     <>
                                         <ExpandableGuestCard
-                                            guest={checkin.guest}
+                                            guest={liveCheckin.guest}
                                             isTitular={true}
-                                            origin={checkin.origin}
+                                            origin={liveCheckin.origin}
                                             isExpanded={
                                                 expandedGuestId ===
-                                                checkin.guest?.id
+                                                liveCheckin.guest?.id
                                             }
                                             onToggle={() =>
-                                                toggleExpand(checkin.guest?.id)
+                                                toggleExpand(
+                                                    liveCheckin.guest?.id,
+                                                )
                                             }
                                         />
-                                        {checkin.companions?.map(
+                                        {liveCheckin.companions?.map(
                                             (comp: any) => (
                                                 <ExpandableGuestCard
                                                     key={comp.id}
@@ -287,7 +315,7 @@ export default function OccupiedRoomModal({
                                             </span>
                                             <span className="font-bold text-gray-800 capitalize">
                                                 {formatDate(
-                                                    checkin.check_in_date,
+                                                    liveCheckin.check_in_date,
                                                 )}
                                             </span>
                                         </div>
@@ -401,7 +429,6 @@ export default function OccupiedRoomModal({
 
                                                 <div className="relative mb-3">
                                                     <div className="flex flex-col gap-2">
-                                                        {/* FILA SUPERIOR: SELECCIÓN DE MÉTODO + MONTO */}
                                                         <div className="flex gap-2">
                                                             <div className="w-1/2">
                                                                 <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
@@ -488,7 +515,6 @@ export default function OccupiedRoomModal({
                                                             </div>
                                                         </div>
 
-                                                        {/* FILA INFERIOR: BANCO QR */}
                                                         <div
                                                             className={`overflow-hidden transition-all duration-300 ease-in-out ${
                                                                 paymentData.payment_method ===
@@ -500,7 +526,6 @@ export default function OccupiedRoomModal({
                                                             <label className="mb-1 ml-1 block text-[9px] font-bold text-purple-600 uppercase">
                                                                 Banco (QR)
                                                             </label>
-
                                                             <div className="grid grid-cols-4 gap-1">
                                                                 {[
                                                                     {
@@ -528,7 +553,6 @@ export default function OccupiedRoomModal({
                                                                         const isSelected =
                                                                             paymentData.qr_bank ===
                                                                             banco.id;
-
                                                                         return (
                                                                             <button
                                                                                 key={
@@ -566,7 +590,6 @@ export default function OccupiedRoomModal({
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        {/* ERROR VISUAL */}
                                                         {Number(
                                                             paymentData.amount,
                                                         ) > 0 &&
@@ -609,17 +632,11 @@ export default function OccupiedRoomModal({
                                             <Utensils className="h-4 w-4 text-orange-500" />{' '}
                                             Consumo Extra
                                         </h3>
-                                        <button
-                                            onClick={() => setShowServiceModal(true)}
-                                            className="flex items-center gap-1 rounded-md bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-200"
-                                        >
-                                            + AGREGAR
-                                        </button>
                                     </div>
 
-                                    {checkin.services?.length > 0 ? (
+                                    {liveCheckin.services?.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
-                                            {checkin.services.map(
+                                            {liveCheckin.services.map(
                                                 (
                                                     service: any,
                                                     index: number,
@@ -685,16 +702,12 @@ export default function OccupiedRoomModal({
                 </DialogContent>
             </Dialog>
 
-            {/* --- MODAL DE CONFIRMACIÓN DE PAGO (ACCESIBILIDAD CORREGIDA) --- */}
+            {/* --- MODAL DE CONFIRMACIÓN DE PAGO --- */}
             <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
-                <DialogContent
-                    className="rounded-2xl border-none bg-white p-6 text-center shadow-2xl sm:max-w-[380px]"
-                    aria-describedby="confirm-desc"
-                >
-                    {/* Header Oculto para Accesibilidad */}
+                <DialogContent className="rounded-2xl border-none bg-white p-6 text-center shadow-2xl sm:max-w-[380px]">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Confirmar Adelanto</DialogTitle>
-                        <DialogDescription id="confirm-desc">
+                        <DialogDescription>
                             Confirme que desea registrar un adelanto de{' '}
                             {paymentData.amount} Bs.
                         </DialogDescription>
@@ -737,14 +750,16 @@ export default function OccupiedRoomModal({
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* MODAL DE SERVICIOS */}
             <CheckinDetailModal
                 show={showServiceModal}
                 onClose={() => {
                     setShowServiceModal(false);
-                    // Magia de actualización de datos
+                    // Magia de actualización de datos en el padre usando la palabra clave de Inertia
                     router.reload({ only: ['Checkins', 'Rooms'] });
                 }}
-                checkins={checkin ? [checkin] : []}
+                checkins={liveCheckin ? [liveCheckin] : []}
                 services={services}
             />
         </>
@@ -752,7 +767,7 @@ export default function OccupiedRoomModal({
 }
 
 // ============================================================================
-// COMPONENTES AUXILIARES (SE MANTIENEN IGUAL)
+// COMPONENTES AUXILIARES
 // ============================================================================
 
 const calculateAge = (dateString?: string) => {
@@ -832,13 +847,7 @@ function StaticGuestCard({ guest, origin }: { guest: any; origin?: string }) {
     );
 }
 
-function ExpandableGuestCard({
-    guest,
-    isTitular,
-    isExpanded,
-    onToggle,
-    origin,
-}: any) {
+function ExpandableGuestCard({ guest, isExpanded, onToggle, origin }: any) {
     if (!guest) return null;
     return (
         <div

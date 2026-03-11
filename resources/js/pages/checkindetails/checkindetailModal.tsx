@@ -1,12 +1,36 @@
-import { useForm } from '@inertiajs/react';
-import { UtensilsCrossed, Save, X, Hash, BedDouble, User } from 'lucide-react';
-import { FormEventHandler, useEffect } from 'react';
+import { router, useForm } from '@inertiajs/react';
+import axios from 'axios';
+import {
+    BedDouble,
+    Car,
+    CheckCircle2,
+    Coffee,
+    Loader2,
+    Minus,
+    Plus,
+    ShoppingBag,
+    Trash2,
+    Store,
+    ShoppingBasket,
+    Hash,
+    X,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+// Importamos Dialog para evitar el Warning de Accesibilidad
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 // --- INTERFACES ---
-interface Service { 
-    id: number; 
-    name: string; 
-    price: number; 
+interface Service {
+    id: number;
+    name: string;
+    price: number;
 }
 
 interface Checkin {
@@ -26,8 +50,17 @@ interface CheckinDetailModalProps {
     show: boolean;
     onClose: () => void;
     detailToEdit?: CheckinDetail | null;
-    checkins: Checkin[]; // Lista de habitaciones ocupadas para el Select
-    services: Service[]; // Lista de servicios
+    checkins: Checkin[];
+    services: Service[];
+    initialCheckinId?: number | null;
+}
+
+interface AddedItem {
+    dbId: number;
+    serviceId: number;
+    name: string;
+    price: number;
+    quantity: number;
 }
 
 export default function CheckinDetailModal({
@@ -35,183 +68,442 @@ export default function CheckinDetailModal({
     onClose,
     detailToEdit,
     checkins = [],
-    services = [], 
+    services = [],
+    initialCheckinId = null,
 }: CheckinDetailModalProps) {
-    
-    // Configuración del formulario
-    const { data, setData, post, put, processing, errors, reset, clearErrors } =
-        useForm({
-            checkin_id: '', // Ahora inicia vacío para que el usuario elija
-            service_id: '',
-            quantity: 1,
-        });
+    const { data, setData, put, reset, clearErrors } = useForm({
+        checkin_id: '',
+        service_id: '',
+        quantity: 1,
+    });
 
+    const [processing, setProcessing] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [quickFilter, setQuickFilter] = useState<'ALL' | 'DESAYUNO' | 'GARAJE'>('ALL');
+    const [recentlyAdded, setRecentlyAdded] = useState<AddedItem[]>([]);
+    const [editingDbId, setEditingDbId] = useState<number | null>(null);
+
+    // --- EFECTO AL ABRIR EL MODAL ---
     useEffect(() => {
         if (show) {
+            setSearchTerm('');
+            setQuickFilter('ALL');
+            setRecentlyAdded([]);
+            
+            const targetId = detailToEdit ? detailToEdit.checkin_id : (checkins.length === 1 ? checkins[0].id : initialCheckinId);
+            
+            if (targetId) {
+                fetchExistingDetails(targetId.toString());
+            }
+
             if (detailToEdit) {
-                // MODO EDICIÓN: Cargar datos existentes
                 setData({
                     checkin_id: detailToEdit.checkin_id.toString(),
                     service_id: detailToEdit.service_id.toString(),
                     quantity: detailToEdit.quantity,
                 });
             } else {
-                // MODO CREACIÓN: Limpiar
                 reset();
                 clearErrors();
+                if (targetId) {
+                    setData('checkin_id', targetId.toString());
+                }
             }
         }
-    }, [show, detailToEdit]);
+    }, [show, detailToEdit, initialCheckinId, checkins]);
 
-    const submit: FormEventHandler = (e) => {
+    useEffect(() => {
+        if (show && data.checkin_id) {
+            fetchExistingDetails(data.checkin_id);
+        }
+    }, [data.checkin_id, show]);
+
+    const filteredServices = services.filter((s) => {
+        const nameLower = s.name.toLowerCase();
+        const isExcluded =
+            (nameLower.includes('garaje') ||
+                nameLower.includes('desayuno') ||
+                nameLower.includes('estacionamiento')) &&
+            quickFilter === 'ALL';
+
+        const matchesSearch = nameLower.includes(searchTerm.toLowerCase());
+
+        let matchesCategory = true;
+        if (quickFilter === 'DESAYUNO')
+            matchesCategory = nameLower.includes('desayuno');
+        else if (quickFilter === 'GARAJE')
+            matchesCategory =
+                nameLower.includes('garaje') ||
+                nameLower.includes('estacionamiento');
+
+        return !isExcluded && matchesSearch && matchesCategory;
+    });
+
+    // =========================================================================
+    // 🚀 LÓGICA DE GUARDADO Y RECARGA EN TIEMPO REAL
+    // =========================================================================
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!data.service_id) return;
 
-        const options = {
-            preserveScroll: true, // <--- IMPORTANTE: Evita que la pantalla salte
-            onSuccess: () => {
-                reset(); // Limpia el formulario
-                onClose(); // Cierra el modal
-                // Aquí Inertia ya habrá actualizado los datos de fondo automáticamente
-            },
-            onError: () => {
-                // Opcional: Manejo de errores si fallara
-            }
-        };
+        setProcessing(true);
+        console.log('🛒 [CARRITO] Guardando producto...');
 
         if (detailToEdit && detailToEdit.id) {
-            put(`/checkin-details/${detailToEdit.id}`, options);
-        } else {
-            post('/checkin-details', options);
+            put(`/checkin-details/${detailToEdit.id}`, {
+                onSuccess: () => {
+                    reset();
+                    onClose();
+                    setProcessing(false);
+                },
+                onError: () => setProcessing(false),
+            });
+            return;
+        }
+
+        try {
+            if (editingDbId) {
+                await axios.put(`/checkin-details/${editingDbId}`, {
+                    quantity: data.quantity,
+                    service_id: data.service_id,
+                });
+                setEditingDbId(null);
+            } else {
+                await axios.post('/checkin-details', {
+                    checkin_id: data.checkin_id,
+                    service_id: data.service_id,
+                    quantity: data.quantity,
+                });
+            }
+
+            console.log('🛒 [CARRITO] Éxito. Solicitando actualización de la BD...');
+            
+            // Refrescamos la lista interna del carrito
+            await fetchExistingDetails(data.checkin_id);
+            
+            // 🚀 RECARGAMOS INERTIA INMEDIATAMENTE PARA QUE EL MODAL PADRE TENGA LOS DATOS
+            router.reload({ 
+                only: ['Checkins', 'Rooms'],
+                onSuccess: () => console.log('🌐 [INERTIA] Habitaciones actualizadas por debajo.') 
+            });
+
+            // Limpiamos los inputs para seguir agregando
+            setData((prev) => ({ ...prev, service_id: '', quantity: 1 }));
+            
+        } catch (error) {
+            console.error('Error al guardar', error);
+            alert('Ocurrió un error al procesar el servicio.');
+        } finally {
+            setProcessing(false);
         }
     };
+
+    const handleDeleteItem = (dbId: number) => {
+        if (!confirm('¿Eliminar este servicio de la cuenta?')) return;
+
+        console.log('🗑️ [CARRITO] Eliminando producto...');
+        router.delete(`/checkin-details/${dbId}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setRecentlyAdded((prev) =>
+                    prev.filter((item) => item.dbId !== dbId),
+                );
+                // 🚀 SI BORRAS, TAMBIÉN RECARGA INERTIA AL INSTANTE
+                router.reload({ only: ['Checkins', 'Rooms'] }); 
+                console.log('🗑️ [CARRITO] Producto eliminado.');
+            },
+            onError: () => {
+                alert('No se pudo eliminar el servicio.');
+            },
+        });
+    };
+
+    const fetchExistingDetails = async (checkinId: string) => {
+        if (!checkinId) return;
+        try {
+            const response = await axios.get(`/api/checkin-details/${checkinId}`);
+            const formattedItems: AddedItem[] = response.data.map((det: any) => ({
+                dbId: det.id,
+                serviceId: det.service_id,
+                name: det.service?.name || 'Servicio',
+                price: Number(det.selling_price || det.service?.price || 0),
+                quantity: det.quantity
+            }));
+            setRecentlyAdded(formattedItems);
+        } catch (error) {
+            console.error("Error al cargar detalles:", error);
+        }
+    };
+
+    const currentService = services.find((s) => s.id.toString() === data.service_id);
+    const currentTotal = currentService ? currentService.price * data.quantity : 0;
+    const sessionTotal = recentlyAdded.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
-            <div className="w-full max-w-lg animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
-                
-                {/* --- HEADER --- */}
-                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
-                    <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                        <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
-                            <UtensilsCrossed className="h-5 w-5" />
-                        </div>
-                        {detailToEdit ? 'Editar Consumo' : 'Agregar Consumo'}
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
+        <Dialog open={show} onOpenChange={onClose}>
+            <DialogContent 
+                className="fixed inset-0 z-[60] flex animate-in items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-200 fade-in border-none max-w-none w-full h-full shadow-none bg-transparent sm:max-w-none"
+                aria-describedby="checkin-detail-desc"
+            >
+                {/* --- ACCESIBILIDAD OCULTA --- */}
+                <DialogHeader className="sr-only">
+                    <DialogTitle>
+                        {detailToEdit ? 'Editar Consumo' : 'Agregar Consumos Extra'}
+                    </DialogTitle>
+                    <DialogDescription id="checkin-detail-desc">
+                        Selecciona y agrega servicios adicionales a la cuenta de la habitación.
+                    </DialogDescription>
+                </DialogHeader>
 
-                {/* --- FORMULARIO --- */}
-                <form onSubmit={submit} className="p-6">
-                    <div className="space-y-5">
-                        
-                        {/* CAMPO 1: SELECCIONAR HABITACIÓN / HUÉSPED (NUEVO) */}
-                        <div>
-                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
-                                Habitación / Huésped
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <BedDouble className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <select
-                                    value={data.checkin_id}
-                                    onChange={(e) => setData('checkin_id', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-400 py-2.5 pl-10 pr-4 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
-                                    // Si estamos editando, usualmente no cambiamos el huésped, pero si quieres permitirlo quita el disabled
-                                    disabled={!!detailToEdit} 
-                                >
-                                    <option value="" disabled>-- Seleccione Habitación --</option>
-                                    {checkins.map((chk) => (
-                                        <option key={chk.id} value={chk.id}>
-                                            Hab: {chk.room.number} - {chk.guest.full_name}
-                                        </option>
-                                    ))}
-                                </select>
+                <div className="w-full max-w-5xl flex max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl relative mx-auto my-auto">
+                    {/* --- HEADER VISUAL --- */}
+                    <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800 uppercase tracking-wide">
+                            <div className="rounded-lg bg-orange-100 p-1.5 text-orange-600">
+                                <Store className="h-5 w-5" />
                             </div>
-                            {errors.checkin_id && (
-                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.checkin_id}</p>
-                            )}
-                        </div>
-
-                        {/* CAMPO 2: SELECCIONAR SERVICIO */}
-                        <div>
-                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
-                                Servicio a Agregar
-                            </label>
-                            <div className="relative">
-                                <select
-                                    value={data.service_id}
-                                    onChange={(e) => setData('service_id', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-400 py-2.5 pl-3 pr-8 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
-                                >
-                                    <option value="" disabled>-- Seleccione un Servicio --</option>
-                                    {services.map((srv) => (
-                                        <option key={srv.id} value={srv.id}>
-                                            {srv.name} - Bs. {srv.price}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            {errors.service_id && (
-                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.service_id}</p>
-                            )}
-                        </div>
-
-                        {/* CAMPO 3: CANTIDAD */}
-                        <div>
-                            <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wide">
-                                Cantidad
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <Hash className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={data.quantity}
-                                    onChange={(e) => setData('quantity', parseInt(e.target.value) || 0)}
-                                    className="w-full rounded-lg border border-gray-400 py-2.5 pl-10 pr-3 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Ej: 1"
-                                />
-                            </div>
-                            {errors.quantity && (
-                                <p className="mt-1 text-xs text-red-500 font-bold">{errors.quantity}</p>
-                            )}
-                        </div>
-
-                    </div>
-
-                    {/* --- FOOTER --- */}
-                    <div className="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-4">
+                            {detailToEdit ? 'Editar Consumo' : 'Agregar Consumos Extra'}
+                        </h2>
                         <button
-                            type="button"
                             onClick={onClose}
-                            className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
+                            className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-800"
                         >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {processing ? 'Guardando...' : (
-                                <>
-                                    <Save className="h-4 w-4" /> Guardar
-                                </>
-                            )}
+                            <X className="h-5 w-5" />
                         </button>
                     </div>
-                </form>
-            </div>
-        </div>
+
+                    <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
+                        {/* CONTENEDOR DE DOS COLUMNAS */}
+                        <div className="flex flex-1 overflow-hidden md:flex-row flex-col">
+                            
+                            {/* --- COLUMNA IZQUIERDA (CARRITO Y HABITACIÓN) --- */}
+                            <div className="relative flex min-h-0 w-full flex-col border-r border-gray-100 bg-gray-50 p-6 md:w-1/3">
+                                <div className="mb-6 shrink-0">
+                                    <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
+                                        Habitación
+                                    </label>
+                                    <div className="relative">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <BedDouble className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                        <select
+                                            value={data.checkin_id}
+                                            onChange={(e) => setData('checkin_id', e.target.value)}
+                                            className="w-full rounded-xl border-gray-300 bg-white py-2.5 pr-4 pl-10 text-sm font-bold text-gray-800 focus:border-orange-500 focus:ring-orange-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                            disabled={checkins.length === 1 || !!detailToEdit || !!initialCheckinId}
+                                        >
+                                            <option value="" disabled>-- Seleccionar --</option>
+                                            {checkins.map((chk) => (
+                                                <option key={chk.id} value={chk.id}>
+                                                    Hab: {chk.room?.number} - {chk.guest?.full_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* LISTA DEL CARRITO DE COMPRAS */}
+                                <div className="flex min-h-0 flex-1 flex-col border-t border-gray-200 pt-4">
+                                    <h3 className="mb-3 flex shrink-0 items-center justify-between text-xs font-bold text-gray-500 uppercase">
+                                        <span>Agregados a la cuenta</span>
+                                        <span className="text-orange-600">
+                                            Total: Bs. {sessionTotal.toFixed(2)}
+                                        </span>
+                                    </h3>
+
+                                    <div className="flex-1 space-y-2 overflow-y-auto pr-2 pb-2">
+                                        {recentlyAdded.length === 0 ? (
+                                            <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
+                                                <ShoppingBag className="mb-2 h-8 w-8 opacity-20" />
+                                                <p className="text-center text-[10px]">Lista vacía</p>
+                                            </div>
+                                        ) : (
+                                            recentlyAdded.map((item) => (
+                                                <div
+                                                    key={item.dbId}
+                                                    className="flex animate-in items-center justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm duration-200 fade-in slide-in-from-left-2"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm leading-tight font-bold text-gray-800">
+                                                            {item.name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            {item.quantity} x {item.price} Bs.
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-mono text-sm font-bold text-orange-600">
+                                                            {(item.quantity * item.price).toFixed(2)}
+                                                        </span>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handleDeleteItem(item.dbId)}
+                                                            className="rounded-full p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                                                            title="Descartar este producto"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* --- COLUMNA DERECHA (LOS PRODUCTOS PARA ELEGIR) --- */}
+                            <div className="flex min-h-0 w-full flex-col bg-white p-6 md:w-2/3">
+                                <div className="mb-4 shrink-0 border-b border-gray-200 pb-4">
+                                    <div className="flex flex-col gap-3">
+                                        <span className="text-xs font-bold text-gray-500 uppercase">
+                                            Buscador de Productos
+                                        </span>
+                                        <input
+                                            type="text"
+                                            placeholder="Escribe para buscar (Ej: Agua, Coca Cola)..."
+                                            className="w-full rounded-xl border-gray-400 bg-gray-50 py-2.5 pl-4 text-sm transition-all focus:border-orange-500 focus:ring-orange-500"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="min-h-0 flex-1 overflow-y-auto pr-2 pb-2">
+                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                        {filteredServices.map((service) => {
+                                            const isSelected = data.service_id === service.id.toString();
+                                            return (
+                                                <div
+                                                    key={service.id}
+                                                    onClick={() => setData('service_id', service.id.toString())}
+                                                    className={`group relative flex cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all active:scale-95 ${
+                                                        isSelected
+                                                            ? 'border-orange-500 bg-orange-50/50 shadow-md ring-2 ring-orange-500'
+                                                            : 'border-gray-100 bg-white hover:border-orange-400 hover:shadow-md'
+                                                    }`}
+                                                >
+                                                    <div className="mb-3 flex items-center justify-center">
+                                                        <div
+                                                            className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${isSelected ? 'bg-orange-200 text-orange-700' : 'bg-gray-100 text-gray-400 group-hover:bg-orange-100 group-hover:text-orange-600'}`}
+                                                        >
+                                                            {service.name.toLowerCase().includes('garaje') ? (
+                                                                <Car className="h-6 w-6" />
+                                                            ) : service.name.toLowerCase().includes('desayuno') ? (
+                                                                <Coffee className="h-6 w-6" />
+                                                            ) : (
+                                                                <ShoppingBasket className="h-6 w-6" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="text-center">
+                                                        <h4 className={`mb-1 text-xs leading-tight font-bold ${isSelected ? 'text-orange-900' : 'text-gray-700'}`}>
+                                                            {service.name}
+                                                        </h4>
+                                                        <span className="inline-block rounded-md border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm">
+                                                            Bs. {service.price}
+                                                        </span>
+                                                    </div>
+                                                    {isSelected && (
+                                                        <div className="absolute top-2 right-2 animate-in text-orange-600 zoom-in">
+                                                            <CheckCircle2 className="h-5 w-5 fill-white" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {filteredServices.length === 0 && (
+                                        <div className="flex h-full min-h-[150px] flex-col items-center justify-center text-gray-400">
+                                            <p className="text-sm">No se encontraron productos.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* SELECTOR DE CANTIDAD */}
+                                {data.service_id && (
+                                    <div className="mt-4 shrink-0 animate-in duration-300 fade-in slide-in-from-bottom-4">
+                                        <div className="flex items-center justify-between rounded-xl bg-gray-900 p-2 text-white shadow-lg">
+                                            <div className="flex items-center gap-3 px-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setData('quantity', Math.max(1, data.quantity - 1))}
+                                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 transition hover:bg-gray-600"
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </button>
+
+                                                <div className="min-w-[3rem] text-center">
+                                                    <span className="block text-xs font-bold text-gray-400 uppercase">Cant.</span>
+                                                    <span className="text-lg leading-none font-bold">{data.quantity}</span>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setData('quantity', data.quantity + 1)}
+                                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-700 transition hover:bg-gray-600"
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-3 pr-2">
+                                                <div className="text-right">
+                                                    <span className="block text-[10px] text-gray-400 uppercase">Subtotal</span>
+                                                    <span className="font-mono text-lg font-bold text-orange-400">
+                                                        Bs. {currentTotal.toFixed(2)}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setData((prev) => ({ ...prev, service_id: '', quantity: 1 }))}
+                                                    className="ml-2 rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-red-400"
+                                                    title="Cancelar selección"
+                                                >
+                                                    <Trash2 className="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* --- FOOTER COMPLETO CON BOTONES A LA DERECHA --- */}
+                        <div className="flex w-full shrink-0 items-center justify-between border-t border-gray-200 bg-white px-6 py-4">
+                            <div className="text-xs font-medium text-gray-500">
+                                {recentlyAdded.length > 0 ? `${recentlyAdded.length} consumos registrados en esta habitación.` : 'Seleccione un producto para agregarlo.'}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-100"
+                                >
+                                    CERRAR
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={processing || !data.service_id}
+                                    className="flex items-center justify-center min-w-[200px] gap-2 rounded-xl bg-orange-500 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-orange-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {processing ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Plus className="h-5 w-5" />
+                                            {detailToEdit ? 'ACTUALIZAR' : 'AGREGAR A LA CUENTA'}
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }

@@ -20,7 +20,16 @@ class RoomController
     public function index()
     {
         // Usamos 'with' para cargar las relaciones y evitar consultas N+1
-        $rooms = Room::with(['roomType', 'price', 'floor', 'block'])
+        $rooms = Room::with([
+            'roomType',
+            'price',
+            'floor',
+            'block',
+            'checkins.services',
+            'checkins.payments',
+            'checkins.guest',
+            'checkins.companions'
+        ])
             ->orderBy('number', 'asc') // <--- AGREGAR ESTO
             ->get();
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
@@ -182,11 +191,11 @@ class RoomController
             ->get();
 
         // 🚀 NUEVO: 4. Separamos las habitaciones para el Modal de Transferencia
-        $availableRooms = $rooms->filter(function($room) {
+        $availableRooms = $rooms->filter(function ($room) {
             return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']); // O solo 'LIBRE' según tu regla
         })->values();
 
-        $occupiedRooms = $rooms->filter(function($room) {
+        $occupiedRooms = $rooms->filter(function ($room) {
             return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']); // Incluye ambas por si acaso
         })->values();
 
