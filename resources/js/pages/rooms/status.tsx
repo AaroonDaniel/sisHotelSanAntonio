@@ -4,7 +4,9 @@ import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle,
+    ArrowLeft,
     ArrowRightCircle,
+    Banknote,
     BedDouble,
     Brush,
     CheckCircle2,
@@ -15,6 +17,7 @@ import {
     LogOut,
     Search,
     ShoppingCart,
+    SplitSquareHorizontal,
     User,
     User as UserIcon,
     X,
@@ -1239,9 +1242,20 @@ function CheckoutConfirmationModal({
     const [tipoDocumento, setTipoDocumento] = useState<
         'factura' | 'recibo' | null
     >(null);
-    const [metodoPago, setMetodoPago] = useState<'efectivo' | 'qr' | null>(
-        null,
-    );
+
+    // =========================================================================
+    // 🚀 NUEVOS ESTADOS DE PAGO (ACTUALIZADOS PARA SOPORTAR 'ambos')
+    // =========================================================================
+    const [metodoPago, setMetodoPago] = useState<string | null>(null); // Antes era 'efectivo' | 'qr' | null
+    const [qrBank, setQrBank] = useState<string | null>(null);
+    const [bancoMixto, setBancoMixto] = useState<string | null>(null);
+    const [montoEfectivo, setMontoEfectivo] = useState<string>('');
+    const [montoQR, setMontoQR] = useState<string>('');
+
+    const handleMontoEfectivoChange = (val: string) => setMontoEfectivo(val);
+    const handleMontoQRChange = (val: string) => setMontoQR(val);
+    // =========================================================================
+
     const [nombreFactura, setNombreFactura] = useState(
         checkin?.guest?.full_name || '',
     );
@@ -1249,11 +1263,36 @@ function CheckoutConfirmationModal({
         checkin?.guest?.identification_number || '',
     );
     const [isLinked, setIsLinked] = useState(!!checkin?.guest?.id);
-    const [qrBank, setQrBank] = useState<string | null>(null);
     const [filteredGuests, setFilteredGuests] = useState<any[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // Estado principal de datos visuales
+    const [displayData, setDisplayData] = useState<{
+        duration_days: number;
+        accommodation_total: number;
+        services_total: number;
+        grand_total: number;
+        balance: number;
+        check_out_date: string;
+        check_in_date: string;
+        servicios: any[];
+        guest: any;
+        total_pagado?: number;
+        is_late?: boolean; // <-- Añadido por si usas la lógica del backend para ocultar botón
+    } | null>(null);
+
+    // =========================================================================
+    // 🚀 CONSTANTES MATEMÁTICAS PARA EL PAGO MIXTO
+    // (Deben ir DESPUÉS de declarar displayData para que puedan leer 'balance')
+    // =========================================================================
+    const saldoPagar = displayData?.balance ?? 0;
+    const totalIngresado =
+        (parseFloat(montoEfectivo) || 0) + (parseFloat(montoQR) || 0);
+    const restanteMixto = Math.max(0, saldoPagar - totalIngresado);
+    const estaCubierto = totalIngresado >= saldoPagar;
+    // =========================================================================
+
     // [DOC] Manejadores de formulario (handleNameChange, handleSelectGuest)
-    // Formulario manejo sobre handleNameChange, hanleSelectGuest
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value.toUpperCase();
         const shouldReset = isLinked || newValue === '';
@@ -1281,28 +1320,11 @@ function CheckoutConfirmationModal({
     };
 
     const handleSelectGuest = (guest: any) => {
-        // 1. Llenamos los campos
         setNombreFactura(guest.full_name);
-        setNitFactura(guest.identification_number || ''); // Si es null, ponemos vacío
-        // 2. Establecemos el Vínculo (Candado lógico)
+        setNitFactura(guest.identification_number || '');
         setIsLinked(true);
-        // 3. Cerramos buscador
         setIsDropdownOpen(false);
     };
-
-    // Estado principal de datos visuales
-    const [displayData, setDisplayData] = useState<{
-        duration_days: number;
-        accommodation_total: number;
-        services_total: number;
-        grand_total: number;
-        balance: number;
-        check_out_date: string;
-        check_in_date: string;
-        servicios: any[];
-        guest: any;
-        total_pagado?: number; // [DOC] Nueva propiedad para almacenar lo pagado realmente
-    } | null>(null);
 
     // Logica de tolerancia (getExitToleranceStatus)
     const getExitToleranceStatus = () => {
@@ -1466,7 +1488,14 @@ function CheckoutConfirmationModal({
 
                 // 👇 NUEVO DATO: Método de Pago
                 metodo_pago: metodoPago,
-                qr_bank: metodoPago === 'qr' ? qrBank : null,
+                banco_qr:
+                    metodoPago === 'ambos'
+                        ? bancoMixto
+                        : metodoPago === 'qr'
+                          ? qrBank
+                          : null,
+                monto_efectivo: parseFloat(montoEfectivo) || 0,
+                monto_qr: parseFloat(montoQR) || 0,
             });
 
             // 2. Una vez guardado, pedimos el PDF correspondiente
@@ -1801,7 +1830,7 @@ function CheckoutConfirmationModal({
                                                                 ? // Clases cuando YA SE APLICÓ (Desactivado/Gris)
                                                                   'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-500 opacity-70'
                                                                 : // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
-                                                                  'animate-pulse cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                                  'animate-pulse cursor-pointer border-green-500 bg-emerald-100 text-green-700 hover:bg-emerald-200'
                                                         }`}
                                                         title={
                                                             waivePenalty
@@ -1835,14 +1864,14 @@ function CheckoutConfirmationModal({
                                                             'recibo',
                                                         )
                                                     }
-                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-green-600 bg-emerald-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                 >
                                                     <div
-                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-600' : 'border-gray-300'}`}
                                                     >
                                                         {tipoDocumento ===
                                                             'recibo' && (
-                                                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-green-600" />
                                                         )}
                                                     </div>
                                                     <span className="text-xs font-bold uppercase">
@@ -1855,14 +1884,14 @@ function CheckoutConfirmationModal({
                                                             'factura',
                                                         )
                                                     }
-                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-600 bg-blue-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                 >
                                                     <div
-                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-600' : 'border-gray-300'}`}
                                                     >
                                                         {tipoDocumento ===
                                                             'factura' && (
-                                                            <div className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-green-600" />
                                                         )}
                                                     </div>
                                                     <span className="text-xs font-bold uppercase">
@@ -1874,110 +1903,162 @@ function CheckoutConfirmationModal({
 
                                         {/* SECCIÓN 2: MÉTODO DE PAGO */}
                                         {tipoDocumento && (
-                                            <div className="mt-5 animate-in text-center duration-300 fade-in slide-in-from-top-2">
-                                                <h4 className="mb-3 text-sm font-bold tracking-wide text-gray-800 uppercase">
-                                                    2. Método de Pago
+                                            <div className="mt-5 flex-1 animate-in text-center duration-300 fade-in slide-in-from-top-2">
+                                                <h4 className="mb-3 flex items-center justify-center gap-1 text-sm font-bold tracking-widest text-gray-800 uppercase">
+                                                    <Banknote className="h-4 w-4 text-gray-400" />{' '}
+                                                    2. Tipo de Pago
                                                 </h4>
 
-                                                {/* BOTONES PRINCIPALES: EFECTIVO vs QR */}
-                                                <div className="mb-3 flex justify-center gap-3">
-                                                    <button
-                                                        onClick={() => {
-                                                            setMetodoPago(
-                                                                'efectivo',
-                                                            );
-                                                            setQrBank(null);
-                                                        }}
-                                                        className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-3 py-3 transition-all ${metodoPago === 'efectivo' ? 'border-green-600 bg-green-50 text-green-800 shadow-md ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
-                                                    >
-                                                        <span className="text-[10px] font-bold uppercase">
-                                                            Efectivo
-                                                        </span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            setMetodoPago('qr')
-                                                        }
-                                                        className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-3 py-3 transition-all ${metodoPago === 'qr' ? 'border-purple-600 bg-purple-50 text-purple-800 shadow-md ring-1 ring-purple-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
-                                                    >
-                                                        <span className="text-[10px] font-bold uppercase">
-                                                            QR Simple
-                                                        </span>
-                                                    </button>
-                                                </div>
+                                                {/* CUADRÍCULA PRINCIPAL (TODO EN UNO) */}
+                                                {metodoPago !== 'ambos' && (
+                                                    <div className="mb-4 grid animate-in grid-cols-3 gap-2 zoom-in-95 fade-in">
+                                                        {/* 1. EFECTIVO */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setMetodoPago('efectivo')}
+                                                            className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
+                                                                metodoPago === 'efectivo' 
+                                                                ? 'border-green-500 bg-green-50 ring-2 ring-green-500 shadow-md' 
+                                                                : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <Banknote className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-600' : 'text-gray-500'}`} />
+                                                            <span className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-800' : 'text-gray-600'}`}>
+                                                                Efectivo
+                                                            </span>
+                                                        </button>
 
-                                                {/* SUB-SECCIÓN: BANCOS QR (Solo visible si metodoPago === 'qr') */}
-                                                <div
-                                                    className={`overflow-hidden transition-all duration-300 ease-in-out ${metodoPago === 'qr' ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}
-                                                >
-                                                    <label className="mb-2 block text-[10px] font-bold text-purple-600 uppercase">
-                                                        Seleccione Banco (QR)
-                                                    </label>
-                                                    <div className="grid grid-cols-4 gap-2 px-1">
-                                                        {[
-                                                            {
-                                                                id: 'YAPE',
-                                                                logo: '/images/bancos/yape.png',
-                                                                ring: 'ring-purple-500',
-                                                            },
-                                                            {
-                                                                id: 'FIE',
-                                                                logo: '/images/bancos/fie.png',
-                                                                ring: 'ring-orange-500',
-                                                            },
-                                                            {
-                                                                id: 'BNB',
-                                                                logo: '/images/bancos/bnb.png',
-                                                                ring: 'ring-green-500',
-                                                            },
-                                                            {
-                                                                id: 'ECO',
-                                                                logo: '/images/bancos/eco.png',
-                                                                ring: 'ring-blue-500',
-                                                            },
-                                                        ].map((banco) => {
-                                                            const isSelected =
-                                                                qrBank ===
-                                                                banco.id;
+                                                        {/* 2 AL 5. BANCOS (QR DIRECTO) */}
+                                                        {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => {
+                                                            const isSelected = metodoPago === banco.toLowerCase();
                                                             return (
                                                                 <button
-                                                                    key={
-                                                                        banco.id
-                                                                    }
+                                                                    key={banco}
                                                                     type="button"
-                                                                    onClick={() =>
-                                                                        setQrBank(
-                                                                            banco.id,
-                                                                        )
-                                                                    }
-                                                                    className={`relative h-12 rounded-xl border transition-all duration-200 active:scale-95 ${
-                                                                        isSelected
-                                                                            ? `ring-2 ${banco.ring} scale-105 border-transparent shadow-md`
-                                                                            : 'border-gray-200 bg-white hover:border-gray-300'
+                                                                    onClick={() => setMetodoPago(banco.toLowerCase())}
+                                                                    className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
+                                                                        isSelected 
+                                                                        ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-500 shadow-md' 
+                                                                        : 'border-gray-300 bg-white hover:bg-gray-50'
                                                                     }`}
                                                                 >
                                                                     <img
-                                                                        src={
-                                                                            banco.logo
-                                                                        }
-                                                                        alt={
-                                                                            banco.id
-                                                                        }
-                                                                        className={`absolute inset-0 h-full w-full object-contain p-1.5 transition-all ${
-                                                                            isSelected
-                                                                                ? ''
-                                                                                : 'opacity-60 grayscale hover:opacity-100 hover:grayscale-0'
-                                                                        }`}
+                                                                        src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                        alt={banco}
+                                                                        className={`mb-1 h-6 object-contain transition-all ${!isSelected && 'opacity-70 grayscale'}`}
                                                                     />
+                                                                    <span className={`text-[10px] font-black uppercase ${isSelected ? 'text-purple-800' : 'text-gray-600'}`}>
+                                                                        {banco}
+                                                                    </span>
                                                                 </button>
                                                             );
                                                         })}
+
+                                                        {/* 6. AMBOS (MIXTO) */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setMetodoPago('ambos')}
+                                                            className="flex flex-col items-center justify-center rounded-xl border border-gray-300 bg-white py-3 shadow-sm transition-all hover:bg-gray-100"
+                                                        >
+                                                            <SplitSquareHorizontal className="mb-1 h-6 w-6 text-gray-500" />
+                                                            <span className="text-[10px] font-black text-gray-600 uppercase">
+                                                                Ambos (Mixto)
+                                                            </span>
+                                                        </button>
                                                     </div>
-                                                </div>
+                                                )}
+
+                                                {/* MODO "AMBOS" (MIXTO) */}
+                                                {metodoPago === 'ambos' && (
+                                                    <div className="mt-2 animate-in rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm fade-in slide-in-from-right-4">
+                                                        <div className="flex justify-end">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setMetodoPago(null)}
+                                                                className="mb-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] font-black text-gray-600 uppercase shadow-sm transition-colors hover:bg-gray-100 hover:text-gray-900"
+                                                            >
+                                                                <ArrowLeft className="h-3 w-3" />{' '}
+                                                                Volver
+                                                            </button>
+                                                        </div>
+
+                                                        <div className={`mb-4 rounded-xl border-2 p-3 text-center transition-all duration-300 ${estaCubierto ? 'border-green-500 bg-green-50 text-green-800 shadow-inner' : 'border-red-300 bg-white text-gray-800 shadow-md'}`}>
+                                                            <span className={`mb-1 block text-[10px] font-black tracking-widest uppercase ${estaCubierto ? 'text-green-700' : 'text-red-500'}`}>
+                                                                {estaCubierto ? '¡Monto Completado!' : 'Monto Restante por Cubrir'}
+                                                            </span>
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                {estaCubierto && <CheckCircle2 className="h-6 w-6 animate-in text-green-600 zoom-in" />}
+                                                                <span className={`text-2xl font-black ${estaCubierto ? 'text-green-700' : 'text-gray-900'}`}>
+                                                                    {restanteMixto.toFixed(2)} Bs
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
+                                                            {/* INPUT EFECTIVO */}
+                                                            <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
+                                                                <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
+                                                                    <Banknote className="h-4 w-4 text-gray-400" />{' '}
+                                                                    Efectivo (Bs)
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    placeholder="0.00"
+                                                                    value={montoEfectivo}
+                                                                    onChange={(e) => handleMontoEfectivoChange(e.target.value)}
+                                                                    className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
+                                                                />
+                                                            </div>
+                                                            {/* INPUT QR */}
+                                                            <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
+                                                                <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
+                                                                    <SplitSquareHorizontal className="h-4 w-4 text-gray-400" />{' '}
+                                                                    Banco / QR (Bs)
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    placeholder="0.00"
+                                                                    value={montoQR}
+                                                                    onChange={(e) => handleMontoQRChange(e.target.value)}
+                                                                    className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-purple-500 focus:ring-purple-500"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* SELECCIÓN DE BANCO PARA EL QR MIXTO */}
+                                                        <div className="pt-3">
+                                                            <label className="mb-3 block text-center text-[10px] font-black text-gray-700 uppercase">
+                                                                Seleccione el Banco del QR:
+                                                            </label>
+                                                            <div className="grid grid-cols-4 gap-2">
+                                                                {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => (
+                                                                    <button
+                                                                        key={banco}
+                                                                        type="button"
+                                                                        onClick={() => setBancoMixto(banco.toLowerCase())}
+                                                                        className={`flex flex-col items-center justify-center rounded-lg border-2 py-2 transition-all ${
+                                                                            bancoMixto === banco.toLowerCase() 
+                                                                            ? 'border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-500 scale-105' 
+                                                                            : 'border-gray-300 bg-white hover:bg-gray-100'
+                                                                        }`}
+                                                                    >
+                                                                        <img
+                                                                            src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                            alt={banco}
+                                                                            className={`h-6 object-contain transition-all ${bancoMixto !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
+                                                                        />
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
-
-                                       
                                     </div>
 
                                     {/* --- COLUMNA 2: VISTA DE FACTURACIÓN --- */}
