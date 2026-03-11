@@ -5,6 +5,7 @@ import {
     AlertCircle,
     AlertTriangle,
     ArrowRightCircle,
+    Banknote,
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
@@ -2204,200 +2205,131 @@ export default function CheckinModal({
 
                             {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
                             <div>
-                                {/* ELIMINADA LA CONDICIÓN isTitular && AQUÍ */}
-                                <div className="relative -mt-3 animate-in duration-300 fade-in slide-in-from-top-2">
-                                    <div className="flex flex-col gap-2">
-                                        {/* FILA SUPERIOR: SELECCIÓN DE MÉTODO + MONTO */}
-                                        <div className="flex gap-2">
-                                            {/* A. SELECTOR TIPO DE PAGO (IZQUIERDA) */}
-                                            <div className="flex w-1/2 flex-col">
-                                                {/* Etiqueta alineada con altura mínima para igualar al de la derecha */}
-                                                <div className="mb-0.5 flex min-h-[20px] items-center">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">
-                                                        Método
-                                                    </label>
-                                                </div>
-
-                                                {/* Contenedor principal con altura fija de 38px */}
-                                                <div className="flex h-[38px] w-full rounded-lg border border-gray-300 bg-gray-100 p-[3px]">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setData((prev) => ({
-                                                                ...prev,
-                                                                payment_method:
-                                                                    'EFECTIVO',
-                                                                qr_bank: '',
-                                                            }))
-                                                        }
-                                                        disabled={!isTitular} // Bloquear si no es titular (opcional)
-                                                        className={`flex h-full flex-1 items-center justify-center rounded text-xs font-bold transition-all ${
-                                                            data.payment_method ===
-                                                            'EFECTIVO'
-                                                                ? 'bg-white text-green-700 shadow-sm ring-1 ring-gray-200'
-                                                                : 'text-gray-400 hover:text-gray-600'
-                                                        }`}
-                                                    >
-                                                        EFECTIVO
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setData(
-                                                                'payment_method',
-                                                                'QR',
-                                                            )
-                                                        }
-                                                        disabled={!isTitular}
-                                                        className={`flex h-full flex-1 items-center justify-center rounded text-xs font-bold transition-all ${
-                                                            data.payment_method ===
-                                                            'QR'
-                                                                ? 'bg-white text-purple-700 shadow-sm ring-1 ring-gray-200'
-                                                                : 'text-gray-400 hover:text-gray-600'
-                                                        }`}
-                                                    >
-                                                        QR
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* B. INPUT DE MONTO (DERECHA) */}
-                                            <div className="flex w-1/2 flex-col">
-                                                <div className="mb-0.5 flex min-h-[20px] items-center gap-2">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">
-                                                        Adelanto
-                                                    </label>
-                                                </div>
-                                                {/* Contenedor relative con la altura forzada de 38px para igualar a los demás */}
-                                                <div className="relative h-[38px]">
-                                                    <span
-                                                        className={`absolute inset-y-0 left-3 flex items-center text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
-                                                    >
+                                <div className="relative -mt-2 animate-in duration-300 fade-in slide-in-from-top-2">
+                                    <div className="flex flex-col gap-4">
+                                        
+                                        {/* A. INPUT DE MONTO (Adelanto) */}
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">
+                                                Adelanto
+                                            </label>
+                                            <div className="relative">
+                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                    <span className={`text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}>
                                                         Bs
                                                     </span>
-                                                    <input
-                                                        type="number"
-                                                        step="0.50"
-                                                        min="0"
-                                                        value={
-                                                            data.advance_payment
-                                                        }
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'advance_payment',
-                                                                Number(
-                                                                    e.target
-                                                                        .value,
-                                                                ),
-                                                            )
-                                                        }
-                                                        disabled={!isTitular}
-                                                        // py-2, text-sm y h-full hacen que sea idéntico a las otras cajas
-                                                        // pl-9 empuja los números a la derecha para que no tapen el "Bs"
-                                                        className="h-full w-full rounded-lg border border-gray-400 py-2 pr-3 pl-9 text-sm font-black text-gray-800 focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400"
-                                                        placeholder="0.00"
-                                                    />
                                                 </div>
-                                                {errors.advance_payment && (
-                                                    <p className="mt-1 text-[10px] font-bold text-red-500">
-                                                        {errors.advance_payment}
-                                                    </p>
-                                                )}
+                                                <input
+                                                    type="number"
+                                                    step="0.50"
+                                                    min="0"
+                                                    // Si el valor es exactamente 0, dejamos el campo vacío para que actúe el placeholder
+                                                    value={data.advance_payment === 0 ? '' : data.advance_payment}
+                                                    onChange={(e) =>
+                                                        // Guardamos el valor tal cual lo escribe el usuario (evita problemas de decimales y ceros extra)
+                                                        setData('advance_payment', e.target.value as any)
+                                                    }
+                                                    // Si ya hay un número (ej: 60) y tocan el input, se selecciona todo para sobrescribir fácil
+                                                    onFocus={(e) => e.target.select()}
+                                                    disabled={!isTitular}
+                                                    className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                    placeholder="0"
+                                                />
                                             </div>
+                                            {errors.advance_payment && (
+                                                <p className="mt-1 text-[10px] font-bold text-red-500">
+                                                    {errors.advance_payment}
+                                                </p>
+                                            )}
                                         </div>
 
-                                        {/* FILA INFERIOR: SELECCIÓN DE BANCO (SOLO APARECE SI ES QR) */}
-                                        <div
-                                            className={`border-t border-gray-100 pt-1.5 transition-all duration-300 ${
-                                                data.payment_method === 'QR'
-                                                    ? 'visible opacity-100'
-                                                    : 'invisible opacity-0'
-                                            }`}
-                                        >
-                                            {/* GRID DE BANCOS */}
-                                            <div className="grid grid-cols-4 gap-2">
-                                                {[
-                                                    {
-                                                        id: 'YAPE',
-                                                        label: 'YAPE',
-                                                        logo: '/images/bancos/yape.png',
-                                                        color: 'border-green-300 bg-green-50',
-                                                    },
-                                                    {
-                                                        id: 'FIE',
-                                                        label: 'FIE',
-                                                        logo: '/images/bancos/fie.png',
-                                                        color: 'border-orange-300 bg-orange-50',
-                                                    },
-                                                    {
-                                                        id: 'BNB',
-                                                        label: 'BNB',
-                                                        logo: '/images/bancos/bnb.png',
-                                                        color: 'border-blue-300 bg-blue-50',
-                                                    },
-                                                    {
-                                                        id: 'ECO',
-                                                        label: 'ECO',
-                                                        logo: '/images/bancos/eco.png',
-                                                        color: 'border-yellow-300 bg-yellow-50',
-                                                    },
-                                                ].map((banco) => {
-                                                    const isSelected =
-                                                        data.qr_bank ===
-                                                        banco.id;
+                                        {/* B. SELECTOR TIPO DE PAGO (FORMATO GRID) */}
+                                        <div className="flex flex-col">
+                                            <label className="mb-1 text-xs font-bold text-gray-500 uppercase">
+                                                Método de Pago
+                                            </label>
+                                            <div className="grid animate-in grid-cols-3 gap-2 zoom-in-95 fade-in sm:grid-cols-5">
+                                                
+                                                {/* Botón Efectivo */}
+                                                <button
+                                                    type="button"
+                                                    disabled={!isTitular}
+                                                    onClick={() =>
+                                                        setData((prev) => ({
+                                                            ...prev,
+                                                            payment_method: 'EFECTIVO',
+                                                            qr_bank: '',
+                                                        }))
+                                                    }
+                                                    className={`flex flex-col items-center justify-center rounded-xl border py-2 transition-all ${
+                                                        data.payment_method === 'EFECTIVO'
+                                                            ? 'border-green-500 bg-green-50 ring-2 ring-green-500'
+                                                            : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                    } disabled:opacity-50`}
+                                                >
+                                                    <Banknote
+                                                        className={`mb-1 h-6 w-6 ${data.payment_method === 'EFECTIVO' ? 'text-green-600' : 'text-gray-500'}`}
+                                                    />
+                                                    <span
+                                                        className={`text-[10px] font-black uppercase ${data.payment_method === 'EFECTIVO' ? 'text-green-800' : 'text-gray-600'}`}
+                                                    >
+                                                        Efectivo
+                                                    </span>
+                                                </button>
 
+                                                {/* Botones de Bancos */}
+                                                {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => {
+                                                    const isSelected = data.payment_method === 'QR' && data.qr_bank === banco;
                                                     return (
                                                         <button
-                                                            key={banco.id}
+                                                            key={banco}
                                                             type="button"
+                                                            disabled={!isTitular}
                                                             onClick={() =>
-                                                                setData(
-                                                                    'qr_bank',
-                                                                    banco.id,
-                                                                )
+                                                                setData((prev) => ({
+                                                                    ...prev,
+                                                                    payment_method: 'QR',
+                                                                    qr_bank: banco,
+                                                                }))
                                                             }
-                                                            disabled={
-                                                                !isTitular
-                                                            }
-                                                            className={`relative h-12 overflow-hidden rounded-lg border transition-all duration-200 active:scale-95 ${
+                                                            className={`flex flex-col items-center justify-center rounded-xl border py-2 transition-all ${
                                                                 isSelected
-                                                                    ? `${banco.color} scale-105 shadow-md ring-2 ring-purple-500`
-                                                                    : 'border-gray-200 bg-white hover:border-gray-300'
-                                                            }`}
+                                                                    ? 'border-red-500 bg-red-50 ring-2 ring-red-500'
+                                                                    : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                            } disabled:opacity-50`}
                                                         >
-                                                            {/* Logo como fondo */}
-                                                            <div
-                                                                className={`absolute inset-0 bg-contain bg-center bg-no-repeat transition-all duration-200 ${
-                                                                    isSelected
-                                                                        ? ''
-                                                                        : 'opacity-60 grayscale'
+                                                            <img
+                                                                src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                alt={banco}
+                                                                className={`mb-1 h-6 object-contain ${
+                                                                    !isSelected && 'opacity-70 grayscale'
                                                                 }`}
-                                                                style={{
-                                                                    backgroundImage: `url(${banco.logo})`,
-                                                                }}
                                                             />
-
-                                                            {/* Capa ligera para que el seleccionado tenga más presencia */}
-                                                            {isSelected && (
-                                                                <div className="absolute inset-0 bg-white/10" />
-                                                            )}
+                                                            <span
+                                                                className={`text-[10px] font-black uppercase ${
+                                                                    isSelected ? 'text-red-800' : 'text-gray-600'
+                                                                }`}
+                                                            >
+                                                                {banco}
+                                                            </span>
                                                         </button>
                                                     );
                                                 })}
                                             </div>
 
-                                            {/* MENSAJE DE ERROR VISUAL (SI HAY MONTO PERO NO BANCO) */}
+                                            {/* Mensaje de Error (Si tiene monto, método QR y no eligió banco) */}
                                             {data.advance_payment > 0 &&
+                                                data.payment_method === 'QR' &&
                                                 !data.qr_bank && (
-                                                    <div className="mt-1 flex animate-pulse items-center justify-center gap-0.5 text-[8px] font-bold text-red-500">
-                                                        <AlertCircle className="h-2 w-2" />
-                                                        <span>Requerido</span>
+                                                    <div className="mt-2 flex animate-pulse items-center justify-center gap-1 text-[10px] font-bold text-red-500">
+                                                        <AlertCircle className="h-3 w-3" />
+                                                        <span>Requerido seleccione un banco</span>
                                                     </div>
                                                 )}
                                         </div>
+
                                     </div>
                                 </div>
-                                {/* ELIMINADA LA LLAVE DE CIERRE AQUÍ */}
                             </div>
                             {/* Campo de observaciones*/}
                             <div className="relative -top-4">

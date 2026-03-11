@@ -858,46 +858,43 @@ class CheckinController extends Controller
     }
 
     // Obtener los detalles antes de finalizar
-    // --- NUEVO: Obtener detalles antes de finalizar ---
-    public function getCheckoutDetails(Request $request, Checkin $checkin)
+   public function getCheckoutDetails(Request $request, Checkin $checkin)
     {
-        // 1. Cargar relaciones (Añadimos 'payments' para que coincida con los recibos)
         $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
-        // 2. Determinar si se aplica la tolerancia
         $waivePenalty = $request->boolean('waive_penalty', false);
+        
+        // 1. Fecha de salida actual (Ej: 13:58)
+        $checkOutDate = now(); 
 
-        // 3. Definir Fecha de Salida Efectiva
-        $checkOutDate = now(); // Por defecto: AHORA
-
-        // --- LÓGICA DE TOLERANCIA ---
+        // =========================================================
+        // 🚀 LÓGICA DE REAJUSTE DE TIEMPO (LA MÁQUINA DEL TIEMPO)
+        // =========================================================
         if ($waivePenalty && $checkin->schedule) {
-            $officialExitTime = $checkin->schedule->check_out_time;
-            $checkOutDate = now()->setTimeFromTimeString($officialExitTime);
+            // Calculamos cuál era su límite real (Ej: 12:00 + 60 min = 13:00)
+            $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
+            $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
+            
+            // Si está saliendo tarde (ej: 13:58), retrocedemos su reloj a las 13:00 exactas
+            if ($checkOutDate->greaterThan($horaLimite)) {
+                $checkOutDate = $horaLimite;
+            }
         }
 
-        // 4. Calcular días usando la fecha ajustada
-        $days = $this->calculateBillableDays($checkin, $checkOutDate);
+        // 2. Calcular días usando la fecha (ya sea la tardía o la reajustada)
+        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
-        // ==========================================================
-        // 5. --- [MODIFICADO] PRECIO UNITARIO ---
-        // Ahora lee el agreed_price en lugar del precio base.
-        // ==========================================================
+        // 3. Obtener precio unitario
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        // ==========================================================
-        // 🚀 LÓGICA CORPORATIVA: 60/90 Bs por persona si tiene la etiqueta
-        // ==========================================================
+        // LÓGICA CORPORATIVA
         if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
             $ratePerPerson = $isPrivate ? 90 : 60;
-
-            // PaxCount = 1 Titular + N Acompañantes
             $paxCount = 1 + $checkin->companions->count();
             $price = $ratePerPerson * $paxCount;
         }
-        // ==========================================================
 
         $accommodationTotal = $days * $price;
 
@@ -909,19 +906,11 @@ class CheckinController extends Controller
 
         $grandTotal = $accommodationTotal + $servicesTotal;
 
-        // ==========================================================
-        // --- [MODIFICADO] CÁLCULO DE PAGOS REALES ---
-        // Sincronizamos la misma lógica de los PDFs para que la ventana
-        // de React muestre exactamente los mismos montos.
-        // ==========================================================
+        // Calcular pagos reales
         $totalPagadoReal = 0;
         if ($checkin->payments->count() > 0) {
             foreach ($checkin->payments as $pago) {
-                if ($pago->type === 'DEVOLUCION') {
-                    $totalPagadoReal -= $pago->amount;
-                } else {
-                    $totalPagadoReal += $pago->amount;
-                }
+                $totalPagadoReal += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
             }
         } else {
             $totalPagadoReal = $checkin->advance_payment ?? 0;
@@ -933,12 +922,12 @@ class CheckinController extends Controller
             'guest' => $checkin->guest,
             'room' => $checkin->room,
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
-            'check_out_date' => $checkOutDate->toIso8601String(),
+            'check_out_date' => $checkOutDate->toIso8601String(), // Mandamos la hora reajustada a React
             'duration_days' => $days,
             'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
             'services_total' => $servicesTotal,
-            'advance_payment' => $totalPagadoReal, // Mandamos el total de pagos real
+            'advance_payment' => $totalPagadoReal, 
             'grand_total' => $grandTotal,
             'balance' => $balance,
             'notes' => $checkin->notes
@@ -978,6 +967,7 @@ class CheckinController extends Controller
         // 3. Respuesta para Inertia (Recarga automática)
         return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
     }
+    
     public function checkout(Request $request, Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
@@ -986,22 +976,35 @@ class CheckinController extends Controller
             $room->update(['status' => 'LIMPIEZA']);
         }
 
-        // Usamos la fecha enviada o la actual
         $checkOutDate = $request->input('check_out_date')
             ? \Carbon\Carbon::parse($request->input('check_out_date'))
             : now();
 
-        // Recalculamos para asegurar integridad (especialmente si se usó tolerancia)
         $waivePenalty = $request->boolean('waive_penalty', false);
+
+        // =========================================================
+        // 🚀 REAJUSTE DE HORA DEFINITIVO EN BASE DE DATOS
+        // =========================================================
+        if ($waivePenalty && $checkin->schedule) {
+            $horaOficial = $checkOutDate->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
+            $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
+            
+            // Si el recepcionista perdonó la multa, forzamos que en la base de datos 
+            // quede registrado que salió exactamente al límite (Ej: 13:00)
+            if ($checkOutDate->greaterThan($horaLimite)) {
+                $checkOutDate = $horaLimite;
+            }
+        }
+
         $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
         $checkin->update([
             'check_out_date' => $checkOutDate,
-            'duration_days' => $finalDays, // Guardamos los días reales calculados
+            'duration_days' => $finalDays, 
             'status' => 'finalizado'
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
+        return response()->json(['success' => true, 'message' => 'Estadía finalizada correctamente.']);
     }
 
     // --- FUNCIÓN DE CANCELACIÓN (Solo primeros 10 minutos) ---

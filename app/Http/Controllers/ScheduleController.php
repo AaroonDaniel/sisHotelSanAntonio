@@ -54,7 +54,6 @@ class ScheduleController extends Controller
     public function update(Request $request, Schedule $schedule)
     {
         $validated = $request->validate([
-            // Ignoramos el ID actual para la validación de nombre único
             'name' => 'required|string|max:100|unique:schedules,name,' . $schedule->id,
             'check_in_time' => 'required',
             'check_out_time' => 'required',
@@ -63,30 +62,32 @@ class ScheduleController extends Controller
             'is_active' => 'boolean'
         ]);
 
+        // VERIFICAMOS SI ESTÁ EN USO POR HUÉSPEDES ACTIVOS
+        $enUsoActivo = \App\Models\Checkin::where('schedule_id', $schedule->id)
+            ->where('status', 'activo')
+            ->exists();
+
+        // Si está en uso, PERMITIMOS editar tolerancias y desactivar, 
+        // pero BLOQUEAMOS la edición de las horas fijas de entrada/salida.
+        if ($enUsoActivo) {
+            if (
+                $validated['check_in_time'] != $schedule->check_in_time ||
+                $validated['check_out_time'] != $schedule->check_out_time
+            ) {
+                return redirect()->back()->with('error', 'No puedes modificar las horas fijas (Entrada/Salida) porque hay huéspedes usándolo actualmente. Solo puedes editar los minutos de tolerancia o desactivarlo.');
+            }
+        }
+
         $schedule->update([
             'name' => strtoupper($validated['name']),
             'check_in_time' => $validated['check_in_time'],
             'check_out_time' => $validated['check_out_time'],
             'entry_tolerance_minutes' => $validated['entry_tolerance_minutes'],
             'exit_tolerance_minutes' => $validated['exit_tolerance_minutes'],
-            'is_active' => $validated['is_active'] ?? $schedule->is_active,
+            'is_active' => $request->has('is_active') ? $validated['is_active'] : $schedule->is_active,
         ]);
 
         return redirect()->back()->with('success', 'Horario actualizado correctamente.');
-    }
-
-    /**
-     * Elimina un horario permanentemente.
-     */
-    public function destroy(Schedule $schedule)
-    {
-        // Opcional: Podrías verificar si hay checkins usando este horario antes de borrar
-        // if ($schedule->checkins()->exists()) {
-        //     return redirect()->back()->with('error', 'No se puede eliminar este horario porque está en uso.');
-        // }
-
-        $schedule->delete();
-        return redirect()->back()->with('success', 'Horario eliminado.');
     }
 
     /**
@@ -94,9 +95,25 @@ class ScheduleController extends Controller
      */
     public function toggleStatus(Schedule $schedule)
     {
+        // Ya NO bloqueamos esto. Si lo desactivan, simplemente deja de salir en el Formulario de Check-in.
         $schedule->update(['is_active' => !$schedule->is_active]);
         
-        $estado = $schedule->is_active ? 'activado' : 'desactivado';
+        $estado = $schedule->is_active ? 'activado' : 'desactivado (oculto para nuevos registros)';
         return redirect()->back()->with('success', "Horario {$estado} correctamente.");
+    }
+
+    /**
+     * Elimina un horario permanentemente.
+     */
+    public function destroy(Schedule $schedule)
+    {
+        // ESTO SÍ SE MANTIENE BLOQUEADO SIEMPRE.
+        // Nunca borrar de la base de datos si alguien (activo o antiguo) lo usó.
+        if ($schedule->checkins()->exists()) {
+            return redirect()->back()->with('error', 'Imposible eliminar permanentemente. Este horario tiene un historial de huéspedes asignados. Para que no se use más, usa el botón de Desactivar.');
+        }
+
+        $schedule->delete();
+        return redirect()->back()->with('success', 'Horario eliminado.');
     }
 }
