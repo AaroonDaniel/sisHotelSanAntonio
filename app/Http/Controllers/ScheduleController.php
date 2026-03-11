@@ -67,14 +67,17 @@ class ScheduleController extends Controller
             ->where('status', 'activo')
             ->exists();
 
-        // Si está en uso, PERMITIMOS editar tolerancias y desactivar, 
-        // pero BLOQUEAMOS la edición de las horas fijas de entrada/salida.
         if ($enUsoActivo) {
-            if (
-                $validated['check_in_time'] != $schedule->check_in_time ||
-                $validated['check_out_time'] != $schedule->check_out_time
-            ) {
-                return redirect()->back()->with('error', 'No puedes modificar las horas fijas (Entrada/Salida) porque hay huéspedes usándolo actualmente. Solo puedes editar los minutos de tolerancia o desactivarlo.');
+            // CORRECCIÓN MAGISTRAL: Comparamos solo Hora y Minuto (H:i) ignorando los segundos
+            $horaEntradaAntigua = \Carbon\Carbon::parse($schedule->check_in_time)->format('H:i');
+            $horaEntradaNueva = \Carbon\Carbon::parse($validated['check_in_time'])->format('H:i');
+            
+            $horaSalidaAntigua = \Carbon\Carbon::parse($schedule->check_out_time)->format('H:i');
+            $horaSalidaNueva = \Carbon\Carbon::parse($validated['check_out_time'])->format('H:i');
+
+            // Si cambiaron las horas reales, bloqueamos. Si solo cambió la tolerancia, lo dejamos pasar.
+            if ($horaEntradaAntigua != $horaEntradaNueva || $horaSalidaAntigua != $horaSalidaNueva) {
+                return redirect()->back()->with('error', 'No puedes modificar las horas fijas (Entrada/Salida) porque hay huéspedes usándolo. Solo puedes editar la tolerancia.');
             }
         }
 

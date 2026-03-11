@@ -231,7 +231,7 @@ class CheckinController extends Controller
         }
 
         $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
-        
+
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $minAllowed = $agreedPrice * 0.5;
             $agreedPrice = max(floatval($request->discount), $minAllowed);
@@ -273,7 +273,7 @@ class CheckinController extends Controller
             }
 
             // --- ACOMPAÑANTES ---
-            $allCompanionsComplete = true; 
+            $allCompanionsComplete = true;
             if ($request->has('companions') && is_array($request->companions)) {
                 $idsParaSincronizar = [];
 
@@ -417,7 +417,7 @@ class CheckinController extends Controller
                         'notes' => $checkin->notes . " TRANSFERENCIA"
                     ]);
                     return redirect()->back()->with('success', 'Cambio rápido realizado. La habitación anterior pasó a LIMPIEZA.');
-                } 
+                }
                 // 2. TRANSFERENCIA CON ARRASTRE DE HISTORIAL
                 else {
                     $diasACobrar = $this->calculateBillableDays($checkin, $ahora);
@@ -442,7 +442,7 @@ class CheckinController extends Controller
                         'schedule_id' => $checkin->schedule_id,
                         'origin' => $checkin->origin,
                         'duration_days' => 0,
-                        'advance_payment' => 0, 
+                        'advance_payment' => 0,
                         'agreed_price' => $nuevoAgreedPrice,
                         'parent_checkin_id' => $checkin->id,
                         'carried_balance' => $deudaHospedajeAnterior,
@@ -462,7 +462,7 @@ class CheckinController extends Controller
 
                     return redirect()->back()->with('success', 'Transferencia completa. Todo el historial se movió a la nueva habitación.');
                 }
-            } 
+            }
             // =========================================================
             // CASO B: TRANSFERENCIA PARCIAL (Se dividen en 2 habitaciones)
             // =========================================================
@@ -495,11 +495,11 @@ class CheckinController extends Controller
                     'guest_id' => $newNewTitularId,
                     'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                     'room_id' => $newRoomId,
-                    'check_in_date' => $ahora, 
+                    'check_in_date' => $ahora,
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
-                    'advance_payment' => 0, 
+                    'advance_payment' => 0,
                     'agreed_price' => $precioNuevaHabitacion,
                     'parent_checkin_id' => $checkin->id,
                     'carried_balance' => 0, // <-- MEJORA: Empiezan sin deudas, la deuda se queda en la hab original
@@ -567,6 +567,7 @@ class CheckinController extends Controller
         // 1. Validaciones básicas (Permitimos nulo aquí para manejar el error manualmente abajo)
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
+            'schedule_id' => 'nullable|exists:schedules,id',
             'check_in_date' => 'required|date',
             'duration_days' => 'nullable|integer|min:0',
             'advance_payment' => 'required|numeric|min:0',
@@ -754,21 +755,18 @@ class CheckinController extends Controller
             // 4. LÓGICA DE FECHAS
             $roomModel = \App\Models\Room::with('roomType')->find($validated['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
-            $isCapacityFull = ($totalGuests >= $maxCapacity); // Ojo aquí usamos $totalGuests (con 's')
+            $isCapacityFull = ($totalGuests >= $maxCapacity);
+
             // Solo si TODO es verdadero (incluida la procedencia válida)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
+            // Mantenemos estrictamente la fecha original del formulario
             $newCheckInDate = $validated['check_in_date'];
-
-            if ($wasIncomplete && $isEverythingComplete) {
-                $newCheckInDate = now();
-            }
 
             $checkInCarbon = \Carbon\Carbon::parse($newCheckInDate);
             $checkOutDate = $validated['duration_days'] > 0
                 ? $checkInCarbon->copy()->addDays($validated['duration_days'])
                 : null;
-
             // 5. CAMBIO DE HABITACIÓN
             if ($checkin->room_id != $validated['room_id']) {
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
@@ -783,6 +781,7 @@ class CheckinController extends Controller
             $checkin->update([
                 'guest_id' => $guestId, // 🚀 VINCULAMOS LA HABITACIÓN AL HUÉSPED CORRECTO
                 'room_id' => $validated['room_id'],
+                'schedule_id' => $request->filled('schedule_id') ? $validated['schedule_id'] : $checkin->schedule_id,
                 'check_in_date' => $newCheckInDate,
                 'duration_days' => $validated['duration_days'],
                 'check_out_date' => $checkOutDate,
@@ -841,7 +840,7 @@ class CheckinController extends Controller
                 }
 
                 // Guardamos la actualización (hace COMMIT a la BD) pero enviamos la advertencia.
-               return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
+                return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
             }
         });
     }
@@ -858,36 +857,40 @@ class CheckinController extends Controller
     }
 
     // Obtener los detalles antes de finalizar
-   public function getCheckoutDetails(Request $request, Checkin $checkin)
+    public function getCheckoutDetails(Request $request, Checkin $checkin)
     {
         $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
         $waivePenalty = $request->boolean('waive_penalty', false);
-        
-        // 1. Fecha de salida actual (Ej: 13:58)
-        $checkOutDate = now(); 
+        $checkOutDate = now();
 
-        // =========================================================
-        // 🚀 LÓGICA DE REAJUSTE DE TIEMPO (LA MÁQUINA DEL TIEMPO)
-        // =========================================================
-        if ($waivePenalty && $checkin->schedule) {
-            // Calculamos cuál era su límite real (Ej: 12:00 + 60 min = 13:00)
+        // 🚀 VERIFICAMOS SI ESTÁ ATRASADO PARA MOSTRAR EL BOTÓN
+        $isLate = false;
+        // Solo avisamos que "está atrasado" si AÚN NO le hemos perdonado la multa
+        if (!$waivePenalty && $checkin->schedule) {
             $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
+            if ($checkOutDate->greaterThan($horaOficial)) {
+                $isLate = true; // El frontend muestra el botón
+            }
+        }
+
+        // --- LÓGICA DE MÁQUINA DEL TIEMPO ---
+        if ($waivePenalty && $checkin->schedule) {
+            $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
+            // Calculamos hasta dónde se le permite perdonar
             $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
             
-            // Si está saliendo tarde (ej: 13:58), retrocedemos su reloj a las 13:00 exactas
+            // Reajustamos la hora al límite de la tolerancia
             if ($checkOutDate->greaterThan($horaLimite)) {
                 $checkOutDate = $horaLimite;
             }
         }
 
-        // 2. Calcular días usando la fecha (ya sea la tardía o la reajustada)
+        // 🚀 IMPORTANTE: Pasamos la variable $waivePenalty para que perdone la cuenta
         $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
-        // 3. Obtener precio unitario
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        // LÓGICA CORPORATIVA
         if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
@@ -906,7 +909,6 @@ class CheckinController extends Controller
 
         $grandTotal = $accommodationTotal + $servicesTotal;
 
-        // Calcular pagos reales
         $totalPagadoReal = 0;
         if ($checkin->payments->count() > 0) {
             foreach ($checkin->payments as $pago) {
@@ -922,7 +924,7 @@ class CheckinController extends Controller
             'guest' => $checkin->guest,
             'room' => $checkin->room,
             'check_in_date' => $checkin->check_in_date->toIso8601String(),
-            'check_out_date' => $checkOutDate->toIso8601String(), // Mandamos la hora reajustada a React
+            'check_out_date' => $checkOutDate->toIso8601String(),
             'duration_days' => $days,
             'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
@@ -930,7 +932,8 @@ class CheckinController extends Controller
             'advance_payment' => $totalPagadoReal, 
             'grand_total' => $grandTotal,
             'balance' => $balance,
-            'notes' => $checkin->notes
+            'notes' => $checkin->notes,
+            'is_late' => $isLate // <-- Enviamos esto a React
         ]);
     }
 
@@ -967,7 +970,7 @@ class CheckinController extends Controller
         // 3. Respuesta para Inertia (Recarga automática)
         return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
     }
-    
+
     public function checkout(Request $request, Checkin $checkin)
     {
         $room = Room::find($checkin->room_id);
@@ -982,20 +985,16 @@ class CheckinController extends Controller
 
         $waivePenalty = $request->boolean('waive_penalty', false);
 
-        // =========================================================
-        // 🚀 REAJUSTE DE HORA DEFINITIVO EN BASE DE DATOS
-        // =========================================================
         if ($waivePenalty && $checkin->schedule) {
             $horaOficial = $checkOutDate->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
             $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
             
-            // Si el recepcionista perdonó la multa, forzamos que en la base de datos 
-            // quede registrado que salió exactamente al límite (Ej: 13:00)
             if ($checkOutDate->greaterThan($horaLimite)) {
                 $checkOutDate = $horaLimite;
             }
         }
 
+        // 🚀 PASAMOS EL FLAG WAIVEPENALTY
         $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
         $checkin->update([
@@ -1004,7 +1003,7 @@ class CheckinController extends Controller
             'status' => 'finalizado'
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Estadía finalizada correctamente.']);
+        return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
     }
 
     // --- FUNCIÓN DE CANCELACIÓN (Solo primeros 10 minutos) ---
@@ -1724,7 +1723,7 @@ class CheckinController extends Controller
 
         $ingreso = Carbon::parse($checkin->check_in_date);
 
-        // AJUSTE DE ENTRADA (Aplica siempre si hay horario)
+        // AJUSTE DE ENTRADA (Mantenemos tolerancia automática al entrar)
         if ($checkin->schedule) {
             $horaOficialEntrada = Carbon::parse($ingreso->format('Y-m-d') . ' ' . $checkin->schedule->check_in_time);
             $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($checkin->schedule->entry_tolerance_minutes);
@@ -1734,42 +1733,40 @@ class CheckinController extends Controller
             }
         }
 
-        // --- CASO A: SI PRESIONAS EL BOTÓN DE TOLERANCIA ---
+        // =========================================================
+        // 🚀 CASO A: SI SE PRESIONÓ EL BOTÓN DE TOLERANCIA
+        // =========================================================
         if ($waivePenalty) {
             $diasCalendario = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
-            return $diasCalendario == 0 ? 1 : $diasCalendario;
+            // Retorna los días limpios, perdonando la noche extra
+            return $diasCalendario == 0 ? 1 : $diasCalendario; 
         }
 
-        // --- LÓGICA DE DÍAS CALENDARIO ---
+        // --- LÓGICA DE DÍAS CALENDARIO BASE ---
         $diasBase = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
 
-        // Si entra y sale el mismo día (diasBase = 0), siempre se cobra 1 día.
         if ($diasBase == 0) {
             return 1;
         }
 
-        // --- CASO B: LÓGICA ESTRICTA (DÍAS POSTERIORES) ---
         if (!$checkin->schedule) {
-            // Sin horario: cálculo matemático simple (redondeo hacia arriba si pasa 24h)
-            // Ojo: floatDiffInDays da ej: 1.2 días. Ceil lo sube a 2.
             return max(intval($checkin->duration_days), ceil($ingreso->floatDiffInDays($fechaSalidaReal)));
         }
 
-        // Con horario: Verificamos la hora de salida
+        // =========================================================
+        // 🛑 CASO B: LÓGICA ESTRICTA (DÍAS POSTERIORES)
+        // =========================================================
         $horario = $checkin->schedule;
-
-        // Hora límite para HOY (día de salida)
+        
+        // HORA OFICIAL EXACTA (Ya NO le sumamos la tolerancia aquí)
         $limiteSalidaHoy = Carbon::parse($fechaSalidaReal->format('Y-m-d') . ' ' . $horario->check_out_time);
-        $limiteConTolerancia = $limiteSalidaHoy->copy()->addMinutes($horario->exit_tolerance_minutes);
 
-        // DECISIÓN:
-        if ($fechaSalidaReal->greaterThan($limiteConTolerancia)) {
-            // SE PASÓ DE LA HORA EN UN DÍA POSTERIOR:
-            // Ej: Entró ayer, hoy sale a las 14:00 (límite 13:00).
-            // Días base (1) + 1 (Multa) = 2 Días.
+        // ¿Pasó del minuto exacto de salida oficial?
+        if ($fechaSalidaReal->greaterThan($limiteSalidaHoy)) {
+            // SE PASÓ: Cobra el día extra de forma automática y estricta
             return $diasBase + 1;
         } else {
-            // SALIÓ A TIEMPO: Cobramos solo los días calendario transcurridos
+            // SALIÓ A TIEMPO
             return $diasBase;
         }
     }
@@ -1784,7 +1781,7 @@ class CheckinController extends Controller
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
         ]);
-        
+
         return DB::transaction(function () use ($request, $checkin) {
             $targetCheckin = Checkin::with('companions')
                 ->where('room_id', $request->target_room_id)
@@ -1798,7 +1795,7 @@ class CheckinController extends Controller
             // Unimos al titular y los acompañantes de la habitación vieja en una sola lista
             $allGuestIds = array_merge([$checkin->guest_id], $checkin->companions->pluck('id')->toArray());
             $selectedGuests = $request->selected_guests;
-            
+
             // Verificamos si se están llevando a TODOS o solo a algunos
             $isFullTransfer = count($selectedGuests) === count($allGuestIds);
 
@@ -1817,20 +1814,19 @@ class CheckinController extends Controller
                     'duration_days' => $diasACobrar,
                     'notes' => $checkin->notes . " | FUSIONADO (Todos pasaron a Hab. " . $targetCheckin->room->number . ")"
                 ]);
-                
+
                 // LIBERAMOS A LOS ACOMPAÑANTES para no chocar con la base de datos
-                $checkin->companions()->detach(); 
+                $checkin->companions()->detach();
                 \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
 
                 // TRASLADAMOS LA DEUDA Y LOS CONSUMOS AL TITULAR DE LA NUEVA HABITACIÓN
                 $targetCheckin->increment('carried_balance', $deudaAnterior);
                 DB::table('checkin_details')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
                 DB::table('payments')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
-
             } else {
                 // FUSIÓN PARCIAL: Se divide la cuenta, los que se quedan asumen la deuda original
                 $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
-                
+
                 $checkin->update([
                     'guest_id' => $stayingIds[0], // Nombra a un nuevo titular para los que se quedan
                     'agreed_price' => $this->calculateAgreedPrice($checkin->room_id, count($stayingIds)),
@@ -1844,17 +1840,17 @@ class CheckinController extends Controller
             // 🛑 FASE 2: AGREGAR A LOS HUÉSPEDES AL NUEVO CUARTO
             // =======================================================
             $targetCompanionIds = $targetCheckin->companions->pluck('id')->toArray();
-            
+
             foreach ($selectedGuests as $guestId) {
                 // Evitar duplicados si por algún error ya estaban
                 if (!in_array($guestId, $targetCompanionIds) && $guestId !== $targetCheckin->guest_id) {
                     $targetCompanionIds[] = $guestId;
                 }
             }
-            
+
             // Sincronizamos la nueva familia gigante en la habitación destino
             $targetCheckin->companions()->sync($targetCompanionIds);
-            
+
             // Recalculamos la tarifa de la habitación que los recibió
             $targetCheckin->update([
                 'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, 1 + count($targetCompanionIds)),
@@ -1962,7 +1958,7 @@ class CheckinController extends Controller
 
             $salida = now();
             $totalAdelantosGlobal = 0;
-            
+
             // Variables para estructurar la tabla del PDF
             $hospedajesPDF = [];
             $serviciosGlobales = [];
@@ -1979,7 +1975,7 @@ class CheckinController extends Controller
 
                 // Calcular días a cobrar
                 $diasACobrar = $this->calculateBillableDays($checkin, $salida);
-                
+
                 // Calcular precio unitario (con soporte para tarifas corporativas)
                 $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
                 if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
@@ -2009,7 +2005,7 @@ class CheckinController extends Controller
                 foreach ($checkin->checkinDetails as $detalle) {
                     $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
                     $subt = $detalle->quantity * $precioReal;
-                    
+
                     $nombreSrv = $detalle->service->name ?? 'Servicio';
                     if (!isset($serviciosGlobales[$nombreSrv])) {
                         $serviciosGlobales[$nombreSrv] = ['qty' => 0, 'total' => 0];
@@ -2049,7 +2045,7 @@ class CheckinController extends Controller
             // PASO 4: Lógica de Pagos y Caja (Evitando el error 500)
             // =========================================================
             $userId = Auth::id() ?? 1;
-            $primerCheckinId = $checkins->first()->id; 
+            $primerCheckinId = $checkins->first()->id;
 
             // Filtro para que el ENUM de BD acepte el banco
             $metodoRecibido = strtoupper($request->metodo_pago);
@@ -2100,7 +2096,7 @@ class CheckinController extends Controller
             // PASO 5: Generación del PDF (Unificado a 4 columnas)
             // =========================================================
             $pdfLargo = max(150, 100 + (count($hospedajesPDF) * 5) + (count($serviciosGlobales) * 5));
-            $pdf = new \FPDF('P', 'mm', array(80, $pdfLargo)); 
+            $pdf = new \FPDF('P', 'mm', array(80, $pdfLargo));
             $pdf->SetMargins(4, 4, 4);
             $pdf->SetAutoPageBreak(true, 2);
             $pdf->AddPage();
@@ -2109,7 +2105,7 @@ class CheckinController extends Controller
             $pdf->SetFont('Arial', 'B', 10);
             $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
             $pdf->SetFont('Arial', '', 7);
-            
+
             if ($request->tipo_documento === 'factura') {
                 $pdf->SetFont('Arial', 'B', 7);
                 $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
@@ -2178,7 +2174,7 @@ class CheckinController extends Controller
             $pdf->Ln(1);
 
             $pdf->SetFont('Arial', '', 6);
-            
+
             // 1. Hospedajes 
             foreach ($hospedajesPDF as $hosp) {
                 $pdf->Cell(7, 3, $hosp['cant'], 0, 0, 'C');
@@ -2255,7 +2251,6 @@ class CheckinController extends Controller
 
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf');
-
         });
     }
 }

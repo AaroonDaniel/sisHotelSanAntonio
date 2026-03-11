@@ -27,11 +27,11 @@ import CheckinModal, {
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
+import MultiCheckoutModal from '../checkins/multiCheckoutModal';
 import ReservationModal from '../reservations/reservationModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
-import MultiCheckoutModal from '../checkins/multiCheckoutModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -101,11 +101,12 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
-
-    // Controlador Seleccion multiple 
+    // Controlador Seleccion multiple
     const [isMultiCheckoutMode, setIsMultiCheckoutMode] = useState(false);
     // guarda los ids de las habitaciones que han sido seleccionadas
-    const [selectedRoomsForCheckout, setSelectedRoomsForCheckout] = useState<number[]>([]);
+    const [selectedRoomsForCheckout, setSelectedRoomsForCheckout] = useState<
+        number[]
+    >([]);
     // Consola si el modal de facturacion Consolida esta abierto
     const [showMultiCheckoutModal, setShowMultiCheckoutModal] = useState(false);
 
@@ -362,13 +363,15 @@ export default function RoomsStatus({
     const handleRoomClick = (room: Room) => {
         const status = getDisplayStatus(room);
 
-        if (isMultiCheckoutMode) { // <-- 1. ¿El botón de "Finalizar Estadía Múltiple" está activado?
-            if (status === 'occupied') { // <-- 2. ¿La habitación tocada está ocupada?
+        if (isMultiCheckoutMode) {
+            // <-- 1. ¿El botón de "Finalizar Estadía Múltiple" está activado?
+            if (status === 'occupied') {
+                // <-- 2. ¿La habitación tocada está ocupada?
                 // 3. Si es así, la agregamos o quitamos de la lista verde
-                setSelectedRoomsForCheckout((prev) => 
+                setSelectedRoomsForCheckout((prev) =>
                     prev.includes(room.id)
                         ? prev.filter((id) => id !== room.id)
-                        : [...prev, room.id]
+                        : [...prev, room.id],
                 );
             }
             return; // <-- 4. ¡DETENTE AQUÍ! No ejecutes el resto del código.
@@ -437,7 +440,10 @@ export default function RoomsStatus({
             // 2. Si ya estamos en modo selección y seleccionó al menos una
             if (selectedRoomsForCheckout.length > 0) {
                 setShowMultiCheckoutModal(true); // Aquí abriremos el Modal en el Paso 4
-                console.log("Habitaciones seleccionadas para cobrar:", selectedRoomsForCheckout);
+                console.log(
+                    'Habitaciones seleccionadas para cobrar:',
+                    selectedRoomsForCheckout,
+                );
             } else {
                 // 3. Si presionó el botón pero no seleccionó nada, cancelamos el modo
                 setIsMultiCheckoutMode(false);
@@ -499,8 +505,10 @@ export default function RoomsStatus({
                 matchesDate = false;
             } else {
                 // BD: "2026-03-08 15:30:00" -> Extraemos "2026-03-08" (Desde la posición 0 hasta la 10)
-                const checkinDateOnly = String(activeCheckin.check_in_date).substring(0, 10);
-                
+                const checkinDateOnly = String(
+                    activeCheckin.check_in_date,
+                ).substring(0, 10);
+
                 // Input: "2026-03-08" -> Extraemos "2026-03-08"
                 const selectedDateOnly = String(selectedDate).substring(0, 10);
 
@@ -748,45 +756,53 @@ export default function RoomsStatus({
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
                             </h2>
-                            
+
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleTopCheckoutTrigger}
                                     // Deshabilitado solo si el modo está activo pero NO hay habitaciones seleccionadas
-                                    disabled={isMultiCheckoutMode && selectedRoomsForCheckout.length === 0}
+                                    disabled={
+                                        isMultiCheckoutMode &&
+                                        selectedRoomsForCheckout.length === 0
+                                    }
                                     className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold uppercase transition-all ${
                                         isMultiCheckoutMode
-                                            ? selectedRoomsForCheckout.length > 0
+                                            ? selectedRoomsForCheckout.length >
+                                              0
                                                 ? 'animate-bounce bg-green-600 text-white shadow-lg hover:scale-105 hover:bg-green-500' // Listo para cobrar
-                                                : 'bg-yellow-500 text-white animate-pulse' // Esperando que seleccione
+                                                : 'animate-pulse bg-yellow-500 text-white' // Esperando que seleccione
                                             : 'bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500' // Botón normal inactivo
                                     }`}
                                 >
                                     <LogOut className="h-4 w-4" />
-                                    {isMultiCheckoutMode 
-                                        ? (selectedRoomsForCheckout.length > 0 ? `Cobrar ${selectedRoomsForCheckout.length} Hab.` : 'Seleccione Habitaciones...') 
+                                    {isMultiCheckoutMode
+                                        ? selectedRoomsForCheckout.length > 0
+                                            ? `Cobrar ${selectedRoomsForCheckout.length} Hab.`
+                                            : 'Seleccione Habitaciones...'
                                         : 'Finalizar Estadía'}
-                                    
+
                                     {/* Mantenemos tu alerta de selección individual por si acaso */}
-                                    {!isMultiCheckoutMode && selectedForAction && (
-                                        <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">!</span>
-                                    )}
+                                    {!isMultiCheckoutMode &&
+                                        selectedForAction && (
+                                            <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">
+                                                !
+                                            </span>
+                                        )}
                                 </button>
-                                
+
                                 {/* Botón para cancelar el modo selección rápidamente */}
                                 {isMultiCheckoutMode && (
-    <button
-        onClick={() => {
-            setIsMultiCheckoutMode(false);
-            setSelectedRoomsForCheckout([]);
-        }}
-        className="flex items-center gap-2 rounded-lg px-4 py-4.5 text-sm font-bold uppercase bg-gray-600 text-white shadow-lg transition-all hover:scale-105 hover:bg-gray-500"
-    >
-        Cancelar
-    </button>
-)}
+                                    <button
+                                        onClick={() => {
+                                            setIsMultiCheckoutMode(false);
+                                            setSelectedRoomsForCheckout([]);
+                                        }}
+                                        className="flex items-center gap-2 rounded-lg bg-gray-600 px-4 py-4.5 text-sm font-bold text-white uppercase shadow-lg transition-all hover:scale-105 hover:bg-gray-500"
+                                    >
+                                        Cancelar
+                                    </button>
+                                )}
                             </div>
-                            
                         </div>
                     </div>
 
@@ -851,12 +867,12 @@ export default function RoomsStatus({
                                     style={{ colorScheme: 'dark' }}
                                     title="Filtrar por fecha exacta de ingreso"
                                 />
-                                
+
                                 {/* Botón extra MÁS VISIBLE para limpiar la fecha */}
                                 {selectedDate && (
                                     <button
                                         onClick={() => setSelectedDate('')}
-                                        className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white shadow-md uppercase transition-colors hover:bg-red-500 active:scale-95"
+                                        className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white uppercase shadow-md transition-colors hover:bg-red-500 active:scale-95"
                                         title="Borrar filtro de fecha"
                                     >
                                         <X className="h-4 w-4" />
@@ -940,20 +956,17 @@ export default function RoomsStatus({
                                 ? room.checkins[0]
                                 : null;
                         const isSelected = selectedForAction === room.id;
-                        
-                        const isMultiSelected = selectedRoomsForCheckout.includes(room.id);
-                        const isEligibleForMulti = isMultiCheckoutMode && isOccupied;
-                        
+
+                        const isMultiSelected =
+                            selectedRoomsForCheckout.includes(room.id);
+                        const isEligibleForMulti =
+                            isMultiCheckoutMode && isOccupied;
+
                         return (
                             <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} 
-                                ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} 
-                                /* 👇 ESTO FALTABA: Efectos visuales de parpadeo y selección verde 👇 */
-                                ${isEligibleForMulti && !isMultiSelected ? 'animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900 z-10' : ''}
-                                ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}
-                                `}
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} /* 👇 ESTO FALTABA: Efectos visuales de parpadeo y selección verde 👇 */ ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''} `}
                             >
                                 {/* Check original */}
                                 {isSelected && (
@@ -961,7 +974,7 @@ export default function RoomsStatus({
                                         <CheckCircle2 className="h-5 w-5" />
                                     </div>
                                 )}
-                                
+
                                 {/* 👇 ESTO FALTABA: Check verde cuando se selecciona para cobro múltiple 👇 */}
                                 {isMultiSelected && (
                                     <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in">
@@ -1775,10 +1788,21 @@ function CheckoutConfirmationModal({
                                                 <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
                                                     <button
                                                         type="button"
+                                                        // Solo ejecuta la función si no se ha aplicado la tolerancia
                                                         onClick={
-                                                            handleApplyTolerance
+                                                            !waivePenalty
+                                                                ? handleApplyTolerance
+                                                                : undefined
                                                         }
-                                                        className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${waivePenalty ? 'border-emerald-600 bg-emerald-200 text-emerald-800 hover:bg-emerald-300' : 'animate-pulse border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                                                        // Deshabilitamos el botón nativamente en HTML
+                                                        disabled={waivePenalty}
+                                                        className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
+                                                            waivePenalty
+                                                                ? // Clases cuando YA SE APLICÓ (Desactivado/Gris)
+                                                                  'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-500 opacity-70'
+                                                                : // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
+                                                                  'animate-pulse cursor-pointer border-emerald-500 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                        }`}
                                                         title={
                                                             waivePenalty
                                                                 ? 'La tolerancia ya ha sido aplicada.'
@@ -1953,10 +1977,7 @@ function CheckoutConfirmationModal({
                                             </div>
                                         )}
 
-                                        <p className="mt-6 text-center text-[10px] text-gray-400 italic">
-                                            Al confirmar, la habitación pasará a
-                                            estado <strong>LIMPIEZA</strong>.
-                                        </p>
+                                       
                                     </div>
 
                                     {/* --- COLUMNA 2: VISTA DE FACTURACIÓN --- */}
