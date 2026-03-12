@@ -1915,39 +1915,63 @@ function CheckoutConfirmationModal({
                                                         {/* 1. EFECTIVO */}
                                                         <button
                                                             type="button"
-                                                            onClick={() => setMetodoPago('efectivo')}
+                                                            onClick={() =>
+                                                                setMetodoPago(
+                                                                    'efectivo',
+                                                                )
+                                                            }
                                                             className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
-                                                                metodoPago === 'efectivo' 
-                                                                ? 'border-green-500 bg-green-50 ring-2 ring-green-500 shadow-md' 
-                                                                : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                                metodoPago ===
+                                                                'efectivo'
+                                                                    ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-green-500'
+                                                                    : 'border-gray-300 bg-white hover:bg-gray-50'
                                                             }`}
                                                         >
-                                                            <Banknote className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-600' : 'text-gray-500'}`} />
-                                                            <span className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-800' : 'text-gray-600'}`}>
+                                                            <Banknote
+                                                                className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-600' : 'text-gray-500'}`}
+                                                            />
+                                                            <span
+                                                                className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-800' : 'text-gray-600'}`}
+                                                            >
                                                                 Efectivo
                                                             </span>
                                                         </button>
 
                                                         {/* 2 AL 5. BANCOS (QR DIRECTO) */}
-                                                        {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => {
-                                                            const isSelected = metodoPago === banco.toLowerCase();
+                                                        {[
+                                                            'YAPE',
+                                                            'BNB',
+                                                            'FIE',
+                                                            'ECO',
+                                                        ].map((banco) => {
+                                                            const isSelected =
+                                                                metodoPago ===
+                                                                banco.toLowerCase();
                                                             return (
                                                                 <button
                                                                     key={banco}
                                                                     type="button"
-                                                                    onClick={() => setMetodoPago(banco.toLowerCase())}
+                                                                    onClick={() =>
+                                                                        setMetodoPago(
+                                                                            banco.toLowerCase(),
+                                                                        )
+                                                                    }
                                                                     className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
-                                                                        isSelected 
-                                                                        ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-500 shadow-md' 
-                                                                        : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                                        isSelected
+                                                                            ? 'border-purple-500 bg-purple-50 shadow-md ring-2 ring-purple-500'
+                                                                            : 'border-gray-300 bg-white hover:bg-gray-50'
                                                                     }`}
                                                                 >
                                                                     <img
                                                                         src={`/images/bancos/${banco.toLowerCase()}.png`}
-                                                                        alt={banco}
+                                                                        alt={
+                                                                            banco
+                                                                        }
                                                                         className={`mb-1 h-6 object-contain transition-all ${!isSelected && 'opacity-70 grayscale'}`}
                                                                     />
-                                                                    <span className={`text-[10px] font-black uppercase ${isSelected ? 'text-purple-800' : 'text-gray-600'}`}>
+                                                                    <span
+                                                                        className={`text-[10px] font-black uppercase ${isSelected ? 'text-purple-800' : 'text-gray-600'}`}
+                                                                    >
                                                                         {banco}
                                                                     </span>
                                                                 </button>
@@ -1957,7 +1981,11 @@ function CheckoutConfirmationModal({
                                                         {/* 6. AMBOS (MIXTO) */}
                                                         <button
                                                             type="button"
-                                                            onClick={() => setMetodoPago('ambos')}
+                                                            onClick={() =>
+                                                                setMetodoPago(
+                                                                    'ambos',
+                                                                )
+                                                            }
                                                             className="flex flex-col items-center justify-center rounded-xl border border-gray-300 bg-white py-3 shadow-sm transition-all hover:bg-gray-100"
                                                         >
                                                             <SplitSquareHorizontal className="mb-1 h-6 w-6 text-gray-500" />
@@ -1974,7 +2002,11 @@ function CheckoutConfirmationModal({
                                                         <div className="flex justify-end">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setMetodoPago(null)}
+                                                                onClick={() =>
+                                                                    setMetodoPago(
+                                                                        null,
+                                                                    )
+                                                                }
                                                                 className="mb-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] font-black text-gray-600 uppercase shadow-sm transition-colors hover:bg-gray-100 hover:text-gray-900"
                                                             >
                                                                 <ArrowLeft className="h-3 w-3" />{' '}
@@ -1982,14 +2014,27 @@ function CheckoutConfirmationModal({
                                                             </button>
                                                         </div>
 
-                                                        <div className={`mb-4 rounded-xl border-2 p-3 text-center transition-all duration-300 ${estaCubierto ? 'border-green-500 bg-green-50 text-green-800 shadow-inner' : 'border-red-300 bg-white text-gray-800 shadow-md'}`}>
-                                                            <span className={`mb-1 block text-[10px] font-black tracking-widest uppercase ${estaCubierto ? 'text-green-700' : 'text-red-500'}`}>
-                                                                {estaCubierto ? '¡Monto Completado!' : 'Monto Restante por Cubrir'}
+                                                        <div
+                                                            className={`mb-4 rounded-xl border-2 p-3 text-center transition-all duration-300 ${estaCubierto ? 'border-green-500 bg-green-50 text-green-800 shadow-inner' : 'border-red-300 bg-white text-gray-800 shadow-md'}`}
+                                                        >
+                                                            <span
+                                                                className={`mb-1 block text-[10px] font-black tracking-widest uppercase ${estaCubierto ? 'text-green-700' : 'text-red-500'}`}
+                                                            >
+                                                                {estaCubierto
+                                                                    ? '¡Monto Completado!'
+                                                                    : 'Monto Restante por Cubrir'}
                                                             </span>
                                                             <div className="flex items-center justify-center gap-2">
-                                                                {estaCubierto && <CheckCircle2 className="h-6 w-6 animate-in text-green-600 zoom-in" />}
-                                                                <span className={`text-2xl font-black ${estaCubierto ? 'text-green-700' : 'text-gray-900'}`}>
-                                                                    {restanteMixto.toFixed(2)} Bs
+                                                                {estaCubierto && (
+                                                                    <CheckCircle2 className="h-6 w-6 animate-in text-green-600 zoom-in" />
+                                                                )}
+                                                                <span
+                                                                    className={`text-2xl font-black ${estaCubierto ? 'text-green-700' : 'text-gray-900'}`}
+                                                                >
+                                                                    {restanteMixto.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1999,15 +2044,26 @@ function CheckoutConfirmationModal({
                                                             <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
                                                                 <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
                                                                     <Banknote className="h-4 w-4 text-gray-400" />{' '}
-                                                                    Efectivo (Bs)
+                                                                    Efectivo
+                                                                    (Bs)
                                                                 </label>
                                                                 <input
                                                                     type="number"
                                                                     step="0.01"
                                                                     min="0"
                                                                     placeholder="0.00"
-                                                                    value={montoEfectivo}
-                                                                    onChange={(e) => handleMontoEfectivoChange(e.target.value)}
+                                                                    value={
+                                                                        montoEfectivo
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        handleMontoEfectivoChange(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
                                                                     className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
                                                                 />
                                                             </div>
@@ -2015,15 +2071,26 @@ function CheckoutConfirmationModal({
                                                             <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
                                                                 <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
                                                                     <SplitSquareHorizontal className="h-4 w-4 text-gray-400" />{' '}
-                                                                    Banco / QR (Bs)
+                                                                    Banco / QR
+                                                                    (Bs)
                                                                 </label>
                                                                 <input
                                                                     type="number"
                                                                     step="0.01"
                                                                     min="0"
                                                                     placeholder="0.00"
-                                                                    value={montoQR}
-                                                                    onChange={(e) => handleMontoQRChange(e.target.value)}
+                                                                    value={
+                                                                        montoQR
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        handleMontoQRChange(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
                                                                     className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-purple-500 focus:ring-purple-500"
                                                                 />
                                                             </div>
@@ -2032,27 +2099,44 @@ function CheckoutConfirmationModal({
                                                         {/* SELECCIÓN DE BANCO PARA EL QR MIXTO */}
                                                         <div className="pt-3">
                                                             <label className="mb-3 block text-center text-[10px] font-black text-gray-700 uppercase">
-                                                                Seleccione el Banco del QR:
+                                                                Seleccione el
+                                                                Banco del QR:
                                                             </label>
                                                             <div className="grid grid-cols-4 gap-2">
-                                                                {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => (
-                                                                    <button
-                                                                        key={banco}
-                                                                        type="button"
-                                                                        onClick={() => setBancoMixto(banco.toLowerCase())}
-                                                                        className={`flex flex-col items-center justify-center rounded-lg border-2 py-2 transition-all ${
-                                                                            bancoMixto === banco.toLowerCase() 
-                                                                            ? 'border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-500 scale-105' 
-                                                                            : 'border-gray-300 bg-white hover:bg-gray-100'
-                                                                        }`}
-                                                                    >
-                                                                        <img
-                                                                            src={`/images/bancos/${banco.toLowerCase()}.png`}
-                                                                            alt={banco}
-                                                                            className={`h-6 object-contain transition-all ${bancoMixto !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
-                                                                        />
-                                                                    </button>
-                                                                ))}
+                                                                {[
+                                                                    'YAPE',
+                                                                    'BNB',
+                                                                    'FIE',
+                                                                    'ECO',
+                                                                ].map(
+                                                                    (banco) => (
+                                                                        <button
+                                                                            key={
+                                                                                banco
+                                                                            }
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setBancoMixto(
+                                                                                    banco.toLowerCase(),
+                                                                                )
+                                                                            }
+                                                                            className={`flex flex-col items-center justify-center rounded-lg border-2 py-2 transition-all ${
+                                                                                bancoMixto ===
+                                                                                banco.toLowerCase()
+                                                                                    ? 'scale-105 border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-500'
+                                                                                    : 'border-gray-300 bg-white hover:bg-gray-100'
+                                                                            }`}
+                                                                        >
+                                                                            <img
+                                                                                src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                                alt={
+                                                                                    banco
+                                                                                }
+                                                                                className={`h-6 object-contain transition-all ${bancoMixto !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
+                                                                            />
+                                                                        </button>
+                                                                    ),
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2166,189 +2250,261 @@ function CheckoutConfirmationModal({
 
                                             {/* SECCIÓN DETALLES DE LA FACTURA */}
                                             <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                                                <h4 className="mb-4 border-b border-gray-100 pb-2 text-xs font-bold tracking-wider text-red-600 uppercase">
-                                                    Detalle de la Factura
-                                                </h4>
+                                                <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-2">
+                                                    <h4 className="text-xs font-bold tracking-wider text-red-600 uppercase">
+                                                        Detalle de la Factura
+                                                    </h4>
+                                                    {loadingDetails && (
+                                                        <span className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase">
+                                                            <Loader2 className="h-3 w-3 animate-spin" />{' '}
+                                                            Extras...
+                                                        </span>
+                                                    )}
+                                                </div>
 
                                                 <div className="w-full text-sm">
-                                                    <div className="mb-2 grid grid-cols-[1fr_110px_100px] border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
+                                                    {/* CABECERA GRID */}
+                                                    <div className="mb-2 grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
                                                         <div className="text-left">
                                                             Descripción
                                                         </div>
+                                                        <div className="text-center">
+                                                            Cant.
+                                                        </div>
                                                         <div className="text-right">
-                                                            Precio Unitario
+                                                            P. Unitario
                                                         </div>
                                                         <div className="text-right">
                                                             Total
                                                         </div>
+                                                        <div></div>
                                                     </div>
 
-                                                    {/* 1. HABITACIÓN */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="font-bold text-gray-800">
-                                                            Habitación{' '}
-                                                            {room.number} -{' '}
-                                                            {
-                                                                room.roomType
-                                                                    ?.name
-                                                            }
+                                                    {/* DETALLE ÚNICO DE LA HABITACIÓN */}
+                                                    <div className="mb-2 border-b border-gray-100 pb-2">
+                                                        {/* 1. HABITACIÓN (Header Principal) */}
+                                                        <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center rounded-lg bg-gray-50/50 px-2 py-1.5">
+                                                            <div className="text-[13px] font-bold text-gray-800 uppercase">
+                                                                Habitación{' '}
+                                                                {room.number} -{' '}
+                                                                {room.room_type
+                                                                    ?.name ||
+                                                                    'ESTÁNDAR'}{' '}
+                                                                -{' '}
+                                                                {room.price?.bathroom_type?.toLowerCase() ===
+                                                                'shared'
+                                                                    ? 'BAÑO COMPARTIDO'
+                                                                    : 'BAÑO PRIVADO'}
+                                                            </div>
+                                                            <div className="text-center font-bold text-gray-400">
+                                                                -
+                                                            </div>
+                                                            <div className="text-right font-bold text-gray-400">
+                                                                -
+                                                            </div>
+                                                            <div className="text-right text-[13px] font-bold text-gray-800">
+                                                                {displayData.balance.toFixed(
+                                                                    2,
+                                                                )}
+                                                            </div>
+                                                            <div></div>
                                                         </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right font-bold text-gray-800">
-                                                            {displayData.accommodation_total.toFixed(
-                                                                2,
+
+                                                        {/* CONTENIDO DEL DETALLE */}
+                                                        <div className="mt-1">
+                                                            {/* 2. TARIFA */}
+                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-start border-b border-gray-50 px-2 py-1.5">
+                                                                <div className="pl-4">
+                                                                    <div className="mb-1 text-[12px] font-bold text-gray-600">
+                                                                        Tarifa
+                                                                    </div>
+                                                                    <div className="space-y-0.5 pl-2 text-[11px] text-gray-500">
+                                                                        <div>
+                                                                            Número
+                                                                            de
+                                                                            personas:{' '}
+                                                                            <span className="font-bold text-gray-800">
+                                                                                {1 +
+                                                                                    (checkin
+                                                                                        .companions
+                                                                                        ?.length ||
+                                                                                        0)}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div>
+                                                                            Ingreso:{' '}
+                                                                            <span className="font-bold text-gray-800">
+                                                                                {new Date(
+                                                                                    displayData.check_in_date,
+                                                                                ).toLocaleDateString(
+                                                                                    'es-BO',
+                                                                                )}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div>
+                                                                            Salida:{' '}
+                                                                            <span className="font-bold text-gray-800">
+                                                                                {new Date(
+                                                                                    displayData.check_out_date,
+                                                                                ).toLocaleDateString(
+                                                                                    'es-BO',
+                                                                                )}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div>
+                                                                            Total
+                                                                            de
+                                                                            días:{' '}
+                                                                            <span className="font-bold text-gray-800">
+                                                                                {
+                                                                                    displayData.duration_days
+                                                                                }
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="pt-0.5 text-center text-xs font-medium text-gray-800">
+                                                                    {
+                                                                        displayData.duration_days
+                                                                    }
+                                                                </div>
+                                                                <div className="pt-0.5 text-right text-xs font-medium text-gray-800">
+                                                                    {parseFloat(
+                                                                        room
+                                                                            .price
+                                                                            ?.amount ||
+                                                                            0,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}
+                                                                </div>
+                                                                <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
+                                                                    {displayData.accommodation_total.toFixed(
+                                                                        2,
+                                                                    )}
+                                                                </div>
+                                                                <div></div>
+                                                            </div>
+
+                                                            {/* 3. CONSUMO */}
+                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1.5">
+                                                                <div className="pl-4 text-[12px] font-bold text-gray-600">
+                                                                    Consumo
+                                                                </div>
+                                                                <div className="text-center text-gray-400">
+                                                                    -
+                                                                </div>
+                                                                <div className="text-right text-gray-400">
+                                                                    -
+                                                                </div>
+                                                                <div className="text-right text-xs font-bold text-gray-800">
+                                                                    {displayData.services_total.toFixed(
+                                                                        2,
+                                                                    )}
+                                                                </div>
+                                                                <div></div>
+                                                            </div>
+
+                                                            {/* DETALLE CONSUMOS */}
+                                                            {serviceGrouped.length >
+                                                                0 && (
+                                                                <div className="mb-1">
+                                                                    {serviceGrouped.map(
+                                                                        (
+                                                                            srv: any,
+                                                                            idx: number,
+                                                                        ) => {
+                                                                            const unitPrice =
+                                                                                srv.count >
+                                                                                0
+                                                                                    ? (
+                                                                                          srv.subtotal /
+                                                                                          srv.count
+                                                                                      ).toFixed(
+                                                                                          2,
+                                                                                      )
+                                                                                    : '0.00';
+                                                                            return (
+                                                                                <div
+                                                                                    key={
+                                                                                        idx
+                                                                                    }
+                                                                                    className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1"
+                                                                                >
+                                                                                    <div className="pl-8 text-[11px] text-gray-600 uppercase">
+                                                                                        {srv.service ||
+                                                                                            srv.name ||
+                                                                                            srv.description}
+                                                                                    </div>
+                                                                                    <div className="text-center text-[11px] font-medium text-gray-800">
+                                                                                        {
+                                                                                            srv.count
+                                                                                        }
+                                                                                    </div>
+                                                                                    <div className="text-right text-[11px] font-medium text-gray-800">
+                                                                                        {
+                                                                                            unitPrice
+                                                                                        }
+                                                                                    </div>
+                                                                                    <div className="text-right text-[11px] font-bold text-gray-800">
+                                                                                        {srv.subtotal.toFixed(
+                                                                                            2,
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div></div>
+                                                                                </div>
+                                                                            );
+                                                                        },
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* 4. OTROS */}
+                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center px-2 py-1.5">
+                                                                <div className="pl-4 text-[12px] font-bold text-gray-600">
+                                                                    Otros
+                                                                </div>
+                                                                <div className="text-center text-gray-400">
+                                                                    -
+                                                                </div>
+                                                                <div className="text-right text-gray-400">
+                                                                    -
+                                                                </div>
+                                                                <div className="text-right text-xs font-bold text-gray-800">
+                                                                    0.00
+                                                                </div>
+                                                                <div></div>
+                                                            </div>
+
+                                                            {/* 5. ADELANTOS */}
+                                                            {(
+                                                                displayData as any
+                                                            )?.total_pagado >
+                                                                0 && (
+                                                                <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-t border-dashed border-gray-200 bg-green-50/50 px-2 py-1.5 font-bold text-green-600">
+                                                                    <div className="pl-4 text-[11px]">
+                                                                        Adelantos/Pagos
+                                                                        previos
+                                                                    </div>
+                                                                    <div className="text-center text-green-300">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-green-300">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-xs">
+                                                                        -
+                                                                        {(
+                                                                            displayData as any
+                                                                        )?.total_pagado.toFixed(
+                                                                            2,
+                                                                        )}
+                                                                    </div>
+                                                                    <div></div>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
-
-                                                    {/* 2. TARIFA */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="pl-2 text-xs text-gray-600">
-                                                            Tarifa
-                                                        </div>
-                                                        <div className="text-right text-xs font-medium text-gray-800">
-                                                            {parseFloat(
-                                                                room.price
-                                                                    ?.amount ||
-                                                                    0,
-                                                            ).toFixed(2)}
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 3. NÚMERO DE PERSONAS */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="pl-2 text-xs text-gray-600">
-                                                            Número de personas:{' '}
-                                                            <span className="font-bold text-gray-800">
-                                                                {1 +
-                                                                    (checkin
-                                                                        .companions
-                                                                        ?.length ||
-                                                                        0)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 4. LLEGADA */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="pl-2 text-xs text-gray-600">
-                                                            Ingreso:{' '}
-                                                            <span className="font-bold text-gray-800">
-                                                                {new Date(
-                                                                    displayData.check_in_date,
-                                                                ).toLocaleDateString(
-                                                                    'es-BO',
-                                                                )}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 5. SALIDA */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="pl-2 text-xs text-gray-600">
-                                                            Salida:{' '}
-                                                            <span className="font-bold text-gray-800">
-                                                                {new Date(
-                                                                    displayData.check_out_date,
-                                                                ).toLocaleDateString(
-                                                                    'es-BO',
-                                                                )}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 6. TOTAL DE DÍAS */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="pl-2 text-xs text-gray-600">
-                                                            Total de días:{' '}
-                                                            <span className="font-bold text-gray-800">
-                                                                {
-                                                                    displayData.duration_days
-                                                                }
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 7. CONSUMO */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] border-b border-gray-50 py-1.5">
-                                                        <div className="font-bold text-gray-800">
-                                                            Consumo
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right font-bold text-gray-800">
-                                                            {displayData.services_total.toFixed(
-                                                                2,
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 8. OTROS */}
-                                                    <div className="grid grid-cols-[1fr_110px_100px] py-1.5">
-                                                        <div className="font-bold text-gray-800">
-                                                            Otros
-                                                        </div>
-                                                        <div className="text-right text-gray-400">
-                                                            -
-                                                        </div>
-                                                        <div className="text-right font-bold text-gray-800">
-                                                            0.00
-                                                        </div>
-                                                    </div>
-
-                                                    {/* [DOC] AQUÍ SE AGREGA LA FILA DEL ADELANTO EN VERDE */}
-                                                    {(displayData as any)
-                                                        ?.total_pagado > 0 && (
-                                                        <div className="grid grid-cols-[1fr_110px_100px] border-t border-dashed border-gray-200 bg-green-50/50 py-1.5 font-bold text-green-600">
-                                                            <div className="pl-2">
-                                                                Adelantos/Pagos
-                                                                previos
-                                                            </div>
-                                                            <div className="text-right">
-                                                                -
-                                                            </div>
-                                                            <div className="text-right">
-                                                                -
-                                                                {(
-                                                                    (
-                                                                        displayData as any
-                                                                    )
-                                                                        ?.total_pagado ||
-                                                                    0
-                                                                ).toFixed(2)}
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             </div>
 
