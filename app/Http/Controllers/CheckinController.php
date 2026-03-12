@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\Payment;
 use App\Models\Invoice;
+use App\Models\InvoiceDetail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -422,7 +423,7 @@ class CheckinController extends Controller
                 }
                 // 2. TRANSFERENCIA CON ARRASTRE DE HISTORIAL
                 else {
-                    $diasACobrar = $this->calculateBillableDays($checkin, $ahora);
+                    $diasACobrar = $this->calculateBillableDays($checkin, $ahora, true);
                     $precioVieja = $checkin->agreed_price ?? $checkin->room->price->amount ?? 0;
                     $deudaHospedajeAnterior = $diasACobrar * $precioVieja;
 
@@ -868,31 +869,41 @@ class CheckinController extends Controller
         $waivePenalty = $request->boolean('waive_penalty', false);
         $checkOutDate = now();
 
-        // 🚀 VERIFICAMOS SI ESTÁ ATRASADO PARA MOSTRAR EL BOTÓN
         $isLate = false;
-        // Solo avisamos que "está atrasado" si AÚN NO le hemos perdonado la multa
         if (!$waivePenalty && $checkin->schedule) {
             $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
             if ($checkOutDate->greaterThan($horaOficial)) {
-                $isLate = true; // El frontend muestra el botón
+                $isLate = true;
             }
         }
 
-        // --- LÓGICA DE MÁQUINA DEL TIEMPO ---
         if ($waivePenalty && $checkin->schedule) {
             $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
-            // Calculamos hasta dónde se le permite perdonar
             $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
-
-            // Reajustamos la hora al límite de la tolerancia
             if ($checkOutDate->greaterThan($horaLimite)) {
                 $checkOutDate = $horaLimite;
             }
         }
 
-        // 🚀 IMPORTANTE: Pasamos la variable $waivePenalty para que perdone la cuenta
-        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+        // =========================================================
+        // 🚀 RASTREO DEL HISTORIAL (Para mantener fecha original y días)
+        // =========================================================
+        $originalCheckInDate = $checkin->check_in_date;
+        $totalDiasHistorial = 0;
 
+        $currentParentId = $checkin->parent_checkin_id;
+        while ($currentParentId) {
+            $parent = \App\Models\Checkin::find($currentParentId);
+            if ($parent) {
+                $originalCheckInDate = $parent->check_in_date;
+                $totalDiasHistorial += max(1, intval($parent->duration_days));
+                $currentParentId = $parent->parent_checkin_id;
+            } else {
+                break;
+            }
+        }
+
+        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
         if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
@@ -903,7 +914,9 @@ class CheckinController extends Controller
             $price = $ratePerPerson * $paxCount;
         }
 
+        // LÓGICA DE SALDOS (Actual + Historial arrastrado)
         $accommodationTotal = $days * $price;
+        $carriedBalance = floatval($checkin->carried_balance ?? 0);
 
         $servicesTotal = 0;
         foreach ($checkin->checkinDetails as $detail) {
@@ -911,8 +924,10 @@ class CheckinController extends Controller
             $servicesTotal += $detail->quantity * $p;
         }
 
-        $grandTotal = $accommodationTotal + $servicesTotal;
+        // AÑADIMOS LA DEUDA ARRASTRADA AL TOTAL A PAGAR
+        $grandTotal = $accommodationTotal + $servicesTotal + $carriedBalance;
 
+        // PAGOS (Como los pagos se migraron físicamente en el transfer, aquí ya están todos)
         $totalPagadoReal = 0;
         if ($checkin->payments->count() > 0) {
             foreach ($checkin->payments as $pago) {
@@ -927,17 +942,17 @@ class CheckinController extends Controller
         return response()->json([
             'guest' => $checkin->guest,
             'room' => $checkin->room,
-            'check_in_date' => $checkin->check_in_date->toIso8601String(),
+            'check_in_date' => $originalCheckInDate->toIso8601String(), // <-- Fecha Original Real
             'check_out_date' => $checkOutDate->toIso8601String(),
-            'duration_days' => $days,
+            'duration_days' => $days + $totalDiasHistorial, // <-- Días combinados
             'price_per_night' => $price,
-            'accommodation_total' => $accommodationTotal,
+            'accommodation_total' => $accommodationTotal + $carriedBalance, // <-- Deuda combinada
             'services_total' => $servicesTotal,
             'advance_payment' => $totalPagadoReal,
             'grand_total' => $grandTotal,
             'balance' => $balance,
             'notes' => $checkin->notes,
-            'is_late' => $isLate // <-- Enviamos esto a React
+            'is_late' => $isLate
         ]);
     }
 
@@ -1195,29 +1210,34 @@ class CheckinController extends Controller
 
 
     // --GENERACION DE BOLETA --
+    // --GENERACION DE BOLETA --
     public function generateCheckoutReceipt(Checkin $checkin)
     {
-        // 1. CARGAR RELACIONES CORRECTAS 
-        // [DOC] Agregamos 'payments' para sumar todos los adelantos realizados durante la estadía
         $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
-        // --- LÓGICA DE DÍAS (Usando tolerancias) ---
+        // RASTREO HISTÓRICO
+        $originalCheckInDate = $checkin->check_in_date;
+        $totalDiasHistorial = 0;
+
+        $currentParentId = $checkin->parent_checkin_id;
+        while ($currentParentId) {
+            $parent = \App\Models\Checkin::find($currentParentId);
+            if ($parent) {
+                $originalCheckInDate = $parent->check_in_date;
+                $totalDiasHistorial += max(1, intval($parent->duration_days));
+                $currentParentId = $parent->parent_checkin_id;
+            } else {
+                break;
+            }
+        }
+
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
-
-        // [DOC] Función que calcula días según la hora de salida y tolerancia configurada
         $diasACobrar = $this->calculateBillableDays($checkin, $salida);
-
         $diasExcedidos = $diasACobrar - max(1, intval($checkin->duration_days));
         if ($diasExcedidos < 0) $diasExcedidos = 0;
 
-        // ==========================================================================
-        // --- [MODIFICADO] CÁLCULOS ECONÓMICOS ---
-        // Ahora lee el agreed_price en lugar del precio base de la habitación.
-        // Si por alguna razón agreed_price es null, usa el precio base como fallback.
-        // ==========================================================================
         $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        // LÓGICA CORPORATIVA (Mantiene tu lógica de PAX count, sobrescribe el agreed_price si aplica)
         if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
@@ -1227,23 +1247,20 @@ class CheckinController extends Controller
         }
 
         $totalHospedaje = $precioUnitario * $diasACobrar;
+        $carriedBalance = floatval($checkin->carried_balance ?? 0); // Deuda arrastrada
 
-        // Calcular Servicios (CheckinDetails)
         $totalServicios = 0;
         foreach ($checkin->checkinDetails as $detalle) {
             $precioReal = $detalle->selling_price ?? $detalle->service->price;
             $totalServicios += ($detalle->quantity * $precioReal);
         }
 
-        $granTotal = $totalHospedaje + $totalServicios;
+        // GRAN TOTAL INCLUYE LA DEUDA ANTERIOR
+        $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
-        // --------------------------------------------------------------------------
-        // [DOC] CORRECCIÓN DE PAGOS: Sumar todos los pagos del historial
-        // --------------------------------------------------------------------------
         $totalPagadoReal = 0;
         if ($checkin->payments->count() > 0) {
             foreach ($checkin->payments as $pago) {
-                // Restamos si es devolución, sumamos si es pago normal
                 if ($pago->type === 'DEVOLUCION') {
                     $totalPagadoReal -= $pago->amount;
                 } else {
@@ -1251,20 +1268,60 @@ class CheckinController extends Controller
                 }
             }
         } else {
-            // [DOC] Fallback por si no existen registros en la tabla payments (datos antiguos)
             $totalPagadoReal = $checkin->advance_payment ?? 0;
         }
 
-        $adelanto = $totalPagadoReal; // [DOC] Ahora representa la suma de TODOS los pagos
-        $saldoPagar = $granTotal - $adelanto;
+        $saldoPagar = $granTotal - $totalPagadoReal;
 
-        // --- GENERACIÓN PDF (FPDF) ---
+        // =========================================================
+        // 🚀 GUARDAR RECIBO (BOLETA) EN LA BASE DE DATOS
+        // =========================================================
+        $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
+        $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
+        
+        $lastPayment = $checkin->payments->last();
+        $metodoFinal = $lastPayment ? substr($lastPayment->method, 0, 2) : 'EF';
+
+        $nuevoRecibo = \App\Models\Invoice::create([
+            'invoice_number' => $nextInvoiceNumber,
+            'checkin_id'     => $checkin->id,
+            'issue_date'     => now()->toDateString(),
+            'control_code'   => 'RECIBO-INTERNO',
+            'payment_method' => $metodoFinal, 
+            'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
+            'issue_time'     => now(),
+            'status'         => 'valid',
+        ]);
+
+        // Detalle: Hospedaje (Actual + Histórico)
+        \App\Models\InvoiceDetail::create([
+            'invoice_id' => $nuevoRecibo->id,
+            'service_id' => null,
+            'quantity'   => $diasACobrar + $totalDiasHistorial,
+            'unit_price' => $granTotal / max(1, ($diasACobrar + $totalDiasHistorial)),
+            'cost'       => $totalHospedaje + $carriedBalance,
+        ]);
+
+        // Detalle: Servicios individuales
+        foreach ($checkin->checkinDetails as $detalle) {
+            $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+            \App\Models\InvoiceDetail::create([
+                'invoice_id' => $nuevoRecibo->id,
+                'service_id' => $detalle->service_id,
+                'quantity'   => $detalle->quantity,
+                'unit_price' => $precioReal,
+                'cost'       => ($detalle->quantity * $precioReal),
+            ]);
+        }
+
+        // =========================================================
+        // PDF GENERATION
+        // =========================================================
         $pdf = new \FPDF('P', 'mm', array(80, 240));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
 
-        // CABECERA
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
@@ -1274,10 +1331,9 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(0, 6, 'NOTA DE SALIDA', 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, 'Nro: ' . str_pad($checkin->id, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
+        $pdf->Cell(0, 4, 'Nro: ' . str_pad($nuevoRecibo->invoice_number, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
         $pdf->Ln(2);
 
-        // DATOS HUESPED
         $pdf->Cell(0, 0, '------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
@@ -1297,7 +1353,7 @@ class CheckinController extends Controller
         $pdf->Cell(0, 4, $checkin->room->number, 0, 1);
 
         $pdf->Ln(1);
-        $ingresoVisual = \Carbon\Carbon::parse($checkin->check_in_date);
+        $ingresoVisual = \Carbon\Carbon::parse($originalCheckInDate); // FECHA ORIGINAL
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
@@ -1307,23 +1363,33 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(0, 4, $salida->format('d/m/y H:i'), 0, 1);
 
-        // DETALLE ECONÓMICO
         $pdf->Ln(2);
         $pdf->Cell(0, 0, '------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
+        // DETALLE ITEMS REORDENADO
         $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(32, 4, 'DESCRIPCION', 0, 0, 'L');
-        $pdf->Cell(10, 4, 'CANT', 0, 0, 'C');
-        $pdf->Cell(15, 4, 'P.UNIT', 0, 0, 'R');
-        $pdf->Cell(15, 4, 'SUBTOT', 0, 1, 'R');
+        $pdf->Cell(35, 4, 'DETALLE', 0, 0, 'L');
+        $pdf->Cell(8, 4, 'CNT', 0, 0, 'C');
+        $pdf->Cell(12, 4, 'P.UNI', 0, 0, 'R');
+        $pdf->Cell(17, 4, 'TOTAL', 0, 1, 'R');
         $pdf->Ln(1);
 
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(32, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
-        $pdf->Cell(10, 4, $diasACobrar, 0, 0, 'C');
-        $pdf->Cell(15, 4, number_format($precioUnitario, 2), 0, 0, 'R');
-        $pdf->Cell(15, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
+        
+        // ITEM: Habitación Actual
+        $pdf->Cell(35, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
+        $pdf->Cell(8, 4, $diasACobrar, 0, 0, 'C');
+        $pdf->Cell(12, 4, number_format($precioUnitario, 2), 0, 0, 'R');
+        $pdf->Cell(17, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
+
+        // ITEM: Habitación Anterior (Si existe deuda)
+        if ($carriedBalance > 0) {
+            $pdf->Cell(35, 4, utf8_decode("Hospedaje Previo ($totalDiasHistorial d)"), 0, 0, 'L');
+            $pdf->Cell(8, 4, $totalDiasHistorial, 0, 0, 'C');
+            $pdf->Cell(12, 4, '-', 0, 0, 'R');
+            $pdf->Cell(17, 4, number_format($carriedBalance, 2), 0, 1, 'R');
+        }
 
         if ($diasExcedidos > 0) {
             $pdf->SetFont('Arial', 'I', 6);
@@ -1345,10 +1411,10 @@ class CheckinController extends Controller
 
         foreach ($serviciosAgrupados as $nombre => $item) {
             $pUnit = $item['cantidad'] > 0 ? $item['subtotal'] / $item['cantidad'] : 0;
-            $pdf->Cell(32, 4, utf8_decode(substr($nombre, 0, 20)), 0, 0, 'L');
-            $pdf->Cell(10, 4, $item['cantidad'], 0, 0, 'C');
-            $pdf->Cell(15, 4, number_format($pUnit, 2), 0, 0, 'R');
-            $pdf->Cell(15, 4, number_format($item['subtotal'], 2), 0, 1, 'R');
+            $pdf->Cell(35, 4, utf8_decode(substr($nombre, 0, 22)), 0, 0, 'L');
+            $pdf->Cell(8, 4, $item['cantidad'], 0, 0, 'C');
+            $pdf->Cell(12, 4, number_format($pUnit, 2), 0, 0, 'R');
+            $pdf->Cell(17, 4, number_format($item['subtotal'], 2), 0, 1, 'R');
         }
 
         $pdf->Ln(2);
@@ -1362,7 +1428,7 @@ class CheckinController extends Controller
 
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(50, 4, 'A cuenta / Adelantos:', 0, 0, 'R');
-        $pdf->Cell(22, 4, '-' . number_format($adelanto, 2), 0, 1, 'R');
+        $pdf->Cell(22, 4, '-' . number_format($totalPagadoReal, 2), 0, 1, 'R');
 
         $pdf->Ln(2);
         $pdf->SetFont('Arial', 'B', 12);
@@ -1387,18 +1453,32 @@ class CheckinController extends Controller
     {
         try {
             // 1. CARGAR RELACIONES
-            // [DOC] Importante: cargar 'payments' para poder restar los adelantos
             $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
-            // --- CÁLCULOS CON TOLERANCIA ---
-            $ingreso = \Carbon\Carbon::parse($checkin->check_in_date);
-            $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
+            // =========================================================
+            // 🚀 RASTREO DEL HISTORIAL (Para sumar días de traslados)
+            // =========================================================
+            $originalCheckInDate = $checkin->check_in_date;
+            $totalDiasHistorial = 0;
+            
+            $currentParentId = $checkin->parent_checkin_id;
+            while ($currentParentId) {
+                $parent = \App\Models\Checkin::find($currentParentId);
+                if ($parent) {
+                    $originalCheckInDate = $parent->check_in_date;
+                    $totalDiasHistorial += max(1, intval($parent->duration_days));
+                    $currentParentId = $parent->parent_checkin_id;
+                } else {
+                    break;
+                }
+            }
 
+            // --- CÁLCULOS CON TOLERANCIA ---
+            $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
             $diasReales = $this->calculateBillableDays($checkin, $salida);
 
             // ==========================================================================
-            // --- [MODIFICADO] PRECIO UNITARIO ---
-            // Ahora lee el agreed_price (precio ajustado por ocupación).
+            // --- PRECIO UNITARIO ---
             // ==========================================================================
             $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
@@ -1412,6 +1492,9 @@ class CheckinController extends Controller
             }
 
             $totalHospedaje = $precioUnitario * $diasReales;
+            
+            // 🚀 RESCATE DE DEUDA ARRASTRADA DE HABITACIONES ANTERIORES
+            $carriedBalance = floatval($checkin->carried_balance ?? 0);
 
             $totalServicios = 0;
             foreach ($checkin->checkinDetails as $detalle) {
@@ -1419,11 +1502,11 @@ class CheckinController extends Controller
                 $totalServicios += ($detalle->quantity * $precio);
             }
 
-            // GRAN TOTAL (Monto por el que se emite la factura legalmente)
-            $granTotal = $totalHospedaje + $totalServicios;
+            // GRAN TOTAL (Suma de todo, incluyendo la historia)
+            $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
             // --------------------------------------------------------------------------
-            // [DOC] CÁLCULO DE PAGOS REALES (Suma del historial)
+            // CÁLCULO DE PAGOS REALES (Suma del historial)
             // --------------------------------------------------------------------------
             $totalPagadoReal = 0;
             if ($checkin->payments->count() > 0) {
@@ -1485,7 +1568,7 @@ class CheckinController extends Controller
 
             // DATOS CLIENTE
             $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'Fecha:', 0, 0);
+            $pdf->Cell(20, 4, 'Fecha Emision:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
             $pdf->Cell(0, 4, now()->format('d/m/Y H:i:s'), 0, 1);
             $pdf->SetFont('Arial', 'B', 7);
@@ -1496,6 +1579,13 @@ class CheckinController extends Controller
             $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
             $pdf->Cell(0, 4, $checkin->guest->identification_number ?? '0', 0, 1);
+            
+            // Mostrar fecha de Ingreso Original
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Ingreso:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, \Carbon\Carbon::parse($originalCheckInDate)->format('d/m/Y H:i'), 0, 1);
+
             $pdf->Ln(1);
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
@@ -1510,11 +1600,19 @@ class CheckinController extends Controller
 
             $pdf->SetFont('Arial', '', 6);
 
-            // Hospedaje
+            // Hospedaje Actual
             $pdf->Cell(8, 3, '1', 0, 0, 'C');
-            $pdf->Cell(34, 3, utf8_decode("Hospedaje ($diasReales d)"), 0, 0, 'L');
+            $pdf->Cell(34, 3, utf8_decode("Hospedaje Hab {$checkin->room->number} ($diasReales d)"), 0, 0, 'L');
             $pdf->Cell(12, 3, number_format($totalHospedaje, 2), 0, 0, 'R');
             $pdf->Cell(18, 3, number_format($totalHospedaje, 2), 0, 1, 'R');
+
+            // 🚀 Hospedaje Anterior (Solo si hubo traslado)
+            if ($carriedBalance > 0) {
+                $pdf->Cell(8, 3, '1', 0, 0, 'C');
+                $pdf->Cell(34, 3, utf8_decode("Hospedaje Previo ($totalDiasHistorial d)"), 0, 0, 'L');
+                $pdf->Cell(12, 3, number_format($carriedBalance, 2), 0, 0, 'R');
+                $pdf->Cell(18, 3, number_format($carriedBalance, 2), 0, 1, 'R');
+            }
 
             // Servicios
             $serviciosAgrupados = [];
@@ -1539,7 +1637,7 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // [DOC] SECCIÓN TOTALES Y PAGOS
+            // SECCIÓN TOTALES Y PAGOS
             $pdf->SetFont('Arial', 'B', 8);
             $pdf->Cell(50, 4, 'TOTAL FACTURADO Bs', 0, 0, 'R');
             $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
@@ -1808,7 +1906,8 @@ class CheckinController extends Controller
             // =======================================================
             if ($isFullTransfer) {
                 // FUSIÓN COMPLETA: Cierra la vieja y traslada toda la cuenta
-                $diasACobrar = $this->calculateBillableDays($checkin, now());
+                // Añadimos 'true' para no duplicar el cobro de la noche actual al fusionar
+                $diasACobrar = $this->calculateBillableDays($checkin, now(), true);
                 $precioVieja = $checkin->agreed_price ?? $checkin->room->price->amount ?? 0;
                 $deudaAnterior = $diasACobrar * $precioVieja;
 
@@ -2005,6 +2104,16 @@ class CheckinController extends Controller
                     'subtot' => $totalHospedaje
                 ];
 
+                // Si esa habitación fue transferida, añadimos la deuda que traía arrastrando
+                $carriedBalance = floatval($checkin->carried_balance ?? 0);
+                if ($carriedBalance > 0) {
+                    $hospedajesPDF[] = [
+                        'desc' => "Deuda Transf. a Hab {$checkin->room->number}",
+                        'cant' => 1,
+                        'punit' => $carriedBalance,
+                        'subtot' => $carriedBalance
+                    ];
+                }
                 // Agrupar Consumos globalmente de todas las habitaciones
                 foreach ($checkin->checkinDetails as $detalle) {
                     $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
@@ -2096,8 +2205,68 @@ class CheckinController extends Controller
                 }
             }
 
+           // =========================================================
+            // 🚀 NUEVO PASO: GUARDAR FACTURA/RECIBO EN LA BASE DE DATOS
             // =========================================================
-            // PASO 5: Generación del PDF (Unificado a 4 columnas)
+            $lastInvoice = Invoice::orderBy('invoice_number', 'desc')->first();
+            $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
+
+            $nuevaFactura = Invoice::create([
+                'invoice_number' => $nextInvoiceNumber,
+                'checkin_id'     => $primerCheckinId,
+                'issue_date'     => now()->toDateString(),
+                'control_code'   => '8A-F1-2C-99', // Puedes cambiar esto por tu lógica real
+                'payment_method' => substr($metodoRecibido, 0, 2), // EF, QR, TA, TR
+                'user_id'        => $userId,
+                'issue_time'     => now(),
+                'status'         => 'valid',
+            ]);
+
+            // Guardar los detalles (Hospedajes)
+            // OJO: Como InvoiceDetail no tiene campo 'description' en la migración actual,
+            // estamos dejando service_id como nulo. Si necesitas description a futuro, deberás añadirlo a la BD.
+            foreach ($hospedajesPDF as $hosp) {
+                InvoiceDetail::create([
+                    'invoice_id' => $nuevaFactura->id,
+                    'service_id' => null, // null = Hospedaje
+                    'quantity'   => $hosp['cant'],
+                    'unit_price' => $hosp['punit'],
+                    'cost'       => $hosp['subtot'], // Se usa 'cost' en lugar de 'subtotal'
+                ]);
+            }
+
+            // Guardar los detalles (Servicios)
+            // Nota: Aquí estamos guardando agrupados por ID para no perder la relación con el servicio
+            $groupedServiceIds = [];
+            foreach ($checkins as $chk) {
+                foreach ($chk->checkinDetails as $detalle) {
+                    $sId = $detalle->service_id;
+                    $pReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                    
+                    if (!isset($groupedServiceIds[$sId])) {
+                        $groupedServiceIds[$sId] = [
+                            'qty' => 0, 
+                            'total' => 0, 
+                            'punit' => $pReal
+                        ];
+                    }
+                    $groupedServiceIds[$sId]['qty'] += $detalle->quantity;
+                    $groupedServiceIds[$sId]['total'] += ($detalle->quantity * $pReal);
+                }
+            }
+
+            foreach ($groupedServiceIds as $sId => $data) {
+                $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
+                InvoiceDetail::create([
+                    'invoice_id' => $nuevaFactura->id,
+                    'service_id' => $sId,
+                    'quantity'   => $data['qty'],
+                    'unit_price' => $pUnit,
+                    'cost'       => $data['total'], // Se usa 'cost'
+                ]);
+            }
+            // =========================================================
+            // PASO 5: Generación del PDF (Unificado a 4 columnas y reordenado)
             // =========================================================
             $pdfLargo = max(150, 100 + (count($hospedajesPDF) * 5) + (count($serviciosGlobales) * 5));
             $pdf = new \FPDF('P', 'mm', array(80, $pdfLargo));
@@ -2120,9 +2289,9 @@ class CheckinController extends Controller
                 $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
                 $pdf->Ln(2);
                 $pdf->SetFont('Arial', 'B', 8);
-                $pdf->Cell(0, 4, 'FACTURA (CHECKOUT GRUPAL)', 0, 1, 'C');
+                $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
                 $pdf->SetFont('Arial', '', 6);
-                $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+                
                 $pdf->Ln(2);
 
                 $pdf->SetFont('Arial', 'B', 7);
@@ -2169,10 +2338,12 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // DETALLE ITEMS UNIFICADOS (4 COLUMNAS)
+            // =========================================================
+            // DETALLE ITEMS UNIFICADOS (REORDENADOS)
+            // =========================================================
             $pdf->SetFont('Arial', 'B', 6);
-            $pdf->Cell(7, 3, 'CNT', 0, 0, 'C');
-            $pdf->Cell(36, 3, 'DETALLE', 0, 0, 'L');
+            $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
+            $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
             $pdf->Cell(12, 3, 'P.UNI', 0, 0, 'R');
             $pdf->Cell(17, 3, 'TOTAL', 0, 1, 'R');
             $pdf->Ln(1);
@@ -2181,8 +2352,8 @@ class CheckinController extends Controller
 
             // 1. Hospedajes 
             foreach ($hospedajesPDF as $hosp) {
-                $pdf->Cell(7, 3, $hosp['cant'], 0, 0, 'C');
-                $pdf->Cell(36, 3, utf8_decode(substr($hosp['desc'], 0, 22)), 0, 0, 'L');
+                $pdf->Cell(35, 3, utf8_decode(substr($hosp['desc'], 0, 22)), 0, 0, 'L');
+                $pdf->Cell(8, 3, $hosp['cant'], 0, 0, 'C');
                 $pdf->Cell(12, 3, number_format($hosp['punit'], 2), 0, 0, 'R');
                 $pdf->Cell(17, 3, number_format($hosp['subtot'], 2), 0, 1, 'R');
             }
@@ -2190,8 +2361,8 @@ class CheckinController extends Controller
             // 2. Consumos Globales
             foreach ($serviciosGlobales as $name => $data) {
                 $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
-                $pdf->Cell(7, 3, $data['qty'], 0, 0, 'C');
-                $pdf->Cell(36, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
+                $pdf->Cell(35, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
+                $pdf->Cell(8, 3, $data['qty'], 0, 0, 'C');
                 $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
                 $pdf->Cell(17, 3, number_format($data['total'], 2), 0, 1, 'R');
             }
@@ -2202,7 +2373,7 @@ class CheckinController extends Controller
 
             // TOTALES AL PIE
             $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(50, 4, 'TOTAL FACTURADO Bs', 0, 0, 'R');
+            $pdf->Cell(50, 4, 'TOTAL Bs', 0, 0, 'R');
             $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
 
             if ($totalAdelantosGlobal > 0) {

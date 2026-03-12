@@ -150,7 +150,7 @@ export interface Guest {
     birth_date?: string;
     age?: number;
     profession?: string;
-    //origin?: string;
+    origin?: string;
     phone?: string;
     profile_status?: string;
 }
@@ -208,7 +208,7 @@ interface CompanionData {
     civil_status: string;
     birth_date: string;
     profession: string;
-    //origin: string;
+    origin: string;
     phone: string;
 }
 interface Schedule {
@@ -263,7 +263,6 @@ export default function CheckinModal({
     isReadOnly = false,
     isReceptionView = false,
 }: CheckinModalProps) {
-    
     // Estado para manejar la alerta de huesped ocupado
     const [guestConflictError, setGuestConflictError] = useState<string | null>(
         null,
@@ -361,7 +360,7 @@ export default function CheckinModal({
             check_in_date: now,
             duration_days: 1,
             advance_payment: 0,
-            
+
             notes: '',
             selected_services: [],
             full_name: '',
@@ -638,6 +637,7 @@ export default function CheckinModal({
                             civil_status: c.civil_status || '',
                             profession: c.profession || '',
                             phone: c.phone || '',
+                            origin: c.pivot?.origin || c.origin || '',
                         })) || [],
 
                     payment_method: checkinToEdit.payment_method || 'EFECTIVO',
@@ -721,7 +721,7 @@ export default function CheckinModal({
               civil_status: data.civil_status,
               birth_date: data.birth_date,
               profession: data.profession,
-              //origin: data.origin,
+              origin: data.origin,
               phone: data.phone,
           }
         : {
@@ -733,7 +733,7 @@ export default function CheckinModal({
               nationality:
                   companionsList[currentIndex - 1]?.nationality || 'BOLIVIANA',
               phone: companionsList[currentIndex - 1]?.phone || '',
-              //origin: companionsList[currentIndex - 1]?.origin || '',
+              origin: companionsList[currentIndex - 1]?.origin || '',
               profession: companionsList[currentIndex - 1]?.profession || '',
               issued_in: companionsList[currentIndex - 1]?.issued_in || '',
               civil_status:
@@ -775,7 +775,7 @@ export default function CheckinModal({
                 civil_status: '',
                 birth_date: '',
                 profession: '',
-                //origin: '',
+                origin: '',
                 phone: '',
             };
             setData('companions', [...companionsList, newCompanion]);
@@ -968,7 +968,7 @@ export default function CheckinModal({
     // Esta función se llamará en el onChange del input
     const handleOriginInput = (val: string) => {
         const upperVal = val.toUpperCase();
-        setData('origin', upperVal);
+        handleFieldChange('origin', upperVal);
         setIsOriginDropdownOpen(true);
         searchOrigins(upperVal);
     };
@@ -1486,7 +1486,6 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
-                                    
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -1622,7 +1621,7 @@ export default function CheckinModal({
 
                                         <input
                                             type="text"
-                                            value={data.origin || ''}
+                                            value={currentPerson.origin || ''} // <-- AHORA LEE DE CURRENTPERSON (Muestra el correcto en el carrusel)
                                             disabled={isReadOnly}
                                             placeholder="EJ: COCHABAMBA"
                                             autoComplete="off"
@@ -1632,19 +1631,19 @@ export default function CheckinModal({
                                                 )
                                             }
                                             onFocus={() => {
-                                                // Si ya hay texto escrito, volvemos a buscar para mostrar opciones
                                                 if (
-                                                    (data.origin || '').length >
-                                                    1
+                                                    (currentPerson.origin || '')
+                                                        .length > 1
                                                 ) {
                                                     setIsOriginDropdownOpen(
                                                         true,
                                                     );
-                                                    searchOrigins(data.origin);
+                                                    searchOrigins(
+                                                        currentPerson.origin as string,
+                                                    );
                                                 }
                                             }}
                                             onBlur={() => {
-                                                // Pequeño retraso para permitir el click en la opción antes de cerrar
                                                 setTimeout(() => {
                                                     setIsOriginDropdownOpen(
                                                         false,
@@ -1659,21 +1658,21 @@ export default function CheckinModal({
                                             originSuggestions.length > 0 && (
                                                 <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
                                                     {originSuggestions.map(
-                                                        (origin, index) => (
+                                                        (originItem, index) => (
                                                             <div
                                                                 key={index}
                                                                 onClick={() => {
-                                                                    setData(
+                                                                    handleFieldChange(
                                                                         'origin',
-                                                                        origin,
-                                                                    );
+                                                                        originItem,
+                                                                    ); // <-- AHORA USA LA FUNCIÓN INTELIGENTE
                                                                     setIsOriginDropdownOpen(
                                                                         false,
                                                                     );
                                                                 }}
                                                                 className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
                                                             >
-                                                                {origin}
+                                                                {originItem}
                                                             </div>
                                                         ),
                                                     )}
@@ -1927,13 +1926,16 @@ export default function CheckinModal({
                                             // Buscamos la habitación seleccionada
                                             const selectedRoom = rooms.find(
                                                 (r) =>
-                                                    r.id === Number(data.room_id) ||
+                                                    r.id ===
+                                                        Number(data.room_id) ||
                                                     r.id === initialRoomId,
                                             );
 
                                             const originalPrice =
-                                                selectedRoom?.price?.amount || 0;
-                                            let autoCalculatedPrice = originalPrice;
+                                                selectedRoom?.price?.amount ||
+                                                0;
+                                            let autoCalculatedPrice =
+                                                originalPrice;
                                             let isAutoAdjusted = false;
 
                                             // Si estamos EDITANDO, leemos el precio real
@@ -1941,7 +1943,8 @@ export default function CheckinModal({
                                                 checkinToEdit &&
                                                 checkinToEdit.agreed_price
                                             ) {
-                                                autoCalculatedPrice = checkinToEdit.agreed_price;
+                                                autoCalculatedPrice =
+                                                    checkinToEdit.agreed_price;
                                                 if (
                                                     autoCalculatedPrice !==
                                                     originalPrice
@@ -1955,23 +1958,27 @@ export default function CheckinModal({
                                                 ?.toUpperCase()
                                                 .includes('CORPORATIVO');
                                             if (isCorporate && selectedRoom) {
-                                                const roomAny = selectedRoom as any;
+                                                const roomAny =
+                                                    selectedRoom as any;
                                                 const bathroomType =
                                                     roomAny.price?.bathroom_type?.toLowerCase() ||
                                                     roomAny.room_type?.bathroom_type?.toLowerCase() ||
                                                     '';
                                                 const isPrivate =
-                                                    bathroomType === 'private' ||
+                                                    bathroomType ===
+                                                        'private' ||
                                                     bathroomType === 'privado';
                                                 autoCalculatedPrice =
-                                                    (isPrivate ? 90 : 60) * totalPeople;
+                                                    (isPrivate ? 90 : 60) *
+                                                    totalPeople;
                                                 isAutoAdjusted = false; // Sobrescribe etiqueta
                                             }
 
                                             // ==========================================
                                             // PRECIO FINAL DIRECTO (SIN DESCUENTO)
                                             // ==========================================
-                                            const finalPrice = autoCalculatedPrice;
+                                            const finalPrice =
+                                                autoCalculatedPrice;
 
                                             // Calculamos el total
                                             const noches =
@@ -1983,24 +1990,35 @@ export default function CheckinModal({
                                                     {/* IZQUIERDA: Habitación + Costo por 1 Noche */}
                                                     <div className="flex flex-col items-start">
                                                         <label className="flex items-center gap-2 text-2xl leading-none font-black text-green-700">
-                                                            HAB {selectedRoom?.number || 'N/A'}
+                                                            HAB{' '}
+                                                            {selectedRoom?.number ||
+                                                                'N/A'}
                                                         </label>
                                                         <div className="mt-1 flex items-center gap-2">
                                                             {isAutoAdjusted ? (
                                                                 <>
                                                                     <span className="text-sm font-bold text-gray-400 line-through">
-                                                                        {originalPrice} Bs
+                                                                        {
+                                                                            originalPrice
+                                                                        }{' '}
+                                                                        Bs
                                                                     </span>
                                                                     <span className="text-sm font-black text-green-800">
-                                                                        {finalPrice} Bs / noche
+                                                                        {
+                                                                            finalPrice
+                                                                        }{' '}
+                                                                        Bs /
+                                                                        noche
                                                                     </span>
                                                                     <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-amber-700 uppercase shadow-sm">
-                                                                        Tarifa Ajustada
+                                                                        Tarifa
+                                                                        Ajustada
                                                                     </span>
                                                                 </>
                                                             ) : (
                                                                 <span className="text-sm font-bold text-green-800">
-                                                                    {finalPrice} Bs / noche
+                                                                    {finalPrice}{' '}
+                                                                    Bs / noche
                                                                 </span>
                                                             )}
                                                         </div>
@@ -2009,16 +2027,21 @@ export default function CheckinModal({
                                                     {/* DERECHA: Total a cobrar */}
                                                     <div className="flex flex-col border-l border-green-200 pl-4 text-right">
                                                         <span className="mb-0.5 text-xs font-bold text-green-600 uppercase">
-                                                            {isAutoAdjusted ? 'Total a cobrar' : 'Total sugerido'}
+                                                            {isAutoAdjusted
+                                                                ? 'Total a cobrar'
+                                                                : 'Total sugerido'}
                                                         </span>
                                                         <span className="text-2xl leading-none font-black text-gray-900">
                                                             {total} Bs
                                                         </span>
-                                                        {isAutoAdjusted && noches > 1 && (
-                                                            <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                {finalPrice} x {noches} noches
-                                                            </span>
-                                                        )}
+                                                        {isAutoAdjusted &&
+                                                            noches > 1 && (
+                                                                <span className="mt-0.5 text-[10px] font-medium text-gray-500">
+                                                                    {finalPrice}{' '}
+                                                                    x {noches}{' '}
+                                                                    noches
+                                                                </span>
+                                                            )}
                                                     </div>
                                                 </div>
                                             );
@@ -2203,138 +2226,185 @@ export default function CheckinModal({
                                 </div>
                             </div>
 
-                           {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
-<div>
-    <div className="relative -mt-2 animate-in duration-300 fade-in slide-in-from-top-2">
-        <div className="flex flex-col gap-3">
-            
-            {/* FILA 1: EFECTIVO (Izquierda) | MONTO (Derecha) */}
-            <div className="grid grid-cols-2 gap-3 items-end">
-                {/* IZQUIERDA: Método de Pago (Efectivo) */}
-                <div>
-                    <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                        Método de Pago
-                    </label>
-                    <button
-                        type="button"
-                        disabled={!isTitular}
-                        onClick={() =>
-                            setData((prev) => ({
-                                ...prev,
-                                // Actúa como interruptor para poder desmarcarlo
-                                payment_method: prev.payment_method === 'EFECTIVO' ? '' : 'EFECTIVO',
-                                qr_bank: '',
-                            }))
-                        }
-                        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2 transition-all ${
-                            data.payment_method === 'EFECTIVO'
-                                ? 'border-green-500 bg-green-50 ring-1 ring-green-500 shadow-sm'
-                                : 'border-gray-400 bg-white hover:bg-gray-50'
-                        } disabled:opacity-50`}
-                    >
-                        <Banknote
-                            className={`h-4 w-4 ${data.payment_method === 'EFECTIVO' ? 'text-green-600' : 'text-gray-500'}`}
-                        />
-                        <span
-                            className={`text-sm font-bold uppercase ${data.payment_method === 'EFECTIVO' ? 'text-green-800' : 'text-gray-700'}`}
-                        >
-                            Efectivo
-                        </span>
-                    </button>
-                </div>
+                            {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
+                            <div>
+                                <div className="relative -mt-2 animate-in duration-300 fade-in slide-in-from-top-2">
+                                    <div className="flex flex-col gap-3">
+                                        {/* FILA 1: EFECTIVO (Izquierda) | MONTO (Derecha) */}
+                                        <div className="grid grid-cols-2 items-end gap-3">
+                                            {/* IZQUIERDA: Método de Pago (Efectivo) */}
+                                            <div>
+                                                <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
+                                                    Método de Pago
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    disabled={!isTitular}
+                                                    onClick={() =>
+                                                        setData((prev) => ({
+                                                            ...prev,
+                                                            // Actúa como interruptor para poder desmarcarlo
+                                                            payment_method:
+                                                                prev.payment_method ===
+                                                                'EFECTIVO'
+                                                                    ? ''
+                                                                    : 'EFECTIVO',
+                                                            qr_bank: '',
+                                                        }))
+                                                    }
+                                                    className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2 transition-all ${
+                                                        data.payment_method ===
+                                                        'EFECTIVO'
+                                                            ? 'border-green-500 bg-green-50 shadow-sm ring-1 ring-green-500'
+                                                            : 'border-gray-400 bg-white hover:bg-gray-50'
+                                                    } disabled:opacity-50`}
+                                                >
+                                                    <Banknote
+                                                        className={`h-4 w-4 ${data.payment_method === 'EFECTIVO' ? 'text-green-600' : 'text-gray-500'}`}
+                                                    />
+                                                    <span
+                                                        className={`text-sm font-bold uppercase ${data.payment_method === 'EFECTIVO' ? 'text-green-800' : 'text-gray-700'}`}
+                                                    >
+                                                        Efectivo
+                                                    </span>
+                                                </button>
+                                            </div>
 
-                {/* DERECHA: Input de Monto */}
-                <div>
-                    <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                        Monto de Adelanto
-                    </label>
-                    <div className="relative">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                            <span className={`text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}>
-                                Bs
-                            </span>
-                        </div>
-                        <input
-                            type="number"
-                            step="0.50"
-                            min="0"
-                            value={data.advance_payment === 0 ? '' : data.advance_payment}
-                            onChange={(e) =>
-                                setData('advance_payment', e.target.value as any)
-                            }
-                            onFocus={(e) => e.target.select()}
-                            disabled={!isTitular}
-                            className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            placeholder="0.00"
-                        />
-                    </div>
-                </div>
-            </div>
+                                            {/* DERECHA: Input de Monto */}
+                                            <div>
+                                                <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
+                                                    Monto de Adelanto
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                        <span
+                                                            className={`text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
+                                                        >
+                                                            Bs
+                                                        </span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        step="0.50"
+                                                        min="0"
+                                                        value={
+                                                            data.advance_payment ===
+                                                            0
+                                                                ? ''
+                                                                : data.advance_payment
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'advance_payment',
+                                                                e.target
+                                                                    .value as any,
+                                                            )
+                                                        }
+                                                        onFocus={(e) =>
+                                                            e.target.select()
+                                                        }
+                                                        disabled={!isTitular}
+                                                        className="block w-full [appearance:textfield] rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
 
-            {errors.advance_payment && (
-                <p className="-mt-1 text-[10px] font-bold text-red-500">
-                    {errors.advance_payment}
-                </p>
-            )}
+                                        {errors.advance_payment && (
+                                            <p className="-mt-1 text-[10px] font-bold text-red-500">
+                                                {errors.advance_payment}
+                                            </p>
+                                        )}
 
-            {/* FILA 2: BANCOS QR */}
-            <div>
-                <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                    Transferencia QR
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                    {['YAPE', 'BNB', 'FIE', 'ECO'].map((banco) => {
-                        const isSelected = data.payment_method === 'QR' && data.qr_bank === banco;
-                        return (
-                            <button
-                                key={banco}
-                                type="button"
-                                disabled={!isTitular}
-                                onClick={() =>
-                                    setData((prev) => ({
-                                        ...prev,
-                                        // Actúa como interruptor para desmarcarlo
-                                        payment_method: isSelected ? '' : 'QR',
-                                        qr_bank: isSelected ? '' : banco,
-                                    }))
-                                }
-                                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 transition-all ${
-                                    isSelected
-                                        ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 shadow-sm'
-                                        : 'border-gray-400 bg-white hover:bg-gray-50'
-                                } disabled:opacity-50`}
-                            >
-                                <img
-                                    src={`/images/bancos/${banco.toLowerCase()}.png`}
-                                    alt={banco}
-                                    className={`h-4 object-contain ${
-                                        !isSelected && 'opacity-60 grayscale'
-                                    }`}
-                                />
-                                <span
-                                    className={`text-[11px] font-bold uppercase ${
-                                        isSelected ? 'text-blue-800' : 'text-gray-700'
-                                    }`}
-                                >
-                                    {banco}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
+                                        {/* FILA 2: BANCOS QR */}
+                                        <div>
+                                            <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
+                                                Transferencia QR
+                                            </label>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    'YAPE',
+                                                    'BNB',
+                                                    'FIE',
+                                                    'ECO',
+                                                ].map((banco) => {
+                                                    const isSelected =
+                                                        data.payment_method ===
+                                                            'QR' &&
+                                                        data.qr_bank === banco;
+                                                    return (
+                                                        <button
+                                                            key={banco}
+                                                            type="button"
+                                                            disabled={
+                                                                !isTitular
+                                                            }
+                                                            onClick={() =>
+                                                                setData(
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        // Actúa como interruptor para desmarcarlo
+                                                                        payment_method:
+                                                                            isSelected
+                                                                                ? ''
+                                                                                : 'QR',
+                                                                        qr_bank:
+                                                                            isSelected
+                                                                                ? ''
+                                                                                : banco,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 transition-all ${
+                                                                isSelected
+                                                                    ? 'border-blue-500 bg-blue-50 shadow-sm ring-1 ring-blue-500'
+                                                                    : 'border-gray-400 bg-white hover:bg-gray-50'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            <img
+                                                                src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                alt={banco}
+                                                                className={`h-4 object-contain ${
+                                                                    !isSelected &&
+                                                                    'opacity-60 grayscale'
+                                                                }`}
+                                                            />
+                                                            <span
+                                                                className={`text-[11px] font-bold uppercase ${
+                                                                    isSelected
+                                                                        ? 'text-blue-800'
+                                                                        : 'text-gray-700'
+                                                                }`}
+                                                            >
+                                                                {banco}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
 
-                {/* ALERTA DINÁMICA: Si coloca un monto pero olvida elegir método */}
-                {data.advance_payment > 0 && (!data.payment_method || data.payment_method === '' || (data.payment_method === 'QR' && !data.qr_bank)) && (
-                    <div className="mt-3 flex animate-pulse items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-bold text-red-600 shadow-sm uppercase">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>¡Seleccione Efectivo o un QR para el adelanto!</span>
-                    </div>
-                )}
-            </div>
-
-        </div>
-    </div>
-</div>
+                                            {/* ALERTA DINÁMICA: Si coloca un monto pero olvida elegir método */}
+                                            {data.advance_payment > 0 &&
+                                                (!data.payment_method ||
+                                                    data.payment_method ===
+                                                        '' ||
+                                                    (data.payment_method ===
+                                                        'QR' &&
+                                                        !data.qr_bank)) && (
+                                                    <div className="mt-3 flex animate-pulse items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-bold text-red-600 uppercase shadow-sm">
+                                                        <AlertCircle className="h-4 w-4 shrink-0" />
+                                                        <span>
+                                                            ¡Seleccione Efectivo
+                                                            o un QR para el
+                                                            adelanto!
+                                                        </span>
+                                                    </div>
+                                                )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             {/* Campo de observaciones*/}
                             <div className="relative -top-4">
                                 <label className="text-xs font-bold text-gray-500 uppercase">
