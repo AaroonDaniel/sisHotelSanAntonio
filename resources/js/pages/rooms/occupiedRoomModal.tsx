@@ -254,10 +254,7 @@ export default function OccupiedRoomModal({
                         <div className="grid gap-6 lg:grid-cols-2">
                             {/* COLUMNA IZQUIERDA: HUÉSPEDES */}
                             <div className="space-y-4">
-                                <h3 className="mb-2 ml-1 text-xs font-bold tracking-wider text-gray-400 uppercase">
-                                    Huesped
-                                </h3>
-
+                            
                                 {!hasCompanions ? (
                                     <StaticGuestCard
                                         guest={liveCheckin.guest}
@@ -285,6 +282,7 @@ export default function OccupiedRoomModal({
                                                     key={comp.id}
                                                     guest={comp}
                                                     isTitular={false}
+                                                    origin={comp.pivot?.origin || comp.origin || 'SIN REGISTRO'}
                                                     isExpanded={
                                                         expandedGuestId ===
                                                         comp.id

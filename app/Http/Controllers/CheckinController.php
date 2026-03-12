@@ -320,7 +320,9 @@ class CheckinController extends Controller
                     }
 
                     if ($companion->id !== $guestId) {
-                        $idsParaSincronizar[$companion->id] = [];
+                        $idsParaSincronizar[$companion->id] = [
+                            'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
+                        ];
                     }
                 }
 
@@ -738,7 +740,9 @@ class CheckinController extends Controller
 
                     // Evitar que el titular se agregue como su propio acompañante
                     if ($companion->id !== $guestId) {
-                        $idsParaSincronizar[$companion->id] = [];
+                        $idsParaSincronizar[$companion->id] = [
+                            'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
+                        ];
                     }
                 }
                 $checkin->companions()->sync($idsParaSincronizar);
@@ -879,7 +883,7 @@ class CheckinController extends Controller
             $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
             // Calculamos hasta dónde se le permite perdonar
             $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
-            
+
             // Reajustamos la hora al límite de la tolerancia
             if ($checkOutDate->greaterThan($horaLimite)) {
                 $checkOutDate = $horaLimite;
@@ -929,7 +933,7 @@ class CheckinController extends Controller
             'price_per_night' => $price,
             'accommodation_total' => $accommodationTotal,
             'services_total' => $servicesTotal,
-            'advance_payment' => $totalPagadoReal, 
+            'advance_payment' => $totalPagadoReal,
             'grand_total' => $grandTotal,
             'balance' => $balance,
             'notes' => $checkin->notes,
@@ -988,7 +992,7 @@ class CheckinController extends Controller
         if ($waivePenalty && $checkin->schedule) {
             $horaOficial = $checkOutDate->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
             $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
-            
+
             if ($checkOutDate->greaterThan($horaLimite)) {
                 $checkOutDate = $horaLimite;
             }
@@ -999,7 +1003,7 @@ class CheckinController extends Controller
 
         $checkin->update([
             'check_out_date' => $checkOutDate,
-            'duration_days' => $finalDays, 
+            'duration_days' => $finalDays,
             'status' => 'finalizado'
         ]);
 
@@ -1739,7 +1743,7 @@ class CheckinController extends Controller
         if ($waivePenalty) {
             $diasCalendario = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
             // Retorna los días limpios, perdonando la noche extra
-            return $diasCalendario == 0 ? 1 : $diasCalendario; 
+            return $diasCalendario == 0 ? 1 : $diasCalendario;
         }
 
         // --- LÓGICA DE DÍAS CALENDARIO BASE ---
@@ -1757,7 +1761,7 @@ class CheckinController extends Controller
         // 🛑 CASO B: LÓGICA ESTRICTA (DÍAS POSTERIORES)
         // =========================================================
         $horario = $checkin->schedule;
-        
+
         // HORA OFICIAL EXACTA (Ya NO le sumamos la tolerancia aquí)
         $limiteSalidaHoy = Carbon::parse($fechaSalidaReal->format('Y-m-d') . ' ' . $horario->check_out_time);
 

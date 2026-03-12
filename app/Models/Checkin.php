@@ -97,9 +97,11 @@ class Checkin extends Model
     public function companions(): BelongsToMany
     {
         return $this->belongsToMany(Guest::class, 'checkin_guests')
-
+            ->withPivot('origin') 
             ->withTimestamps();
     }
+
+
 
     public function schedule(): BelongsTo
     {
