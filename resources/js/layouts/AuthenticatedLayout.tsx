@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
     Bell,
     ChevronDown,
@@ -27,8 +27,16 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
+    const { url }= usePage();
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
+
+    const navLinkClass = (isActive: boolean) =>
+        `inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
+            isActive
+                ? 'border-red-500 text-white' // Activo: Línea roja y texto blanco
+                : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200' // Inactivo: Sin línea y gris
+        }`;
 
     return (
         /* CAMBIO AQUÍ: Se reemplazó selection:bg-red-500 por selection:bg-green-600 */
@@ -49,35 +57,62 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 justify-between">
                         <div className="flex">
-                            {/* Logo */}
-                            <div className="flex shrink-1 items-center gap-3">
-                                <Link href="/dashboard" className="flex items-center gap-3 mt-1">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-900/50">
-                                        <Hotel className="h-5 w-5 text-white" />
-                                    </div>
-                                    <span className="hidden text-xl font-bold text-white md:block">
-                                        Hotel San Antonio
-                                    </span>
-                                </Link>
-                            </div>
+    {/* Logo */}
+    <div className="flex shrink-1 items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3 mt-1">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-900/50">
+                <Hotel className="h-5 w-5 text-white" />
+            </div>
+            <span className="hidden text-xl font-bold text-white md:block">
+                Hotel San Antonio
+            </span>
+        </Link>
+    </div>
 
-                            {/* Links Escritorio */}
-                            <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
-                                <Link
-                                    href="/status"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
-                                >
-                                    Habitaciones
-                                </Link>
-                                <Link
-                                    href="/dashboard"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
-                                >
-                                    Administracion
-                                </Link>
-                                
-                            </div>
-                        </div>
+    {/* Links Escritorio */}
+    <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
+        <Link
+            href="/status"
+            className={`inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
+                route().current('status') || window.location.pathname.startsWith('/status') || window.location.pathname.startsWith('/habitaciones')
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+        >
+            Habitaciones
+        </Link>
+        <Link
+            href="/dashboard"
+            className={`inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
+                route().current('dashboard') || window.location.pathname === '/dashboard' || window.location.pathname.startsWith('/user') || window.location.pathname.startsWith('/settings')
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+        >
+            Administracion
+        </Link>
+        <Link
+            href="/dashboard" // <-- Deberías cambiar esta ruta a tu ruta real de reservas (ej. /reservas)
+            className={`inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
+                window.location.pathname.startsWith('/reservas') || window.location.pathname.startsWith('/reservations')
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+        >
+            Reservas
+        </Link>
+        <Link
+            href="/dashboard" // <-- Deberías cambiar esta ruta a tu ruta real de gastos (ej. /gastos)
+            className={`inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
+                window.location.pathname.startsWith('/gastos') || window.location.pathname.startsWith('/expenses')
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+        >
+            Gastos
+        </Link>
+    </div>
+</div>
 
                         {/* Menú Usuario */}
                         <div className="hidden gap-4 sm:ml-6 sm:flex sm:items-center">

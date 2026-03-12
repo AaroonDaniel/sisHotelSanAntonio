@@ -1278,7 +1278,7 @@ class CheckinController extends Controller
         // =========================================================
         $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
         $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
-        
+
         $lastPayment = $checkin->payments->last();
         $metodoFinal = $lastPayment ? substr($lastPayment->method, 0, 2) : 'EF';
 
@@ -1287,7 +1287,7 @@ class CheckinController extends Controller
             'checkin_id'     => $checkin->id,
             'issue_date'     => now()->toDateString(),
             'control_code'   => 'RECIBO-INTERNO',
-            'payment_method' => $metodoFinal, 
+            'payment_method' => $metodoFinal,
             'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
             'issue_time'     => now(),
             'status'         => 'valid',
@@ -1297,6 +1297,7 @@ class CheckinController extends Controller
         \App\Models\InvoiceDetail::create([
             'invoice_id' => $nuevoRecibo->id,
             'service_id' => null,
+            'description' => "Hospedaje Hab {$checkin->room->number}",
             'quantity'   => $diasACobrar + $totalDiasHistorial,
             'unit_price' => $granTotal / max(1, ($diasACobrar + $totalDiasHistorial)),
             'cost'       => $totalHospedaje + $carriedBalance,
@@ -1376,7 +1377,7 @@ class CheckinController extends Controller
         $pdf->Ln(1);
 
         $pdf->SetFont('Arial', '', 7);
-        
+
         // ITEM: Habitación Actual
         $pdf->Cell(35, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
         $pdf->Cell(8, 4, $diasACobrar, 0, 0, 'C');
@@ -1452,15 +1453,12 @@ class CheckinController extends Controller
     public function generateCheckoutInvoice(Checkin $checkin)
     {
         try {
-            // 1. CARGAR RELACIONES
             $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
-            // =========================================================
-            // 🚀 RASTREO DEL HISTORIAL (Para sumar días de traslados)
-            // =========================================================
+            // RASTREO DEL HISTORIAL
             $originalCheckInDate = $checkin->check_in_date;
             $totalDiasHistorial = 0;
-            
+
             $currentParentId = $checkin->parent_checkin_id;
             while ($currentParentId) {
                 $parent = \App\Models\Checkin::find($currentParentId);
@@ -1473,16 +1471,11 @@ class CheckinController extends Controller
                 }
             }
 
-            // --- CÁLCULOS CON TOLERANCIA ---
             $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
             $diasReales = $this->calculateBillableDays($checkin, $salida);
 
-            // ==========================================================================
-            // --- PRECIO UNITARIO ---
-            // ==========================================================================
             $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-            // LÓGICA CORPORATIVA
             if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
                 $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
                 $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
@@ -1492,8 +1485,6 @@ class CheckinController extends Controller
             }
 
             $totalHospedaje = $precioUnitario * $diasReales;
-            
-            // 🚀 RESCATE DE DEUDA ARRASTRADA DE HABITACIONES ANTERIORES
             $carriedBalance = floatval($checkin->carried_balance ?? 0);
 
             $totalServicios = 0;
@@ -1502,12 +1493,8 @@ class CheckinController extends Controller
                 $totalServicios += ($detalle->quantity * $precio);
             }
 
-            // GRAN TOTAL (Suma de todo, incluyendo la historia)
             $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
-            // --------------------------------------------------------------------------
-            // CÁLCULO DE PAGOS REALES (Suma del historial)
-            // --------------------------------------------------------------------------
             $totalPagadoReal = 0;
             if ($checkin->payments->count() > 0) {
                 foreach ($checkin->payments as $pago) {
@@ -1521,17 +1508,70 @@ class CheckinController extends Controller
                 $totalPagadoReal = $checkin->advance_payment ?? 0;
             }
 
-            // Saldo que efectivamente debe entrar a caja hoy
             $saldoPagar = $granTotal - $totalPagadoReal;
 
+            // =========================================================
+            // 🚀 GUARDAR FACTURA EN LA BASE DE DATOS
+            // =========================================================
+            $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
+            $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
 
+            $lastPayment = $checkin->payments->last();
+            $metodoFinal = $lastPayment ? substr($lastPayment->method, 0, 2) : 'EF';
+
+            $nuevaFactura = \App\Models\Invoice::create([
+                'invoice_number' => $nextInvoiceNumber,
+                'checkin_id'     => $checkin->id,
+                'issue_date'     => now()->toDateString(),
+                'control_code'   => '8A-F1-2C-99',
+                'payment_method' => $metodoFinal,
+                'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                'issue_time'     => now(),
+                'status'         => 'valid',
+            ]);
+
+            // Detalle: Hospedaje
+            \App\Models\InvoiceDetail::create([
+                'invoice_id'  => $nuevaFactura->id,
+                'service_id'  => null,
+                'description' => "Hospedaje Hab {$checkin->room->number}",
+                'quantity'    => $diasReales,
+                'unit_price'  => $precioUnitario,
+                'cost'        => $totalHospedaje,
+            ]);
+
+            if ($carriedBalance > 0) {
+                \App\Models\InvoiceDetail::create([
+                    'invoice_id'  => $nuevaFactura->id,
+                    'service_id'  => null,
+                    'description' => "Hospedaje Previo",
+                    'quantity'    => $totalDiasHistorial,
+                    'unit_price'  => $carriedBalance > 0 && $totalDiasHistorial > 0 ? $carriedBalance / $totalDiasHistorial : $carriedBalance,
+                    'cost'        => $carriedBalance,
+                ]);
+            }
+
+            // Detalle: Servicios
+            foreach ($checkin->checkinDetails as $detalle) {
+                $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                \App\Models\InvoiceDetail::create([
+                    'invoice_id'  => $nuevaFactura->id,
+                    'service_id'  => $detalle->service_id,
+                    'description' => strtoupper($detalle->service->name ?? 'SERVICIO EXTRA'),
+                    'quantity'    => $detalle->quantity,
+                    'unit_price'  => $precioReal,
+                    'cost'        => ($detalle->quantity * $precioReal),
+                ]);
+            }
+
+            // =========================================================
             // --- PDF GENERATION ---
+            // =========================================================
             $pdf = new \FPDF('P', 'mm', array(80, 260));
             $pdf->SetMargins(4, 4, 4);
             $pdf->SetAutoPageBreak(true, 2);
             $pdf->AddPage();
 
-            // 1. ENCABEZADO
             $pdf->SetFont('Arial', 'B', 10);
             $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
             $pdf->SetFont('Arial', 'B', 7);
@@ -1549,7 +1589,6 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
             $pdf->Ln(2);
 
-            // DATOS FACTURA
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(30, 3, 'NIT:', 0, 0, 'R');
             $pdf->SetFont('Arial', '', 7);
@@ -1557,7 +1596,7 @@ class CheckinController extends Controller
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(30, 3, utf8_decode('FACTURA N°:'), 0, 0, 'R');
             $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(35, 3, str_pad($checkin->id, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
+            $pdf->Cell(35, 3, str_pad($nuevaFactura->invoice_number, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
             $pdf->SetFont('Arial', '', 7);
@@ -1566,7 +1605,6 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(1);
 
-            // DATOS CLIENTE
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(20, 4, 'Fecha Emision:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
@@ -1579,8 +1617,7 @@ class CheckinController extends Controller
             $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
             $pdf->Cell(0, 4, $checkin->guest->identification_number ?? '0', 0, 1);
-            
-            // Mostrar fecha de Ingreso Original
+
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(20, 4, 'Ingreso:', 0, 0);
             $pdf->SetFont('Arial', '', 7);
@@ -1590,31 +1627,28 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // DETALLE ITEMS
+            // DETALLE ITEMS REORDENADO: Detalle | Cantidad | P.Unit | Total
             $pdf->SetFont('Arial', 'B', 6);
+            $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
             $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
-            $pdf->Cell(34, 3, 'DETALLE', 0, 0, 'L');
             $pdf->Cell(12, 3, 'P.UNIT', 0, 0, 'R');
-            $pdf->Cell(18, 3, 'SUBTOT', 0, 1, 'R');
+            $pdf->Cell(17, 3, 'SUBTOT', 0, 1, 'R');
             $pdf->Ln(3);
 
             $pdf->SetFont('Arial', '', 6);
 
-            // Hospedaje Actual
-            $pdf->Cell(8, 3, '1', 0, 0, 'C');
-            $pdf->Cell(34, 3, utf8_decode("Hospedaje Hab {$checkin->room->number} ($diasReales d)"), 0, 0, 'L');
-            $pdf->Cell(12, 3, number_format($totalHospedaje, 2), 0, 0, 'R');
-            $pdf->Cell(18, 3, number_format($totalHospedaje, 2), 0, 1, 'R');
+            $pdf->Cell(35, 3, utf8_decode("Hospedaje Hab {$checkin->room->number} ($diasReales d)"), 0, 0, 'L');
+            $pdf->Cell(8, 3, $diasReales, 0, 0, 'C');
+            $pdf->Cell(12, 3, number_format($precioUnitario, 2), 0, 0, 'R');
+            $pdf->Cell(17, 3, number_format($totalHospedaje, 2), 0, 1, 'R');
 
-            // 🚀 Hospedaje Anterior (Solo si hubo traslado)
             if ($carriedBalance > 0) {
-                $pdf->Cell(8, 3, '1', 0, 0, 'C');
-                $pdf->Cell(34, 3, utf8_decode("Hospedaje Previo ($totalDiasHistorial d)"), 0, 0, 'L');
-                $pdf->Cell(12, 3, number_format($carriedBalance, 2), 0, 0, 'R');
-                $pdf->Cell(18, 3, number_format($carriedBalance, 2), 0, 1, 'R');
+                $pdf->Cell(35, 3, utf8_decode("Hospedaje Previo ($totalDiasHistorial d)"), 0, 0, 'L');
+                $pdf->Cell(8, 3, $totalDiasHistorial, 0, 0, 'C');
+                $pdf->Cell(12, 3, '-', 0, 0, 'R');
+                $pdf->Cell(17, 3, number_format($carriedBalance, 2), 0, 1, 'R');
             }
 
-            // Servicios
             $serviciosAgrupados = [];
             if ($checkin->checkinDetails) {
                 foreach ($checkin->checkinDetails as $detalle) {
@@ -1627,22 +1661,20 @@ class CheckinController extends Controller
             }
             foreach ($serviciosAgrupados as $name => $data) {
                 $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
+                $pdf->Cell(35, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
                 $pdf->Cell(8, 3, $data['qty'], 0, 0, 'C');
-                $pdf->Cell(34, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
                 $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
-                $pdf->Cell(18, 3, number_format($data['total'], 2), 0, 1, 'R');
+                $pdf->Cell(17, 3, number_format($data['total'], 2), 0, 1, 'R');
             }
 
             $pdf->Ln(2);
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // SECCIÓN TOTALES Y PAGOS
             $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(50, 4, 'TOTAL FACTURADO Bs', 0, 0, 'R');
+            $pdf->Cell(50, 4, 'TOTAL Bs', 0, 0, 'R');
             $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
 
-            // Solo mostramos adelantos si existen
             if ($totalPagadoReal > 0) {
                 $pdf->SetFont('Arial', '', 7);
                 $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
@@ -1653,13 +1685,11 @@ class CheckinController extends Controller
                 $pdf->Cell(22, 4, number_format($saldoPagar, 2), 0, 1, 'R');
             }
 
-            // MONTO LITERAL (Del total facturado, ley fiscal)
             $pdf->Ln(2);
             $pdf->SetFont('Arial', '', 7);
             $montoLetras = $this->convertirNumeroALetras($granTotal);
             $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
 
-            // PIE FISCAL
             $pdf->Ln(2);
             $pdf->SetFont('Arial', 'B', 6);
             $pdf->Cell(35, 3, utf8_decode('IMPORTE BASE CRÉDITO FISCAL:'), 0, 0, 'L');
@@ -1669,17 +1699,15 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // QR
             $logoPath = public_path('images/qrCop.png');
             if (file_exists($logoPath)) {
                 $x = (80 - 22) / 2;
                 $pdf->Image($logoPath, $x, $pdf->GetY(), 22, 22);
                 $pdf->Ln(24);
             } else {
-                $pdf->Ln(24); // Espacio vacío si no hay QR
+                $pdf->Ln(24);
             }
 
-            // LEYENDAS OBLIGATORIAS
             $pdf->SetFont('Arial', 'B', 5);
             $pdf->MultiCell(0, 2.5, utf8_decode('"ESTA FACTURA CONTRIBUYE AL DESARROLLO DEL PAÍS, EL USO ILÍCITO SERÁ SANCIONADO PENALMENTE DE ACUERDO A LEY"'), 0, 'C');
             $pdf->Ln(1);
@@ -2205,7 +2233,7 @@ class CheckinController extends Controller
                 }
             }
 
-           // =========================================================
+            // =========================================================
             // 🚀 NUEVO PASO: GUARDAR FACTURA/RECIBO EN LA BASE DE DATOS
             // =========================================================
             $lastInvoice = Invoice::orderBy('invoice_number', 'desc')->first();
@@ -2229,6 +2257,7 @@ class CheckinController extends Controller
                 InvoiceDetail::create([
                     'invoice_id' => $nuevaFactura->id,
                     'service_id' => null, // null = Hospedaje
+                    'description' => $hosp['desc'],
                     'quantity'   => $hosp['cant'],
                     'unit_price' => $hosp['punit'],
                     'cost'       => $hosp['subtot'], // Se usa 'cost' en lugar de 'subtotal'
@@ -2242,11 +2271,11 @@ class CheckinController extends Controller
                 foreach ($chk->checkinDetails as $detalle) {
                     $sId = $detalle->service_id;
                     $pReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
-                    
+
                     if (!isset($groupedServiceIds[$sId])) {
                         $groupedServiceIds[$sId] = [
-                            'qty' => 0, 
-                            'total' => 0, 
+                            'qty' => 0,
+                            'total' => 0,
                             'punit' => $pReal
                         ];
                     }
@@ -2291,7 +2320,7 @@ class CheckinController extends Controller
                 $pdf->SetFont('Arial', 'B', 8);
                 $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
                 $pdf->SetFont('Arial', '', 6);
-                
+
                 $pdf->Ln(2);
 
                 $pdf->SetFont('Arial', 'B', 7);
