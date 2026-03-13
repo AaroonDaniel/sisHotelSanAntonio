@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { CheckCircle } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { FormEventHandler, useState } from 'react';
 
 interface ConfirmModalProps {
     show: boolean;
@@ -11,6 +11,8 @@ interface ConfirmModalProps {
 export default function ConfirmModal({ show, onClose, actionUrl }: ConfirmModalProps) {
     // Enviamos el estado como 'confirmado'
     const { put, processing } = useForm({ status: 'confirmado' });
+
+    const [rebaja, serRebaja] = useState('');
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();

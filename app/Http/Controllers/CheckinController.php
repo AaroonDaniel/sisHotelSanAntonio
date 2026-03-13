@@ -1016,9 +1016,20 @@ class CheckinController extends Controller
         // 🚀 PASAMOS EL FLAG WAIVEPENALTY
         $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
+        // Logica de rebaja 
+        $agreedPrice = $checkin->agreed_price;
+        
+        if ( $request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+            $totalConRebaja = floatval($request->discount);
+            if($finalDays > 0) {
+                $agreedPrice = round($totalConRebaja / $finalDays, 0);
+            }
+        }
+
         $checkin->update([
             'check_out_date' => $checkOutDate,
             'duration_days' => $finalDays,
+            'agreed_price' => $agreedPrice,
             'status' => 'finalizado'
         ]);
 

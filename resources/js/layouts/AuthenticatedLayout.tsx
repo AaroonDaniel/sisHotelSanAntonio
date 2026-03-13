@@ -24,20 +24,15 @@ interface AuthenticatedLayoutProps {
 }
 
 export default function AuthenticatedLayout({ user, children }: PropsWithChildren<AuthenticatedLayoutProps>) {
+
+    const { url } = usePage();
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
-    const { url }= usePage();
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
-    const navLinkClass = (isActive: boolean) =>
-        `inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition duration-150 ease-in-out ${
-            isActive
-                ? 'border-red-500 text-white' // Activo: Línea roja y texto blanco
-                : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-200' // Inactivo: Sin línea y gris
-        }`;
-
+    
     return (
         /* CAMBIO AQUÍ: Se reemplazó selection:bg-red-500 por selection:bg-green-600 */
         <div className="min-h-screen bg-gray-900 font-sans text-gray-100 selection:bg-sky-600 selection:text-white">
@@ -70,32 +65,48 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                             </div>
 
                             {/* Links Escritorio */}
-                            <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
+                            <div className="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex h-full">
                                 <Link
                                     href="/status"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
+                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                        url.startsWith('/status')
+                                            ? 'border-red-500 text-white'
+                                            : 'border-transparent text-white hover:border-white/50'
+                                    }`}
                                 >
                                     Habitaciones
                                 </Link>
                                 <Link
                                     href="/dashboard"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
+                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                        url.startsWith('/dashboard')
+                                            ? 'border-red-500 text-white'
+                                            : 'border-transparent text-white hover:border-white/50'
+                                    }`}
                                 >
-                                    Administracion
+                                    Administración
                                 </Link>
+                                
                                 <Link
-                                    href="/dashboard"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
+                                    href="/reservas" 
+                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                        url.startsWith('/reservas')
+                                            ? 'border-red-500 text-white'
+                                            : 'border-transparent text-white hover:border-white/50'
+                                    }`}
                                 >
                                     Reservas
                                 </Link>
                                 <Link
-                                    href="/dashboard"
-                                    className="inline-flex items-center border-b-2 border-red-500 px-1 pt-1 text-sm font-medium text-white transition duration-150 ease-in-out"
+                                    href="/gastos"
+                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                        url.startsWith('/gastos')
+                                            ? 'border-red-500 text-white'
+                                            : 'border-transparent text-white hover:border-white/50'
+                                    }`}
                                 >
                                     Gastos
                                 </Link>
-                                
                             </div>
                         </div>
 

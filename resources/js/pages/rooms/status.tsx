@@ -1252,6 +1252,31 @@ function CheckoutConfirmationModal({
     const [montoEfectivo, setMontoEfectivo] = useState<string>('');
     const [montoQR, setMontoQR] = useState<string>('');
 
+    const [rebaja, setRebaja] = useState('');
+    const [mostrarDescuento, setMostrarDescuento] = useState<boolean>(false);
+    const [rebajaConfirmada, setRebajaConfirmada] = useState<number | null>(
+        null,
+    );
+
+    const handleConfirmarRebaja = () => {
+        const val = parseFloat(rebaja);
+
+        if (isNaN(val) || val < 0) {
+            alert('Ingrese un monto valido');
+            return;
+        }
+        if (displayData) {
+            const limiteAdvertencia = displayData.accommodation_total * 0.3;
+            if (val < limiteAdvertencia) {
+                const confirmar = window.confirm(
+                    `Atención: El monto es de (${val} Bs).\n\n¿Estás seguro de que quiere aplicar el descuento?`,
+                );
+                if (!confirmar) return;
+            }
+        }
+        setRebajaConfirmada(val);
+    };
+
     const handleMontoEfectivoChange = (val: string) => setMontoEfectivo(val);
     const handleMontoQRChange = (val: string) => setMontoQR(val);
     // =========================================================================
@@ -1285,7 +1310,19 @@ function CheckoutConfirmationModal({
     // 🚀 CONSTANTES MATEMÁTICAS PARA EL PAGO MIXTO
     // (Deben ir DESPUÉS de declarar displayData para que puedan leer 'balance')
     // =========================================================================
-    const saldoPagar = displayData?.balance ?? 0;
+
+    const hospedajeFinal =
+        rebajaConfirmada !== null
+            ? rebajaConfirmada
+            : displayData?.accommodation_total || 0;
+    const consumoFinal = displayData?.services_total || 0;
+    const adelantoFinal = (displayData as any)?.total_pagado || 0;
+
+    const saldoPagar = Math.max(
+        0,
+        hospedajeFinal + consumoFinal - adelantoFinal,
+    );
+
     const totalIngresado =
         (parseFloat(montoEfectivo) || 0) + (parseFloat(montoQR) || 0);
     const restanteMixto = Math.max(0, saldoPagar - totalIngresado);
@@ -1471,6 +1508,22 @@ function CheckoutConfirmationModal({
     const handleConfirmAndPreview = async () => {
         if (!displayData) return;
 
+        if (rebaja && rebajaConfirmada === null) {
+            alert(
+                "Por favor, haz clic en el botón 'Confirmar' al lado de la rebaja antes de continuar.",
+            );
+            return;
+        }
+
+        if (rebaja && parseFloat(rebaja) > 0) {
+            const limiteAdvertencia = displayData.accommodation_total * 0.3;
+            if (parseFloat(rebaja) < limiteAdvertencia) {
+                const confirmar = window.confirm(
+                    `ATENCIÓN: ¿Esta seguro del monto de descuento?(${rebaja} Bs) Total es  ${displayData.accommodation_total.toFixed(2)} Bs).\n\n`,
+                );
+                if (!confirmar) return;
+            }
+        }
         setProcessing(true);
 
         try {
@@ -1481,12 +1534,12 @@ function CheckoutConfirmationModal({
                 waive_penalty: waivePenalty,
                 tipo_documento: tipoDocumento,
 
-                // 👇 NUEVOS DATOS: Facturación (solo si es factura)
+                //  NUEVOS DATOS: Facturación (solo si es factura)
                 nombre_factura:
                     tipoDocumento === 'factura' ? nombreFactura : null,
                 nit_factura: tipoDocumento === 'factura' ? nitFactura : null,
 
-                // 👇 NUEVO DATO: Método de Pago
+                //  NUEVO DATO: Método de Pago
                 metodo_pago: metodoPago,
                 banco_qr:
                     metodoPago === 'ambos'
@@ -1496,6 +1549,7 @@ function CheckoutConfirmationModal({
                           : null,
                 monto_efectivo: parseFloat(montoEfectivo) || 0,
                 monto_qr: parseFloat(montoQR) || 0,
+                discount: rebajaConfirmada !== null ? rebajaConfirmada : null,
             });
 
             // 2. Una vez guardado, pedimos el PDF correspondiente
@@ -1711,12 +1765,23 @@ function CheckoutConfirmationModal({
                                                     </span>
                                                 </div>
                                                 <div className="text-right">
-                                                    {displayData.accommodation_total.toFixed(
-                                                        2,
-                                                    )}{' '}
-                                                    Bs
+                                                    {rebajaConfirmada !==
+                                                    null ? (
+                                                        <span className="font-bold text-green-600">
+                                                            {hospedajeFinal.toFixed(
+                                                                2,
+                                                            )}{' '}
+                                                            Bs (Rebajado)
+                                                        </span>
+                                                    ) : (
+                                                        <span>
+                                                            {hospedajeFinal.toFixed(
+                                                                2,
+                                                            )}{' '}
+                                                            Bs
+                                                        </span>
+                                                    )}
                                                 </div>
-
                                                 {displayData.services_total >
                                                     0 && (
                                                     <>
@@ -1760,9 +1825,7 @@ function CheckoutConfirmationModal({
                                                         Total General:
                                                     </span>
                                                     <span className="font-bold text-gray-700">
-                                                        {displayData.balance.toFixed(
-                                                            2,
-                                                        )}{' '}
+                                                        {saldoPagar.toFixed(2)}{' '}
                                                         Bs
                                                     </span>
                                                 </div>
@@ -1852,7 +1915,101 @@ function CheckoutConfirmationModal({
                                                 </div>
                                             )}
 
+                                        {/* BLOQUE REBAJA */}
+                                        <div className="mt-4">
+                                            {!mostrarDescuento ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setMostrarDescuento(
+                                                            true,
+                                                        )
+                                                    }
+                                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-300 bg-cyan-50/50 px-4 py-3 text-sm font-bold text-cyan-700 transition-colors hover:bg-cyan-100 hover:text-cyan-800"
+                                                >
+                                                    <span>
+                                                        Aplicar Descuento de
+                                                        Hospedaje
+                                                    </span>
+                                                </button>
+                                            ) : (
+                                                <div className="relative rounded-xl border border-cyan-200 bg-cyan-50/80 p-3 shadow-inner">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setMostrarDescuento(
+                                                                false,
+                                                            );
+                                                            setRebaja('');
+                                                            setRebajaConfirmada(
+                                                                null,
+                                                            );
+                                                        }}
+                                                        className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold text-cyan-500 uppercase hover:text-red-500"
+                                                    >
+                                                        Cancelar x
+                                                    </button>
+
+                                                    <label className="mb-1 block text-[11px] font-bold tracking-wider text-cyan-800 uppercase">
+                                                        Nuevo Total de Hospedaje
+                                                        (Bs)
+                                                    </label>
+                                                    <div className="mt-2 flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            placeholder="Ej: 900"
+                                                            value={rebaja}
+                                                            onChange={(e) => {
+                                                                setRebaja(
+                                                                    e.target
+                                                                        .value,
+                                                                );
+                                                                setRebajaConfirmada(
+                                                                    null,
+                                                                ); // Borra confirmación si vuelve a escribir
+                                                            }}
+                                                            disabled={
+                                                                rebajaConfirmada !==
+                                                                null
+                                                            }
+                                                            className="w-full [appearance:textfield] rounded-lg border-cyan-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-cyan-500 focus:ring-cyan-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                        />
+
+                                                        {rebajaConfirmada ===
+                                                        null ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={
+                                                                    handleConfirmarRebaja
+                                                                }
+                                                                disabled={
+                                                                    !rebaja
+                                                                }
+                                                                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-cyan-700 disabled:opacity-50"
+                                                            >
+                                                                Confirmar
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setRebajaConfirmada(
+                                                                        null,
+                                                                    )
+                                                                }
+                                                                className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-yellow-600"
+                                                            >
+                                                                Editar
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
                                         {/* SECCIÓN 1: TIPO DE DOCUMENTO */}
+
                                         <div className="mt-4 text-center">
                                             <h4 className="mb-3 text-sm font-bold tracking-wide text-gray-800 uppercase">
                                                 1. Tipo de Documento
