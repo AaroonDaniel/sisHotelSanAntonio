@@ -1022,7 +1022,7 @@ class CheckinController extends Controller
         if ( $request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $totalConRebaja = floatval($request->discount);
             if($finalDays > 0) {
-                $agreedPrice = round($totalConRebaja / $finalDays, 0);
+                $agreedPrice = $totalConRebaja / $finalDays;
             }
         }
 

@@ -1311,10 +1311,20 @@ function CheckoutConfirmationModal({
     // (Deben ir DESPUÉS de declarar displayData para que puedan leer 'balance')
     // =========================================================================
 
+    // 1. Creamos una variable 100% segura para los días
+    const diasEstadia = displayData?.duration_days || 1;
+
     const hospedajeFinal =
         rebajaConfirmada !== null
             ? rebajaConfirmada
             : displayData?.accommodation_total || 0;
+
+    // 2. Usamos la variable segura (sin signos de exclamación)
+    const precioUnitarioFinal =
+        diasEstadia > 0
+            ? hospedajeFinal / diasEstadia
+            : 0;
+
     const consumoFinal = displayData?.services_total || 0;
     const adelantoFinal = (displayData as any)?.total_pagado || 0;
 
@@ -2526,17 +2536,14 @@ function CheckoutConfirmationModal({
                                                                     }
                                                                 </div>
                                                                 <div className="pt-0.5 text-right text-xs font-medium text-gray-800">
-                                                                    {parseFloat(
-                                                                        room
-                                                                            .price
-                                                                            ?.amount ||
-                                                                            0,
-                                                                    ).toFixed(
+                                                                    {/* 👇 CAMBIO 1: El precio por noche (Unitario) 👇 */}
+                                                                    {precioUnitarioFinal.toFixed(
                                                                         2,
                                                                     )}
                                                                 </div>
                                                                 <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
-                                                                    {displayData.accommodation_total.toFixed(
+                                                                    {/* 👇 CAMBIO 2: El total por todas las noches 👇 */}
+                                                                    {hospedajeFinal.toFixed(
                                                                         2,
                                                                     )}
                                                                 </div>
@@ -2667,15 +2674,12 @@ function CheckoutConfirmationModal({
 
                                             {/* [DOC] TOTAL FINAL CORREGIDO (BALANCE EN LUGAR DE GRAND_TOTAL) */}
                                             <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
-                                                <span className="text-sm font-bold tracking-wider uppercase">
+                                                <div className="col-span-4 text-right text-sm font-bold text-write uppercase">
                                                     Saldo Pendiente de Cobro
-                                                </span>
-                                                <span className="text-2xl font-black">
-                                                    {displayData.balance.toFixed(
-                                                        2,
-                                                    )}{' '}
-                                                    Bs
-                                                </span>
+                                                </div>
+                                                <div className="text-right text-lg font-black text-write">
+                                                    {saldoPagar.toFixed(2)} Bs
+                                                </div>
                                             </div>
                                         </div>
                                     )}

@@ -128,23 +128,41 @@ export default function OccupiedRoomModal({
     };
 
     // --- LÓGICA FINANCIERA ---
+    // --- LÓGICA FINANCIERA (EN VIVO / TIEMPO REAL) ---
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('es-BO', {
             style: 'currency',
             currency: 'BOB',
         }).format(amount);
 
-    const days =
-        Number(liveCheckin.duration_days) > 0
-            ? Number(liveCheckin.duration_days)
-            : 1;
+    const calculateRealNights = () => {
+        if (!liveCheckin.check_in_date) return 1;
+        
+        // Tomamos el tiempo EXACTO de entrada y el de ahora (sin borrar las horas)
+        const start = new Date(liveCheckin.check_in_date).getTime();
+        const end = new Date().getTime(); 
+        
+        // Diferencia de tiempo exacta en milisegundos
+        const diffTime = end - start;
+        
+        // Convertimos a días y redondeamos HACIA ARRIBA con Math.ceil
+        // Así, 2 días y 13 horas (2.54) sube automáticamente a 3 noches
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        // Mínimo 1 noche
+        return Math.max(1, diffDays);
+    };
+
+    const days = calculateRealNights();
+    
+    // 2. Costos financieros
     const oldDebt = parseFloat(liveCheckin.carried_balance || 0);
     const pricePerNight =
         parseFloat(liveCheckin.agreed_price) ||
         parseFloat(liveCheckin.room?.price?.amount) ||
         0;
+        
     const currentRoomCost = days * pricePerNight;
-
     const servicesCost =
         liveCheckin.services?.reduce((acc: number, s: any) => {
             const precio = parseFloat(s.pivot?.selling_price) || 0;
