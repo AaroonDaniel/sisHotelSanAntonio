@@ -1154,23 +1154,6 @@ export default function RoomsStatus({
                 roomTypes={RoomTypes}
             />
 
-            {/* --- AQUÍ ESTÁ TU BLOQUE EXACTO --- */}
-            {confirmCheckoutId &&
-                checkoutData &&
-                checkoutData.checkin &&
-                checkoutData.room && (
-                    <CheckoutConfirmationModal
-                        checkin={checkoutData.checkin}
-                        room={checkoutData.room}
-                        schedules={Schedules}
-                        guests={Guests}
-                        onClose={() => {
-                            setConfirmCheckoutId(null);
-                            setSelectedForAction(null);
-                        }}
-                    />
-                )}
-
             {/* MODAL DE RESERVAS PENDIENTES*/}
             <PendingReservationsModal
                 show={isPendingModalOpen}
@@ -1321,9 +1304,7 @@ function CheckoutConfirmationModal({
 
     // 2. Usamos la variable segura (sin signos de exclamación)
     const precioUnitarioFinal =
-        diasEstadia > 0
-            ? hospedajeFinal / diasEstadia
-            : 0;
+        diasEstadia > 0 ? hospedajeFinal / diasEstadia : 0;
 
     const consumoFinal = displayData?.services_total || 0;
     const adelantoFinal = (displayData as any)?.total_pagado || 0;
@@ -1926,7 +1907,7 @@ function CheckoutConfirmationModal({
                                             )}
 
                                         {/* BLOQUE REBAJA */}
-                                        <div className="mt-4">
+                                        <div className="mt-4 flex w-full justify-end">
                                             {!mostrarDescuento ? (
                                                 <button
                                                     type="button"
@@ -1935,15 +1916,13 @@ function CheckoutConfirmationModal({
                                                             true,
                                                         )
                                                     }
-                                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-300 bg-cyan-50/50 px-4 py-3 text-sm font-bold text-cyan-700 transition-colors hover:bg-cyan-100 hover:text-cyan-800"
+                                                    className="text-sm font-bold text-red-600 text-bold transition-colors hover:text-red-500 hover:underline"
                                                 >
-                                                    <span>
-                                                        Aplicar Descuento de
-                                                        Hospedaje
-                                                    </span>
+                                                    + Aplicar descuento de
+                                                    hospedaje
                                                 </button>
                                             ) : (
-                                                <div className="relative rounded-xl border border-cyan-200 bg-cyan-50/80 p-3 shadow-inner">
+                                                <div className="relative w-full rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-inner">
                                                     <button
                                                         type="button"
                                                         onClick={() => {
@@ -1955,12 +1934,12 @@ function CheckoutConfirmationModal({
                                                                 null,
                                                             );
                                                         }}
-                                                        className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold text-cyan-500 uppercase hover:text-red-500"
+                                                        className="absolute top-3 right-3 flex items-center gap-1 text-[11px] font-bold text-red-500 uppercase hover:text-red-600"
                                                     >
                                                         Cancelar x
                                                     </button>
 
-                                                    <label className="mb-1 block text-[11px] font-bold tracking-wider text-cyan-800 uppercase">
+                                                    <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
                                                         Nuevo Total de Hospedaje
                                                         (Bs)
                                                     </label>
@@ -1968,7 +1947,7 @@ function CheckoutConfirmationModal({
                                                         <input
                                                             type="number"
                                                             min="0"
-                                                            placeholder="Ej: 900"
+                                                            
                                                             value={rebaja}
                                                             onChange={(e) => {
                                                                 setRebaja(
@@ -1983,7 +1962,7 @@ function CheckoutConfirmationModal({
                                                                 rebajaConfirmada !==
                                                                 null
                                                             }
-                                                            className="w-full [appearance:textfield] rounded-lg border-cyan-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-cyan-500 focus:ring-cyan-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                            className="w-full [appearance:textfield] rounded-lg border-red-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-red-500 focus:ring-red-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                         />
 
                                                         {rebajaConfirmada ===
@@ -1996,7 +1975,7 @@ function CheckoutConfirmationModal({
                                                                 disabled={
                                                                     !rebaja
                                                                 }
-                                                                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-cyan-700 disabled:opacity-50"
+                                                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-700 disabled:opacity-50"
                                                             >
                                                                 Confirmar
                                                             </button>
@@ -2008,7 +1987,7 @@ function CheckoutConfirmationModal({
                                                                         null,
                                                                     )
                                                                 }
-                                                                className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-yellow-600"
+                                                                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-600"
                                                             >
                                                                 Editar
                                                             </button>
@@ -2536,13 +2515,11 @@ function CheckoutConfirmationModal({
                                                                     }
                                                                 </div>
                                                                 <div className="pt-0.5 text-right text-xs font-medium text-gray-800">
-                                                                    {/* 👇 CAMBIO 1: El precio por noche (Unitario) 👇 */}
                                                                     {precioUnitarioFinal.toFixed(
                                                                         2,
                                                                     )}
                                                                 </div>
                                                                 <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
-                                                                    {/* 👇 CAMBIO 2: El total por todas las noches 👇 */}
                                                                     {hospedajeFinal.toFixed(
                                                                         2,
                                                                     )}
@@ -2674,10 +2651,10 @@ function CheckoutConfirmationModal({
 
                                             {/* [DOC] TOTAL FINAL CORREGIDO (BALANCE EN LUGAR DE GRAND_TOTAL) */}
                                             <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
-                                                <div className="col-span-4 text-right text-sm font-bold text-write uppercase">
+                                                <div className="text-write col-span-4 text-right text-sm font-bold uppercase">
                                                     Saldo Pendiente de Cobro
                                                 </div>
-                                                <div className="text-right text-lg font-black text-write">
+                                                <div className="text-write text-right text-lg font-black">
                                                     {saldoPagar.toFixed(2)} Bs
                                                 </div>
                                             </div>
@@ -2716,7 +2693,9 @@ function CheckoutConfirmationModal({
                                     !tipoDocumento ||
                                     !displayData ||
                                     !metodoPago ||
-                                    (metodoPago === 'qr' && !qrBank)
+                                    (metodoPago === 'qr' && !qrBank) ||
+                                    (metodoPago === 'ambos' &&
+                                        (!bancoMixto || !estaCubierto))
                                 }
                             >
                                 {processing ? (
