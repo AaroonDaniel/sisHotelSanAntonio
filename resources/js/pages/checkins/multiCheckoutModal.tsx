@@ -47,24 +47,52 @@ export default function MultiCheckoutModal({
         'yape' | 'bnb' | 'fie' | 'eco' | null
     >(null);
 
+    // --- NUEVOS ESTADOS PARA DESCUENTO (REBAJA) ---
+    const [mostrarDescuento, setMostrarDescuento] = useState(false);
+    const [rebaja, setRebaja] = useState<string>('');
+    const [rebajaConfirmada, setRebajaConfirmada] = useState<number | null>(
+        null,
+    );
+
+    const handleConfirmarRebaja = () => {
+        const val = parseFloat(rebaja);
+        if (!isNaN(val) && val >= 0) {
+            setRebajaConfirmada(val);
+            setMontoEfectivo(''); // Reseteamos los pagos manuales si cambia el total
+            setMontoQR('');
+        }
+    };
+
     // Estados para Consumos y Desplegables
     const [expandedRooms, setExpandedRooms] = useState<number[]>([]);
     const [roomServices, setRoomServices] = useState<Record<number, any[]>>({});
     const [loadingServices, setLoadingServices] = useState(true);
 
-    // --- NUEVOS ESTADOS PARA EL BACKEND Y PDF ---
+    // Estados para el Backend y PDF
     const [processing, setProcessing] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
     // 1. Abrir la primera habitación automáticamente al mostrar el modal
     useEffect(() => {
-        if (show && selectedRoomIds.length > 0) {
-            setExpandedRooms([]);
-        } else {
-            setExpandedRooms([]);
-        }
-    }, [show, selectedRoomIds]);
+        // Ya sea que el modal se abra o se cierre, reseteamos absolutamente todo
+        setExpandedRooms([]);
+        
+        // Limpiar Descuentos
+        setMostrarDescuento(false);
+        setRebaja('');
+        setRebajaConfirmada(null);
 
+        // Limpiar Formularios y Pagos
+        setTipoDocumento(null);
+        setMetodoPago(null);
+        setMontoEfectivo('');
+        setMontoQR('');
+        setBancoMixto(null);
+        
+        // Limpiar Estados de Carga o PDF
+        setPdfUrl(null);
+        setProcessing(false);
+    }, [show, selectedRoomIds]);
     // Búsqueda de Consumos
     useEffect(() => {
         if (!show || selectedRoomIds.length === 0) return;
@@ -212,7 +240,7 @@ export default function MultiCheckoutModal({
 
             return {
                 roomId: room.id,
-                checkinId: activeCheckin.id, // <-- NECESARIO PARA EL BACKEND
+                checkinId: activeCheckin.id,
                 roomNumber: room.number,
                 tipoHabitacion: room.room_type?.name || 'ESTÁNDAR',
                 tipoBano:
@@ -233,9 +261,15 @@ export default function MultiCheckoutModal({
         })
         .filter(Boolean);
 
+    // ==========================================
+    // CÁLCULO DEL SALDO PENDIENTE CON DESCUENTO
+    // ==========================================
+    const hospedajeFinal =
+        rebajaConfirmada !== null ? rebajaConfirmada : totalHospedajeGeneral;
+
     const saldoPendienteFinal = Math.max(
         0,
-        totalHospedajeGeneral + totalConsumosGeneral - totalAdelantosGeneral,
+        hospedajeFinal + totalConsumosGeneral - totalAdelantosGeneral,
     );
 
     const efeNum = parseFloat(montoEfectivo) || 0;
@@ -318,6 +352,10 @@ export default function MultiCheckoutModal({
                           ? metodoPago
                           : null,
                 total_pagado: saldoPendienteFinal,
+                descuento:
+                    rebajaConfirmada !== null
+                        ? totalHospedajeGeneral - rebajaConfirmada
+                        : 0, // ENVIANDO DESCUENTO AL BACKEND
             };
 
             // Petición al backend
@@ -395,10 +433,24 @@ export default function MultiCheckoutModal({
                                                     Hospedaje:
                                                 </span>
                                                 <span className="text-right font-medium">
-                                                    {totalHospedajeGeneral.toFixed(
-                                                        2,
-                                                    )}{' '}
-                                                    Bs
+                                                    {rebajaConfirmada !==
+                                                    null ? (
+                                                        <>
+                                                            <span className="mr-2 text-xs text-gray-400 line-through">
+                                                                {totalHospedajeGeneral.toFixed(
+                                                                    2,
+                                                                )}
+                                                            </span>
+                                                            <span className="font-black text-red-600">
+                                                                {rebajaConfirmada.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        `${totalHospedajeGeneral.toFixed(2)} Bs`
+                                                    )}
                                                 </span>
                                             </div>
                                             {totalConsumosGeneral > 0 && (
@@ -441,6 +493,92 @@ export default function MultiCheckoutModal({
                                                 </span>
                                             </div>
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* BLOQUE REBAJA MÚLTIPLE (COLORES ROJOS) */}
+                                {metodoPago !== 'ambos' && (
+                                    <div className="mb-4 mt-2 flex w-full justify-end">
+                                        {!mostrarDescuento ? (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setMostrarDescuento(true)
+                                                }
+                                                className="text-sm font-bold text-red-600 transition-colors hover:text-red-500 hover:underline"
+                                            >
+                                                + Aplicar descuento general
+                                            </button>
+                                        ) : (
+                                            <div className="relative w-full rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-inner">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setMostrarDescuento(
+                                                            false,
+                                                        );
+                                                        setRebaja('');
+                                                        setRebajaConfirmada(
+                                                            null,
+                                                        );
+                                                    }}
+                                                    className="absolute top-3 right-3 flex items-center gap-1 text-[11px] font-bold text-red-500 uppercase hover:text-red-600"
+                                                >
+                                                    Cancelar x
+                                                </button>
+
+                                                <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
+                                                    Nuevo Total Hospedaje General (Bs)
+                                                </label>
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder={`Ej: ${totalHospedajeGeneral}`}
+                                                        value={rebaja}
+                                                        onChange={(e) => {
+                                                            setRebaja(
+                                                                e.target.value,
+                                                            );
+                                                            setRebajaConfirmada(
+                                                                null,
+                                                            );
+                                                        }}
+                                                        disabled={
+                                                            rebajaConfirmada !==
+                                                            null
+                                                        }
+                                                        className="w-full [appearance:textfield] rounded-lg border-red-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-red-500 focus:ring-red-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                    />
+
+                                                    {rebajaConfirmada ===
+                                                    null ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={
+                                                                handleConfirmarRebaja
+                                                            }
+                                                            disabled={!rebaja}
+                                                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-700 disabled:opacity-50"
+                                                        >
+                                                            Confirmar
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setRebajaConfirmada(
+                                                                    null,
+                                                                )
+                                                            }
+                                                            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-600"
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -675,7 +813,6 @@ export default function MultiCheckoutModal({
                                         )}
                                     </div>
                                 )}
-
                             </div>
 
                             {/* ======================================================== */}
@@ -1049,19 +1186,10 @@ export default function MultiCheckoutModal({
                                                             {/* 6. SALDO TOTAL DE LA HABITACIÓN */}
                                                             <div className="mx-2 mt-3 flex items-center justify-between rounded-xl bg-red-500 p-4 text-white shadow-lg">
                                                                 <span className="text-xs font-bold tracking-wider uppercase">
-                                                                    Saldo
-                                                                    Pendiente
-                                                                    (Hab{' '}
-                                                                    {
-                                                                        item.roomNumber
-                                                                    }
-                                                                    )
+                                                                    Saldo Pendiente (Hab{' '}{item.roomNumber})
                                                                 </span>
                                                                 <span className="text-xl font-black">
-                                                                    {item.totalHabitacion.toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs
+                                                                    {item.totalHabitacion.toFixed(2)} Bs
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1069,6 +1197,31 @@ export default function MultiCheckoutModal({
                                                 );
                                             },
                                         )}
+
+                                        {/* ======================================================== */}
+                                        {/* TOTAL GENERAL EN LA FACTURA (AQUÍ ESTÁ LA MAGIA)         */}
+                                        {/* ======================================================== */}
+                                        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-inner">
+                                            {rebajaConfirmada !== null && (
+                                                <div className="mb-3 flex justify-between border-b border-dashed border-red-200 pb-2 text-sm">
+                                                    <span className="font-bold text-red-500 uppercase">
+                                                        - Descuento Gral. Hospedaje:
+                                                    </span>
+                                                    <span className="font-bold text-red-500">
+                                                        -{(totalHospedajeGeneral - rebajaConfirmada).toFixed(2)} Bs
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center justify-between text-lg">
+                                                <span className="font-bold text-gray-900 uppercase">
+                                                    Total a Cobrar:
+                                                </span>
+                                                <span className="text-2xl font-black text-red-600">
+                                                    {saldoPendienteFinal.toFixed(2)} Bs
+                                                </span>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>

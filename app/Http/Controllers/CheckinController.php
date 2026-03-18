@@ -125,15 +125,24 @@ class CheckinController extends Controller
 
             // BÚSQUEDA BLINDADA
             $existingGuest = null;
+
+            // 1. Prioridad Absoluta: Buscar por Carnet de Identidad
             if (!empty($idNumber)) {
                 $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
             }
+
+            // 2. Si no hay carnet, buscar por Nombre EXACTO (sin importar la fecha de nacimiento por ahora)
             if (!$existingGuest) {
-                $query = \App\Models\Guest::where('full_name', $fullName);
-                if (!empty($birthDate)) {
-                    $query->where('birth_date', $birthDate);
+                // Buscamos a la persona por su nombre completo en mayúsculas
+                $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
+
+                // Si encontramos a alguien por el nombre, pero la persona que estamos guardando AHORA 
+                // sí tiene un Carnet nuevo (y el viejo no tenía), se lo asignaremos más abajo en el update.
+                // Sin embargo, si encontramos a alguien por nombre, pero el registro original SÍ TIENE CARNET
+                // y nosotros estamos intentando meterle otro carnet diferente... es otra persona.
+                if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
+                    $existingGuest = null; // Falsa alarma, se llaman igual pero tienen carnets distintos. Creamos uno nuevo.
                 }
-                $existingGuest = $query->first();
             }
 
             if ($existingGuest) {

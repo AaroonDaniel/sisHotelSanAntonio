@@ -1918,8 +1918,7 @@ function CheckoutConfirmationModal({
                                                     }
                                                     className="text-sm font-bold text-red-600 text-bold transition-colors hover:text-red-500 hover:underline"
                                                 >
-                                                    + Aplicar descuento de
-                                                    hospedaje
+                                                    + Aplicar descuento
                                                 </button>
                                             ) : (
                                                 <div className="relative w-full rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-inner">
