@@ -19,7 +19,8 @@ import {
     FileText,
     Briefcase,
     Clock,
-    Wallet,      // Icono archivo
+    Wallet,
+    User,      // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
@@ -53,6 +54,7 @@ const hotelModules = [
             { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
             { name: 'Huéspedes', icon: Users, url: '/invitados' },
             { name: 'Horarios', icon: Clock, url: '/horarios' },
+            { name: 'Personal', icon: User, url: '/usuarios'}
         ],
     },
     {

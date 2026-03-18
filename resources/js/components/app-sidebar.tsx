@@ -10,17 +10,27 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-react';
+// Añadimos los íconos Users y Receipt para los nuevos módulos
+import { BookOpen, Folder, LayoutGrid, Users, Receipt } from 'lucide-react'; 
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
-        href: dashboard(),
+        href: '/dashboard', // <-- Ruta corregida
         icon: LayoutGrid,
+    },
+    {
+        title: 'Usuarios',
+        href: '/users',     // <-- Nuevo enlace al CRUD de Usuarios
+        icon: Users,
+    },
+    {
+        title: 'Gastos',
+        href: '/expenses',  // <-- Preparado para el módulo de Gastos
+        icon: Receipt,
     },
 ];
 
@@ -44,7 +54,8 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                            {/* <-- Ruta corregida aquí también --> */}
+                            <Link href={'/dashboard'} prefetch> 
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>

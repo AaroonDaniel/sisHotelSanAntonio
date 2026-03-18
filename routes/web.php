@@ -12,6 +12,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\CheckinDetailController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -31,6 +32,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/gestion-habitaciones', function () {
         return Inertia::render('rooms/menu');
     })->name('rooms.menu');
+
+    //Usuarios
+    Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
 
     //Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
