@@ -50,11 +50,37 @@ class CheckinController extends Controller
         return $room->price->amount ?? 0;
     }
 
-    // --- AQUÍ ESTÁ LA CORRECCIÓN PARA QUE GUARDE EL NUEVO HUÉSPED Y ACEPTE 0 DÍAS ---
+    
     public function store(Request $request)
     {
         // =========================================================
-        // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
+        // 1. NORMALIZADOR DE FECHA DE NACIMIENTO (Acepta año o fecha)
+        // =========================================================
+        if ($request->filled('birth_date')) {
+            $fecha = trim($request->birth_date);
+            // Si solo enviaron 4 números (ej: 1990), lo completamos a 1990-01-01
+            if (preg_match('/^\d{4}$/', $fecha)) {
+                $request->merge(['birth_date' => $fecha . '-01-01']);
+            }
+        }
+
+        // También aplicamos el normalizador para los acompañantes (companions)
+        if ($request->has('companions') && is_array($request->companions)) {
+            $companions = $request->companions;
+            foreach ($companions as $key => $comp) {
+                if (!empty($comp['birth_date'])) {
+                    $cFecha = trim($comp['birth_date']);
+                    if (preg_match('/^\d{4}$/', $cFecha)) {
+                        $companions[$key]['birth_date'] = $cFecha . '-01-01';
+                    }
+                }
+            }
+            // Reemplazamos el array viejo con las fechas ya corregidas
+            $request->merge(['companions' => $companions]);
+        }
+
+        // =========================================================
+        // 🛑 2. LIMPIEZA ESTRICTA DE PROCEDENCIA
         // =========================================================
         $inputOrigin = $request->input('origin');
         $cleanOrigin = null;
@@ -71,9 +97,9 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 🛑 2. VERIFICACIÓN DE COMPLETITUD (TITULAR)
+        // 🛑 3. VERIFICACIÓN DE COMPLETITUD (TITULAR)
         // =========================================================
-        $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
+        $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in', 'phone'];
         $isTitularComplete = true;
         $missingField = null;
 
@@ -108,7 +134,7 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 3. PROCESO DE CREACIÓN / ACTUALIZACIÓN (CON PROTECCIÓN)
+        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN (CON PROTECCIÓN)
         // =========================================================
 
         if (!$request->filled('guest_id')) {
@@ -212,7 +238,7 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 4. VALIDACIÓN DE CHECKIN
+        // 5. VALIDACIÓN DE CHECKIN
         // =========================================================
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
@@ -372,6 +398,7 @@ class CheckinController extends Controller
                         'civil_status' => 'Estado Civil',
                         'birth_date' => 'Fecha de Nacimiento',
                         'issued_in' => 'Lugar de Expedición',
+                        'phone' => 'Teléfono Celular',
                         default => 'algún dato obligatorio'
                     };
                     $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
@@ -634,7 +661,7 @@ class CheckinController extends Controller
             // =========================================================
 
             // A. Campos obligatorios del Perfil (Guest) - SIN 'origin'
-            $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
+            $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in', 'phone'];
 
             $isTitularComplete = true;
             $missingField = null;

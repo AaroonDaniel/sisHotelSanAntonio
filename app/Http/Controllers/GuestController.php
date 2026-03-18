@@ -153,6 +153,14 @@ class GuestController extends Controller
             'phone' => 'nullable|string|max:20',
         ]);
 
+        if ($request->filled('birth_date')) {
+            $fecha = trim($request->birth_date);
+            // Si solo enviaron 4 números (ej: 1990), lo completamos a 1990-01-01
+            if (preg_match('/^\d{4}$/', $fecha)) {
+                $request->merge(['birth_date' => $fecha . '-01-01']);
+            }
+        }
+
         $guest->update($validated);
         return redirect()->back()->with('success', 'Huésped actualizado.');
     }

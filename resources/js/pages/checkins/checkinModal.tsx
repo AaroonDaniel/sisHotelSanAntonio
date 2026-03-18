@@ -1486,6 +1486,7 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
+                                    {/*}
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -1526,7 +1527,8 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
-                                    {/*}
+                                    {*/}
+
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Año Nac.
@@ -1545,19 +1547,25 @@ export default function CheckinModal({
                                             disabled={isReadOnly}
                                             placeholder="EJ: 1990"
                                             onChange={(e) => {
-                                                // 1. Extraemos solo números (máximo 4 dígitos)
+                                                // Extraer solo hasta 4 números
                                                 const year = e.target.value
                                                     .replace(/\D/g, '')
                                                     .substring(0, 4);
 
-                                                // 2. Si escribieron algo, autocompletamos mes y día (01-01)
-                                                // Si borran todo, limpiamos la fecha.
-                                                if (year) {
+                                                if (year.length === 4) {
+                                                    // Si ya escribió los 4 dígitos, guardamos la fecha completa "YYYY-01-01"
                                                     handleFieldChange(
                                                         'birth_date',
-                                                        `${year}`,
+                                                        `${year}-01-01`,
+                                                    );
+                                                } else if (year.length > 0) {
+                                                    // Mientras escribe, mantenemos el valor temporal
+                                                    handleFieldChange(
+                                                        'birth_date',
+                                                        year,
                                                     );
                                                 } else {
+                                                    // Si borra el campo, limpiamos la fecha
                                                     handleFieldChange(
                                                         'birth_date',
                                                         '',
@@ -1573,16 +1581,16 @@ export default function CheckinModal({
                                                     e.preventDefault();
                                                     professionRef.current?.focus();
                                                 }
-                                                // SHIFT + TAB hacia atrás fluye con normalidad
                                             }}
                                             maxLength={4}
                                         />
                                         <span className="pl-1 text-xs font-bold text-gray-700">
+                                            {/* Mostrar edad calculada o estática */}
                                             {displayAge
                                                 ? `Edad: ${displayAge}`
                                                 : ''}
                                         </span>
-                                    </div>*/}
+                                    </div>
 
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
