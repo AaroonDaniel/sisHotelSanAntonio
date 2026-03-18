@@ -1260,8 +1260,19 @@ function CheckoutConfirmationModal({
         setRebajaConfirmada(val);
     };
 
-    const handleMontoEfectivoChange = (val: string) => setMontoEfectivo(val);
-    const handleMontoQRChange = (val: string) => setMontoQR(val);
+    const handleMontoEfectivoChange = (val: string) => {
+        setMontoEfectivo(val); // Guardamos lo que el usuario teclea
+        const efe = parseFloat(val) || 0; // Convertimos a número
+        const qrCalculado = Math.max(0, saldoPagar - efe); // Calculamos el resto
+        setMontoQR(qrCalculado.toFixed(2)); // Llenamos el QR automáticamente
+    };
+
+    const handleMontoQRChange = (val: string) => {
+        setMontoQR(val); // Guardamos lo que el usuario teclea
+        const qrVal = parseFloat(val) || 0; // Convertimos a número
+        const efeCalculado = Math.max(0, saldoPagar - qrVal); // Calculamos el resto
+        setMontoEfectivo(efeCalculado.toFixed(2)); // Llenamos el Efectivo automáticamente
+    };
     // =========================================================================
 
     const [nombreFactura, setNombreFactura] = useState(
@@ -2009,14 +2020,14 @@ function CheckoutConfirmationModal({
                                                             'recibo',
                                                         )
                                                     }
-                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-green-600 bg-emerald-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-green-500 bg-emerald-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                 >
                                                     <div
-                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-600' : 'border-gray-300'}`}
+                                                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-500' : 'border-gray-300'}`}
                                                     >
                                                         {tipoDocumento ===
                                                             'recibo' && (
-                                                            <div className="h-1.5 w-1.5 rounded-full bg-green-600" />
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
                                                         )}
                                                     </div>
                                                     <span className="text-xs font-bold uppercase">
@@ -2073,10 +2084,10 @@ function CheckoutConfirmationModal({
                                                             }`}
                                                         >
                                                             <Banknote
-                                                                className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-600' : 'text-gray-500'}`}
+                                                                className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-500'}`}
                                                             />
                                                             <span
-                                                                className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-800' : 'text-gray-600'}`}
+                                                                className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-600'}`}
                                                             >
                                                                 Efectivo
                                                             </span>
@@ -2103,7 +2114,7 @@ function CheckoutConfirmationModal({
                                                                     }
                                                                     className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
                                                                         isSelected
-                                                                            ? 'border-purple-500 bg-purple-50 shadow-md ring-2 ring-purple-500'
+                                                                            ? 'border-green-500 bg-purple-50 shadow-md ring-2 ring-green-500'
                                                                             : 'border-gray-300 bg-white hover:bg-gray-50'
                                                                     }`}
                                                                 >
@@ -2115,7 +2126,7 @@ function CheckoutConfirmationModal({
                                                                         className={`mb-1 h-6 object-contain transition-all ${!isSelected && 'opacity-70 grayscale'}`}
                                                                     />
                                                                     <span
-                                                                        className={`text-[10px] font-black uppercase ${isSelected ? 'text-purple-800' : 'text-gray-600'}`}
+                                                                        className={`text-[11px] font-black uppercase ${isSelected ? 'text-green-800' : 'text-gray-600'}`}
                                                                     >
                                                                         {banco}
                                                                     </span>

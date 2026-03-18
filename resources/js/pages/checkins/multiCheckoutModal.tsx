@@ -593,13 +593,13 @@ export default function MultiCheckoutModal({
                                             onClick={() =>
                                                 setTipoDocumento('recibo')
                                             }
-                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 transition-all ${tipoDocumento === 'recibo' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 transition-all ${tipoDocumento === 'recibo' ? 'border-green-500 bg-emerald-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             <div
-                                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-emerald-600' : 'border-gray-300'}`}
+                                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-500' : 'border-gray-300'}`}
                                             >
                                                 {tipoDocumento === 'recibo' && (
-                                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
                                                 )}
                                             </div>
                                             <span className="text-xs font-bold uppercase">
@@ -610,14 +610,14 @@ export default function MultiCheckoutModal({
                                             onClick={() =>
                                                 setTipoDocumento('factura')
                                             }
-                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             <div
-                                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-blue-600' : 'border-gray-300'}`}
+                                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-500' : 'border-gray-300'}`}
                                             >
                                                 {tipoDocumento ===
                                                     'factura' && (
-                                                    <div className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
                                                 )}
                                             </div>
                                             <span className="text-xs font-bold uppercase">
@@ -646,10 +646,10 @@ export default function MultiCheckoutModal({
                                                     className={`flex flex-col items-center justify-center rounded-xl border py-2 transition-all ${metodoPago === 'efectivo' ? 'border-green-500 bg-green-50 ring-2 ring-green-500' : 'border-gray-300 bg-white hover:bg-gray-50'}`}
                                                 >
                                                     <Banknote
-                                                        className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-600' : 'text-gray-500'}`}
+                                                        className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-500'}`}
                                                     />
                                                     <span
-                                                        className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-800' : 'text-gray-600'}`}
+                                                        className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-600'}`}
                                                     >
                                                         Efectivo
                                                     </span>
@@ -668,7 +668,7 @@ export default function MultiCheckoutModal({
                                                                 banco.toLowerCase() as any,
                                                             )
                                                         }
-                                                        className={`flex flex-col items-center justify-center rounded-xl border py-2 transition-all ${metodoPago === banco.toLowerCase() ? 'border-red-500 bg-red-50 ring-2 ring-red-500' : 'border-gray-300 bg-white hover:bg-gray-50'}`}
+                                                        className={`flex flex-col items-center justify-center rounded-xl border py-2 transition-all ${metodoPago === banco.toLowerCase() ? 'border-green-500 bg-green-50 ring-2 ring-green-500' : 'border-gray-300 bg-white hover:bg-gray-50'}`}
                                                     >
                                                         <img
                                                             src={`/images/bancos/${banco.toLowerCase()}.png`}
@@ -676,7 +676,7 @@ export default function MultiCheckoutModal({
                                                             className={`mb-1 h-6 object-contain ${metodoPago !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
                                                         />
                                                         <span
-                                                            className={`text-[10px] font-black uppercase ${metodoPago === banco.toLowerCase() ? 'text-red-800' : 'text-gray-600'}`}
+                                                            className={`text-[11px] font-black uppercase ${metodoPago === banco.toLowerCase() ? 'text-green-500' : 'text-gray-600'}`}
                                                         >
                                                             {banco}
                                                         </span>

@@ -2366,14 +2366,14 @@ export default function CheckinModal({
                                                             }
                                                             className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 transition-all ${
                                                                 isSelected
-                                                                    ? 'border-blue-500 bg-blue-50 shadow-sm ring-1 ring-blue-500'
+                                                                    ? 'border-green-500 bg-blue-50 shadow-sm ring-1 ring-green-500'
                                                                     : 'border-gray-400 bg-white hover:bg-gray-50'
                                                             } disabled:opacity-50`}
                                                         >
                                                             <img
                                                                 src={`/images/bancos/${banco.toLowerCase()}.png`}
                                                                 alt={banco}
-                                                                className={`h-4 object-contain ${
+                                                                className={`h-5 object-contain ${
                                                                     !isSelected &&
                                                                     'opacity-60 grayscale'
                                                                 }`}
@@ -2381,7 +2381,7 @@ export default function CheckinModal({
                                                             <span
                                                                 className={`text-[11px] font-bold uppercase ${
                                                                     isSelected
-                                                                        ? 'text-blue-800'
+                                                                        ? 'text-green-500'
                                                                         : 'text-gray-700'
                                                                 }`}
                                                             >

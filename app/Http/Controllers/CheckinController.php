@@ -352,6 +352,7 @@ class CheckinController extends Controller
                         $companion->update([
                             'identification_number' => $compIdNumber ?? $companion->identification_number,
                             'birth_date' => $compBirthDate ?? $companion->birth_date,
+                            'phone' => $compData['phone'] ?? $companion->phone,
                         ]);
                     }
 
