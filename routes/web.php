@@ -12,6 +12,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\CheckinDetailController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
@@ -35,6 +36,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     //Usuarios
     Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    //Perfil de Usuario
+    Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('profile.password');
 
     //Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');

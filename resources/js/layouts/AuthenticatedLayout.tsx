@@ -131,7 +131,7 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                                         {/* Cabecera del Menú */}
                                         <div className="border-b border-gray-700 px-4 py-3 mb-1">
                                             <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Conectado como</p>
-                                            <p className="mt-1 truncate text-sm font-bold text-white">
+                                            <p className="mt-1 truncate text-base font-bold text-white">
                                                 {user.full_name}
                                             </p>
                                         </div>
@@ -143,15 +143,6 @@ export default function AuthenticatedLayout({ user, children }: PropsWithChildre
                                         >
                                             <UserIcon className="h-4 w-4 text-blue-500 group-hover:text-blue-400" />
                                             Perfil
-                                        </Link>
-
-                                        {/* Opción: Configuración */}
-                                        <Link
-                                            href="/settings"
-                                            className="group flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                                        >
-                                            <Settings className="h-4 w-4 text-amber-500 group-hover:text-amber-400" />
-                                            Configuración
                                         </Link>
 
                                         <div className="my-1 border-t border-gray-700" />
