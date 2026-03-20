@@ -3,6 +3,7 @@ import { Head, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
     CheckCircle2,
+    Clock, // <-- Importado el icono del reloj
     KeyRound,
     MapPin,
     Phone,
@@ -19,6 +20,7 @@ export interface User {
     full_name: string;
     phone: string;
     address: string;
+    shift?: string; // <-- Agregado a la interfaz
     is_active: boolean;
 }
 
@@ -29,7 +31,6 @@ interface Props {
 export default function ProfileIndex({ auth }: Props) {
     const user = auth.user;
 
-    // Formulario 1: Datos Personales
     const {
         data: infoData,
         setData: setInfoData,
@@ -42,9 +43,9 @@ export default function ProfileIndex({ auth }: Props) {
         nickname: user.nickname || '',
         phone: user.phone || '',
         address: user.address || '',
+        shift: user.shift || '', // <-- Agregado al estado del formulario
     });
 
-    // Formulario 2: Contraseña
     const {
         data: pwdData,
         setData: setPwdData,
@@ -76,7 +77,7 @@ export default function ProfileIndex({ auth }: Props) {
         <AuthenticatedLayout user={user}>
             <Head title="Mi Perfil" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Botón Volver - Exactamente igual a PricesIndex */}
+                {/* Botón Volver */}
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
@@ -89,12 +90,11 @@ export default function ProfileIndex({ auth }: Props) {
 
                 <div className="py-12">
                     <div className="mx-auto w-full max-w-4xl space-y-8">
-                        {/* --- TARJETA 1: DATOS PERSONALES (Estilo Modal Incrustado) --- */}
+                        {/* --- TARJETA 1: DATOS PERSONALES --- */}
                         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                            {/* Cabecera estilo Modal */}
                             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                                    <div className="rounded-lg bg-blue-100 p-1.5 text-blue-600">
+                                    <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                                         <UserCircle className="h-5 w-5" />
                                     </div>
                                     Información Personal
@@ -102,9 +102,9 @@ export default function ProfileIndex({ auth }: Props) {
                             </div>
 
                             <form onSubmit={submitInfo} className="p-6">
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div className="space-y-4">
                                     {/* Nombre Completo */}
-                                    <div className="md:col-span-2">
+                                    <div>
                                         <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                             Nombre Completo
                                         </label>
@@ -115,13 +115,8 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="text"
                                                 value={infoData.full_name}
-                                                onChange={(e) =>
-                                                    setInfoData(
-                                                        'full_name',
-                                                        e.target.value.toUpperCase(),
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                onChange={(e) => setInfoData('full_name', e.target.value.toUpperCase())}
+                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-green-500 focus:ring-green-500"
                                             />
                                         </div>
                                         {infoErrors.full_name && (
@@ -131,66 +126,55 @@ export default function ProfileIndex({ auth }: Props) {
                                         )}
                                     </div>
 
-                                    {/* Nickname */}
-                                    <div>
-                                        <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                            Nickname (Usuario de Acceso)
-                                        </label>
-                                        <div className="relative">
-                                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-400">
-                                                @
+                                    {/* Fila: Nickname y Teléfono */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                                Nickname (Usuario de Acceso)
+                                            </label>
+                                            <div className="relative">
+                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-400">
+                                                    @
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={infoData.nickname}
+                                                    onChange={(e) => setInfoData('nickname', e.target.value.toLowerCase().replace(/\s/g, ''))}
+                                                    className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base font-semibold text-green-600 focus:border-green-500 focus:ring-green-500"
+                                                />
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={infoData.nickname}
-                                                onChange={(e) =>
-                                                    setInfoData(
-                                                        'nickname',
-                                                        e.target.value
-                                                            .toLowerCase()
-                                                            .replace(/\s/g, ''),
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base font-semibold text-blue-600 focus:border-blue-500 focus:ring-blue-500"
-                                            />
+                                            {infoErrors.nickname && (
+                                                <p className="mt-1 text-xs font-bold text-red-500">
+                                                    {infoErrors.nickname}
+                                                </p>
+                                            )}
                                         </div>
-                                        {infoErrors.nickname && (
-                                            <p className="mt-1 text-xs font-bold text-red-500">
-                                                {infoErrors.nickname}
-                                            </p>
-                                        )}
-                                    </div>
 
-                                    {/* Teléfono */}
-                                    <div>
-                                        <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                            Teléfono / Celular
-                                        </label>
-                                        <div className="relative">
-                                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                                <Phone className="h-4 w-4 text-gray-400" />
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                                Teléfono / Celular
+                                            </label>
+                                            <div className="relative">
+                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                    <Phone className="h-4 w-4 text-gray-400" />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={infoData.phone}
+                                                    onChange={(e) => setInfoData('phone', e.target.value)}
+                                                    className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                                />
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={infoData.phone}
-                                                onChange={(e) =>
-                                                    setInfoData(
-                                                        'phone',
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-blue-500 focus:ring-blue-500"
-                                            />
+                                            {infoErrors.phone && (
+                                                <p className="mt-1 text-xs font-bold text-red-500">
+                                                    {infoErrors.phone}
+                                                </p>
+                                            )}
                                         </div>
-                                        {infoErrors.phone && (
-                                            <p className="mt-1 text-xs font-bold text-red-500">
-                                                {infoErrors.phone}
-                                            </p>
-                                        )}
                                     </div>
 
                                     {/* Dirección */}
-                                    <div className="md:col-span-2">
+                                    <div>
                                         <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                             Dirección
                                         </label>
@@ -201,13 +185,8 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="text"
                                                 value={infoData.address}
-                                                onChange={(e) =>
-                                                    setInfoData(
-                                                        'address',
-                                                        e.target.value.toUpperCase(),
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                onChange={(e) => setInfoData('address', e.target.value.toUpperCase())}
+                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-green-500 focus:ring-green-500"
                                             />
                                         </div>
                                         {infoErrors.address && (
@@ -215,6 +194,31 @@ export default function ProfileIndex({ auth }: Props) {
                                                 {infoErrors.address}
                                             </p>
                                         )}
+                                    </div>
+
+                                    {/* Campo Turno Asignado */}
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                            Turno Asignado
+                                        </label>
+                                        <div className="relative">
+                                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                <Clock className="h-4 w-4 text-gray-400" />
+                                            </div>
+                                            <select
+                                                value={infoData.shift}
+                                                onChange={(e) => setInfoData('shift', e.target.value)}
+                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
+                                            >
+                                                <option value="" disabled>SELECCIONAR TURNO...</option>
+                                                <option value="DÍA">DÍA (08:00 a 20:00)</option>
+                                                <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
+                                            </select>
+                                        </div>
+                                        <p className="mt-1 text-[10px] text-gray-500">
+                                            * Ambos turnos incluyen su respectiva hora de descanso.
+                                        </p>
+                                        {infoErrors.shift && <p className="mt-1 text-xs font-bold text-red-500">{infoErrors.shift}</p>}
                                     </div>
                                 </div>
 
@@ -228,18 +232,16 @@ export default function ProfileIndex({ auth }: Props) {
                                     <button
                                         type="submit"
                                         disabled={infoProcessing}
-                                        className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-blue-500 active:scale-95 disabled:opacity-50"
+                                        className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
                                     >
-                                        <Save className="h-4 w-4" /> Guardar
-                                        Cambios
+                                        <Save className="h-4 w-4" /> Guardar Cambios
                                     </button>
                                 </div>
                             </form>
                         </div>
 
-                        {/* --- TARJETA 2: CAMBIAR CONTRASEÑA (Estilo Modal Incrustado) --- */}
+                        {/* --- TARJETA 2: CAMBIAR CONTRASEÑA --- */}
                         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                            {/* Cabecera estilo Modal */}
                             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                     <div className="rounded-lg bg-red-100 p-1.5 text-red-600">
@@ -263,12 +265,7 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="password"
                                                 value={pwdData.current_password}
-                                                onChange={(e) =>
-                                                    setPwdData(
-                                                        'current_password',
-                                                        e.target.value,
-                                                    )
-                                                }
+                                                onChange={(e) => setPwdData('current_password', e.target.value)}
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
                                         </div>
@@ -291,12 +288,7 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="password"
                                                 value={pwdData.password}
-                                                onChange={(e) =>
-                                                    setPwdData(
-                                                        'password',
-                                                        e.target.value,
-                                                    )
-                                                }
+                                                onChange={(e) => setPwdData('password', e.target.value)}
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
                                         </div>
@@ -318,23 +310,14 @@ export default function ProfileIndex({ auth }: Props) {
                                             </div>
                                             <input
                                                 type="password"
-                                                value={
-                                                    pwdData.password_confirmation
-                                                }
-                                                onChange={(e) =>
-                                                    setPwdData(
-                                                        'password_confirmation',
-                                                        e.target.value,
-                                                    )
-                                                }
+                                                value={pwdData.password_confirmation}
+                                                onChange={(e) => setPwdData('password_confirmation', e.target.value)}
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
                                         </div>
                                         {pwdErrors.password_confirmation && (
                                             <p className="mt-1 text-xs font-bold text-red-500">
-                                                {
-                                                    pwdErrors.password_confirmation
-                                                }
+                                                {pwdErrors.password_confirmation}
                                             </p>
                                         )}
                                     </div>
@@ -352,8 +335,7 @@ export default function ProfileIndex({ auth }: Props) {
                                         disabled={pwdProcessing}
                                         className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95 disabled:opacity-50"
                                     >
-                                        <Save className="h-4 w-4" /> Actualizar
-                                        Contraseña
+                                        <Save className="h-4 w-4" /> Actualizar Contraseña
                                     </button>
                                 </div>
                             </form>

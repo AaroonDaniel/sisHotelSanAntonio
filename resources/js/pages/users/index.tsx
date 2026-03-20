@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import UserModal from './userModal';
-import DeleteModal from './deleteModal'; // <-- Importamos tu nuevo modal inteligente
+import DeleteModal from './deleteModal';
 
 // Interfaz del Usuario
 export interface User {
@@ -21,6 +21,7 @@ export interface User {
     full_name: string;
     phone: string;
     address: string;
+    shift?: string; // <-- Aseguramos que el turno esté aquí
     is_active: boolean;
 }
 
@@ -129,12 +130,20 @@ export default function UsersIndex({ auth, users }: Props) {
                                                 key={user.id}
                                                 className={`transition-colors hover:bg-gray-50 ${!user.is_active ? 'bg-gray-50' : ''}`}
                                             >
-                                                {/* Columna: Nombre y Nickname */}
+                                                {/* Columna: Nombre, Nickname y Turno */}
                                                 <td className="px-6 py-4">
-                                                    <div className="font-bold text-gray-900 uppercase">
-                                                        {user.full_name}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-bold text-gray-900 uppercase">
+                                                            {user.full_name}
+                                                        </div>
+                                                        {/* AQUÍ SE MUESTRA EL TURNO */}
+                                                        {user.shift && (
+                                                            <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-blue-700">
+                                                                {user.shift}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <div className="text-xs text-blue-600 font-semibold">
+                                                    <div className="text-xs text-blue-600 font-semibold mt-0.5">
                                                         @{user.nickname}
                                                     </div>
                                                 </td>

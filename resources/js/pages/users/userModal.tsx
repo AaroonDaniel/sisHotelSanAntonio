@@ -1,14 +1,29 @@
 import { useForm } from '@inertiajs/react';
-import { KeyRound, MapPin, Phone, Save, UserCircle, X } from 'lucide-react';
+import {
+    Clock,
+    KeyRound,
+    MapPin,
+    Phone,
+    Save,
+    UserCircle,
+    X,
+} from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
-import { User } from './index';
 
 interface UserModalProps {
     show: boolean;
     onClose: () => void;
     userToEdit?: User | null;
 }
-
+export interface User {
+    id: number;
+    nickname: string;
+    full_name: string;
+    phone: string;
+    address: string;
+    shift?: string;
+    is_active: boolean;
+}
 export default function UserModal({
     show,
     onClose,
@@ -22,6 +37,7 @@ export default function UserModal({
             full_name: '',
             phone: '',
             address: '',
+            shift: '',
             password: '',
         });
 
@@ -33,7 +49,8 @@ export default function UserModal({
                     full_name: userToEdit.full_name || '',
                     phone: userToEdit.phone || '',
                     address: userToEdit.address || '',
-                    password: '', // En blanco por seguridad al editar
+                    shift: userToEdit.shift || '',
+                    password: '',
                 });
             } else {
                 reset();
@@ -102,7 +119,7 @@ export default function UserModal({
                             {errors.full_name && <p className="mt-1 text-xs font-bold text-red-500">{errors.full_name}</p>}
                         </div>
 
-                        {/* Fila: Nickname y Teléfono */}
+                        {/* Fila Dividida: Nickname y Teléfono (1 columna cada uno) */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="mb-1.5 block text-sm font-semibold text-gray-700">
@@ -143,7 +160,7 @@ export default function UserModal({
                             </div>
                         </div>
 
-                        {/* Campo Dirección */}
+                        {/* Campo Dirección (Ahora ocupa todo el ancho) */}
                         <div>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                 Dirección / Zona
@@ -157,10 +174,33 @@ export default function UserModal({
                                     value={data.address}
                                     onChange={(e) => setData('address', e.target.value.toUpperCase())}
                                     className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
-                                    placeholder="EJ: ZONA CENTRAL CALLE 1"
+                                    placeholder="EJ: ZONA CENTRAL"
                                 />
                             </div>
                             {errors.address && <p className="mt-1 text-xs font-bold text-red-500">{errors.address}</p>}
+                        </div>
+
+                        {/* Campo Turno Asignado (Debajo de dirección, ocupando todo el ancho) */}
+                        <div>
+                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                Turno Asignado
+                            </label>
+                            <div className="relative">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Clock className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <select
+                                    value={data.shift}
+                                    onChange={(e) => setData('shift', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
+                                >
+                                    <option value="" disabled>SELECCIONAR TURNO...</option>
+                                    <option value="DÍA">DÍA (08:00 a 20:00)</option>
+                                    <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
+                                </select>
+                            </div>
+                           
+                            {errors.shift && <p className="mt-1 text-xs font-bold text-red-500">{errors.shift}</p>}
                         </div>
 
                         {/* Campo Contraseña */}

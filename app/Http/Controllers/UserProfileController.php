@@ -26,15 +26,26 @@ class UserProfileController extends Controller
     {
         $user = $request->user();
 
+        // 1. Validamos los datos (Incluyendo el nuevo campo 'shift')
         $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
-            // Validamos que el nickname sea único, ignorando el del usuario actual
-            'nickname' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'address' => ['nullable', 'string', 'max:255'],
+            
+            // Le decimos a Laravel que el nickname debe ser único, EXCEPTO para el ID de este usuario
+            'nickname'  => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
+            
+            'phone'     => ['required', 'string', 'max:50'],
+            'address'   => ['required', 'string', 'max:255'],
+            'shift'     => ['required', 'string', 'max:50'], // Validamos el turno
         ]);
 
-        $user->update($request->only('full_name', 'nickname', 'phone', 'address'));
+        // 2. Guardamos los cambios en la base de datos
+        $user->update([
+            'full_name' => $request->full_name,
+            'nickname'  => $request->nickname,
+            'phone'     => $request->phone,
+            'address'   => $request->address,
+            'shift'     => $request->shift,
+        ]);
 
         return back()->with('success', 'Perfil actualizado correctamente.');
     }

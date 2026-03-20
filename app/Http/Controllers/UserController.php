@@ -34,6 +34,7 @@ class UserController extends Controller
             'full_name' => 'required|string|max:255',
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
+            'shift' => 'required|string|max:50',
             'password' => 'required|string|min:8',
         ]);
 
@@ -42,6 +43,7 @@ class UserController extends Controller
             'full_name' => $request->full_name,
             'phone' => $request->phone,
             'address' => $request->address,
+            'shift' => $request->shift,
             'password' => Hash::make($request->password), // Encriptamos la contraseña
             'is_active' => true,
         ]);
@@ -52,25 +54,31 @@ class UserController extends Controller
     /**
      * Actualiza un usuario existente.
      */
-    public function update(Request $request, User $user)
+    public function update(Request $request, $id)
     {
         $request->validate([
-            'nickname' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
+            // EL CAMBIO ESTÁ EN ESTA LÍNEA 👇 (Le decimos que ignore el $id actual)
+            'nickname' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($id)],
+            
             'full_name' => 'required|string|max:255',
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
-            'password' => 'nullable|string|min:8', // Opcional al editar
+            'shift' => 'required|string|max:50', // Tu nuevo campo
+            'password' => 'nullable|string|min:8', // Nullable porque si está vacío, no se cambia
         ]);
 
-        // Datos básicos a actualizar
+        $user = User::findOrFail($id);
+
+        // Preparamos los datos a actualizar
         $data = [
             'nickname' => $request->nickname,
             'full_name' => $request->full_name,
             'phone' => $request->phone,
             'address' => $request->address,
+            'shift' => $request->shift,
         ];
 
-        // Si escribió una nueva contraseña, la encriptamos y la agregamos
+        // Solo actualizamos la contraseña si el usuario escribió una nueva
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
