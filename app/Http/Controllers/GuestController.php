@@ -196,4 +196,15 @@ class GuestController extends Controller
         }
     }
 
+    public function searchProfessions(Request $request)
+    {
+        $query = strtoupper($request->input('query'));
+        $professions = \App\Models\Guest::whereNotNull('profession')
+            ->where('profession', 'ILIKE', '%' . $query . '%') // Usa LIKE en vez de ILIKE si estás en MySQL
+            ->distinct()
+            ->pluck('profession')
+            ->take(10);
+        return response()->json($professions);
+    }
+
 }

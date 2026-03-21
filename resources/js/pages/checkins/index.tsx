@@ -50,13 +50,19 @@ interface Checkin {
     check_out_date?: string | null;
     duration_days: number;
     advance_payment: number;
+    
+    // 👇 AÑADIDOS PARA QUE COINCIDA CON EL MODAL
+    agreed_price: number;
+    discount?: number;
+    payment_method?: string | null;
+    qr_bank?: string | null;
+
     notes?: string;
     guest?: Guest;
     room?: Room;
-    companions?: Guest[]; // Aseguramos que use la interfaz Guest
+    companions?: Guest[];
     created_at: string;
     origin?: string;
-    
 }
 
 interface Props {

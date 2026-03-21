@@ -260,9 +260,11 @@ export default function CheckinModal({
     schedules = [],
     initialRoomId,
     availableServices = [],
-    isReadOnly = false,
+    //isReadOnly = false,
+    isReadOnly: propIsReadOnly = false,
     isReceptionView = false,
 }: CheckinModalProps) {
+    const isReadOnly = false;
     // Estado para manejar la alerta de huesped ocupado
     const [guestConflictError, setGuestConflictError] = useState<string | null>(
         null,
@@ -336,9 +338,16 @@ export default function CheckinModal({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const nationalityRef = useRef<HTMLDivElement>(null);
 
-    const originDropdownRef = useRef<HTMLDivElement>(null); // <--- AGREGAR ESTA LÍNEA
+    const originDropdownRef = useRef<HTMLDivElement>(null);
 
     const [isOriginOpen, setIsOriginOpen] = useState(false);
+
+    const professionDropdownRef = useRef<HTMLDivElement>(null);
+    const [professionSuggestions, setProfessionSuggestions] = useState<
+        string[]
+    >([]);
+    const [isProfessionDropdownOpen, setIsProfessionDropdownOpen] =
+        useState(false);
 
     const [displayAge, setDisplayAge] = useState<number | string>('');
     const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
@@ -461,6 +470,13 @@ export default function CheckinModal({
                 !nationalityRef.current.contains(event.target as Node)
             ) {
                 setShowCountrySuggestions(false);
+            }
+
+            if (
+                professionDropdownRef.current &&
+                !professionDropdownRef.current.contains(event.target as Node)
+            ) {
+                setIsProfessionDropdownOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -971,6 +987,31 @@ export default function CheckinModal({
         handleFieldChange('origin', upperVal);
         setIsOriginDropdownOpen(true);
         searchOrigins(upperVal);
+    };
+
+    // ===============================
+    // AUTOCOMPLETE PROFESIÓN
+    // ===============================
+    const searchProfessions = async (query: string) => {
+        if (!query || query.length < 2) {
+            setProfessionSuggestions([]);
+            return;
+        }
+        try {
+            const response = await axios.get('/search/professions', {
+                params: { query: query },
+            });
+            setProfessionSuggestions(response.data);
+        } catch (error) {
+            console.error('Error buscando profesiones:', error);
+        }
+    };
+
+    const handleProfessionInput = (val: string) => {
+        const upperVal = val.toUpperCase();
+        handleFieldChange('profession', upperVal);
+        setIsProfessionDropdownOpen(true);
+        searchProfessions(upperVal);
     };
 
     // La variable que usarás para el .map en el dropdown ahora es originSuggestions
@@ -1592,22 +1633,86 @@ export default function CheckinModal({
                                         </span>
                                     </div>
 
-                                    <div className="flex-1">
+                                    {/* INPUT DE PROFESIÓN ACTUALIZADO */}
+                                    {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
+                                    <div
+                                        className="relative flex-1"
+                                        ref={professionDropdownRef}
+                                    >
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Profesión
                                         </label>
-                                        <input
-                                            ref={professionRef}
-                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
-                                            value={currentPerson.profession}
-                                            disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'profession',
-                                                    e.target.value.toUpperCase(),
-                                                )
-                                            }
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                ref={professionRef}
+                                                type="text"
+                                                className="block w-full rounded-xl border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                value={
+                                                    currentPerson.profession ||
+                                                    ''
+                                                }
+                                                disabled={isReadOnly}
+                                                placeholder="EJ: INGENIERO"
+                                                autoComplete="off"
+                                                onChange={(e) =>
+                                                    handleProfessionInput(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                onFocus={() => {
+                                                    if (
+                                                        (
+                                                            currentPerson.profession ||
+                                                            ''
+                                                        ).length > 1
+                                                    ) {
+                                                        setIsProfessionDropdownOpen(
+                                                            true,
+                                                        );
+                                                        searchProfessions(
+                                                            currentPerson.profession as string,
+                                                        );
+                                                    }
+                                                }}
+                                                onBlur={() => {
+                                                    setTimeout(() => {
+                                                        setIsProfessionDropdownOpen(
+                                                            false,
+                                                        );
+                                                    }, 200);
+                                                }}
+                                            />
+
+                                            {/* Dropdown conectado a la Base de Datos (professionSuggestions) */}
+                                            {isProfessionDropdownOpen &&
+                                                professionSuggestions.length >
+                                                    0 && (
+                                                    <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                        {professionSuggestions.map(
+                                                            (
+                                                                profItem,
+                                                                index,
+                                                            ) => (
+                                                                <div
+                                                                    key={index}
+                                                                    onClick={() => {
+                                                                        handleFieldChange(
+                                                                            'profession',
+                                                                            profItem,
+                                                                        );
+                                                                        setIsProfessionDropdownOpen(
+                                                                            false,
+                                                                        );
+                                                                    }}
+                                                                    className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
+                                                                >
+                                                                    {profItem}
+                                                                </div>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2546,7 +2651,7 @@ export default function CheckinModal({
                                     <button
                                         type="button"
                                         onClick={() => onClose(false)}
-                                        className="rounded-xl px-5 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                                        className="rounded-xl border border-gray-300 bg-white px-5 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95"
                                     >
                                         {isReadOnly ? 'Cerrar' : 'Cancelar'}
                                     </button>

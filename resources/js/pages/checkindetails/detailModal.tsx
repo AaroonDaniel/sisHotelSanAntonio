@@ -441,7 +441,7 @@ export default function DetailModal({
                                 onClick={onClose}
                                 className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-100"
                             >
-                                CANCELAR
+                                Cancelar
                             </button>
                             <button
                                 type="submit"
@@ -453,7 +453,7 @@ export default function DetailModal({
                                 ) : (
                                     <>
                                         <Plus className="h-5 w-5" />
-                                        {detailToEdit ? 'ACTUALIZAR' : 'AGREGAR A LA CUENTA'}
+                                        {detailToEdit ? 'Actualizar' : 'Agregar a la cuenta'}
                                     </>
                                 )}
                             </button>
