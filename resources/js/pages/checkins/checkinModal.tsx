@@ -248,6 +248,8 @@ interface CheckinFormData {
     payment_method: string; // 'EFECTIVO' o 'QR'
     qr_bank: string; // 'BNB', 'BCP', etc.
     is_temporary: boolean;
+    monto_efectivo?: number | string;
+    monto_qr?: number | string;
 }
 
 export default function CheckinModal({
@@ -385,6 +387,8 @@ export default function CheckinModal({
             payment_method: 'EFECTIVO', // Por defecto efectivo
             qr_bank: '', // Vacío al inicio
             is_temporary: false,
+            monto_efectivo: '',
+            monto_qr: '',
         });
 
     // =========================================================================
@@ -1019,14 +1023,35 @@ export default function CheckinModal({
 
     const handleCheckout = () => {
         if (!checkinToEdit) return;
+        
         if (
             confirm(
                 '¿Confirmar salida? Se generará el recibo final y pasará a limpieza.',
             )
         ) {
+            // 1. Preparamos el dinero y el método de pago que el recepcionista llenó
+            // (Asegúrate de que 'data' sea el nombre de tu variable del formulario useForm)
+            const metodo = data.payment_method || 'EFECTIVO';
+            let payload: any = {
+                check_out_date: new Date().toISOString(),
+                payment_method: metodo,
+                qr_bank: data.qr_bank,
+            };
+
+            // 2. Lógica para dividir el pago si selecciona "AMBOS"
+            if (metodo === 'AMBOS') {
+                payload.amount = 0; 
+                payload.monto_efectivo = Number(data.monto_efectivo) || 0;
+                payload.monto_qr = Number(data.monto_qr) || 0;
+            } else {
+                // Si pagó todo en Efectivo o todo en QR (Usa el input donde escribes el monto final)
+                payload.amount = Number(data.advance_payment) || 0; 
+            }
+
+            // 3. Enviamos la petición con el payload lleno (ya no las {})
             router.put(
                 `/checks/${checkinToEdit.id}/checkout`,
-                {},
+                payload, // <--- AQUÍ ENVIAMOS EL DINERO
                 {
                     onSuccess: () => {
                         onClose();
@@ -2172,10 +2197,16 @@ export default function CheckinModal({
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
                                 <div className="relative flex flex-col">
                                     {/* 1. Header con etiqueta */}
-                                    <div className="mb-0.5 flex min-h-[20px] items-center gap-2">
+                                    <div className="mb-0.5 flex flex-col justify-center min-h-[20px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Fecha Ingreso (Check-In)
+                                            Inicio de Cobro (Hab. Actual)
                                         </label>
+                                        {/* NUEVO: Muestra la hora real de llegada si fue transferido */}
+                                        {data.actual_arrival_date && data.actual_arrival_date !== data.check_in_date && (
+                                            <span className="text-[10px] font-black tracking-wide text-blue-500 uppercase">
+                                                Llegó al hotel: {new Date(data.actual_arrival_date).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}
+                                            </span>
+                                        )}
                                     </div>
 
                                     {/* 2. BOTÓN TOLERANCIA (FLOTANTE / ABSOLUTO) */}

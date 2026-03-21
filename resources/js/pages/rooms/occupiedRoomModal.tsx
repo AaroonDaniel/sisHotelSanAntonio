@@ -137,20 +137,35 @@ export default function OccupiedRoomModal({
 
     const calculateRealNights = () => {
         if (!liveCheckin.check_in_date) return 1;
+
+        // 1. Tomamos la fecha en la que realmente llegó el huésped (o su check-in normal)
+        const checkInDate = new Date(liveCheckin.actual_arrival_date || liveCheckin.check_in_date);
+        const now = new Date();
+
+        // 2. Extraemos la hora límite oficial del hotel (por defecto 13:00)
+        const checkoutTimeStr = liveCheckin.schedule?.check_out_time || '13:00:00';
+        const [checkoutHour, checkoutMinute] = checkoutTimeStr.split(':').map(Number);
+
+        // 3. Calculamos la diferencia en DÍAS CALENDARIO (ignorando la hora exacta)
+        const startDay = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
+        const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         
-        // Tomamos el tiempo EXACTO de entrada y el de ahora (sin borrar las horas)
-        const start = new Date(liveCheckin.check_in_date).getTime();
-        const end = new Date().getTime(); 
-        
-        // Diferencia de tiempo exacta en milisegundos
-        const diffTime = end - start;
-        
-        // Convertimos a días y redondeamos HACIA ARRIBA con Math.ceil
-        // Así, 2 días y 13 horas (2.54) sube automáticamente a 3 noches
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        // Mínimo 1 noche
-        return Math.max(1, diffDays);
+        let days = Math.floor((currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24));
+
+        // 4. Si el huésped entró hoy mismo, siempre se cobra 1 noche mínimo
+        if (days === 0) return 1;
+
+        // 5. Creamos una barrera temporal para HOY a la hora del checkout (ej. 13:00)
+        const limitToday = new Date();
+        limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
+
+        // 6. LÓGICA DE HOTEL: Si la hora actual ya superó la hora límite de checkout,
+        // significa que ya empezó la SIGUIENTE noche.
+        if (now.getTime() > limitToday.getTime()) {
+            days += 1;
+        }
+
+        return Math.max(1, days);
     };
 
     const days = calculateRealNights();
@@ -331,7 +346,7 @@ export default function OccupiedRoomModal({
                                             </span>
                                             <span className="font-bold text-gray-800 capitalize">
                                                 {formatDate(
-                                                    liveCheckin.check_in_date,
+                                                    liveCheckin.actual_arrival_date || liveCheckin.check_in_date,
                                                 )}
                                             </span>
                                         </div>

@@ -244,22 +244,22 @@ class ReportController extends Controller
     {
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate = $request->query('end_date', now()->toDateString());
-        // CAMBIO: Recibimos el parámetro del usuario (por defecto 'todos')
+        // Recibimos el parámetro del usuario (por defecto 'todos')
         $userId = $request->query('user_id', 'todos');
         
-        // AÑADIDO: Recibimos el tipo de registro (efectivo/bancos/ambos)
+        // Recibimos el tipo de registro (efectivo/bancos/ambos)
         $recordType = $request->query('record_type', 'ambos');
 
-        // CAMBIO: Construimos la consulta base
+        // Construimos la consulta base
         $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
 
-        // CAMBIO: Si el usuario no es 'todos', filtramos por ese usuario en específico
+        // Si el usuario no es 'todos', filtramos por ese usuario en específico
         if ($userId !== 'todos') {
             $query->where('user_id', $userId);
         }
 
-        // AÑADIDO: Aplicamos el filtro usando la variable en inglés
+        // Aplicamos el filtro usando la variable en inglés
         if ($recordType === 'efectivo') {
             $query->where('method', 'EFECTIVO');
         } elseif ($recordType === 'bancos') {
@@ -274,15 +274,25 @@ class ReportController extends Controller
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 15);
         $pdf->AddPage();
-
-        /* ... AQUI VA EL RESTO DEL CÓDIGO DE TU PDF EXACTAMENTE IGUAL COMO LO TIENES ... */
         
+        // ==========================================
         // CABECERA
+        // ==========================================
+        $logoPath = public_path('images/logo_camara.png');
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 15, 10, 20);
+        }
 
         $pdf->SetFont('Arial', 'B', 14);
         $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(0, 6, utf8_decode('REPORTE DE INGRESOS Y CIERRE DE CAJA'), 0, 1, 'C');
+        
+        // TÍTULO DINÁMICO: Indica qué botón presionó el usuario
+        $tipoTexto = 'AMBOS (EFECTIVO Y QR)';
+        if ($recordType === 'efectivo') $tipoTexto = 'SOLO EFECTIVO';
+        if ($recordType === 'bancos') $tipoTexto = 'SOLO QR / BANCOS';
+
+        $pdf->SetFont('Arial', 'B', 11);
+        $pdf->Cell(0, 6, utf8_decode('REPORTE DE CIERRE DE CAJA - ' . $tipoTexto), 0, 1, 'C');
 
         $pdf->SetFont('Arial', '', 9);
         $rangoTexto = "Desde: " . \Carbon\Carbon::parse($startDate)->format('d/m/Y') . "  Hasta: " . \Carbon\Carbon::parse($endDate)->format('d/m/Y');
@@ -291,7 +301,7 @@ class ReportController extends Controller
 
         if ($payments->isEmpty()) {
             $pdf->SetFont('Arial', 'I', 10);
-            $pdf->Cell(0, 10, 'No hay transacciones registradas en este rango de fechas.', 0, 1, 'C');
+            $pdf->Cell(0, 10, 'No hay transacciones registradas con estos filtros.', 0, 1, 'C');
             return response($pdf->Output('S'), 200)->header('Content-Type', 'application/pdf');
         }
 
@@ -355,17 +365,30 @@ class ReportController extends Controller
             $granTotalQR += $subQR;
 
             $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(137, 5, '', 0, 0);
-            $pdf->Cell(24, 5, 'Efectivo:', 1, 0, 'R');
-            $pdf->Cell(25, 5, number_format($subEfectivo, 2), 1, 1, 'R');
+            
+            // Imprimir línea de Efectivo (Si se solicitó o si hay monto)
+            if ($recordType === 'efectivo' || $recordType === 'ambos' || $subEfectivo > 0) {
+                $pdf->Cell(137, 5, '', 0, 0);
+                $pdf->Cell(24, 5, 'Efectivo:', 1, 0, 'R');
+                $pdf->Cell(25, 5, number_format($subEfectivo, 2), 1, 1, 'R');
+            }
 
-            if ($subQR > 0) {
-                foreach ($qrPorBanco as $bco => $mnt) {
+            // Imprimir líneas de QR
+            if ($recordType === 'bancos' || $recordType === 'ambos' || $subQR > 0) {
+                if ($subQR > 0) {
+                    foreach ($qrPorBanco as $bco => $mnt) {
+                        $pdf->Cell(137, 5, '', 0, 0);
+                        $pdf->Cell(24, 5, substr("QR $bco:", 0, 12), 1, 0, 'R');
+                        $pdf->Cell(25, 5, number_format($mnt, 2), 1, 1, 'R');
+                    }
+                } elseif ($recordType === 'bancos') {
+                    // Muestra 0.00 si filtró bancos y no hay nada (para que no quede vacío)
                     $pdf->Cell(137, 5, '', 0, 0);
-                    $pdf->Cell(24, 5, substr("QR $bco:", 0, 12), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($mnt, 2), 1, 1, 'R');
+                    $pdf->Cell(24, 5, 'QR/Bancos:', 1, 0, 'R');
+                    $pdf->Cell(25, 5, '0.00', 1, 1, 'R');
                 }
             }
+
             $pdf->Cell(137, 5, '', 0, 0);
             $pdf->SetFillColor(220, 255, 220);
             $pdf->Cell(24, 5, 'TOTAL:', 1, 0, 'R', true);
@@ -373,6 +396,9 @@ class ReportController extends Controller
             $pdf->Ln(4);
         }
 
+        // ==========================================
+        // GRAN TOTAL DE RECAUDACIÓN
+        // ==========================================
         $pdf->Ln(2);
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->SetFillColor(180, 255, 180);
@@ -381,12 +407,21 @@ class ReportController extends Controller
         $pdf->Ln();
 
         $pdf->SetFont('Arial', 'B', 9);
-        $pdf->Cell(137, 6, '', 0, 0);
-        $pdf->Cell(24, 6, 'Efectivo:', 1, 0, 'R');
-        $pdf->Cell(25, 6, number_format($granTotalEfectivo, 2) . ' Bs', 1, 1, 'R');
-        $pdf->Cell(137, 6, '', 0, 0);
-        $pdf->Cell(24, 6, 'QR/Bancos:', 1, 0, 'R');
-        $pdf->Cell(25, 6, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R');
+        
+        // Muestra el resumen de efectivo si el filtro lo permite
+        if ($recordType === 'efectivo' || $recordType === 'ambos') {
+            $pdf->Cell(137, 6, '', 0, 0);
+            $pdf->Cell(24, 6, 'Efectivo:', 1, 0, 'R');
+            $pdf->Cell(25, 6, number_format($granTotalEfectivo, 2) . ' Bs', 1, 1, 'R');
+        }
+        
+        // Muestra el resumen de QR si el filtro lo permite
+        if ($recordType === 'bancos' || $recordType === 'ambos') {
+            $pdf->Cell(137, 6, '', 0, 0);
+            $pdf->Cell(24, 6, 'QR/Bancos:', 1, 0, 'R');
+            $pdf->Cell(25, 6, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R');
+        }
+
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(137, 8, '', 0, 0);
         $pdf->Cell(24, 8, 'NETO:', 1, 0, 'R', true);

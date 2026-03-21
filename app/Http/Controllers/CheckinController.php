@@ -1035,22 +1035,60 @@ class CheckinController extends Controller
             $room->update(['status' => 'LIMPIEZA']);
         }
 
-        // Registro de monto 
-        $amount = $request->input('amount', 0);
-        
-        if ($amount > 0) {
-            $paymentMethod = $request->input('payment_method', 'EFECTIVO');
-            $qrBank = ($paymentMethod === 'EFECTIVO') ? null : $request->input('qr_bank');
-            
-            \App\Models\Payment::create([
-                'checkin_id'  => $checkin->id,
-                'user_id'     => \Illuminate\Support\Facades\Auth::id() ?? 1,
-                'amount'      => $amount,
-                'method'      => strtoupper($paymentMethod),
-                'bank_name'   => $qrBank ? strtoupper($qrBank) : null,
-                'type'        => 'PAGO'
-            ]);
+        // =========================================================
+        // 🚀 REGISTRO DE MONTO (CON SOPORTE PARA PAGO MIXTO "AMBOS")
+        // =========================================================
+        $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
+        $bancoRecibido = strtoupper($request->input('qr_bank', ''));
+
+        // Normalizamos si el método llega directamente como YAPE, BNB, etc.
+        $metodoUpper = strtoupper($metodoRecibido);
+        if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
+            $bancoRecibido = $metodoUpper;
+            $metodoRecibido = 'qr';
         }
+
+        $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
+
+        if ($metodoRecibido === 'ambos') {
+            $montoEfectivo = floatval($request->input('monto_efectivo', 0));
+            $montoQr = floatval($request->input('monto_qr', 0));
+
+            if ($montoEfectivo > 0) {
+                \App\Models\Payment::create([
+                    'checkin_id'  => $checkin->id,
+                    'user_id'     => $userId,
+                    'amount'      => $montoEfectivo,
+                    'method'      => 'EFECTIVO',
+                    'bank_name'   => null,
+                    'type'        => 'PAGO'
+                ]);
+            }
+
+            if ($montoQr > 0) {
+                \App\Models\Payment::create([
+                    'checkin_id'  => $checkin->id,
+                    'user_id'     => $userId,
+                    'amount'      => $montoQr,
+                    'method'      => 'QR',
+                    'bank_name'   => $bancoRecibido ?: 'OTROS',
+                    'type'        => 'PAGO'
+                ]);
+            }
+        } else {
+            $amount = floatval($request->input('amount', 0));
+            if ($amount > 0) {
+                \App\Models\Payment::create([
+                    'checkin_id'  => $checkin->id,
+                    'user_id'     => $userId,
+                    'amount'      => $amount,
+                    'method'      => strtoupper($metodoRecibido),
+                    'bank_name'   => strtoupper($metodoRecibido) === 'EFECTIVO' ? null : $bancoRecibido,
+                    'type'        => 'PAGO'
+                ]);
+            }
+        }
+        // =========================================================
 
         $checkOutDate = $request->input('check_out_date')
             ? \Carbon\Carbon::parse($request->input('check_out_date'))
