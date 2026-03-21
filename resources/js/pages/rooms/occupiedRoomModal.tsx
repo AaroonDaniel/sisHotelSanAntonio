@@ -135,38 +135,41 @@ export default function OccupiedRoomModal({
             currency: 'BOB',
         }).format(amount);
 
-    const calculateRealNights = () => {
-        if (!liveCheckin.check_in_date) return 1;
+    // En occupiedRoomModal.tsx
+const calculateRealNights = () => {
+    // Usamos check_in_date porque es la fecha de inicio de cobro que tú manejas/modificas
+    if (!liveCheckin.check_in_date) return 1;
 
-        // 1. Tomamos la fecha en la que realmente llegó el huésped (o su check-in normal)
-        const checkInDate = new Date(liveCheckin.actual_arrival_date || liveCheckin.check_in_date);
-        const now = new Date();
+    // 1. Convertimos la fecha de inicio de cobro a objeto Date
+    const checkInDate = new Date(liveCheckin.check_in_date); 
+    const now = new Date();
 
-        // 2. Extraemos la hora límite oficial del hotel (por defecto 13:00)
-        const checkoutTimeStr = liveCheckin.schedule?.check_out_time || '13:00:00';
-        const [checkoutHour, checkoutMinute] = checkoutTimeStr.split(':').map(Number);
+    // 2. Obtenemos la hora de salida del horario (Schedule) para el corte
+    const checkoutTimeStr = liveCheckin.schedule?.check_out_time || '13:00:00';
+    const [checkoutHour, checkoutMinute] = checkoutTimeStr.split(':').map(Number);
 
-        // 3. Calculamos la diferencia en DÍAS CALENDARIO (ignorando la hora exacta)
-        const startDay = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
-        const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
-        let days = Math.floor((currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24));
+    // 3. Calculamos la diferencia en días naturales (sin importar la hora exacta todavía)
+    const startDay = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
+    const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Diferencia de días
+    let days = Math.floor((currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24));
 
-        // 4. Si el huésped entró hoy mismo, siempre se cobra 1 noche mínimo
-        if (days === 0) return 1;
+    // 4. Reglas de negocio:
+    if (days < 0) return 0; // Por si la fecha es futura
+    if (days === 0) return 1; // Si es el mismo día, se cobra al menos 1 noche
 
-        // 5. Creamos una barrera temporal para HOY a la hora del checkout (ej. 13:00)
-        const limitToday = new Date();
-        limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
+    // 5. Verificamos si hoy ya pasó la hora de salida (Check-out)
+    const limitToday = new Date();
+    limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
 
-        // 6. LÓGICA DE HOTEL: Si la hora actual ya superó la hora límite de checkout,
-        // significa que ya empezó la SIGUIENTE noche.
-        if (now.getTime() > limitToday.getTime()) {
-            days += 1;
-        }
+    // Si la hora actual ya pasó el límite de salida, se cuenta como una noche más
+    if (now.getTime() > limitToday.getTime()) {
+        days += 1;
+    }
 
-        return Math.max(1, days);
-    };
+    return days;
+};
 
     const days = calculateRealNights();
     
@@ -346,7 +349,7 @@ export default function OccupiedRoomModal({
                                             </span>
                                             <span className="font-bold text-gray-800 capitalize">
                                                 {formatDate(
-                                                    liveCheckin.actual_arrival_date || liveCheckin.check_in_date,
+                                                    liveCheckin.check_in_date,
                                                 )}
                                             </span>
                                         </div>
