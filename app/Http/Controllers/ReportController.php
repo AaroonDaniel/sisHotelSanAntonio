@@ -246,6 +246,9 @@ class ReportController extends Controller
         $endDate = $request->query('end_date', now()->toDateString());
         // CAMBIO: Recibimos el parámetro del usuario (por defecto 'todos')
         $userId = $request->query('user_id', 'todos');
+        
+        // AÑADIDO: Recibimos el tipo de registro (efectivo/bancos/ambos)
+        $recordType = $request->query('record_type', 'ambos');
 
         // CAMBIO: Construimos la consulta base
         $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
@@ -254,6 +257,13 @@ class ReportController extends Controller
         // CAMBIO: Si el usuario no es 'todos', filtramos por ese usuario en específico
         if ($userId !== 'todos') {
             $query->where('user_id', $userId);
+        }
+
+        // AÑADIDO: Aplicamos el filtro usando la variable en inglés
+        if ($recordType === 'efectivo') {
+            $query->where('method', 'EFECTIVO');
+        } elseif ($recordType === 'bancos') {
+            $query->where('method', '!=', 'EFECTIVO');
         }
 
         $payments = $query->orderBy('user_id')
@@ -268,10 +278,6 @@ class ReportController extends Controller
         /* ... AQUI VA EL RESTO DEL CÓDIGO DE TU PDF EXACTAMENTE IGUAL COMO LO TIENES ... */
         
         // CABECERA
-        $logoPath = public_path('images/logo_camara.png');
-        if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 10, 20);
-        }
 
         $pdf->SetFont('Arial', 'B', 14);
         $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
@@ -390,7 +396,6 @@ class ReportController extends Controller
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="cierre-caja-' . $startDate . '.pdf"');
     }
-
     // =========================================================
     // 3. GENERADOR EXCEL/CSV: CIERRE DE CAJA
     // =========================================================

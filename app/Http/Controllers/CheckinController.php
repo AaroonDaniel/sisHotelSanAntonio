@@ -1035,6 +1035,23 @@ class CheckinController extends Controller
             $room->update(['status' => 'LIMPIEZA']);
         }
 
+        // Registro de monto 
+        $amount = $request->input('amount', 0);
+        
+        if ($amount > 0) {
+            $paymentMethod = $request->input('payment_method', 'EFECTIVO');
+            $qrBank = ($paymentMethod === 'EFECTIVO') ? null : $request->input('qr_bank');
+            
+            \App\Models\Payment::create([
+                'checkin_id'  => $checkin->id,
+                'user_id'     => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                'amount'      => $amount,
+                'method'      => strtoupper($paymentMethod),
+                'bank_name'   => $qrBank ? strtoupper($qrBank) : null,
+                'type'        => 'PAGO'
+            ]);
+        }
+
         $checkOutDate = $request->input('check_out_date')
             ? \Carbon\Carbon::parse($request->input('check_out_date'))
             : now();

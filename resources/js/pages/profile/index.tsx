@@ -215,9 +215,7 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
                                             </select>
                                         </div>
-                                        <p className="mt-1 text-[10px] text-gray-500">
-                                            * Ambos turnos incluyen su respectiva hora de descanso.
-                                        </p>
+                                        
                                         {infoErrors.shift && <p className="mt-1 text-xs font-bold text-red-500">{infoErrors.shift}</p>}
                                     </div>
                                 </div>

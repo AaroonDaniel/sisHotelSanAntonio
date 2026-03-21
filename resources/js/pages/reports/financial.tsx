@@ -52,6 +52,7 @@ export default function FinancialReport({ auth, users = [], Filters }: Props) {
             start_date: fechaInicio,
             end_date: fechaFin,
             user_id: userId,
+            record_type: tipoRegistro,
         });
 
         setTimeout(() => {

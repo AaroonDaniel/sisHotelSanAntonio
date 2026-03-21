@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Payment extends Model
 {
     protected $fillable = [
-        'checkin_id', 'user_id', 'amount', 'method', 'bank_name', 'reference', 'type'
+        'checkin_id', 'reservation_id', 'user_id', 'amount', 'method', 'bank_name', 'reference', 'type', 
     ];
 
     public function checkin(): BelongsTo {
