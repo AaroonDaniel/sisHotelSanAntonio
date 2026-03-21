@@ -38,10 +38,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
 
     //Perfil de Usuario
-    Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('profile.update');
-    Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('profile.password');
-
+    Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('user.profile.edit'); // <-- Le agregamos 'user.' al inicio
+    Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('user.profile.update');
+    Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('user.profile.password');
+    
     //Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
     Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
