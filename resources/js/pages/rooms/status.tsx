@@ -610,7 +610,16 @@ export default function RoomsStatus({
                     icon: (
                         <BedDouble className="h-10 w-10 text-emerald-200/50" />
                     ),
+
                     info: room.room_type?.name || 'Libre',
+                    des:
+                        room.price?.bathroom_type === 'private' ||
+                        room.price?.bathroom_type === 'privado'
+                            ? 'B.Priv'
+                            : room.price?.bathroom_type === 'shared' ||
+                                room.price?.bathroom_type === 'compartido'
+                              ? 'B.Comp'
+                              : 'Tipo de baño no definido',
                     actionLabel: 'Asignar',
                 };
 
@@ -969,7 +978,7 @@ export default function RoomsStatus({
                             <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} /* 👇 ESTO FALTABA: Efectos visuales de parpadeo y selección verde 👇 */ ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''} `}
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''} `}
                             >
                                 {/* Check original */}
                                 {isSelected && (
@@ -990,7 +999,7 @@ export default function RoomsStatus({
                                 </div>
                                 <div className="relative z-10 p-4 text-white">
                                     <div className="flex items-start justify-between">
-                                        <div>
+                                        <div className="w-full">
                                             <h3 className="text-2xl font-extrabold tracking-tight">
                                                 {room.number}
                                             </h3>
@@ -1000,6 +1009,25 @@ export default function RoomsStatus({
                                             >
                                                 {config.info}
                                             </p>
+                                            {/* 👇 TIPO DE BAÑO CON CONTENEDOR DE COLOR (BADGE) 👇 */}
+                                            {config.des && (
+                                                /* flex y justify-end empujan el contenedor hacia la derecha */
+                                                <div className="mt-2 flex w-full justify-end">
+                                                    <span
+                                                        className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold tracking-widest uppercase shadow-sm backdrop-blur-md transition-colors ${
+                                                            config.des ===
+                                                            'B.Priv'
+                                                                ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700' // 🔵 Azul Suave (Privacidad / Limpieza)
+                                                                : config.des ===
+                                                                    'B.Comp'
+                                                                  ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700' // 🟠 Ámbar Suave (Atención / Compartido)
+                                                                  : 'border border-gray-200/50 bg-gray-50/90 text-gray-700'
+                                                        }`}
+                                                    >
+                                                        {config.des}
+                                                    </span>
+                                                </div>
+                                            )}{' '}
                                         </div>
                                         {/*
                                         {!isSelected && (
@@ -1927,7 +1955,7 @@ function CheckoutConfirmationModal({
                                                             true,
                                                         )
                                                     }
-                                                    className="text-sm font-bold text-red-600 text-bold transition-colors hover:text-red-500 hover:underline"
+                                                    className="text-bold text-sm font-bold text-red-600 transition-colors hover:text-red-500 hover:underline"
                                                 >
                                                     + Aplicar descuento
                                                 </button>
@@ -1957,7 +1985,6 @@ function CheckoutConfirmationModal({
                                                         <input
                                                             type="number"
                                                             min="0"
-                                                            
                                                             value={rebaja}
                                                             onChange={(e) => {
                                                                 setRebaja(

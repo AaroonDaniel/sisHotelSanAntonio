@@ -2199,14 +2199,9 @@ export default function CheckinModal({
                                     {/* 1. Header con etiqueta */}
                                     <div className="mb-0.5 flex flex-col justify-center min-h-[20px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Inicio de Cobro (Hab. Actual)
+                                            Ingreso
                                         </label>
-                                        {/* NUEVO: Muestra la hora real de llegada si fue transferido */}
-                                        {data.actual_arrival_date && data.actual_arrival_date !== data.check_in_date && (
-                                            <span className="text-[10px] font-black tracking-wide text-blue-500 uppercase">
-                                                Llegó al hotel: {new Date(data.actual_arrival_date).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}
-                                            </span>
-                                        )}
+                                        
                                     </div>
 
                                     {/* 2. BOTÓN TOLERANCIA (FLOTANTE / ABSOLUTO) */}
