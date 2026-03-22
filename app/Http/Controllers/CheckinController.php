@@ -50,7 +50,7 @@ class CheckinController extends Controller
         return $room->price->amount ?? 0;
     }
 
-    
+
     public function store(Request $request)
     {
         // =========================================================
@@ -1029,100 +1029,109 @@ class CheckinController extends Controller
 
     public function checkout(Request $request, Checkin $checkin)
     {
-        $room = Room::find($checkin->room_id);
+        // 1. Cargamos las relaciones necesarias para realizar los cálculos financieros
+        $checkin->load(['room.price', 'checkinDetails.service', 'payments']);
 
+        $room = Room::find($checkin->room_id);
         if ($room) {
             $room->update(['status' => 'LIMPIEZA']);
         }
 
-        // =========================================================
-        // 🚀 REGISTRO DE MONTO (CON SOPORTE PARA PAGO MIXTO "AMBOS")
-        // =========================================================
-        $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
-        $bancoRecibido = strtoupper($request->input('qr_bank', ''));
+        // 2. Establecemos las fechas y calculamos los días reales de estadía
+        $checkOutDate = $request->input('check_out_date')
+            ? \Carbon\Carbon::parse($request->input('check_out_date'))
+            : now();
+        $waivePenalty = $request->boolean('waive_penalty', false);
 
-        // Normalizamos si el método llega directamente como YAPE, BNB, etc.
-        $metodoUpper = strtoupper($metodoRecibido);
-        if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
-            $bancoRecibido = $metodoUpper;
-            $metodoRecibido = 'qr';
+        $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+
+        // 3. Calculamos el precio acordado considerando si hay un descuento/rebaja en este momento
+        $agreedPrice = $checkin->agreed_price;
+        if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+            $totalConRebaja = floatval($request->discount);
+            if ($finalDays > 0) {
+                $agreedPrice = $totalConRebaja / $finalDays;
+            }
+            $totalHospedaje = $totalConRebaja;
+        } else {
+            $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
+            $totalHospedaje = $finalDays * $precioUnitario;
         }
 
+        // 4. Calculamos el total de servicios consumidos
+        $servicesTotal = 0;
+        foreach ($checkin->checkinDetails as $detail) {
+            $precioServicio = $detail->selling_price ?? $detail->service->price;
+            $servicesTotal += $detail->quantity * $precioServicio;
+        }
+
+        // 5. Calculamos el saldo pendiente real (Hospedaje + Servicios + Saldo Anterior - Pagos previos)
+        $carriedBalance = floatval($checkin->carried_balance ?? 0);
+        $grandTotal = $totalHospedaje + $servicesTotal + $carriedBalance;
+
+        $totalPagadoPrevio = 0;
+        foreach ($checkin->payments as $pago) {
+            $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+        }
+
+        $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
+
+        // 6. Registro del pago en la base de datos
+        $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
+        $bancoRecibido = strtoupper($request->input('qr_bank', ''));
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
         if ($metodoRecibido === 'ambos') {
+            // Soporte para pago mixto (efectivo y QR)
             $montoEfectivo = floatval($request->input('monto_efectivo', 0));
             $montoQr = floatval($request->input('monto_qr', 0));
 
             if ($montoEfectivo > 0) {
                 \App\Models\Payment::create([
-                    'checkin_id'  => $checkin->id,
-                    'user_id'     => $userId,
-                    'amount'      => $montoEfectivo,
-                    'method'      => 'EFECTIVO',
-                    'bank_name'   => null,
-                    'type'        => 'PAGO'
+                    'checkin_id' => $checkin->id,
+                    'user_id'    => $userId,
+                    'amount'     => $montoEfectivo,
+                    'method'     => 'EFECTIVO',
+                    'type'       => 'PAGO'
                 ]);
             }
-
             if ($montoQr > 0) {
                 \App\Models\Payment::create([
-                    'checkin_id'  => $checkin->id,
-                    'user_id'     => $userId,
-                    'amount'      => $montoQr,
-                    'method'      => 'QR',
-                    'bank_name'   => $bancoRecibido ?: 'OTROS',
-                    'type'        => 'PAGO'
+                    'checkin_id' => $checkin->id,
+                    'user_id'    => $userId,
+                    'amount'     => $montoQr,
+                    'method'     => 'QR',
+                    'bank_name'  => $bancoRecibido ?: 'OTROS',
+                    'type'       => 'PAGO'
                 ]);
             }
         } else {
-            $amount = floatval($request->input('amount', 0));
-            if ($amount > 0) {
+            // Registro del pago único basado en el saldo calculado
+            if ($saldoPendienteFinal > 0) {
+                $metodoUpper = strtoupper($metodoRecibido);
+                // Normalización de métodos de pago QR comunes
+                if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
+                    $bancoRecibido = $metodoUpper;
+                    $metodoUpper = 'QR';
+                }
+
                 \App\Models\Payment::create([
-                    'checkin_id'  => $checkin->id,
-                    'user_id'     => $userId,
-                    'amount'      => $amount,
-                    'method'      => strtoupper($metodoRecibido),
-                    'bank_name'   => strtoupper($metodoRecibido) === 'EFECTIVO' ? null : $bancoRecibido,
-                    'type'        => 'PAGO'
+                    'checkin_id' => $checkin->id,
+                    'user_id'    => $userId,
+                    'amount'     => $saldoPendienteFinal,
+                    'method'     => $metodoUpper,
+                    'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
+                    'type'       => 'PAGO'
                 ]);
             }
         }
-        // =========================================================
 
-        $checkOutDate = $request->input('check_out_date')
-            ? \Carbon\Carbon::parse($request->input('check_out_date'))
-            : now();
-
-        $waivePenalty = $request->boolean('waive_penalty', false);
-
-        if ($waivePenalty && $checkin->schedule) {
-            $horaOficial = $checkOutDate->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
-            $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
-
-            if ($checkOutDate->greaterThan($horaLimite)) {
-                $checkOutDate = $horaLimite;
-            }
-        }
-
-        // 🚀 PASAMOS EL FLAG WAIVEPENALTY
-        $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
-
-        // Logica de rebaja 
-        $agreedPrice = $checkin->agreed_price;
-        
-        if ( $request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-            $totalConRebaja = floatval($request->discount);
-            if($finalDays > 0) {
-                $agreedPrice = $totalConRebaja / $finalDays;
-            }
-        }
-
+        // 7. Actualizamos el registro de check-in a estado finalizado
         $checkin->update([
             'check_out_date' => $checkOutDate,
-            'duration_days' => $finalDays,
-            'agreed_price' => $agreedPrice,
-            'status' => 'finalizado'
+            'duration_days'  => $finalDays,
+            'agreed_price'   => $agreedPrice,
+            'status'         => 'finalizado'
         ]);
 
         return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
@@ -1157,7 +1166,7 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Asignación cancelada. La habitación está LIBRE.');
     }
 
-    // --- GENERACIÓN DE RECIBOS ---
+    // --- GENERACIÓN DE PERSONA QUE ESTA ---
     public function generateAssignmentReceipt(Checkin $checkin)
     {
         // [MODIFICADO] Añadimos 'room.price' por precaución para los fallbacks
@@ -1313,7 +1322,6 @@ class CheckinController extends Controller
 
 
     // --GENERACION DE BOLETA --
-    // --GENERACION DE BOLETA --
     public function generateCheckoutReceipt(Checkin $checkin)
     {
         $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
@@ -1361,24 +1369,36 @@ class CheckinController extends Controller
         // GRAN TOTAL INCLUYE LA DEUDA ANTERIOR
         $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
+        // =========================================================
+        // 🚀 NUEVA LÓGICA DE PAGOS: SEPARAR ADELANTOS DEL PAGO ACTUAL
+        // =========================================================
         $totalPagadoReal = 0;
+        $pagoFinalCaja = 0;
+        $adelantosPrevios = 0;
+
         if ($checkin->payments->count() > 0) {
+            // El último pago registrado es el que acaba de hacer en el checkout
+            $ultimoPagoId = $checkin->payments->last()->id;
+
             foreach ($checkin->payments as $pago) {
-                if ($pago->type === 'DEVOLUCION') {
-                    $totalPagadoReal -= $pago->amount;
+                $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                $totalPagadoReal += $monto;
+
+                if ($pago->id === $ultimoPagoId) {
+                    $pagoFinalCaja += $monto;
                 } else {
-                    $totalPagadoReal += $pago->amount;
+                    $adelantosPrevios += $monto;
                 }
             }
         } else {
-            $totalPagadoReal = $checkin->advance_payment ?? 0;
+            $adelantosPrevios = $checkin->advance_payment ?? 0;
+            $totalPagadoReal = $adelantosPrevios;
         }
 
-        $saldoPagar = $granTotal - $totalPagadoReal;
+        $saldoFinal = max(0, $granTotal - $totalPagadoReal);
+        // =========================================================
 
-        // =========================================================
-        // 🚀 GUARDAR RECIBO (BOLETA) EN LA BASE DE DATOS
-        // =========================================================
+        // GUARDAR RECIBO (BOLETA) EN LA BASE DE DATOS
         $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
         $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
 
@@ -1457,7 +1477,7 @@ class CheckinController extends Controller
         $pdf->Cell(0, 4, $checkin->room->number, 0, 1);
 
         $pdf->Ln(1);
-        $ingresoVisual = \Carbon\Carbon::parse($originalCheckInDate); // FECHA ORIGINAL
+        $ingresoVisual = \Carbon\Carbon::parse($originalCheckInDate);
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->Cell(15, 4, 'Ingreso:', 0, 0);
         $pdf->SetFont('Arial', '', 8);
@@ -1481,13 +1501,11 @@ class CheckinController extends Controller
 
         $pdf->SetFont('Arial', '', 7);
 
-        // ITEM: Habitación Actual
         $pdf->Cell(35, 4, utf8_decode("Hospedaje ($diasACobrar dias)"), 0, 0, 'L');
         $pdf->Cell(8, 4, $diasACobrar, 0, 0, 'C');
         $pdf->Cell(12, 4, number_format($precioUnitario, 2), 0, 0, 'R');
         $pdf->Cell(17, 4, number_format($totalHospedaje, 2), 0, 1, 'R');
 
-        // ITEM: Habitación Anterior (Si existe deuda)
         if ($carriedBalance > 0) {
             $pdf->Cell(35, 4, utf8_decode("Hospedaje Previo ($totalDiasHistorial d)"), 0, 0, 'L');
             $pdf->Cell(8, 4, $totalDiasHistorial, 0, 0, 'C');
@@ -1500,8 +1518,6 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, utf8_decode("(Inc. $diasExcedidos dias extra por horario)"), 0, 1, 'L');
         }
 
-        // Servicios Agrupados
-        $pdf->SetFont('Arial', '', 7);
         $serviciosAgrupados = [];
         foreach ($checkin->checkinDetails as $detalle) {
             $nombre = $detalle->service->name ?? 'Servicio';
@@ -1525,19 +1541,25 @@ class CheckinController extends Controller
         $pdf->Cell(0, 0, '------------------------------------------------------------------', 0, 1, 'C');
         $pdf->Ln(2);
 
-        // TOTALES FINALES
+        // =========================================================
+        // 🚀 IMPRESIÓN DEL DESGLOSE CORRECTO EN EL RECIBO
+        // =========================================================
+        $saldoCobrar = $granTotal - $adelantosPrevios;
+
         $pdf->SetFont('Arial', 'B', 9);
         $pdf->Cell(50, 5, 'TOTAL GENERAL:', 0, 0, 'R');
         $pdf->Cell(22, 5, number_format($granTotal, 2), 0, 1, 'R');
 
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(50, 4, 'A cuenta / Adelantos:', 0, 0, 'R');
-        $pdf->Cell(22, 4, '-' . number_format($totalPagadoReal, 2), 0, 1, 'R');
+        if ($adelantosPrevios > 0) {
+            $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
+            $pdf->Cell(22, 4, number_format($adelantosPrevios, 2), 0, 1, 'R');
+        }
 
-        $pdf->Ln(2);
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(50, 6, 'A PAGAR:', 0, 0, 'R');
-        $pdf->Cell(22, 6, number_format($saldoPagar, 2) . ' Bs', 0, 1, 'R');
+        $pdf->Ln(1);
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(50, 5, 'TOTAL A PAGAR:', 0, 0, 'R');
+        $pdf->Cell(22, 5, number_format($saldoCobrar, 2) . ' Bs', 0, 1, 'R');
 
         // PIE
         $pdf->Ln(6);
@@ -1551,6 +1573,7 @@ class CheckinController extends Controller
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf');
     }
+
 
     // --GENERACION DE FACTURA --
     public function generateCheckoutInvoice(Checkin $checkin)
@@ -1598,24 +1621,35 @@ class CheckinController extends Controller
 
             $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
+            // =========================================================
+            // 🚀 NUEVA LÓGICA DE PAGOS: SEPARAR ADELANTOS DEL PAGO ACTUAL
+            // =========================================================
             $totalPagadoReal = 0;
+            $pagoFinalCaja = 0;
+            $adelantosPrevios = 0;
+
             if ($checkin->payments->count() > 0) {
+                $ultimoPagoId = $checkin->payments->last()->id;
+
                 foreach ($checkin->payments as $pago) {
-                    if ($pago->type === 'DEVOLUCION') {
-                        $totalPagadoReal -= $pago->amount;
+                    $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                    $totalPagadoReal += $monto;
+
+                    if ($pago->id === $ultimoPagoId) {
+                        $pagoFinalCaja += $monto;
                     } else {
-                        $totalPagadoReal += $pago->amount;
+                        $adelantosPrevios += $monto;
                     }
                 }
             } else {
-                $totalPagadoReal = $checkin->advance_payment ?? 0;
+                $adelantosPrevios = $checkin->advance_payment ?? 0;
+                $totalPagadoReal = $adelantosPrevios;
             }
 
-            $saldoPagar = $granTotal - $totalPagadoReal;
+            $saldoFinal = max(0, $granTotal - $totalPagadoReal);
+            // =========================================================
 
-            // =========================================================
-            // 🚀 GUARDAR FACTURA EN LA BASE DE DATOS
-            // =========================================================
+            // GUARDAR FACTURA EN LA BASE DE DATOS
             $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
             $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
 
@@ -1667,9 +1701,7 @@ class CheckinController extends Controller
                 ]);
             }
 
-            // =========================================================
             // --- PDF GENERATION ---
-            // =========================================================
             $pdf = new \FPDF('P', 'mm', array(80, 260));
             $pdf->SetMargins(4, 4, 4);
             $pdf->SetAutoPageBreak(true, 2);
@@ -1730,7 +1762,6 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // DETALLE ITEMS REORDENADO: Detalle | Cantidad | P.Unit | Total
             $pdf->SetFont('Arial', 'B', 6);
             $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
             $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
@@ -1774,23 +1805,32 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
+           // =========================================================
+            // 🚀 IMPRESIÓN DEL DESGLOSE CORRECTO EN LA FACTURA
+            // =========================================================
+            $saldoCobrar = $granTotal - $adelantosPrevios;
+
             $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(50, 4, 'TOTAL Bs', 0, 0, 'R');
+            $pdf->Cell(50, 4, 'TOTAL GENERAL Bs:', 0, 0, 'R');
             $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
 
-            if ($totalPagadoReal > 0) {
-                $pdf->SetFont('Arial', '', 7);
+            $pdf->SetFont('Arial', '', 7);
+            if ($adelantosPrevios > 0) {
                 $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
-                $pdf->Cell(22, 4, number_format($totalPagadoReal, 2), 0, 1, 'R');
-
-                $pdf->SetFont('Arial', 'B', 8);
-                $pdf->Cell(50, 4, 'A PAGAR EN CAJA:', 0, 0, 'R');
-                $pdf->Cell(22, 4, number_format($saldoPagar, 2), 0, 1, 'R');
+                $pdf->Cell(22, 4, number_format($adelantosPrevios, 2), 0, 1, 'R');
             }
+
+            $pdf->Ln(1);
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->Cell(50, 5, 'TOTAL A PAGAR Bs:', 0, 0, 'R');
+            $pdf->Cell(22, 5, number_format($saldoCobrar, 2), 0, 1, 'R');
 
             $pdf->Ln(2);
             $pdf->SetFont('Arial', '', 7);
-            $montoLetras = $this->convertirNumeroALetras($granTotal);
+            // IMPORTANTE: Se cambia a $saldoCobrar para que el literal coincida con lo que paga el cliente hoy, 
+            // o a $granTotal si quieres que el literal sea por el valor total de la factura. 
+            // Legalmente (en Bolivia) el texto literal suele ser sobre el TOTAL GENERAL de la factura.
+            $montoLetras = $this->convertirNumeroALetras($granTotal); 
             $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
 
             $pdf->Ln(2);
