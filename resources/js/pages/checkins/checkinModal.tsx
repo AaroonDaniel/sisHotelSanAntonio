@@ -274,6 +274,7 @@ export default function CheckinModal({
 
     // Redirreccionar a la caja de nombre
     const nameInputRef = useRef<HTMLInputElement | null>(null);
+    
 
     // Const para el desplazamiento de caja de text
     const professionRef = useRef<HTMLInputElement | null>(null);
@@ -773,15 +774,30 @@ export default function CheckinModal({
     }, [currentPerson.birth_date, currentIndex]);
 
     // Auto Focus enfocar a la caja de texto del nombre completo
+    // =========================================================
+    // 🚀 AUTO-FOCUS INTELIGENTE CORREGIDO (Sin saltos fantasma)
+    // =========================================================
     useEffect(() => {
         if (show) {
             setTimeout(() => {
                 if (nameInputRef.current) {
-                    nameInputRef.current.focus();
+                    // 1. Verificamos directamente en el HTML si la caja está vacía en este instante exacto
+                    const isNameEmpty = !nameInputRef.current.value || nameInputRef.current.value.trim() === '';
+                    
+                    // 2. ¿Es una asignación completamente nueva (habitación verde)?
+                    const isNewAssignment = !checkinToEdit;
+                    
+                    // 3. ¿Estamos en la pestaña de un acompañante?
+                    const isAddingCompanion = currentIndex > 0;
+
+                    // SOLO ENFOCA si la caja está vacía Y (es un registro nuevo O es un acompañante nuevo)
+                    if (isNameEmpty && (isNewAssignment || isAddingCompanion)) {
+                        nameInputRef.current.focus();
+                    }
                 }
-            }, 100);
+            }, 200); // Le damos 200ms para asegurar que React termine de pintar los datos
         }
-    }, [show, currentIndex]);
+    }, [show, currentIndex, checkinToEdit]);
 
     // D. MANEJADOR DE CAMBIOS UNIFICADO
     const handleFieldChange = (field: string, value: string) => {
