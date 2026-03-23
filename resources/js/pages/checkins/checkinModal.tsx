@@ -272,6 +272,9 @@ export default function CheckinModal({
         null,
     );
 
+    // Redirreccionar a la caja de nombre
+    const nameInputRef = useRef<HTMLInputElement | null>(null);
+
     // Const para el desplazamiento de caja de text
     const professionRef = useRef<HTMLInputElement | null>(null);
 
@@ -506,7 +509,6 @@ export default function CheckinModal({
         return () => clearInterval(interval);
     }, [show]);
 
-    // --- EFECTO MAESTRO: CARGA DE DATOS, HORA Y GESTIÓN DE HORARIOS ---
     // --- EFECTO MAESTRO: CARGA DE DATOS, HORA Y GESTIÓN DE HORARIOS ---
     useEffect(() => {
         if (show) {
@@ -769,6 +771,17 @@ export default function CheckinModal({
             setDisplayAge('');
         }
     }, [currentPerson.birth_date, currentIndex]);
+
+    // Auto Focus enfocar a la caja de texto del nombre completo
+    useEffect(() => {
+        if (show) {
+            setTimeout(() => {
+                if (nameInputRef.current) {
+                    nameInputRef.current.focus();
+                }
+            }, 100);
+        }
+    }, [show, currentIndex]);
 
     // D. MANEJADOR DE CAMBIOS UNIFICADO
     const handleFieldChange = (field: string, value: string) => {
@@ -1306,6 +1319,7 @@ export default function CheckinModal({
                                         <User className="h-4 w-4 text-gray-400" />
                                     </div>
                                     <input
+                                        ref={nameInputRef}
                                         type="text"
                                         className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500 disabled:bg-gray-50"
                                         placeholder="ESCRIBE PARA BUSCAR..."
