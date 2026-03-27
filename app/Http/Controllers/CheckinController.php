@@ -46,10 +46,30 @@ class CheckinController extends Controller
     {
         $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
 
-        // Retornamos directamente el precio original sin importar la cantidad de huéspedes
-        return $room->price->amount ?? 0;
-    }
+        // Datos por defecto de la habitación original
+        $originalPrice = $room->price->amount ?? 0;
+        $bathroomType = $room->price->bathroom_type ?? null;
+        $roomCapacity = $room->roomType->capacity ?? 1;
 
+        $agreedPrice = $originalPrice;
+
+        // Si la cantidad de personas es menor a la capacidad máxima y hay un tipo de baño definido
+        if ($totalGuests < $roomCapacity && $bathroomType) {
+            // Buscamos un precio activo que coincida con el tipo de baño y la cantidad de huéspedes actual
+            $adjustedPrice = \App\Models\Price::where('is_active', true)
+                ->where('bathroom_type', $bathroomType)
+                ->whereHas('roomType', function($query) use ($totalGuests) {
+                    $query->where('capacity', $totalGuests);
+                })
+                ->first();
+                
+            if ($adjustedPrice) {
+                $agreedPrice = $adjustedPrice->amount;
+            }
+        }
+
+        return $agreedPrice;
+    }
 
     public function store(Request $request)
     {
@@ -257,6 +277,7 @@ class CheckinController extends Controller
         ]);
 
         // LOGICA DE PRECIO Y CAPACIDAD
+        // LOGICA DE PRECIO Y CAPACIDAD
         $totalGuest = 1;
         if ($request->has('companions') && is_array($request->companions)) {
             foreach ($request->companions as $compData) {
@@ -266,7 +287,14 @@ class CheckinController extends Controller
             }
         }
 
-        $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
+        // 1. Obtenemos el precio original por defecto
+        $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
+        $agreedPrice = $roomModelForPrice->price->amount ?? 0;
+
+        // 2. Solo aplicamos el descuento automático si el botón fue activado en el frontend
+        if ($request->boolean('auto_adjust_price')) {
+            $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
+        }
 
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $minAllowed = $agreedPrice * 0.5;
@@ -422,6 +450,7 @@ class CheckinController extends Controller
             'transfer_reason' => 'nullable|string|max:255',
             'selected_guests' => 'required|array|min:1', // <-- OBLIGATORIO recibir quiénes se mueven
             'selected_guests.*' => 'integer',
+            'auto_adjust_price' => 'nullable|boolean',
         ]);
 
         return DB::transaction(function () use ($request, $checkin) {
@@ -449,7 +478,14 @@ class CheckinController extends Controller
                     \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']); // MEJORADO: Pasa a limpieza por protocolo
                     \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
 
-                    $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                    // Precio original por defecto de la NUEVA habitación
+                    $newRoomData = \App\Models\Room::with('price')->find($newRoomId);
+                    $nuevoAgreedPrice = $newRoomData->price->amount ?? 0;
+
+                    // Ajuste solo si se solicitó en el modal de transferencia
+                    if ($request->boolean('auto_adjust_price')) {
+                        $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                    }
 
                     $checkin->update([
                         'room_id' => $newRoomId,
@@ -472,7 +508,14 @@ class CheckinController extends Controller
                     ]);
                     \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
 
-                    $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                    // Precio original por defecto de la NUEVA habitación
+                    $newRoomData = \App\Models\Room::with('price')->find($newRoomId);
+                    $nuevoAgreedPrice = $newRoomData->price->amount ?? 0;
+
+                    // Ajuste solo si se solicitó en el modal de transferencia
+                    if ($request->boolean('auto_adjust_price')) {
+                        $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                    }
 
                     $nuevoCheckin = Checkin::create([
                         'guest_id' => $checkin->guest_id,
@@ -518,8 +561,17 @@ class CheckinController extends Controller
                 $newNewTitularId = $leavingIds[0];
                 $newNewCompanions = array_slice($leavingIds, 1);
 
-                $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
-                $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
+                $roomViejaData = \App\Models\Room::with('price')->find($checkin->room_id);
+                $roomNuevaData = \App\Models\Room::with('price')->find($newRoomId);
+                
+                $precioViejaHabitacion = $roomViejaData->price->amount ?? 0;
+                $precioNuevaHabitacion = $roomNuevaData->price->amount ?? 0;
+
+                // Si pidieron ajuste automático
+                if ($request->boolean('auto_adjust_price')) {
+                    $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
+                    $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
+                }
 
                 // 1. Habitación vieja (Sigue activa, conserva deudas y pagos)
                 $checkin->update([
@@ -787,7 +839,15 @@ class CheckinController extends Controller
             } else {
                 $checkin->companions()->detach();
             }
-            $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            
+            // 1. Obtenemos el precio original por defecto de la habitación (por si cambió de cuarto)
+            $roomModelUpdate = \App\Models\Room::with('price')->findOrFail($validated['room_id']);
+            $updatedAgreedPrice = $roomModelUpdate->price->amount ?? 0;
+
+            // 2. Aplicamos el ajuste SOLO si el botón está activado
+            if ($request->boolean('auto_adjust_price')) {
+                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            }
 
             // Aplicacion de nuevo precio con descuento
             if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
