@@ -406,16 +406,28 @@ class CheckinController extends Controller
             // =========================================================
             $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
-            $isCapacityFull = ($totalGuest >= $maxCapacity);
+            
+            // 🌟 MAGIA DEL AUTO-AJUSTE: Si el precio fue ajustado manualmente con el botón, 
+            // le decimos al sistema que la capacidad ya está completa a propósito (ignoramos las camas vacías).
+            $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuest >= $maxCapacity);
 
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
+            // 1. SIEMPRE forzamos el estado a OCUPADO para que se pinte de ROJO en el mapa
+            \App\Models\Room::where('id', $validatedCheckin['room_id'])->update(['status' => 'OCUPADO']);
+
             if ($isEverythingComplete) {
                 // CASO 2: COMPLETO
-                \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+                // Quitamos cualquier rastro de que es temporal por si el frontend lo mandó mal
+                $checkin->update(['is_temporary' => false]);
+                
                 return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
             } else {
-                // CASO 1: ASIGNACIÓN RÁPIDA
+                // CASO 1: ASIGNACIÓN RÁPIDA (Faltan datos o faltan personas)
+                
+                // Mantenemos la etiqueta de temporal
+                $checkin->update(['is_temporary' => true]);
+
                 $mensaje = 'Faltan datos.';
 
                 if (!$isTitularComplete) {
@@ -438,7 +450,8 @@ class CheckinController extends Controller
                     $mensaje = "Aún falta registrar a {$faltantes} persona(s) para llenar la capacidad de la habitación.";
                 }
 
-                return redirect()->back()->with('success', 'Asignación Rápida registrada. ATENCIÓN: ' . $mensaje . ' Por favor edite y complete los datos para cambiar el estado a OCUPADO.');
+                // El mensaje avisa que está ocupada, pero sigue siendo temporal
+                return redirect()->back()->with('success', 'Asignación Rápida registrada. ATENCIÓN: ' . $mensaje . ' La habitación está OCUPADA, pero por favor complete los datos más tarde.');
             }
         });
     }
@@ -656,275 +669,199 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
-        // 1. Validaciones básicas (Permitimos nulo aquí para manejar el error manualmente abajo)
+        // 1. Validaciones (Mantenemos las que ya tienes, asegúrate de que esto coincida)
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
-            'schedule_id' => 'nullable|exists:schedules,id',
             'check_in_date' => 'required|date',
-            'duration_days' => 'nullable|integer|min:0',
-            'advance_payment' => 'required|numeric|min:0',
+            'actual_arrival_date' => 'nullable|date',
+            'duration_days' => 'required|integer|min:1',
             'notes' => 'nullable|string',
-            'origin' => 'nullable|string|max:150',
-            'discount' => 'nullable|numeric|min:0',
-
-            // Datos del Huésped Titular
-            'full_name' => 'required|string|max:150',
-            'identification_number' => 'nullable|string|max:50',
-            'nationality' => 'nullable|string',
-            'profession' => 'nullable|string',
-            'civil_status' => 'nullable|string',
-            'birth_date' => 'nullable|date',
-            'issued_in' => 'nullable|string',
-            'phone' => 'nullable|string|max:20',
-
-            // Validación de Acompañantes
-            'companions' => 'nullable|array',
-            'companions.*.full_name' => 'required|string|max:150',
-            'companions.*.identification_number' => 'nullable|string|max:50',
-            'companions.*.relationship' => 'nullable|string|max:50',
-            'companions.*.nationality' => 'nullable|string|max:50',
-            'companions.*.profession' => 'nullable|string|max:100',
-            'companions.*.civil_status' => 'nullable|string',
-            'companions.*.birth_date' => 'nullable|date',
-            'companions.*.issued_in' => 'nullable|string',
-            'companions.*.phone' => 'nullable|string|max:20',
+            'origin' => 'nullable|string',
+            'is_temporary' => 'boolean',
+            'auto_adjust_price' => 'boolean', // Asegurarnos de recibir este campo
         ]);
 
-        return DB::transaction(function () use ($validated, $request, $checkin) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
+            
+            // =========================================================
+            // 1. ACTUALIZAR LOS DATOS DEL TITULAR PRIMERO
+            // =========================================================
+            $guest = \App\Models\Guest::find($checkin->guest_id);
+            
+            if ($guest) {
+                // Actualizamos el huésped con los datos que hayan llenado en el modal
+                $guest->update([
+                    'identification_number' => $request->identification_number ?? $guest->identification_number,
+                    'nationality' => $request->nationality ? strtoupper($request->nationality) : $guest->nationality,
+                    'profession' => $request->profession ? strtoupper($request->profession) : $guest->profession,
+                    'civil_status' => $request->civil_status ? strtoupper($request->civil_status) : $guest->civil_status,
+                    'birth_date' => $request->birth_date ?? $guest->birth_date,
+                    'issued_in' => $request->issued_in ?? $guest->issued_in, // Expedido en (ej. LP, CBBA)
+                ]);
+            }
 
-            // =========================================================
-            // 🛑 1. LIMPIEZA ESTRICTA DE PROCEDENCIA
-            // =========================================================
-            $inputOrigin = $request->input('origin');
+            // Limpiamos origin
             $cleanOrigin = null;
-
-            // Verificamos que sea texto, no esté vacío, no sea URL y no sea la palabra 'null'
-            if (
-                !empty($inputOrigin) &&
-                is_string($inputOrigin) &&
-                trim($inputOrigin) !== '' &&
-                !str_starts_with(trim($inputOrigin), 'http') && // No URLs
-                strtolower(trim($inputOrigin)) !== 'null'
-            ) {
-                $cleanOrigin = strtoupper(trim($inputOrigin));
+            if (!empty($validated['origin'])) {
+                $cleanOrigin = trim($validated['origin']);
+                $cleanOrigin = trim(preg_replace('/[\s,]+/', ' ', $cleanOrigin));
+                $cleanOrigin = strtoupper($cleanOrigin);
             }
 
             // =========================================================
-            // 🛑 2. VERIFICACIÓN DE COMPLETITUD
+            // 2. VERIFICAR SI EL TITULAR ESTÁ COMPLETO (Usando datos frescos)
             // =========================================================
-
-            // A. Campos obligatorios del Perfil (Guest) - SIN 'origin'
-            $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in', 'phone'];
-
             $isTitularComplete = true;
             $missingField = null;
 
-            foreach ($requiredFields as $field) {
-                if (!$request->filled($field)) {
-                    $isTitularComplete = false;
-                    $missingField = $field;
-                    break;
-                }
-            }
-
-            // B. Validación ESTRICTA de Procedencia (Checkin)
-            // Si el perfil está completo pero falta la procedencia limpia, lo marcamos incompleto.
-            if ($isTitularComplete && is_null($cleanOrigin)) {
+            if (empty($guest->identification_number)) {
                 $isTitularComplete = false;
-                $missingField = 'origin'; // Marcamos explícitamente que falta origen
+                $missingField = 'identification_number';
+            } elseif (empty($guest->nationality)) {
+                $isTitularComplete = false;
+                $missingField = 'nationality';
+            } elseif (empty($cleanOrigin)) {
+                $isTitularComplete = false;
+                $missingField = 'origin';
+            } elseif (empty($guest->profession)) {
+                $isTitularComplete = false;
+                $missingField = 'profession';
+            } elseif (empty($guest->civil_status)) {
+                $isTitularComplete = false;
+                $missingField = 'civil_status';
+            } elseif (empty($guest->birth_date)) {
+                $isTitularComplete = false;
+                $missingField = 'birth_date';
+            }
+
+            // Actualizamos el status del perfil a COMPLETADO si ya se llenó todo
+            if ($isTitularComplete && $guest) {
+                $guest->update(['profile_status' => 'COMPLETE']);
             }
 
             // =========================================================
-            // 🚀 3. ACTUALIZACIÓN INTELIGENTE DEL TITULAR (EVITA UNIQUE ERROR)
+            // 3. ACTUALIZAR ACOMPAÑANTES Y VERIFICAR COMPLETITUD
             // =========================================================
-            $idNumber = $request->filled('identification_number') ? strtoupper($validated['identification_number']) : null;
-            $fullName = strtoupper($validated['full_name']);
-
-            // Intentamos buscar si el usuario escribió un carnet o nombre diferente
-            $targetGuest = null;
-            if (!empty($idNumber)) {
-                $targetGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
-            }
-            if (!$targetGuest) {
-                $targetGuest = \App\Models\Guest::where('full_name', $fullName)->first();
-            }
-
-            // Si encontró a la persona en la base de datos (sea el original u otro distinto)
-            if ($targetGuest) {
-                $targetGuest->update([
-                    'identification_number' => $idNumber ?? $targetGuest->identification_number,
-                    'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : $targetGuest->nationality,
-                    'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : $targetGuest->profession,
-                    'civil_status' => $validated['civil_status'] ?? $targetGuest->civil_status,
-                    'birth_date' => $validated['birth_date'] ?? $targetGuest->birth_date,
-                    'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : $targetGuest->issued_in,
-                    'phone' => $request->phone ?? $targetGuest->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
-                ]);
-                $guestId = $targetGuest->id;
-                $wasIncomplete = $targetGuest->profile_status === 'INCOMPLETE';
-            } else {
-                // Si es una persona totalmente nueva, creamos su perfil
-                $newGuest = \App\Models\Guest::create([
-                    'full_name' => $fullName,
-                    'identification_number' => $idNumber,
-                    'nationality' => $request->filled('nationality') ? strtoupper($validated['nationality']) : 'BOLIVIANA',
-                    'civil_status' => $validated['civil_status'],
-                    'birth_date' => $validated['birth_date'],
-                    'profession' => $request->filled('profession') ? strtoupper($validated['profession']) : null,
-                    'issued_in' => $request->filled('issued_in') ? strtoupper($validated['issued_in']) : null,
-                    'phone' => $request->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
-                ]);
-                $guestId = $newGuest->id;
-                $wasIncomplete = true;
-            }
-
-            // 3.5 ACTUALIZAR ACOMPAÑANTES
             $allCompanionsComplete = true;
-            $totalGuests = 1;
+            $totalGuests = 1; // Contamos al titular
 
-            if ($request->has('companions')) {
+            if ($request->has('companions') && is_array($request->companions)) {
                 $idsParaSincronizar = [];
 
                 foreach ($request->companions as $compData) {
-                    // Verificación de acompañante individual
-                    if (empty($compData['full_name'])) {
-                        continue;
+                    if (empty($compData['full_name'])) continue;
+                    
+                    $totalGuests++; 
+
+                    $compName = strtoupper($compData['full_name']);
+                    $compBirthDate = $compData['birth_date'] ?? null;
+                    $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
+                    $compNationality = !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA';
+
+                    $compIsComplete = !empty($compIdNumber) && !empty($compNationality);
+                    if (!$compIsComplete) {
+                        $allCompanionsComplete = false;
                     }
-
-                    $totalGuests++;
-                    $isThisCompanionComplete = true;
-                    $compRequired = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
-
-                    foreach ($compRequired as $field) {
-                        if (empty($compData[$field])) {
-                            $isThisCompanionComplete = false;
-                            $allCompanionsComplete = false;
-                            break;
-                        }
-                    }
-
-                    $datosCompanion = [
-                        'full_name' => strtoupper($compData['full_name']),
-                        'identification_number' => !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null,
-                        'nationality' => !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA',
-                        'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                        'civil_status' => $compData['civil_status'] ?? null,
-                        'birth_date' => $compData['birth_date'] ?? null,
-                        'phone' => $compData['phone'] ?? null,
-                        'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
-                        'profile_status' => $isThisCompanionComplete ? 'COMPLETE' : 'INCOMPLETE'
-                    ];
 
                     $companion = null;
-                    if (!empty($datosCompanion['identification_number'])) {
-                        $companion = \App\Models\Guest::where('identification_number', $datosCompanion['identification_number'])->first();
+                    if (!empty($compIdNumber)) {
+                        $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
+                    }
+                    if (!$companion) {
+                        $companion = \App\Models\Guest::where('full_name', $compName)->first();
                     }
 
                     if (!$companion) {
-                        $companion = \App\Models\Guest::create($datosCompanion);
+                        // SI ES NUEVO, lo creamos con todos los datos
+                        $companion = \App\Models\Guest::create([
+                            'full_name' => $compName,
+                            'identification_number' => $compIdNumber,
+                            'nationality' => $compNationality,
+                            'civil_status' => !empty($compData['civil_status']) ? strtoupper($compData['civil_status']) : null,
+                            'birth_date' => $compBirthDate,
+                            'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                            'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
+                        ]);
                     } else {
-                        $companion->update($datosCompanion);
+                        // 🛑 CORRECCIÓN: Si ya existe, ahora sí actualizamos TODOS sus datos
+                        $companion->update([
+                            'identification_number' => $compIdNumber ?? $companion->identification_number,
+                            'birth_date' => $compBirthDate ?? $companion->birth_date,
+                            'nationality' => $compNationality,
+                            'civil_status' => !empty($compData['civil_status']) ? strtoupper($compData['civil_status']) : $companion->civil_status,
+                            'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : $companion->profession,
+                            'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
+                        ]);
                     }
 
-                    // Evitar que el titular se agregue como su propio acompañante
-                    if ($companion->id !== $guestId) {
+                    // 🛑 CORRECCIÓN: Guardamos la Procedencia (Origin) en la relación (Pivot)
+                    if ($companion->id !== $guest->id) {
                         $idsParaSincronizar[$companion->id] = [
                             'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
                         ];
                     }
                 }
+                
                 $checkin->companions()->sync($idsParaSincronizar);
             } else {
                 $checkin->companions()->detach();
             }
-            
-            // 1. Obtenemos el precio original por defecto de la habitación (por si cambió de cuarto)
-            $roomModelUpdate = \App\Models\Room::with('price')->findOrFail($validated['room_id']);
+            // =========================================================
+            // 4. LÓGICA DE PRECIO (Auto-Ajuste)
+            // =========================================================
+            $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
+            $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $updatedAgreedPrice = $roomModelUpdate->price->amount ?? 0;
 
-            // 2. Aplicamos el ajuste SOLO si el botón está activado
+            // 🌟 EVALUAMOS CAPACIDAD: Si enciende el botón de ajuste, perdonamos las camas vacías
+            $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuests >= $maxCapacity);
+
             if ($request->boolean('auto_adjust_price')) {
                 $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
             }
 
-            // Aplicacion de nuevo precio con descuento
-            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-                $minAllowed = $updatedAgreedPrice * 0.5;
-                $updatedAgreedPrice = max(floatval($request->discount), $minAllowed);
-            }
-            // 4. LÓGICA DE FECHAS
-            $roomModel = \App\Models\Room::with('roomType')->find($validated['room_id']);
-            $maxCapacity = $roomModel->roomType->capacity ?? 1;
-            $isCapacityFull = ($totalGuests >= $maxCapacity);
-
-            // Solo si TODO es verdadero (incluida la procedencia válida)
+            // 🕵️‍♂️ LOGS PARA LA CONSOLA (AHORA SÍ FUNCIONARÁN)
+            \Illuminate\Support\Facades\Log::info('--- INTENTO DE ACTUALIZAR CHECKIN ---');
+            \Illuminate\Support\Facades\Log::info('1. DNI: ' . ($guest->identification_number ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('2. Nacionalidad: ' . ($guest->nationality ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('3. Procedencia (Origin): ' . ($cleanOrigin ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('4. Profesión: ' . ($guest->profession ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('5. Estado Civil: ' . ($guest->civil_status ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('6. Fecha de Nacimiento: ' . ($guest->birth_date ?: 'VACÍO'));
+            \Illuminate\Support\Facades\Log::info('>> VEREDICTO TITULAR: ' . ($isTitularComplete ? 'COMPLETO ✅' : 'FALTA DATOS ❌ (Campo que falló: ' . $missingField . ')'));
+            \Illuminate\Support\Facades\Log::info('>> VEREDICTO ACOMPAÑANTES: ' . ($allCompanionsComplete ? 'COMPLETO ✅' : 'FALTAN DATOS ❌'));
+            // =========================================================
+            // 5. EVALUACIÓN FINAL: ¿Está todo completo o faltan datos?
+            // =========================================================
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
 
-            // Mantenemos estrictamente la fecha original del formulario
-            $newCheckInDate = $validated['check_in_date'];
-
-            $checkInCarbon = \Carbon\Carbon::parse($newCheckInDate);
-            $checkOutDate = $validated['duration_days'] > 0
-                ? $checkInCarbon->copy()->addDays($validated['duration_days'])
-                : null;
-            // 5. CAMBIO DE HABITACIÓN
-            if ($checkin->room_id != $validated['room_id']) {
-                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIBRE']);
-                // OJO: Si cambia de habitación, NO la forzamos a OCUPADO aquí. 
-                // Se actualizará correctamente en el bloque final si todos los datos están listos.
-                if ($isEverythingComplete) {
-                    \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
-                }
-            }
-
-            // 6. ACTUALIZAR CHECKIN
-            $checkin->update([
-                'guest_id' => $guestId, // 🚀 VINCULAMOS LA HABITACIÓN AL HUÉSPED CORRECTO
-                'room_id' => $validated['room_id'],
-                'schedule_id' => $request->filled('schedule_id') ? $validated['schedule_id'] : $checkin->schedule_id,
-                'check_in_date' => $newCheckInDate,
-                'duration_days' => $validated['duration_days'],
-                'check_out_date' => $checkOutDate,
-                'advance_payment' => $validated['advance_payment'],
-                'agreed_price' => $updatedAgreedPrice,
-                'notes' => strtoupper($validated['notes'] ?? ''),
-
-                // ✅ GUARDAR ÚNICAMENTE LA PROCEDENCIA LIMPIA
-                'origin' => $cleanOrigin,
-            ]);
-
-            // 7. SERVICIOS
-            if ($request->has('selected_services')) {
-                $services = \App\Models\Service::whereIn('id', $request->selected_services)->get();
-                $syncData = [];
-                foreach ($services as $service) {
-                    $syncData[$service->id] = ['quantity' => 1, 'selling_price' => $service->price];
-                }
-                $checkin->services()->sync($syncData);
-            }
-
-            // =========================================================
-            // 🛑 8. LÓGICA FINAL DE ACTUALIZACIÓN (Completo vs Incompleto)
-            // =========================================================
-            // MODIFICACIÓN: Se eliminó el `throw ValidationException`.
-            // Ahora la base de datos SIEMPRE guarda los datos que se hayan llenado,
-            // pero la habitación solo pasa a 'OCUPADO' si el 100% de la info está lista.
+            // Siempre forzamos a que la habitación sea vista como OCUPADA
+            \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
-                // ------------------------------------------------------------------
-                // CASO 2: CHECK-IN COMPLETO (Se terminaron de llenar los datos)
-                // ------------------------------------------------------------------
-                \App\Models\Room::where('id', $request->room_id)->update(['status' => 'OCUPADO']);
+                // TODO ESTÁ LLENO: Quitamos el flag de temporal y guardamos.
+                $checkin->update([
+                    'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
+                    'duration_days' => $validated['duration_days'],
+                    'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
+                    'origin' => $cleanOrigin,
+                    'agreed_price' => $updatedAgreedPrice,
+                    'is_temporary' => false, // <-- ¡MAGIA! Como ya llenó todo, ya NO es temporal
+                ]);
 
-                return redirect()->back()->with('success', 'Check-in actualizado y COMPLETADO. La habitación ahora está OCUPADA.');
+                return redirect()->back()->with('success', 'Check-in completado al 100%. La habitación está OCUPADA y la asignación temporal fue removida.');
             } else {
-                // ------------------------------------------------------------------
-                // CASO 1: ASIGNACIÓN SIGUE INCOMPLETA (Faltan datos)
-                // ------------------------------------------------------------------
-                $mensaje = 'Faltan datos.';
+                // AÚN FALTAN DATOS: Guardamos lo que se llenó, pero mantenemos la advertencia
+                $checkin->update([
+                    'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
+                    'duration_days' => $validated['duration_days'],
+                    'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
+                    'origin' => $cleanOrigin,
+                    'agreed_price' => $updatedAgreedPrice,
+                    'is_temporary' => true, // <-- Sigue siendo temporal porque faltan datos
+                ]);
 
+                $mensaje = 'Faltan datos.';
                 if (!$isTitularComplete) {
                     $campoFaltante = match ($missingField) {
                         'identification_number' => 'Carnet de Identidad',
@@ -938,11 +875,10 @@ class CheckinController extends Controller
                     };
                     $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
                 } elseif (!$allCompanionsComplete) {
-                    $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
+                    $mensaje = 'El titular está listo, pero faltan datos de los Acompañantes.';
                 }
 
-                // Guardamos la actualización (hace COMMIT a la BD) pero enviamos la advertencia.
-                return redirect()->back()->with('success', 'Datos guardados correctamente. ATENCIÓN: La asignación sigue Incompleta. ' . $mensaje);
+                return redirect()->back()->with('success', 'Datos guardados, pero la asignación sigue TEMPORAL. ' . $mensaje);
             }
         });
     }

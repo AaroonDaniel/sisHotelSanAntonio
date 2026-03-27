@@ -386,7 +386,6 @@ export default function CheckinModal({
             civil_status: '',
             birth_date: '',
             profession: '',
-            //origin: '',
             phone: '',
             companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
             payment_method: 'EFECTIVO', // Por defecto efectivo

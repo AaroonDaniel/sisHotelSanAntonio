@@ -385,18 +385,30 @@ export default function RoomsStatus({
                 (c) => c.room_id === room.id && c.status === 'activo',
             );
 
-            if (fullCheckinData) {
-                setOccupiedCheckinData({ ...fullCheckinData, room });
-                setIsOccupiedModalOpen(true);
-            } else {
-                const localCheckin = room.checkins?.[0];
-                if (localCheckin) {
-                    setOccupiedCheckinData({ ...localCheckin, room });
-                    setIsOccupiedModalOpen(true);
+            // Obtenemos los datos del checkin de forma segura
+            const activeCheckin = fullCheckinData || room.checkins?.[0];
+
+            if (activeCheckin) {
+                // =========================================================
+                // 🛑 NUEVO: INTERCEPTOR DE ASIGNACIÓN TEMPORAL
+                // Si la habitación está OCUPADA (roja), pero fue marcada como "Temporal",
+                // NO abrimos el modal de solo lectura. En su lugar, abrimos el
+                // formulario de edición (CheckinModal) para que completen los datos.
+                // =========================================================
+                if (activeCheckin.is_temporary) {
+                    setCheckinToEdit(activeCheckin);
+                    setSelectedRoomId(room.id);
+                    setIsCheckinModalOpen(true);
+                    return; // Detenemos la ejecución para que no abra el modal normal
                 }
+
+                // FLUJO NORMAL: Si no es temporal, mostramos el modal de habitación ocupada
+                setOccupiedCheckinData({ ...activeCheckin, room });
+                setIsOccupiedModalOpen(true);
             }
             return;
         }
+
         if (status === 'reserved') {
             const matchinReservation = reservations?.find((res) =>
                 res.details?.some(
