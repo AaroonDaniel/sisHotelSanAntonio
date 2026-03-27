@@ -302,8 +302,6 @@ export default function RoomsStatus({
             }
         }
     }, [Rooms, isCheckinModalOpen]);
-
-    // --- LÓGICA DE ESTADO ---
     // =========================================================
     // 1. LÓGICA DE ESTADO (Corregida para detectar libres con checkin)
     // =========================================================
@@ -322,16 +320,25 @@ export default function RoomsStatus({
                 (c) => c.profile_status === 'INCOMPLETE',
             );
 
-            // Origin missing = Falta de datos (Lo que creamos al confirmar la reserva)
+            // Origin missing = Falta de datos 
             const isOriginMissing =
                 !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
             // --- 🚀 NUEVO: VERIFICAR SI FALTAN PERSONAS PARA LLENAR LA CAPACIDAD ---
+            // --- 🚀 NUEVO: VERIFICAR CAPACIDAD O AUTO-AJUSTE ---
             const roomCapacity = room.room_type?.capacity || 1;
-            const totalGuests = 1 + (companions?.length || 0); // 1 Titular + N Acompañantes
-            const isCapacityMissing = totalGuests < roomCapacity;
+            const totalGuests = 1 + (companions?.length || 0);
+            
+            // Verificamos si el precio acordado es MENOR al precio original normal.
+            const originalRoomPrice = room.price?.amount || 0;
+            
+            // ¿Se presionó el botón de reajuste en el backend? 
+            const isPriceAdjusted = originalRoomPrice > 0 && activeCheckin.agreed_price < originalRoomPrice;
 
-            // Si falta algún dato O faltan personas para llenar las camas, forzamos el estado a INCOMPLETO (Amarillo)
+            // Faltan personas SOLO SI: hay camas vacías Y NO se ha reajustado el precio.
+            const isCapacityMissing = (totalGuests < roomCapacity) && !isPriceAdjusted;
+
+            // Si falta algún dato O faltan personas (sin ajuste), forzamos INCOMPLETO (Naranja)
             if (
                 isTitularIncomplete ||
                 isAnyCompanionIncomplete ||
@@ -341,7 +348,7 @@ export default function RoomsStatus({
                 return 'incomplete';
             }
 
-            // Si tiene checkin, no le falta nada y la habitación está llena, es OCUPADO seguro (Azul)
+            // Si está completo o fue ajustado, es OCUPADO seguro (Rojo)
             return 'occupied';
         }
 
@@ -360,24 +367,27 @@ export default function RoomsStatus({
 
         return 'unknown';
     };
+    
     // =========================================================
     // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
     // =========================================================
     const handleRoomClick = (room: Room) => {
+        console.log('====================================');
+        console.log('👆 CLIC EN HABITACIÓN:', room.number, '| ID:', room.id);
+        console.log('Estado original de la BD (room.status):', room.status);
+
         const status = getDisplayStatus(room);
+        console.log('Estado visual calculado (getDisplayStatus):', status);
 
         if (isMultiCheckoutMode) {
-            // <-- 1. ¿El botón de "Finalizar Estadía Múltiple" está activado?
             if (status === 'occupied') {
-                // <-- 2. ¿La habitación tocada está ocupada?
-                // 3. Si es así, la agregamos o quitamos de la lista verde
                 setSelectedRoomsForCheckout((prev) =>
                     prev.includes(room.id)
                         ? prev.filter((id) => id !== room.id)
                         : [...prev, room.id],
                 );
             }
-            return; // <-- 4. ¡DETENTE AQUÍ! No ejecutes el resto del código.
+            return; 
         }
 
         if (status === 'occupied') {
@@ -385,26 +395,27 @@ export default function RoomsStatus({
                 (c) => c.room_id === room.id && c.status === 'activo',
             );
 
-            // Obtenemos los datos del checkin de forma segura
             const activeCheckin = fullCheckinData || room.checkins?.[0];
 
+            console.log('--- EVALUANDO EL CHECK-IN ACTIVO ---');
             if (activeCheckin) {
-                // =========================================================
-                // 🛑 NUEVO: INTERCEPTOR DE ASIGNACIÓN TEMPORAL
-                // Si la habitación está OCUPADA (roja), pero fue marcada como "Temporal",
-                // NO abrimos el modal de solo lectura. En su lugar, abrimos el
-                // formulario de edición (CheckinModal) para que completen los datos.
-                // =========================================================
+                console.log('Datos completos del Checkin:', activeCheckin);
+                console.log('¿Es Temporal? (is_temporary):', activeCheckin.is_temporary);
+                console.log('Precio Acordado:', activeCheckin.agreed_price);
+
                 if (activeCheckin.is_temporary) {
+                    console.log('🛑 INTERCEPTADO: is_temporary es TRUE (o 1). Abriendo Modal de EDICIÓN...');
                     setCheckinToEdit(activeCheckin);
                     setSelectedRoomId(room.id);
                     setIsCheckinModalOpen(true);
-                    return; // Detenemos la ejecución para que no abra el modal normal
+                    return; 
                 }
 
-                // FLUJO NORMAL: Si no es temporal, mostramos el modal de habitación ocupada
+                console.log('✅ TODO EN ORDEN: is_temporary es FALSE (o 0). Abriendo Modal de INFORMACIÓN (OccupiedModal)...');
                 setOccupiedCheckinData({ ...activeCheckin, room });
                 setIsOccupiedModalOpen(true);
+            } else {
+                console.log('⚠️ ERROR: La habitación está ocupada pero no se encontró el Checkin activo.');
             }
             return;
         }

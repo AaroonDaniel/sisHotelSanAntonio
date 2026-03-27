@@ -407,51 +407,35 @@ class CheckinController extends Controller
             $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
             
-            // 🌟 MAGIA DEL AUTO-AJUSTE: Si el precio fue ajustado manualmente con el botón, 
-            // le decimos al sistema que la capacidad ya está completa a propósito (ignoramos las camas vacías).
+            // 🌟 MAGIA: Si el precio fue ajustado, la capacidad se considera "llena" por defecto.
             $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuest >= $maxCapacity);
 
+            // Verificamos las 3 condiciones
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
             // 1. SIEMPRE forzamos el estado a OCUPADO para que se pinte de ROJO en el mapa
             \App\Models\Room::where('id', $validatedCheckin['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
-                // CASO 2: COMPLETO
-                // Quitamos cualquier rastro de que es temporal por si el frontend lo mandó mal
+                // CASO 2: COMPLETO AL 100%
                 $checkin->update(['is_temporary' => false]);
                 
                 return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
             } else {
                 // CASO 1: ASIGNACIÓN RÁPIDA (Faltan datos o faltan personas)
-                
-                // Mantenemos la etiqueta de temporal
                 $checkin->update(['is_temporary' => true]);
 
                 $mensaje = 'Faltan datos.';
-
                 if (!$isTitularComplete) {
-                    $campoFaltante = match ($missingField) {
-                        'identification_number' => 'Carnet de Identidad',
-                        'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia (Origen)',
-                        'profession' => 'Profesión',
-                        'civil_status' => 'Estado Civil',
-                        'birth_date' => 'Fecha de Nacimiento',
-                        'issued_in' => 'Lugar de Expedición',
-                        'phone' => 'Teléfono Celular',
-                        default => 'algún dato obligatorio'
-                    };
-                    $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
+                    $mensaje = 'Faltan datos obligatorios del Titular.';
                 } elseif (!$allCompanionsComplete) {
-                    $mensaje = 'El titular está completo, pero faltan datos de uno o más Acompañantes.';
+                    $mensaje = 'El titular está completo, pero faltan datos de los Acompañantes.';
                 } elseif (!$isCapacityFull) {
                     $faltantes = $maxCapacity - $totalGuest;
-                    $mensaje = "Aún falta registrar a {$faltantes} persona(s) para llenar la capacidad de la habitación.";
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' para cerrar la asignación.";
                 }
 
-                // El mensaje avisa que está ocupada, pero sigue siendo temporal
-                return redirect()->back()->with('success', 'Asignación Rápida registrada. ATENCIÓN: ' . $mensaje . ' La habitación está OCUPADA, pero por favor complete los datos más tarde.');
+                return redirect()->back()->with('success', 'Asignación registrada. ATENCIÓN: ' . $mensaje);
             }
         });
     }
@@ -807,75 +791,62 @@ class CheckinController extends Controller
                 $checkin->companions()->detach();
             }
             // =========================================================
-            // 4. LÓGICA DE PRECIO (Auto-Ajuste)
+            // 4. LÓGICA DE PRECIO Y CAPACIDAD (Auto-Ajuste)
             // =========================================================
             $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $updatedAgreedPrice = $roomModelUpdate->price->amount ?? 0;
 
-            // 🌟 EVALUAMOS CAPACIDAD: Si enciende el botón de ajuste, perdonamos las camas vacías
+            // 🌟 MAGIA 1: Si el botón está activado, "engañamos" al sistema diciéndole 
+            // que la capacidad ya está llena, perdonando las camas vacías.
             $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuests >= $maxCapacity);
 
+            // 🌟 MAGIA 2: Si el botón está activado, calculamos el nuevo precio descontado.
             if ($request->boolean('auto_adjust_price')) {
                 $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
             }
 
-            // 🕵️‍♂️ LOGS PARA LA CONSOLA (AHORA SÍ FUNCIONARÁN)
-            \Illuminate\Support\Facades\Log::info('--- INTENTO DE ACTUALIZAR CHECKIN ---');
-            \Illuminate\Support\Facades\Log::info('1. DNI: ' . ($guest->identification_number ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('2. Nacionalidad: ' . ($guest->nationality ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('3. Procedencia (Origin): ' . ($cleanOrigin ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('4. Profesión: ' . ($guest->profession ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('5. Estado Civil: ' . ($guest->civil_status ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('6. Fecha de Nacimiento: ' . ($guest->birth_date ?: 'VACÍO'));
-            \Illuminate\Support\Facades\Log::info('>> VEREDICTO TITULAR: ' . ($isTitularComplete ? 'COMPLETO ✅' : 'FALTA DATOS ❌ (Campo que falló: ' . $missingField . ')'));
-            \Illuminate\Support\Facades\Log::info('>> VEREDICTO ACOMPAÑANTES: ' . ($allCompanionsComplete ? 'COMPLETO ✅' : 'FALTAN DATOS ❌'));
             // =========================================================
-            // 5. EVALUACIÓN FINAL: ¿Está todo completo o faltan datos?
+            // 5. EVALUACIÓN FINAL: ¿Está TODO completo?
             // =========================================================
-            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete;
+            // 🛑 EL SECRETO: Ahora multiplicamos las 3 variables (Titular + Acompañantes + Capacidad)
+            $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
-            // Siempre forzamos a que la habitación sea vista como OCUPADA
+            // Siempre forzamos a que la habitación sea vista como OCUPADA en la pantalla (Rojo)
             \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
-                // TODO ESTÁ LLENO: Quitamos el flag de temporal y guardamos.
+                // CASO A: TODO ESTÁ LLENO (No faltan datos ni capacidad)
                 $checkin->update([
                     'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
                     'duration_days' => $validated['duration_days'],
                     'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
                     'origin' => $cleanOrigin,
-                    'agreed_price' => $updatedAgreedPrice,
-                    'is_temporary' => false, // <-- ¡MAGIA! Como ya llenó todo, ya NO es temporal
+                    'agreed_price' => $updatedAgreedPrice, // <-- GUARDAMOS EL PRECIO AJUSTADO
+                    'is_temporary' => false, // <-- ¡YA NO ES TEMPORAL!
                 ]);
 
-                return redirect()->back()->with('success', 'Check-in completado al 100%. La habitación está OCUPADA y la asignación temporal fue removida.');
+                return redirect()->back()->with('success', 'Check-in completado al 100%. La asignación temporal fue removida.');
             } else {
-                // AÚN FALTAN DATOS: Guardamos lo que se llenó, pero mantenemos la advertencia
+                // CASO B: FALTAN DATOS O FALTAN PERSONAS
                 $checkin->update([
                     'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
                     'duration_days' => $validated['duration_days'],
                     'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
                     'origin' => $cleanOrigin,
-                    'agreed_price' => $updatedAgreedPrice,
-                    'is_temporary' => true, // <-- Sigue siendo temporal porque faltan datos
+                    'agreed_price' => $updatedAgreedPrice, // <-- GUARDAMOS EL PRECIO (Aunque falten datos)
+                    'is_temporary' => true, // <-- SIGUE SIENDO TEMPORAL
                 ]);
 
+                // Generamos el mensaje exacto de qué está fallando
                 $mensaje = 'Faltan datos.';
                 if (!$isTitularComplete) {
-                    $campoFaltante = match ($missingField) {
-                        'identification_number' => 'Carnet de Identidad',
-                        'nationality' => 'Nacionalidad',
-                        'origin' => 'Procedencia (Origen)',
-                        'profession' => 'Profesión',
-                        'civil_status' => 'Estado Civil',
-                        'birth_date' => 'Fecha de Nacimiento',
-                        'issued_in' => 'Lugar de Expedición',
-                        default => 'algún dato obligatorio'
-                    };
-                    $mensaje = 'Faltan datos del Titular: ' . $campoFaltante;
+                    $mensaje = 'Faltan datos obligatorios del Titular.';
                 } elseif (!$allCompanionsComplete) {
                     $mensaje = 'El titular está listo, pero faltan datos de los Acompañantes.';
+                } elseif (!$isCapacityFull) {
+                    $faltantes = $maxCapacity - $totalGuests;
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' para cerrar la asignación.";
                 }
 
                 return redirect()->back()->with('success', 'Datos guardados, pero la asignación sigue TEMPORAL. ' . $mensaje);
