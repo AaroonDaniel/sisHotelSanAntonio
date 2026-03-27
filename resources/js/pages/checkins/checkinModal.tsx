@@ -174,6 +174,8 @@ export interface CheckinData {
     origin?: string | null;
     payment_method?: string | null;
     qr_bank?: string | null;
+    is_temporary?: boolean;
+    auto_adjust_price?: boolean;
 }
 
 export interface Room {
@@ -275,7 +277,6 @@ export default function CheckinModal({
 
     // Redirreccionar a la caja de nombre
     const nameInputRef = useRef<HTMLInputElement | null>(null);
-    
 
     // Const para el desplazamiento de caja de text
     const professionRef = useRef<HTMLInputElement | null>(null);
@@ -598,6 +599,19 @@ export default function CheckinModal({
                     }
                 }
 
+                // 1. Buscamos la habitación actual en la lista 'rooms' para saber su precio original
+                const currentRoomObj = rooms?.find(
+                    (r: any) => String(r.id) === String(checkinToEdit.room_id),
+                );
+                const originalRoomPrice = currentRoomObj?.price?.amount || 0;
+
+                // 2. Comparamos el precio que está pagando vs el precio normal
+                // Si paga menos del precio base, deducimos que el Auto-Ajuste fue utilizado.
+                const isPriceAdjusted =
+                    originalRoomPrice > 0 &&
+                    Number(checkinToEdit.agreed_price) <
+                        Number(originalRoomPrice);
+
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
@@ -621,6 +635,10 @@ export default function CheckinModal({
                               String(s.id || s),
                           )
                         : [],
+
+                    // 🌟 AQUÍ ENCENDEMOS EL BOTÓN SI DETECTAMOS LA REBAJA
+                    auto_adjust_price: isPriceAdjusted,
+                    is_temporary: !!checkinToEdit.is_temporary, // Forzamos booleano por si acaso
 
                     // 🚀 DATOS DEL TITULAR (BLANCOS SI ES HABITACIÓN ADICIONAL PENDIENTE)
                     full_name: isSecondaryRoom
@@ -684,12 +702,15 @@ export default function CheckinModal({
                     duration_days: 1,
                     selected_services: [],
                     companions: [],
-                    payment_method: 'EFECTIVO', // <--- AGREGADO
-                    qr_bank: '', // <--- AGREGADO
+                    payment_method: 'EFECTIVO',
+                    qr_bank: '',
+                    auto_adjust_price: false, // <-- Si es nuevo, arranca siempre apagado
+                    is_temporary: false, // <-- Arranca apagado
                 }));
             }
         }
-    }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules]);
+        // 🛑 IMPORTANTE: Agregamos 'rooms' al arreglo de dependencias al final
+    }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules, rooms]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -783,11 +804,13 @@ export default function CheckinModal({
             setTimeout(() => {
                 if (nameInputRef.current) {
                     // 1. Verificamos directamente en el HTML si la caja está vacía en este instante exacto
-                    const isNameEmpty = !nameInputRef.current.value || nameInputRef.current.value.trim() === '';
-                    
+                    const isNameEmpty =
+                        !nameInputRef.current.value ||
+                        nameInputRef.current.value.trim() === '';
+
                     // 2. ¿Es una asignación completamente nueva (habitación verde)?
                     const isNewAssignment = !checkinToEdit;
-                    
+
                     // 3. ¿Estamos en la pestaña de un acompañante?
                     const isAddingCompanion = currentIndex > 0;
 
@@ -1053,7 +1076,7 @@ export default function CheckinModal({
 
     const handleCheckout = () => {
         if (!checkinToEdit) return;
-        
+
         if (
             confirm(
                 '¿Confirmar salida? Se generará el recibo final y pasará a limpieza.',
@@ -1070,12 +1093,12 @@ export default function CheckinModal({
 
             // 2. Lógica para dividir el pago si selecciona "AMBOS"
             if (metodo === 'AMBOS') {
-                payload.amount = 0; 
+                payload.amount = 0;
                 payload.monto_efectivo = Number(data.monto_efectivo) || 0;
                 payload.monto_qr = Number(data.monto_qr) || 0;
             } else {
                 // Si pagó todo en Efectivo o todo en QR (Usa el input donde escribes el monto final)
-                payload.amount = Number(data.advance_payment) || 0; 
+                payload.amount = Number(data.advance_payment) || 0;
             }
 
             // 3. Enviamos la petición con el payload lleno (ya no las {})
@@ -2000,46 +2023,56 @@ export default function CheckinModal({
                                 /* ------------------------------------------------ */
                                 <div>
                                     <div className="mb-2 flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/50 p-1.5 shadow-sm">
-    {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
-    <label
-        htmlFor="auto_adjust_price_admin"
-        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
-            data.auto_adjust_price
-                ? 'bg-blue-100 text-blue-700 shadow-sm'
-                : 'text-gray-500 hover:bg-gray-200/50'
-        }`}
-    >
-        <input
-            id="auto_adjust_price_admin"
-            type="checkbox"
-            checked={data.auto_adjust_price}
-            onChange={(e) => setData('auto_adjust_price', e.target.checked)}
-            disabled={isReadOnly}
-            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-        />
-        Auto-Adjust Price
-    </label>
+                                        {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
+                                        <label
+                                            htmlFor="auto_adjust_price_admin"
+                                            className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+                                                data.auto_adjust_price
+                                                    ? 'bg-blue-100 text-blue-700 shadow-sm'
+                                                    : 'text-gray-500 hover:bg-gray-200/50'
+                                            }`}
+                                        >
+                                            <input
+                                                id="auto_adjust_price_admin"
+                                                type="checkbox"
+                                                checked={data.auto_adjust_price}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'auto_adjust_price',
+                                                        e.target.checked,
+                                                    )
+                                                }
+                                                disabled={isReadOnly}
+                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                            />
+                                            Auto-Adjust Price
+                                        </label>
 
-    {/* DERECHA: Checkbox Temporal (50%) */}
-    <label
-        htmlFor="is_temporary_admin"
-        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
-            data.is_temporary
-                ? 'bg-amber-100 text-amber-700 shadow-sm'
-                : 'text-gray-500 hover:bg-gray-200/50'
-        }`}
-    >
-        <input
-            id="is_temporary_admin"
-            type="checkbox"
-            checked={data.is_temporary}
-            onChange={(e) => setData('is_temporary', e.target.checked)}
-            disabled={isReadOnly}
-            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-        />
-        Asig. TEMPORAL
-    </label>
-</div>
+                                        {/* DERECHA: Checkbox Temporal (50%) */}
+                                        <label
+                                            htmlFor="is_temporary_admin"
+                                            className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+                                                data.is_temporary
+                                                    ? 'bg-amber-100 text-amber-700 shadow-sm'
+                                                    : 'text-gray-500 hover:bg-gray-200/50'
+                                            }`}
+                                        >
+                                            <input
+                                                id="is_temporary_admin"
+                                                type="checkbox"
+                                                checked={data.is_temporary}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'is_temporary',
+                                                        e.target.checked,
+                                                    )
+                                                }
+                                                disabled={isReadOnly}
+                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+                                            />
+                                            Asig. TEMPORAL
+                                        </label>
+                                    </div>
 
                                     {/* --- CAMPO SELECT --- */}
                                     <select
@@ -2076,49 +2109,61 @@ export default function CheckinModal({
                                     <div className="mb-1 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-0.5 shadow-sm">
                                         {/* Checkbox Temporal */}
                                         <div className="flex w-full items-center gap-2">
-    {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
-    <label
-        htmlFor="auto_adjust_price_rec"
-        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
-            data.auto_adjust_price
-                ? 'bg-blue-100 text-blue-700 shadow-sm'
-                : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
-        }`}
-    >
-        <input
-            id="auto_adjust_price_rec"
-            type="checkbox"
-            checked={data.auto_adjust_price}
-            onChange={(e) => setData('auto_adjust_price', e.target.checked)}
-            disabled={isReadOnly}
-            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-        />
-        Auto-Adjust Price
-    </label>
+                                            {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
+                                            <label
+                                                htmlFor="auto_adjust_price_rec"
+                                                className={`text-bold flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+                                                    data.auto_adjust_price
+                                                        ? 'bg-write-100 text-green-700 shadow-sm'
+                                                        : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+                                                }`}
+                                            >
+                                                <input
+                                                    id="auto_adjust_price_rec"
+                                                    type="checkbox"
+                                                    checked={
+                                                        data.auto_adjust_price
+                                                    }
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'auto_adjust_price',
+                                                            e.target.checked,
+                                                        )
+                                                    }
+                                                    disabled={isReadOnly}
+                                                    className="h-4 w-4 cursor-pointer rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
+                                                />
+                                                Ajuste Precio
+                                            </label>
 
-    {/* Línea divisoria sutil entre ambos botones */}
-    <div className="h-5 w-px bg-gray-300"></div>
+                                            {/* Línea divisoria sutil entre ambos botones */}
+                                            <div className="h-5 w-px bg-gray-300"></div>
 
-    {/* DERECHA: Checkbox Temporal (50%) */}
-    <label
-        htmlFor="is_temporary_rec"
-        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
-            data.is_temporary
-                ? 'bg-amber-100 text-amber-700 shadow-sm'
-                : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
-        }`}
-    >
-        <input
-            id="is_temporary_rec"
-            type="checkbox"
-            checked={data.is_temporary}
-            onChange={(e) => setData('is_temporary', e.target.checked)}
-            disabled={isReadOnly}
-            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-        />
-        Asig. TEMPORAL
-    </label>
-</div>
+                                            {/* DERECHA: Checkbox Temporal (50%) */}
+                                            <label
+                                                htmlFor="is_temporary_rec"
+                                                className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+                                                    data.is_temporary
+                                                        ? 'bg-amber-100 text-amber-700 shadow-sm'
+                                                        : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+                                                }`}
+                                            >
+                                                <input
+                                                    id="is_temporary_rec"
+                                                    type="checkbox"
+                                                    checked={data.is_temporary}
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'is_temporary',
+                                                            e.target.checked,
+                                                        )
+                                                    }
+                                                    disabled={isReadOnly}
+                                                    className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+                                                />
+                                                Asig. TEMPORAL
+                                            </label>
+                                        </div>
                                     </div>
 
                                     {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
@@ -2250,21 +2295,15 @@ export default function CheckinModal({
                                     </div>
                                 </div>
                             )}
-                            {/* ========================================================= */}
-                            {/* 👇 CAMPOS COMPARTIDOS (Fecha, Noches, Precio, etc.) 👇     */}
-                            {/* ESTO VA FUERA DE LA CONDICIÓN PARA QUE SE VEA EN AMBAS VISTAS */}
-                            {/* ========================================================= */}
-
                             {/* Caja de fecha de ingreso y Noches */}
                             <div className="grid grid-cols-[1fr_160px] gap-3">
                                 {/* COLUMNA IZQUIERDA: FECHA DE INGRESO + BOTÓN TOLERANCIA */}
                                 <div className="relative flex flex-col">
                                     {/* 1. Header con etiqueta */}
-                                    <div className="mb-0.5 flex flex-col justify-center min-h-[20px]">
+                                    <div className="mb-0.5 flex min-h-[20px] flex-col justify-center">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Ingreso
                                         </label>
-                                        
                                     </div>
 
                                     {/* 2. BOTÓN TOLERANCIA (FLOTANTE / ABSOLUTO) */}
