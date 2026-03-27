@@ -248,6 +248,7 @@ interface CheckinFormData {
     payment_method: string; // 'EFECTIVO' o 'QR'
     qr_bank: string; // 'BNB', 'BCP', etc.
     is_temporary: boolean;
+    auto_adjust_price: boolean;
     monto_efectivo?: number | string;
     monto_qr?: number | string;
 }
@@ -391,6 +392,7 @@ export default function CheckinModal({
             payment_method: 'EFECTIVO', // Por defecto efectivo
             qr_bank: '', // Vacío al inicio
             is_temporary: false,
+            auto_adjust_price: false,
             monto_efectivo: '',
             monto_qr: '',
         });
@@ -1998,34 +2000,47 @@ export default function CheckinModal({
                                 /* VISTA 1: ADMINISTRADOR (Selector de habitación)  */
                                 /* ------------------------------------------------ */
                                 <div>
-                                    <div className="mb-2 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 shadow-sm">
-                                        {/* DERECHA: Checkbox Temporal (Mantenido Intacto) */}
-                                        <div className="flex items-center gap-2 pr-1">
-                                            <label
-                                                htmlFor="is_temporary_admin"
-                                                className={`cursor-pointer text-xs font-bold transition-colors select-none ${
-                                                    data.is_temporary
-                                                        ? 'text-amber-600'
-                                                        : 'text-gray-500'
-                                                }`}
-                                            >
-                                                Asig. TEMPORAL:
-                                            </label>
-                                            <input
-                                                id="is_temporary_admin"
-                                                type="checkbox"
-                                                checked={data.is_temporary}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'is_temporary',
-                                                        e.target.checked,
-                                                    )
-                                                }
-                                                disabled={isReadOnly}
-                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-                                            />
-                                        </div>
-                                    </div>
+                                    <div className="mb-2 flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/50 p-1.5 shadow-sm">
+    {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
+    <label
+        htmlFor="auto_adjust_price_admin"
+        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+            data.auto_adjust_price
+                ? 'bg-blue-100 text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:bg-gray-200/50'
+        }`}
+    >
+        <input
+            id="auto_adjust_price_admin"
+            type="checkbox"
+            checked={data.auto_adjust_price}
+            onChange={(e) => setData('auto_adjust_price', e.target.checked)}
+            disabled={isReadOnly}
+            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+        />
+        Auto-Adjust Price
+    </label>
+
+    {/* DERECHA: Checkbox Temporal (50%) */}
+    <label
+        htmlFor="is_temporary_admin"
+        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+            data.is_temporary
+                ? 'bg-amber-100 text-amber-700 shadow-sm'
+                : 'text-gray-500 hover:bg-gray-200/50'
+        }`}
+    >
+        <input
+            id="is_temporary_admin"
+            type="checkbox"
+            checked={data.is_temporary}
+            onChange={(e) => setData('is_temporary', e.target.checked)}
+            disabled={isReadOnly}
+            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+        />
+        Asig. TEMPORAL
+    </label>
+</div>
 
                                     {/* --- CAMPO SELECT --- */}
                                     <select
@@ -2059,33 +2074,52 @@ export default function CheckinModal({
 
                                 <div className="mb-1">
                                     {/* 1. FILA DE OPCIONES (Solo Temporal Derecha) */}
-                                    <div className="mb-2 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 shadow-sm">
+                                    <div className="mb-1 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-0.5 shadow-sm">
                                         {/* Checkbox Temporal */}
-                                        <div className="flex items-center gap-2 pr-1">
-                                            <label
-                                                htmlFor="is_temporary_rec"
-                                                className={`cursor-pointer text-xs font-bold transition-colors select-none ${
-                                                    data.is_temporary
-                                                        ? 'text-amber-600'
-                                                        : 'text-gray-500'
-                                                }`}
-                                            >
-                                                Asig. TEMPORAL:
-                                            </label>
-                                            <input
-                                                id="is_temporary_rec"
-                                                type="checkbox"
-                                                checked={data.is_temporary}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'is_temporary',
-                                                        e.target.checked,
-                                                    )
-                                                }
-                                                disabled={isReadOnly}
-                                                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-                                            />
-                                        </div>
+                                        <div className="flex w-full items-center gap-2">
+    {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
+    <label
+        htmlFor="auto_adjust_price_rec"
+        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+            data.auto_adjust_price
+                ? 'bg-blue-100 text-blue-700 shadow-sm'
+                : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+        }`}
+    >
+        <input
+            id="auto_adjust_price_rec"
+            type="checkbox"
+            checked={data.auto_adjust_price}
+            onChange={(e) => setData('auto_adjust_price', e.target.checked)}
+            disabled={isReadOnly}
+            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+        />
+        Auto-Adjust Price
+    </label>
+
+    {/* Línea divisoria sutil entre ambos botones */}
+    <div className="h-5 w-px bg-gray-300"></div>
+
+    {/* DERECHA: Checkbox Temporal (50%) */}
+    <label
+        htmlFor="is_temporary_rec"
+        className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+            data.is_temporary
+                ? 'bg-amber-100 text-amber-700 shadow-sm'
+                : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+        }`}
+    >
+        <input
+            id="is_temporary_rec"
+            type="checkbox"
+            checked={data.is_temporary}
+            onChange={(e) => setData('is_temporary', e.target.checked)}
+            disabled={isReadOnly}
+            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
+        />
+        Asig. TEMPORAL
+    </label>
+</div>
                                     </div>
 
                                     {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
