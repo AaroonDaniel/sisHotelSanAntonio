@@ -30,8 +30,13 @@ class RoomController
             'checkins.guest',
             'checkins.companions'
         ])
-            ->orderBy('number', 'asc') // <--- AGREGAR ESTO
-            ->get();
+        // 1. Obtenemos los registros primero (quitamos el orderBy de SQL)
+        ->get() 
+        // 2. Aplicamos el ordenamiento Natural usando PHP
+        ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE) 
+        // 3. Re-indexamos los valores para que el Frontend lo reciba como un Array limpio
+        ->values(); 
+
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
             ->get();

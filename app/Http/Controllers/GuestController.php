@@ -206,5 +206,24 @@ class GuestController extends Controller
             ->take(10);
         return response()->json($professions);
     }
+    /**
+     * Buscar lugares de expedición (autocompletado en Check-in)
+     */
+    public function searchIssuedIn(Request $request)
+    {
+        $query = $request->input('query');
+
+        if (!$query) {
+            return response()->json([]);
+        }
+        $issuedIn = \App\Models\Guest::where('issued_in', 'like', '%' . $query . '%')
+            ->whereNotNull('issued_in')
+            ->where('issued_in', '!=', '')
+            ->distinct()
+            ->pluck('issued_in')
+            ->take(10); // Limitamos a 10 resultados para que la lista no tape toda la pantalla
+
+        return response()->json($issuedIn);
+    }
 
 }

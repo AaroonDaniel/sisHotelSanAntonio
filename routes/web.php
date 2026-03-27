@@ -116,6 +116,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
+    Route::get('/search/issued-in', [\App\Http\Controllers\GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
 
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
 

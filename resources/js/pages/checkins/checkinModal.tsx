@@ -488,6 +488,13 @@ export default function CheckinModal({
             ) {
                 setIsProfessionDropdownOpen(false);
             }
+            if (
+                issuedInDropdownRef.current &&
+                !issuedInDropdownRef.current.contains(event.target as Node)
+            ) {
+                setIsIssuedInDropdownOpen(false);
+            }
+
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () =>
@@ -1011,6 +1018,12 @@ export default function CheckinModal({
         e.preventDefault();
         executeSubmit();
     };
+    // ===============================
+    // AUTOCOMPLETE EXPEDIDO (BD)
+    // ===============================
+    const issuedInDropdownRef = useRef<HTMLDivElement>(null);
+    const [issuedInSuggestions, setIssuedInSuggestions] = useState<string[]>([]);
+    const [isIssuedInDropdownOpen, setIsIssuedInDropdownOpen] = useState(false);
 
     // ===============================
     // AUTOCOMPLETE PROCEDENCIA (BD)
@@ -1020,7 +1033,7 @@ export default function CheckinModal({
     const [originSuggestions, setOriginSuggestions] = useState<string[]>([]);
     const [isOriginDropdownOpen, setIsOriginDropdownOpen] = useState(false);
 
-    // Función para buscar en el Backend
+    // Función para buscar en el Backend ORIGIN
     const searchOrigins = async (query: string) => {
         // Solo buscamos si hay al menos 2 letras para no saturar
         if (!query || query.length < 2) {
@@ -1044,6 +1057,31 @@ export default function CheckinModal({
         handleFieldChange('origin', upperVal);
         setIsOriginDropdownOpen(true);
         searchOrigins(upperVal);
+    };
+
+    //Funsion parabuscar en el Backend EXPEDIDO
+    const searchIssuedIn = async (query: string) => {
+        // Buscamos desde 1 letra (ej: "L" para "LP")
+        if (!query || query.length < 1) {
+            setIssuedInSuggestions([]);
+            return;
+        }
+        try {
+            // NOTA: Asegúrate de tener esta ruta creada en tu backend (Laravel)
+            const response = await axios.get('/search/issued-in', {
+                params: { query: query },
+            });
+            setIssuedInSuggestions(response.data);
+        } catch (error) {
+            console.error('Error buscando expedidos:', error);
+        }
+    };
+
+    const handleIssuedInInput = (val: string) => {
+        const upperVal = val.toUpperCase();
+        handleFieldChange('issued_in', upperVal);
+        setIsIssuedInDropdownOpen(true);
+        searchIssuedIn(upperVal);
     };
 
     // ===============================
@@ -1520,29 +1558,57 @@ export default function CheckinModal({
                                         placeholder="123456"
                                     />
                                 </div>
-                                <div>
+                                <div className="relative" ref={issuedInDropdownRef}>
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Expedido
                                     </label>
-                                    <input
-                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase"
-                                        value={currentPerson.issued_in}
-                                        disabled={isReadOnly}
-                                        onChange={(e) =>
-                                            handleFieldChange(
-                                                'issued_in',
-                                                e.target.value.toUpperCase(),
-                                            )
-                                        }
-                                        placeholder="La Paz"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                            value={currentPerson.issued_in || ''}
+                                            disabled={isReadOnly}
+                                            placeholder="EJ: LP, SC, CB"
+                                            autoComplete="off"
+                                            onChange={(e) => handleIssuedInInput(e.target.value)}
+                                            onFocus={() => {
+                                                // Mostramos sugerencias si ya hay algo escrito
+                                                if ((currentPerson.issued_in || '').length > 0) {
+                                                    setIsIssuedInDropdownOpen(true);
+                                                    searchIssuedIn(currentPerson.issued_in as string);
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    setIsIssuedInDropdownOpen(false);
+                                                }, 200); // Retraso vital para poder hacer clic en la lista
+                                            }}
+                                        />
+
+                                        {/* Dropdown de sugerencias */}
+                                        {isIssuedInDropdownOpen && issuedInSuggestions.length > 0 && (
+                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                {issuedInSuggestions.map((item, index) => (
+                                                    <div
+                                                        key={index}
+                                                        onClick={() => {
+                                                            handleFieldChange('issued_in', item);
+                                                            setIsIssuedInDropdownOpen(false);
+                                                        }}
+                                                        className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
+                                                    >
+                                                        {item}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="relative" ref={nationalityRef}>
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Nacionalidad
                                     </label>
                                     <input
-                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase" // Changed text-black to text-gray-900 font-medium
+                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase"
                                         value={currentPerson.nationality}
                                         disabled={isReadOnly}
                                         onChange={(e) =>
@@ -1550,9 +1616,35 @@ export default function CheckinModal({
                                                 e.target.value,
                                             )
                                         }
-                                        onFocus={() =>
-                                            setShowCountrySuggestions(true)
-                                        }
+                                        onFocus={() => {
+                                            // 1. Si el texto dice exactamente BOLIVIANA, lo vaciamos al hacer clic
+                                            if (
+                                                currentPerson.nationality ===
+                                                'BOLIVIANA'
+                                            ) {
+                                                updateNationalityAndPhone('');
+                                            }
+                                            // Mostramos las sugerencias de países
+                                            setShowCountrySuggestions(true);
+                                        }}
+                                        onBlur={(e) => {
+                                            // 2. Usamos un pequeño retraso de 200ms. Esto es MUY IMPORTANTE
+                                            // para que si el usuario da clic en la lista de sugerencias, no se cierre antes de tiempo.
+                                            setTimeout(() => {
+                                                // Si el usuario se fue de la caja y la dejó vacía, restauramos BOLIVIANA
+                                                if (
+                                                    !e.target.value ||
+                                                    e.target.value.trim() === ''
+                                                ) {
+                                                    updateNationalityAndPhone(
+                                                        'BOLIVIANA',
+                                                    );
+                                                }
+                                                setShowCountrySuggestions(
+                                                    false,
+                                                );
+                                            }, 200);
+                                        }}
                                     />
                                     {showCountrySuggestions && (
                                         <div className="absolute z-10 mt-1 max-h-32 w-full overflow-y-auto rounded-md border bg-white shadow-lg">
