@@ -444,7 +444,7 @@ class CheckinController extends Controller
     {
         $request->validate([
             'new_room_id' => 'required|exists:rooms,id|different:room_id',
-            'transfer_reason' => 'nullable|string|max:255',
+            
             'selected_guests' => 'required|array|min:1', // <-- OBLIGATORIO recibir quiénes se mueven
             'selected_guests.*' => 'integer',
             'auto_adjust_price' => 'nullable|boolean',
@@ -528,7 +528,7 @@ class CheckinController extends Controller
                         'carried_balance' => $deudaHospedajeAnterior,
                         'is_temporary' => $checkin->is_temporary, // <-- MEJORA: Hereda el estado temporal
                         'status' => 'activo',
-                        'notes' => "Transferencia. Deuda Anterior: {$deudaHospedajeAnterior} Bs. | Razón: " . $request->transfer_reason,
+                        'notes' => "Transferencia. Deuda Anterior: {$deudaHospedajeAnterior} Bs.",
                     ]);
 
                     // MIGRACIÓN COMPLETA (Pagos, Servicios y Acompañantes)
@@ -594,7 +594,7 @@ class CheckinController extends Controller
                     'carried_balance' => 0, // <-- MEJORA: Empiezan sin deudas, la deuda se queda en la hab original
                     'is_temporary' => $checkin->is_temporary, // <-- MEJORA: Hereda el estado temporal
                     'status' => 'activo',
-                    'notes' => "Transferencia Parcial (División) desde Hab. " . $checkin->room->number . " | Razón: " . $request->transfer_reason,
+                    'notes' => "Transferencia Parcial (División) desde Hab. " . $checkin->room->number,
                 ]);
 
                 if (!empty($newNewCompanions)) {
