@@ -80,6 +80,16 @@ class User extends Authenticatable
     public function invoices(): HasMany {
         return $this->hasMany(Invoice::class);
     }
+
+    public function cashRegisters()
+    {
+        return $this->hasMany(CashRegister::class);
+    }
+
+    public function expenses()
+    {
+        return $this->hasMany(Expense::class);
+    }
 }
 
 
