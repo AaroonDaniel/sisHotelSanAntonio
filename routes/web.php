@@ -13,6 +13,7 @@ use App\Http\Controllers\CheckinDetailController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\UserProfileController;
+use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
@@ -168,6 +169,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/financial/pdf', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
     Route::get('/reports/financial/excel', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
+    Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
+    Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
+
+
 
 });
 

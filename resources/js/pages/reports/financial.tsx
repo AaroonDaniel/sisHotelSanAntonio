@@ -1,16 +1,18 @@
 // 1. Importas el Layout y tipos necesarios
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { User } from '@/layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react'; // <-- CAMBIO 1: Importamos router
 import { 
     Printer, Calendar, Banknote, QrCode, Layers, FileText, 
-    FileSpreadsheet, X, Loader2, ArrowLeft, User as UserIcon
+    FileSpreadsheet, X, Loader2, ArrowLeft, User as UserIcon,
+    LogOut // <-- Aseguramos que el ícono LogOut esté importado
 } from 'lucide-react';
 import { useState, FormEventHandler } from 'react';
 
 interface Props {
     auth: {
         user: User;
+        active_register?: any; // <-- CAMBIO 2: Agregamos esto para que TypeScript no de error
     };
     users?: User[]; // Lista de usuarios enviada desde el backend
     Filters?: {
@@ -27,7 +29,7 @@ export default function FinancialReport({ auth, users = [], Filters }: Props) {
     const [userId, setUserId] = useState(Filters?.user_id || auth.user.id.toString());
     const [tipoRegistro, setTipoRegistro] = useState<'efectivo' | 'bancos' | 'ambos'>('ambos');
     const [formato, setFormato] = useState<'pdf' | 'excel'>('pdf');
-    
+
     // Estados de UI
     const [isGenerating, setIsGenerating] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -66,26 +68,52 @@ export default function FinancialReport({ auth, users = [], Filters }: Props) {
         }, 600); 
     };
 
+    // 👇 CAMBIO 3: Función que apaga el interruptor en la base de datos sin usar Ziggy 👇
+    const handleCerrarCaja = () => {
+        if (confirm('¿Estás seguro de cerrar tu caja? Esta acción registrará la hora actual y no podrás deshacerla.')) {
+            
+            // 👇 1. Mostramos la ALERTA VISUAL que pediste justo antes de salir 👇
+            alert('✅ CAJA CERRADA EXITOSAMENTE.\n\nTu turno ha finalizado. El sistema cerrará tu sesión por seguridad. ¡Buen descanso!');
+
+            // 2. Llamamos al backend (Que ahora nos deslogueará y mandará al Login)
+            router.post('/cash-registers/close');
+        }
+    };
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Cierre de Caja" />
             
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-7 pb-10 flex flex-col h-[calc(120vh-5rem)]">
                 
-                {/* ENCABEZADO: Título y Volver */}
-                <div className="mb-1 flex-shrink-0 pt-0">
-                    <button 
-                        onClick={() => window.history.back()} 
-                        className="group flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-white transition-colors mb-4"
-                    >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 transition-all group-hover:bg-gray-700">
-                            <ArrowLeft className="h-4 w-4 text-white" />
-                        </div>
-                        <span className="text-gray-400">Volver atrás</span>
-                    </button>
-                    <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
-                        Cierre de Caja
-                    </h2>
+                {/* ENCABEZADO: Título, Volver y BOTÓN DE CIERRE DE TURNO */}
+                {/* CAMBIO 4: Modificamos este contenedor para que el botón rojo quede a la derecha */}
+                <div className="mb-4 flex-shrink-0 pt-0 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div>
+                        <button 
+                            onClick={() => window.history.back()} 
+                            className="group flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-white transition-colors mb-4"
+                        >
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 transition-all group-hover:bg-gray-700">
+                                <ArrowLeft className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="text-gray-400">Volver atrás</span>
+                        </button>
+                        <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+                            Cierre de Caja
+                        </h2>
+                    </div>
+
+                    {/* 👇 CAMBIO 5: Mostramos el botón rojo SOLO si el usuario tiene una caja abierta 👇 */}
+                    {auth.active_register && (
+                        <button 
+                            onClick={handleCerrarCaja}
+                            className="flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white shadow-lg hover:bg-red-500 active:scale-95 transition"
+                        >
+                            <LogOut className="h-5 w-5" />
+                            Confirmar Cierre de Turno
+                        </button>
+                    )}
                 </div>
 
                 {/* ZONA DE CONTENIDO CENTRAL */}
@@ -121,7 +149,6 @@ export default function FinancialReport({ auth, users = [], Filters }: Props) {
                     ) : (
                         
                         /* TARJETA DEL FORMULARIO */
-                        /* CAMBIO: Se ajustó max-h-full y flex-col para que el formulario no se desborde */
                         <div className="w-full max-w-2xl flex flex-col max-h-full overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100">
                             
                             {/* Header Formulario Fijo */}
@@ -134,7 +161,7 @@ export default function FinancialReport({ auth, users = [], Filters }: Props) {
                                 </h2>
                             </div>
 
-                            {/* Body Formulario - CAMBIO: flex-1 y min-h-0 para permitir scroll interno */}
+                            {/* Body Formulario */}
                             <form onSubmit={handleGenerar} className="flex flex-col flex-1 min-h-0">
                                 
                                 {/* ZONA DE INPUTS (CON SCROLL SI ES NECESARIO) */}

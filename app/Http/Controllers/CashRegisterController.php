@@ -33,4 +33,28 @@ class CashRegisterController extends Controller
 
         return back()->with('success', 'Turno iniciado. ¡Que tengas un excelente día!');
     }
+    // Función para cerrar la caja al finalizar turno
+    public function close(Request $request)
+    {
+        // 1. Buscamos si el usuario tiene una caja abierta
+        $activeRegister = CashRegister::where('user_id', Auth::id())
+                                      ->where('status', 'ABIERTA')
+                                      ->first();
+
+        // 2. Si por alguna razón no tiene caja, lo devolvemos
+        if (!$activeRegister) {
+            return back()->with('error', 'No tienes ninguna caja abierta para cerrar.');
+        }
+
+        // 3. Cerramos la caja guardando la hora actual
+        $activeRegister->update([
+            'status' => 'CERRADA',
+            'closed_at' => now(),
+        ]);
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return back()->with('success', 'Turno cerrado correctamente. ¡Buen trabajo!');
+    }
 }
