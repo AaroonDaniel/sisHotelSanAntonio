@@ -179,13 +179,8 @@ class CheckinController extends Controller
 
             // 2. Si no hay carnet, buscar por Nombre EXACTO (sin importar la fecha de nacimiento por ahora)
             if (!$existingGuest) {
-                // Buscamos a la persona por su nombre completo en mayúsculas
                 $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
 
-                // Si encontramos a alguien por el nombre, pero la persona que estamos guardando AHORA 
-                // sí tiene un Carnet nuevo (y el viejo no tenía), se lo asignaremos más abajo en el update.
-                // Sin embargo, si encontramos a alguien por nombre, pero el registro original SÍ TIENE CARNET
-                // y nosotros estamos intentando meterle otro carnet diferente... es otra persona.
                 if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
                     $existingGuest = null; // Falsa alarma, se llaman igual pero tienen carnets distintos. Creamos uno nuevo.
                 }
@@ -274,10 +269,12 @@ class CheckinController extends Controller
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
             'discount' => 'nullable|numeric|min:0',
+            
+            // 👇 NUEVOS CAMPOS CORPORATIVOS PERMITIDOS
+            'is_corporate' => 'nullable|boolean',
+            'payment_frequency' => 'nullable|string|max:255',
         ]);
 
-        // LOGICA DE PRECIO Y CAPACIDAD
-        // LOGICA DE PRECIO Y CAPACIDAD
         $totalGuest = 1;
         if ($request->has('companions') && is_array($request->companions)) {
             foreach ($request->companions as $compData) {
@@ -287,15 +284,25 @@ class CheckinController extends Controller
             }
         }
 
-        // 1. Obtenemos el precio original por defecto
+        // =========================================================
+        // 🌟 LÓGICA DE PRECIO Y PLAN CORPORATIVO (NUEVO REGISTRO)
+        // =========================================================
         $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
-        $agreedPrice = $roomModelForPrice->price->amount ?? 0;
+        $basePrice = $roomModelForPrice->price->amount ?? 0;
+        $agreedPrice = $basePrice;
 
-        // 2. Solo aplicamos el descuento automático si el botón fue activado en el frontend
-        if ($request->boolean('auto_adjust_price')) {
+        $isCorporate = $request->boolean('is_corporate');
+
+        // Si activó Plan Corporativo, descuento fijo de 20Bs
+        if ($isCorporate) {
+            $agreedPrice = max(0, $basePrice - 20);
+        } 
+        // Si no es corporativo, pero uso Auto-Ajuste
+        elseif ($request->boolean('auto_adjust_price')) {
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
 
+        // Lógica extra de descuento manual por si acaso
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $minAllowed = $agreedPrice * 0.5;
             $agreedPrice = max(floatval($request->discount), $minAllowed);
@@ -303,7 +310,7 @@ class CheckinController extends Controller
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $totalGuest) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isCorporate, $totalGuest) {
 
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
@@ -319,6 +326,11 @@ class CheckinController extends Controller
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
                 'is_temporary' => $request->boolean('is_temporary'),
+                
+                // 👇 NUEVOS CAMPOS CORPORATIVOS
+                'is_corporate' => $isCorporate,
+                'payment_frequency' => $isCorporate ? $request->input('payment_frequency') : null,
+                'corporate_days' => 0,
             ]);
 
             // --- PAGOS ---
@@ -331,7 +343,7 @@ class CheckinController extends Controller
                     'amount' => $montoInicial,
                     'method' => $request->payment_method,
                     'bank_name' => $banco,
-                    'description' => 'PAGO INICIAL (CHECK-IN)',
+                    'description' => 'PAGO INICIAL (CHECK-IN) / GARANTÍA CORPORATIVA',
                     'type' => 'PAGO'
                 ]);
             }
@@ -407,22 +419,17 @@ class CheckinController extends Controller
             $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
             
-            // 🌟 MAGIA: Si el precio fue ajustado, la capacidad se considera "llena" por defecto.
-            $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuest >= $maxCapacity);
+            // 🌟 MAGIA: Si ajustó precio manual o corporativo, perdonamos capacidad
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporate) ? true : ($totalGuest >= $maxCapacity);
 
-            // Verificamos las 3 condiciones
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
-            // 1. SIEMPRE forzamos el estado a OCUPADO para que se pinte de ROJO en el mapa
             \App\Models\Room::where('id', $validatedCheckin['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
-                // CASO 2: COMPLETO AL 100%
                 $checkin->update(['is_temporary' => false]);
-                
                 return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
             } else {
-                // CASO 1: ASIGNACIÓN RÁPIDA (Faltan datos o faltan personas)
                 $checkin->update(['is_temporary' => true]);
 
                 $mensaje = 'Faltan datos.';
@@ -432,7 +439,7 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de los Acompañantes.';
                 } elseif (!$isCapacityFull) {
                     $faltantes = $maxCapacity - $totalGuest;
-                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' para cerrar la asignación.";
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' o el 'Plan Corporativo'.";
                 }
 
                 return redirect()->back()->with('success', 'Asignación registrada. ATENCIÓN: ' . $mensaje);
@@ -653,7 +660,6 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
-        // 1. Validaciones (Mantenemos las que ya tienes, asegúrate de que esto coincida)
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -662,7 +668,11 @@ class CheckinController extends Controller
             'notes' => 'nullable|string',
             'origin' => 'nullable|string',
             'is_temporary' => 'boolean',
-            'auto_adjust_price' => 'boolean', // Asegurarnos de recibir este campo
+            'auto_adjust_price' => 'boolean',
+            
+            // 👇 NUEVOS CAMPOS CORPORATIVOS PERMITIDOS
+            'is_corporate' => 'nullable|boolean',
+            'payment_frequency' => 'nullable|string|max:255',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
@@ -673,14 +683,13 @@ class CheckinController extends Controller
             $guest = \App\Models\Guest::find($checkin->guest_id);
             
             if ($guest) {
-                // Actualizamos el huésped con los datos que hayan llenado en el modal
                 $guest->update([
                     'identification_number' => $request->identification_number ?? $guest->identification_number,
                     'nationality' => $request->nationality ? strtoupper($request->nationality) : $guest->nationality,
                     'profession' => $request->profession ? strtoupper($request->profession) : $guest->profession,
                     'civil_status' => $request->civil_status ? strtoupper($request->civil_status) : $guest->civil_status,
                     'birth_date' => $request->birth_date ?? $guest->birth_date,
-                    'issued_in' => $request->issued_in ?? $guest->issued_in, // Expedido en (ej. LP, CBBA)
+                    'issued_in' => $request->issued_in ?? $guest->issued_in,
                 ]);
             }
 
@@ -693,32 +702,13 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 2. VERIFICAR SI EL TITULAR ESTÁ COMPLETO (Usando datos frescos)
+            // 2. VERIFICAR SI EL TITULAR ESTÁ COMPLETO
             // =========================================================
             $isTitularComplete = true;
-            $missingField = null;
-
-            if (empty($guest->identification_number)) {
+            if (empty($guest->identification_number) || empty($guest->nationality) || empty($cleanOrigin) || empty($guest->profession) || empty($guest->civil_status) || empty($guest->birth_date)) {
                 $isTitularComplete = false;
-                $missingField = 'identification_number';
-            } elseif (empty($guest->nationality)) {
-                $isTitularComplete = false;
-                $missingField = 'nationality';
-            } elseif (empty($cleanOrigin)) {
-                $isTitularComplete = false;
-                $missingField = 'origin';
-            } elseif (empty($guest->profession)) {
-                $isTitularComplete = false;
-                $missingField = 'profession';
-            } elseif (empty($guest->civil_status)) {
-                $isTitularComplete = false;
-                $missingField = 'civil_status';
-            } elseif (empty($guest->birth_date)) {
-                $isTitularComplete = false;
-                $missingField = 'birth_date';
             }
 
-            // Actualizamos el status del perfil a COMPLETADO si ya se llenó todo
             if ($isTitularComplete && $guest) {
                 $guest->update(['profile_status' => 'COMPLETE']);
             }
@@ -734,7 +724,6 @@ class CheckinController extends Controller
 
                 foreach ($request->companions as $compData) {
                     if (empty($compData['full_name'])) continue;
-                    
                     $totalGuests++; 
 
                     $compName = strtoupper($compData['full_name']);
@@ -756,7 +745,6 @@ class CheckinController extends Controller
                     }
 
                     if (!$companion) {
-                        // SI ES NUEVO, lo creamos con todos los datos
                         $companion = \App\Models\Guest::create([
                             'full_name' => $compName,
                             'identification_number' => $compIdNumber,
@@ -767,7 +755,6 @@ class CheckinController extends Controller
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
                     } else {
-                        // 🛑 CORRECCIÓN: Si ya existe, ahora sí actualizamos TODOS sus datos
                         $companion->update([
                             'identification_number' => $compIdNumber ?? $companion->identification_number,
                             'birth_date' => $compBirthDate ?? $companion->birth_date,
@@ -778,75 +765,96 @@ class CheckinController extends Controller
                         ]);
                     }
 
-                    // 🛑 CORRECCIÓN: Guardamos la Procedencia (Origin) en la relación (Pivot)
                     if ($companion->id !== $guest->id) {
                         $idsParaSincronizar[$companion->id] = [
                             'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
                         ];
                     }
                 }
-                
                 $checkin->companions()->sync($idsParaSincronizar);
             } else {
                 $checkin->companions()->detach();
             }
+
             // =========================================================
-            // 4. LÓGICA DE PRECIO Y CAPACIDAD (Auto-Ajuste)
+            // 4. LÓGICA DE PRECIO, CAPACIDAD Y PLAN CORPORATIVO
             // =========================================================
             $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
-            $updatedAgreedPrice = $roomModelUpdate->price->amount ?? 0;
+            $basePrice = $roomModelUpdate->price->amount ?? 0;
 
-            // 🌟 MAGIA 1: Si el botón está activado, "engañamos" al sistema diciéndole 
-            // que la capacidad ya está llena, perdonando las camas vacías.
-            $isCapacityFull = $request->boolean('auto_adjust_price') ? true : ($totalGuests >= $maxCapacity);
+            // 🌟 DETECTOR DE RUPTURAS CORPORATIVAS
+            $isCorporateNow = $request->boolean('is_corporate');
+            $updatedAgreedPrice = $checkin->agreed_price ?? $basePrice; 
+            $paymentFrequency = $checkin->payment_frequency;
+            $corporateDays = $checkin->corporate_days;
 
-            // 🌟 MAGIA 2: Si el botón está activado, calculamos el nuevo precio descontado.
-            if ($request->boolean('auto_adjust_price')) {
-                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            if ($checkin->is_corporate == true && $isCorporateNow == false) {
+                // CASO A: ¡EL CASTIGO! El trato estaba activo y lo acaban de apagar
+                $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
+                $now = \Carbon\Carbon::now();
+                $corporateDays = max(0, $checkInDate->diffInDays($now)); // Congelamos días baratos
+                
+                $updatedAgreedPrice = $basePrice; // Vuelve a precio normal
+                $paymentFrequency = null; 
+            } 
+            elseif ($checkin->is_corporate == false && $isCorporateNow == true) {
+                // CASO B: Encienden el plan corporativo que habían olvidado
+                $updatedAgreedPrice = max(0, $basePrice - 20); 
+                $paymentFrequency = $request->input('payment_frequency');
+                $corporateDays = 0;
+            } 
+            elseif (!$isCorporateNow) {
+                // CASO C: Lógica normal de Auto-Ajuste (NO corporativo)
+                if ($request->boolean('auto_adjust_price')) {
+                    $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+                }
+            } 
+            else {
+                // Sigue activo el corporativo, actualizamos frecuencia por si la editó
+                $paymentFrequency = $request->input('payment_frequency');
             }
 
+            // Si tiene corporativo o auto_ajuste, perdonamos el control de capacidad
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporateNow) ? true : ($totalGuests >= $maxCapacity);
+
             // =========================================================
-            // 5. EVALUACIÓN FINAL: ¿Está TODO completo?
+            // 5. EVALUACIÓN FINAL Y GUARDADO
             // =========================================================
-            // 🛑 EL SECRETO: Ahora multiplicamos las 3 variables (Titular + Acompañantes + Capacidad)
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
-            // Siempre forzamos a que la habitación sea vista como OCUPADA en la pantalla (Rojo)
             \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
 
-            if ($isEverythingComplete) {
-                // CASO A: TODO ESTÁ LLENO (No faltan datos ni capacidad)
-                $checkin->update([
-                    'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
-                    'duration_days' => $validated['duration_days'],
-                    'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
-                    'origin' => $cleanOrigin,
-                    'agreed_price' => $updatedAgreedPrice, // <-- GUARDAMOS EL PRECIO AJUSTADO
-                    'is_temporary' => false, // <-- ¡YA NO ES TEMPORAL!
-                ]);
+            // Armamos los datos base a actualizar
+            $updateData = [
+                'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
+                'duration_days' => $validated['duration_days'],
+                'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
+                'origin' => $cleanOrigin,
+                
+                // 👇 MAGIA APLICADA AQUÍ
+                'agreed_price' => $updatedAgreedPrice,
+                'is_corporate' => $isCorporateNow,
+                'payment_frequency' => $paymentFrequency,
+                'corporate_days' => $corporateDays,
+            ];
 
+            if ($isEverythingComplete) {
+                $updateData['is_temporary'] = false;
+                $checkin->update($updateData);
                 return redirect()->back()->with('success', 'Check-in completado al 100%. La asignación temporal fue removida.');
             } else {
-                // CASO B: FALTAN DATOS O FALTAN PERSONAS
-                $checkin->update([
-                    'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
-                    'duration_days' => $validated['duration_days'],
-                    'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
-                    'origin' => $cleanOrigin,
-                    'agreed_price' => $updatedAgreedPrice, // <-- GUARDAMOS EL PRECIO (Aunque falten datos)
-                    'is_temporary' => true, // <-- SIGUE SIENDO TEMPORAL
-                ]);
+                $updateData['is_temporary'] = true;
+                $checkin->update($updateData);
 
-                // Generamos el mensaje exacto de qué está fallando
                 $mensaje = 'Faltan datos.';
                 if (!$isTitularComplete) {
                     $mensaje = 'Faltan datos obligatorios del Titular.';
                 } elseif (!$allCompanionsComplete) {
-                    $mensaje = 'El titular está listo, pero faltan datos de los Acompañantes.';
+                    $mensaje = 'Faltan datos de los Acompañantes.';
                 } elseif (!$isCapacityFull) {
                     $faltantes = $maxCapacity - $totalGuests;
-                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' para cerrar la asignación.";
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Active 'Auto-Ajuste' o 'Plan Corporativo' para cerrar la alerta.";
                 }
 
                 return redirect()->back()->with('success', 'Datos guardados, pero la asignación sigue TEMPORAL. ' . $mensaje);
