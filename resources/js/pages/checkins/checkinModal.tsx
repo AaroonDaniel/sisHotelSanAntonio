@@ -176,6 +176,10 @@ export interface CheckinData {
     qr_bank?: string | null;
     is_temporary?: boolean;
     auto_adjust_price?: boolean;
+    is_corporate?: boolean;
+    payment_frequency?: string | number;
+    corporate_days: number;
+    payments?: any[];
 }
 
 export interface Room {
@@ -253,6 +257,9 @@ interface CheckinFormData {
     auto_adjust_price: boolean;
     monto_efectivo?: number | string;
     monto_qr?: number | string;
+    is_corporate: boolean;
+    payment_frequency: string | number;
+    corporate_days: number;
 }
 
 export default function CheckinModal({
@@ -270,6 +277,9 @@ export default function CheckinModal({
     isReceptionView = false,
 }: CheckinModalProps) {
     const isReadOnly = false;
+    // Estado de para la Asig corporativa
+    const [isCustomFrequency, setIsCustomFrequency] = useState(false);
+
     // Estado para manejar la alerta de huesped ocupado
     const [guestConflictError, setGuestConflictError] = useState<string | null>(
         null,
@@ -377,7 +387,6 @@ export default function CheckinModal({
             check_in_date: now,
             duration_days: 1,
             advance_payment: 0,
-
             notes: '',
             selected_services: [],
             full_name: '',
@@ -395,6 +404,9 @@ export default function CheckinModal({
             auto_adjust_price: false,
             monto_efectivo: '',
             monto_qr: '',
+            is_corporate: false,
+            payment_frequency: '',
+            corporate_days: 0,
         });
 
     // =========================================================================
@@ -494,7 +506,6 @@ export default function CheckinModal({
             ) {
                 setIsIssuedInDropdownOpen(false);
             }
-
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () =>
@@ -613,7 +624,6 @@ export default function CheckinModal({
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
 
                 // 2. Comparamos el precio que está pagando vs el precio normal
-                // Si paga menos del precio base, deducimos que el Auto-Ajuste fue utilizado.
                 const isPriceAdjusted =
                     originalRoomPrice > 0 &&
                     Number(checkinToEdit.agreed_price) <
@@ -622,7 +632,6 @@ export default function CheckinModal({
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
-                    // 🚀 SI ES ADICIONAL Y PENDIENTE: Vaciamos el ID y los datos para no sobreescribir al titular
                     guest_id: isSecondaryRoom
                         ? ''
                         : String(checkinToEdit.guest_id),
@@ -643,11 +652,14 @@ export default function CheckinModal({
                           )
                         : [],
 
-                    // 🌟 AQUÍ ENCENDEMOS EL BOTÓN SI DETECTAMOS LA REBAJA
                     auto_adjust_price: isPriceAdjusted,
-                    is_temporary: !!checkinToEdit.is_temporary, // Forzamos booleano por si acaso
+                    is_temporary: !!checkinToEdit.is_temporary,
 
-                    // 🚀 DATOS DEL TITULAR (BLANCOS SI ES HABITACIÓN ADICIONAL PENDIENTE)
+                    // 🌟 AQUÍ ESTÁ LA MEMORIA CORPORATIVA 🌟
+                    is_corporate: !!checkinToEdit.is_corporate,
+                    payment_frequency: checkinToEdit.payment_frequency || '',
+                    corporate_days: checkinToEdit.corporate_days || 0,
+
                     full_name: isSecondaryRoom
                         ? ''
                         : checkinToEdit.guest?.full_name || '',
@@ -673,7 +685,6 @@ export default function CheckinModal({
                         ? ''
                         : checkinToEdit.guest?.phone || '',
 
-                    // Mapeamos acompañantes
                     companions:
                         checkinToEdit.companions?.map((c: any) => ({
                             id: c.id,
@@ -692,6 +703,16 @@ export default function CheckinModal({
                     payment_method: checkinToEdit.payment_method || 'EFECTIVO',
                     qr_bank: checkinToEdit.qr_bank || '',
                 }));
+
+                // 🌟 LÓGICA PARA MOSTRAR LA CAJA "OTRO" SI TENÍA UN NÚMERO PERSONALIZADO
+                if (checkinToEdit.is_corporate) {
+                    const frec = String(checkinToEdit.payment_frequency);
+                    if (frec && !['1', '7', '15', '30'].includes(frec)) {
+                        setIsCustomFrequency(true);
+                    } else {
+                        setIsCustomFrequency(false);
+                    }
+                }
             } else {
                 // ===============================================
                 // MODO NUEVO REGISTRO: Limpiar formulario
@@ -711,9 +732,17 @@ export default function CheckinModal({
                     companions: [],
                     payment_method: 'EFECTIVO',
                     qr_bank: '',
-                    auto_adjust_price: false, // <-- Si es nuevo, arranca siempre apagado
-                    is_temporary: false, // <-- Arranca apagado
+                    auto_adjust_price: false,
+                    is_temporary: false,
+
+                    // 🌟 LIMPIAMOS LA MEMORIA CORPORATIVA 🌟
+                    is_corporate: false,
+                    payment_frequency: '',
+                    corporate_days: 0,
                 }));
+
+                // Aseguramos que la caja "OTRO" se oculte
+                setIsCustomFrequency(false);
             }
         }
         // 🛑 IMPORTANTE: Agregamos 'rooms' al arreglo de dependencias al final
@@ -1022,7 +1051,9 @@ export default function CheckinModal({
     // AUTOCOMPLETE EXPEDIDO (BD)
     // ===============================
     const issuedInDropdownRef = useRef<HTMLDivElement>(null);
-    const [issuedInSuggestions, setIssuedInSuggestions] = useState<string[]>([]);
+    const [issuedInSuggestions, setIssuedInSuggestions] = useState<string[]>(
+        [],
+    );
     const [isIssuedInDropdownOpen, setIsIssuedInDropdownOpen] = useState(false);
 
     // ===============================
@@ -1558,49 +1589,77 @@ export default function CheckinModal({
                                         placeholder="123456"
                                     />
                                 </div>
-                                <div className="relative" ref={issuedInDropdownRef}>
+                                <div
+                                    className="relative"
+                                    ref={issuedInDropdownRef}
+                                >
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Expedido
                                     </label>
                                     <div className="relative">
                                         <input
                                             className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
-                                            value={currentPerson.issued_in || ''}
+                                            value={
+                                                currentPerson.issued_in || ''
+                                            }
                                             disabled={isReadOnly}
                                             placeholder="EJ: LP, SC, CB"
                                             autoComplete="off"
-                                            onChange={(e) => handleIssuedInInput(e.target.value)}
+                                            onChange={(e) =>
+                                                handleIssuedInInput(
+                                                    e.target.value,
+                                                )
+                                            }
                                             onFocus={() => {
                                                 // Mostramos sugerencias si ya hay algo escrito
-                                                if ((currentPerson.issued_in || '').length > 0) {
-                                                    setIsIssuedInDropdownOpen(true);
-                                                    searchIssuedIn(currentPerson.issued_in as string);
+                                                if (
+                                                    (
+                                                        currentPerson.issued_in ||
+                                                        ''
+                                                    ).length > 0
+                                                ) {
+                                                    setIsIssuedInDropdownOpen(
+                                                        true,
+                                                    );
+                                                    searchIssuedIn(
+                                                        currentPerson.issued_in as string,
+                                                    );
                                                 }
                                             }}
                                             onBlur={() => {
                                                 setTimeout(() => {
-                                                    setIsIssuedInDropdownOpen(false);
+                                                    setIsIssuedInDropdownOpen(
+                                                        false,
+                                                    );
                                                 }, 200); // Retraso vital para poder hacer clic en la lista
                                             }}
                                         />
 
                                         {/* Dropdown de sugerencias */}
-                                        {isIssuedInDropdownOpen && issuedInSuggestions.length > 0 && (
-                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                {issuedInSuggestions.map((item, index) => (
-                                                    <div
-                                                        key={index}
-                                                        onClick={() => {
-                                                            handleFieldChange('issued_in', item);
-                                                            setIsIssuedInDropdownOpen(false);
-                                                        }}
-                                                        className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
-                                                    >
-                                                        {item}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        {isIssuedInDropdownOpen &&
+                                            issuedInSuggestions.length > 0 && (
+                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                    {issuedInSuggestions.map(
+                                                        (item, index) => (
+                                                            <div
+                                                                key={index}
+                                                                onClick={() => {
+                                                                    handleFieldChange(
+                                                                        'issued_in',
+                                                                        item,
+                                                                    );
+                                                                    setIsIssuedInDropdownOpen(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                                className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
+                                                            >
+                                                                {item}
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            )}
                                     </div>
                                 </div>
                                 <div className="relative" ref={nationalityRef}>
@@ -2199,14 +2258,13 @@ export default function CheckinModal({
                                 <div className="mb-1">
                                     {/* 1. FILA DE OPCIONES (Solo Temporal Derecha) */}
                                     <div className="mb-1 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-0.5 shadow-sm">
-                                        {/* Checkbox Temporal */}
                                         <div className="flex w-full items-center gap-2">
                                             {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
                                             <label
                                                 htmlFor="auto_adjust_price_rec"
-                                                className={`text-bold flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
+                                                className={`text-bold flex w-[40%] cursor-pointer items-center justify-center gap-2 rounded-lg p-3 text-xs font-bold transition-all select-none ${
                                                     data.auto_adjust_price
-                                                        ? 'bg-write-100 text-green-700 shadow-sm'
+                                                        ? 'bg-white text-green-700 shadow-sm'
                                                         : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
                                                 }`}
                                             >
@@ -2222,39 +2280,163 @@ export default function CheckinModal({
                                                             e.target.checked,
                                                         )
                                                     }
-                                                    disabled={isReadOnly}
+                                                    disabled={
+                                                        isReadOnly ||
+                                                        data.is_corporate
+                                                    }
                                                     className="h-4 w-4 cursor-pointer rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
                                                 />
-                                                Ajuste Precio
+                                                AJUSTE DE PRECIO
                                             </label>
 
                                             {/* Línea divisoria sutil entre ambos botones */}
                                             <div className="h-5 w-px bg-gray-300"></div>
 
-                                            {/* DERECHA: Checkbox Temporal (50%) */}
-                                            <label
-                                                htmlFor="is_temporary_rec"
-                                                className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg p-2 text-xs font-bold transition-all select-none ${
-                                                    data.is_temporary
-                                                        ? 'bg-amber-100 text-amber-700 shadow-sm'
-                                                        : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+                                            {/* DERECHA: Checkbox Corporativo y Controles (50%) */}
+                                            {/* DERECHA: Asig. CORP (w-[60%]) */}
+                                            <div
+                                                className={`flex w-[60%] items-center justify-center rounded-lg p-1 transition-all ${
+                                                    data.is_corporate
+                                                        ? 'border border-indigo-100 bg-indigo-50 shadow-sm'
+                                                        : 'hover:bg-gray-200/50'
                                                 }`}
                                             >
-                                                <input
-                                                    id="is_temporary_rec"
-                                                    type="checkbox"
-                                                    checked={data.is_temporary}
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'is_temporary',
-                                                            e.target.checked,
-                                                        )
-                                                    }
-                                                    disabled={isReadOnly}
-                                                    className="h-4 w-4 cursor-pointer rounded border-gray-300 text-amber-500 focus:ring-amber-500 disabled:opacity-50"
-                                                />
-                                                Asig. TEMPORAL
-                                            </label>
+                                                <label
+                                                    htmlFor="is_corporate_rec"
+                                                    className={`flex cursor-pointer items-center justify-center gap-1.5 text-xs font-bold transition-all select-none ${
+                                                        data.is_corporate
+                                                            ? 'text-indigo-800'
+                                                            : 'text-gray-500'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        id="is_corporate_rec"
+                                                        type="checkbox"
+                                                        checked={
+                                                            data.is_corporate
+                                                        }
+                                                        onChange={(e) => {
+                                                            const isChecked =
+                                                                e.target
+                                                                    .checked;
+                                                            setData(
+                                                                'is_corporate',
+                                                                isChecked,
+                                                            );
+                                                            if (!isChecked) {
+                                                                setData(
+                                                                    'payment_frequency',
+                                                                    '',
+                                                                );
+                                                                setIsCustomFrequency(
+                                                                    false,
+                                                                );
+                                                            } else {
+                                                                setData(
+                                                                    'auto_adjust_price',
+                                                                    false,
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={isReadOnly}
+                                                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                                                    />
+                                                    ASIG. CORP
+                                                </label>
+
+                                                {/* Controles que aparecen AL LADO */}
+                                                {data.is_corporate && (
+                                                    <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
+                                                        {/* 🚨 SELECTOR MÁS PEQUEÑO: Agregamos w-[68px] y pr-4 */}
+                                                        <select
+                                                            className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
+                                                            value={
+                                                                isCustomFrequency
+                                                                    ? 'OTRO'
+                                                                    : data.payment_frequency
+                                                            }
+                                                            onChange={(e) => {
+                                                                if (
+                                                                    e.target
+                                                                        .value ===
+                                                                    'OTRO'
+                                                                ) {
+                                                                    setIsCustomFrequency(
+                                                                        true,
+                                                                    );
+                                                                    setData(
+                                                                        'payment_frequency',
+                                                                        '',
+                                                                    );
+                                                                } else {
+                                                                    setIsCustomFrequency(
+                                                                        false,
+                                                                    );
+                                                                    setData(
+                                                                        'payment_frequency',
+                                                                        e.target
+                                                                            .value,
+                                                                    );
+                                                                }
+                                                            }}
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
+                                                            required={
+                                                                data.is_corporate
+                                                            }
+                                                        >
+                                                            <option
+                                                                value=""
+                                                                disabled
+                                                            >
+                                                                Días...
+                                                            </option>
+                                                            <option value="1">
+                                                                1 día
+                                                            </option>
+                                                            <option value="7">
+                                                                7 días
+                                                            </option>
+                                                            <option value="15">
+                                                                15 días
+                                                            </option>
+                                                            <option value="30">
+                                                                30 días
+                                                            </option>
+                                                            <option value="OTRO">
+                                                                Otro
+                                                            </option>
+                                                        </select>
+
+                                                        {/* 🚨 CAJA DE TEXTO MÁS ANCHA: Cambiamos w-12 por w-16 y px-2 */}
+                                                        {isCustomFrequency && (
+                                                            <input
+                                                                type="number"
+                                                                min="2"
+                                                                className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm text-black focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                placeholder="Nº"
+                                                                value={
+                                                                    data.payment_frequency
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setData(
+                                                                        'payment_frequency',
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    isReadOnly
+                                                                }
+                                                                required={
+                                                                    isCustomFrequency
+                                                                }
+                                                            />
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 

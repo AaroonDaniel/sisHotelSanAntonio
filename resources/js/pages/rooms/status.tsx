@@ -997,22 +997,81 @@ export default function RoomsStatus({
                         const isEligibleForMulti =
                             isMultiCheckoutMode && isOccupied;
 
+                        // =========================================================
+                        // 🧠 MOTOR MATEMÁTICO: CÁLCULO DEL SEMÁFORO CORPORATIVO
+                        // =========================================================
+                        const isCorporate = activeCheckin?.is_corporate;
+                        let corpState: any = null;
+
+                        if (isCorporate && activeCheckin) {
+                            // 1. Sumamos lo que pagó
+                            let totalPaid = 0;
+                            if (activeCheckin.payments && activeCheckin.payments.length > 0) {
+                                totalPaid = activeCheckin.payments.reduce((acc: number, p: any) => {
+                                    const monto = parseFloat(p.amount) || 0;
+                                    return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
+                                }, 0);
+                            } else {
+                                totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
+                            }
+
+                            // 2. Días cubiertos por el pago
+                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
+                            const daysPaid = agreedPrice > 0 ? Math.floor(totalPaid / agreedPrice) : 0;
+                            
+                            // 3. Frecuencia de crédito pactada
+                            const frequency = parseInt(String(activeCheckin.payment_frequency)) || 1;
+
+                            // 4. Fecha Límite a las 00:00 hrs
+                            const checkinDate = new Date(activeCheckin.check_in_date);
+                            checkinDate.setHours(0, 0, 0, 0);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+
+                            const limitDate = new Date(checkinDate);
+                            limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
+
+                            // 5. Días restantes
+                            const diffTime = limitDate.getTime() - today.getTime();
+                            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                            // 6. Colores del Semáforo 🚦 (Solo color de fondo y texto)
+                            if (daysRemaining > 1) {
+                                corpState = { badge: 'bg-emerald-500 text-white', text: `CORP: Al día` };
+                            } else if (daysRemaining === 1) {
+                                corpState = { badge: 'bg-yellow-400 text-yellow-900', text: `CORP: Mañana` };
+                            } else if (daysRemaining === 0) {
+                                corpState = { badge: 'bg-orange-500 text-white animate-pulse', text: `COBRAR HOY` };
+                            } else {
+                                corpState = { badge: 'bg-red-600 text-white animate-pulse font-black', text: `MOROSO (${Math.abs(daysRemaining)}d)` };
+                            }
+                        }
+                        // =========================================================
+
                         return (
                             <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''} `}
+                                // 🚨 Quitamos el "glow" de aquí para que la tarjeta no brille 🚨
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
-                                {/* Check original */}
+                                {/* 🚦 EL SEMÁFORO VISUAL (Pegado arriba a la derecha) 🚦 */}
+                                {corpState && (
+                                    <div className={`absolute top-0 right-0 z-20 rounded-bl-xl rounded-tr-lg px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-md ${corpState.badge}`}>
+                                        {corpState.text}
+                                    </div>
+                                )}
+
+                                {/* Check original (Lo bajamos un poquitito si es corporativo para que no choque) */}
                                 {isSelected && (
-                                    <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in">
+                                    <div className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}>
                                         <CheckCircle2 className="h-5 w-5" />
                                     </div>
                                 )}
 
-                                {/* 👇 ESTO FALTABA: Check verde cuando se selecciona para cobro múltiple 👇 */}
+                                {/* Check verde cuando se selecciona para cobro múltiple */}
                                 {isMultiSelected && (
-                                    <div className="absolute top-2 right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in">
+                                    <div className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}>
                                         <CheckCircle2 className="h-6 w-6" />
                                     </div>
                                 )}
@@ -1032,33 +1091,24 @@ export default function RoomsStatus({
                                             >
                                                 {config.info}
                                             </p>
-                                            {/* 👇 TIPO DE BAÑO CON CONTENEDOR DE COLOR (BADGE) 👇 */}
+                                            
+                                            {/* TIPO DE BAÑO */}
                                             {config.des && (
-                                                /* flex y justify-end empujan el contenedor hacia la derecha */
-                                                <div className="mt-2 flex w-full justify-end">
+                                                <div className="mt-2 flex w-full">
                                                     <span
                                                         className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold tracking-widest uppercase shadow-sm backdrop-blur-md transition-colors ${
-                                                            config.des ===
-                                                            'B.Priv'
-                                                                ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700' // 🔵 Azul Suave (Privacidad / Limpieza)
-                                                                : config.des ===
-                                                                    'B.Comp'
-                                                                  ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700' // 🟠 Ámbar Suave (Atención / Compartido)
+                                                            config.des === 'B.Priv'
+                                                                ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700'
+                                                                : config.des === 'B.Comp'
+                                                                  ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700'
                                                                   : 'border border-gray-200/50 bg-gray-50/90 text-gray-700'
                                                         }`}
                                                     >
                                                         {config.des}
                                                     </span>
                                                 </div>
-                                            )}{' '}
+                                            )}
                                         </div>
-                                        {/*
-                                        {!isSelected && (
-                                            <div className="rounded-full bg-white/20 p-1.5 backdrop-blur-sm">
-                                                <Bed className="h-5 w-5 text-white" />
-                                            </div>
-                                        )}
-                                        */}
                                     </div>
                                 </div>
                                 {isActionable ? (
