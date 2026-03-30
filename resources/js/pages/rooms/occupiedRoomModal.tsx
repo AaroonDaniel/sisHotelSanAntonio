@@ -414,17 +414,32 @@ const calculateRealNights = () => {
                                                     {formatCurrency(totalPaid)}
                                                 </span>
                                             </div>
-                                            <div className="mx-2 h-8 w-px bg-gray-200"></div>
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                                                    Saldo Pendiente
-                                                </span>
-                                                <span
-                                                    className={`text-lg font-black ${balanceDue > 0 ? 'text-red-500' : 'text-blue-500'}`}
-                                                >
-                                                    {formatCurrency(balanceDue)}
-                                                </span>
-                                            </div>
+                                            
+                                            {/* 👇 MAGIA: Ocultamos esta parte si es corporativo 👇 */}
+                                            {!liveCheckin.is_corporate && (
+                                                <>
+                                                    <div className="mx-2 h-8 w-px bg-gray-200"></div>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                                                            Saldo Pendiente
+                                                        </span>
+                                                        <span
+                                                            className={`text-lg font-black ${balanceDue > 0 ? 'text-red-500' : 'text-blue-500'}`}
+                                                        >
+                                                            {formatCurrency(balanceDue)}
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* 👇 OPCIONAL: Para que no quede vacío, ponemos un letrerito 👇 */}
+                                            {liveCheckin.is_corporate && (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="rounded bg-indigo-100 px-2 py-1 text-[9px] font-black tracking-widest text-indigo-700 uppercase">
+                                                        Corporativo
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* --- BOTÓN / FORMULARIO DE ADELANTO --- */}

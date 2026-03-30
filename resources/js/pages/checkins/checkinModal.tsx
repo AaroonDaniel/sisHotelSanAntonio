@@ -1045,6 +1045,24 @@ export default function CheckinModal({
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+
+        // =========================================================
+        // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
+        // =========================================================
+        if (data.is_corporate) {
+            const montoAdelanto = Number(data.advance_payment);
+            
+            if (!montoAdelanto || montoAdelanto <= 0) {
+                // 1. Alerta en pantalla
+                alert("⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.");
+                
+                // 2. Pintamos el error usando el sistema de Inertia que ya tienes
+                // (Opcional, pero ayuda a que se vea en rojo abajo del input)
+                return; // 🛑 EL CANDADO SE CIERRA: No ejecutamos executeSubmit()
+            }
+        }
+        // =========================================================
+
         executeSubmit();
     };
     // ===============================
@@ -2819,7 +2837,12 @@ export default function CheckinModal({
                                                             e.target.select()
                                                         }
                                                         disabled={!isTitular}
-                                                        className="block w-full [appearance:textfield] rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                        required={data.is_corporate}
+                                                        className={`block w-full [appearance:textfield] rounded-xl border py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+                                                            data.is_corporate && (!data.advance_payment || data.advance_payment <= 0) 
+                                                            ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo
+                                                            : 'border-gray-400'
+                                                        }`}
                                                         placeholder="0.00"
                                                     />
                                                 </div>
