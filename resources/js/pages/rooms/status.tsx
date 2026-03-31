@@ -12,6 +12,7 @@ import {
     CheckCircle2,
     Construction,
     FileEdit,
+    FileText,
     Home,
     Loader2,
     LogOut,
@@ -149,6 +150,22 @@ export default function RoomsStatus({
     // Detalles de asignacion
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [checkinForDetails, setCheckinForDetails] = useState<any>(null);
+
+    // Vista previa de reporte de cierre de caja
+    const [quickPreviewUrl, setQuickPreviewUrl] = useState<string | null>(null);
+
+    const handleOpenQuickPreview = () => {
+        const today = new Date().toISOString().split('T')[0];
+        const params = new URLSearchParams({
+            start_date: today,
+            end_date: today,
+            user_id: auth.user.id.toString(),
+            record_type: 'ambos',
+        });
+        setQuickPreviewUrl(
+            `/reports/financial/pdf?${params.toString()}&t=${Date.now()}`,
+        );
+    };
 
     // Detalles de una nueva vista para los datos del usuario
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
@@ -320,7 +337,7 @@ export default function RoomsStatus({
                 (c) => c.profile_status === 'INCOMPLETE',
             );
 
-            // Origin missing = Falta de datos 
+            // Origin missing = Falta de datos
             const isOriginMissing =
                 !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
@@ -328,15 +345,18 @@ export default function RoomsStatus({
             // --- 🚀 NUEVO: VERIFICAR CAPACIDAD O AUTO-AJUSTE ---
             const roomCapacity = room.room_type?.capacity || 1;
             const totalGuests = 1 + (companions?.length || 0);
-            
+
             // Verificamos si el precio acordado es MENOR al precio original normal.
             const originalRoomPrice = room.price?.amount || 0;
-            
-            // ¿Se presionó el botón de reajuste en el backend? 
-            const isPriceAdjusted = originalRoomPrice > 0 && activeCheckin.agreed_price < originalRoomPrice;
+
+            // ¿Se presionó el botón de reajuste en el backend?
+            const isPriceAdjusted =
+                originalRoomPrice > 0 &&
+                activeCheckin.agreed_price < originalRoomPrice;
 
             // Faltan personas SOLO SI: hay camas vacías Y NO se ha reajustado el precio.
-            const isCapacityMissing = (totalGuests < roomCapacity) && !isPriceAdjusted;
+            const isCapacityMissing =
+                totalGuests < roomCapacity && !isPriceAdjusted;
 
             // Si falta algún dato O faltan personas (sin ajuste), forzamos INCOMPLETO (Naranja)
             if (
@@ -367,7 +387,7 @@ export default function RoomsStatus({
 
         return 'unknown';
     };
-    
+
     // =========================================================
     // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
     // =========================================================
@@ -387,7 +407,7 @@ export default function RoomsStatus({
                         : [...prev, room.id],
                 );
             }
-            return; 
+            return;
         }
 
         if (status === 'occupied') {
@@ -400,22 +420,31 @@ export default function RoomsStatus({
             console.log('--- EVALUANDO EL CHECK-IN ACTIVO ---');
             if (activeCheckin) {
                 console.log('Datos completos del Checkin:', activeCheckin);
-                console.log('¿Es Temporal? (is_temporary):', activeCheckin.is_temporary);
+                console.log(
+                    '¿Es Temporal? (is_temporary):',
+                    activeCheckin.is_temporary,
+                );
                 console.log('Precio Acordado:', activeCheckin.agreed_price);
 
                 if (activeCheckin.is_temporary) {
-                    console.log('🛑 INTERCEPTADO: is_temporary es TRUE (o 1). Abriendo Modal de EDICIÓN...');
+                    console.log(
+                        '🛑 INTERCEPTADO: is_temporary es TRUE (o 1). Abriendo Modal de EDICIÓN...',
+                    );
                     setCheckinToEdit(activeCheckin);
                     setSelectedRoomId(room.id);
                     setIsCheckinModalOpen(true);
-                    return; 
+                    return;
                 }
 
-                console.log('✅ TODO EN ORDEN: is_temporary es FALSE (o 0). Abriendo Modal de INFORMACIÓN (OccupiedModal)...');
+                console.log(
+                    '✅ TODO EN ORDEN: is_temporary es FALSE (o 0). Abriendo Modal de INFORMACIÓN (OccupiedModal)...',
+                );
                 setOccupiedCheckinData({ ...activeCheckin, room });
                 setIsOccupiedModalOpen(true);
             } else {
-                console.log('⚠️ ERROR: La habitación está ocupada pero no se encontró el Checkin activo.');
+                console.log(
+                    '⚠️ ERROR: La habitación está ocupada pero no se encontró el Checkin activo.',
+                );
             }
             return;
         }
@@ -844,6 +873,16 @@ export default function RoomsStatus({
                     {/*Filtros por tipo de estados de la habitacion*/}
                     <div className="flex flex-col items-end gap-3">
                         <div className="flex flex-row items-center justify-end gap-2">
+                            {(auth as any).active_register && (
+                                    <button
+                                        onClick={handleOpenQuickPreview}
+                                        className="flex min-w-[220px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-6 py-2.5 text-sm font-bold text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95"
+                                        title="Ver resumen visual del dinero cobrado"
+                                    >
+                                        <FileText className="h-5 w-5" />
+                                        Vista Previa de Caja
+                                    </button>
+                                )}
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
@@ -1006,44 +1045,83 @@ export default function RoomsStatus({
                         if (isCorporate && activeCheckin) {
                             // 1. Sumamos lo que pagó
                             let totalPaid = 0;
-                            if (activeCheckin.payments && activeCheckin.payments.length > 0) {
-                                totalPaid = activeCheckin.payments.reduce((acc: number, p: any) => {
-                                    const monto = parseFloat(p.amount) || 0;
-                                    return p.type === 'DEVOLUCION' ? acc - monto : acc + monto;
-                                }, 0);
+                            if (
+                                activeCheckin.payments &&
+                                activeCheckin.payments.length > 0
+                            ) {
+                                totalPaid = activeCheckin.payments.reduce(
+                                    (acc: number, p: any) => {
+                                        const monto = parseFloat(p.amount) || 0;
+                                        return p.type === 'DEVOLUCION'
+                                            ? acc - monto
+                                            : acc + monto;
+                                    },
+                                    0,
+                                );
                             } else {
-                                totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
+                                totalPaid =
+                                    parseFloat(
+                                        String(activeCheckin.advance_payment),
+                                    ) || 0;
                             }
 
                             // 2. Días cubiertos por el pago
-                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
-                            const daysPaid = agreedPrice > 0 ? Math.floor(totalPaid / agreedPrice) : 0;
-                            
+                            const agreedPrice =
+                                parseFloat(
+                                    String(activeCheckin.agreed_price),
+                                ) || 0;
+                            const daysPaid =
+                                agreedPrice > 0
+                                    ? Math.floor(totalPaid / agreedPrice)
+                                    : 0;
+
                             // 3. Frecuencia de crédito pactada
-                            const frequency = parseInt(String(activeCheckin.payment_frequency)) || 1;
+                            const frequency =
+                                parseInt(
+                                    String(activeCheckin.payment_frequency),
+                                ) || 1;
 
                             // 4. Fecha Límite a las 00:00 hrs
-                            const checkinDate = new Date(activeCheckin.check_in_date);
+                            const checkinDate = new Date(
+                                activeCheckin.check_in_date,
+                            );
                             checkinDate.setHours(0, 0, 0, 0);
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
 
                             const limitDate = new Date(checkinDate);
-                            limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
+                            limitDate.setDate(
+                                limitDate.getDate() + daysPaid + frequency,
+                            );
 
                             // 5. Días restantes
-                            const diffTime = limitDate.getTime() - today.getTime();
-                            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const diffTime =
+                                limitDate.getTime() - today.getTime();
+                            const daysRemaining = Math.ceil(
+                                diffTime / (1000 * 60 * 60 * 24),
+                            );
 
                             // 6. Colores del Semáforo 🚦 (Solo color de fondo y texto)
                             if (daysRemaining > 1) {
-                                corpState = { badge: 'bg-emerald-500 text-white', text: `CORP: Al día` };
+                                corpState = {
+                                    badge: 'bg-emerald-500 text-white',
+                                    text: `CORP: Al día`,
+                                };
                             } else if (daysRemaining === 1) {
-                                corpState = { badge: 'bg-yellow-400 text-yellow-900', text: `CORP: Mañana` };
+                                corpState = {
+                                    badge: 'bg-yellow-400 text-yellow-900',
+                                    text: `CORP: Mañana`,
+                                };
                             } else if (daysRemaining === 0) {
-                                corpState = { badge: 'bg-orange-500 text-white animate-pulse', text: `COBRAR HOY` };
+                                corpState = {
+                                    badge: 'bg-orange-500 text-white animate-pulse',
+                                    text: `COBRAR HOY`,
+                                };
                             } else {
-                                corpState = { badge: 'bg-red-600 text-white animate-pulse font-black', text: `MOROSO (${Math.abs(daysRemaining)}d)` };
+                                corpState = {
+                                    badge: 'bg-red-600 text-white animate-pulse font-black',
+                                    text: `MOROSO (${Math.abs(daysRemaining)}d)`,
+                                };
                             }
                         }
                         // =========================================================
@@ -1057,21 +1135,27 @@ export default function RoomsStatus({
                             >
                                 {/* 🚦 EL SEMÁFORO VISUAL (Pegado arriba a la derecha) 🚦 */}
                                 {corpState && (
-                                    <div className={`absolute top-0 right-0 z-20 rounded-bl-xl rounded-tr-lg px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-md ${corpState.badge}`}>
+                                    <div
+                                        className={`absolute top-0 right-0 z-20 rounded-tr-lg rounded-bl-xl px-3 py-1 text-[10px] font-black tracking-wider uppercase shadow-md ${corpState.badge}`}
+                                    >
                                         {corpState.text}
                                     </div>
                                 )}
 
                                 {/* Check original (Lo bajamos un poquitito si es corporativo para que no choque) */}
                                 {isSelected && (
-                                    <div className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}>
+                                    <div
+                                        className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}
+                                    >
                                         <CheckCircle2 className="h-5 w-5" />
                                     </div>
                                 )}
 
                                 {/* Check verde cuando se selecciona para cobro múltiple */}
                                 {isMultiSelected && (
-                                    <div className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}>
+                                    <div
+                                        className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}
+                                    >
                                         <CheckCircle2 className="h-6 w-6" />
                                     </div>
                                 )}
@@ -1091,15 +1175,17 @@ export default function RoomsStatus({
                                             >
                                                 {config.info}
                                             </p>
-                                            
+
                                             {/* TIPO DE BAÑO */}
                                             {config.des && (
                                                 <div className="mt-2 flex w-full">
                                                     <span
                                                         className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold tracking-widest uppercase shadow-sm backdrop-blur-md transition-colors ${
-                                                            config.des === 'B.Priv'
+                                                            config.des ===
+                                                            'B.Priv'
                                                                 ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700'
-                                                                : config.des === 'B.Comp'
+                                                                : config.des ===
+                                                                    'B.Comp'
                                                                   ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700'
                                                                   : 'border border-gray-200/50 bg-gray-50/90 text-gray-700'
                                                         }`}
@@ -1292,6 +1378,45 @@ export default function RoomsStatus({
                 guests={Guests}
                 onClose={() => setShowMultiCheckoutModal(false)}
             />
+            {quickPreviewUrl && (
+                <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
+                    <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
+                        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                <div className="rounded-lg bg-blue-100 p-1.5 text-blue-600">
+                                    <FileText className="h-5 w-5" />
+                                </div>
+                                Caja (Informativo)
+                            </h3>
+                            <button
+                                onClick={() => setQuickPreviewUrl(null)}
+                                className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-200"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Visor PDF */}
+                        <div className="flex-1 bg-gray-300/50 p-2">
+                            <iframe
+                                src={quickPreviewUrl}
+                                className="h-full w-full rounded border border-gray-300 bg-white shadow-inner"
+                                title="Vista Previa PDF"
+                            />
+                        </div>
+
+                        {/* Footer de Acciones */}
+                        <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
+                            <button
+                                onClick={() => setQuickPreviewUrl(null)}
+                                className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

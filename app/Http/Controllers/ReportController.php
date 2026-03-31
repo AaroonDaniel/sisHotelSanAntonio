@@ -278,11 +278,7 @@ class ReportController extends Controller
         // ==========================================
         // CABECERA
         // ==========================================
-        $logoPath = public_path('images/logo_camara.png');
-        if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 15, 10, 20);
-        }
-
+       
         $pdf->SetFont('Arial', 'B', 14);
         $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
         
