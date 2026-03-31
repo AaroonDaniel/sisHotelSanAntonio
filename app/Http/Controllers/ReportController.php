@@ -6,6 +6,8 @@ use App\Models\Checkin;
 use App\Models\Guest;
 use App\Models\User;
 use App\Models\Payment;
+use App\Models\Expense;
+use App\Models\CashRegister;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Fpdf;
@@ -238,190 +240,258 @@ class ReportController extends Controller
     }
 
     // =========================================================
-    // 2. GENERADOR PDF: CIERRE DE CAJA
+    // GENERADOR PDF: CIERRE DE CAJA (CON GASTOS Y DETALLE BANCARIO)
+    // =========================================================
+    // =========================================================
+    // GENERADOR PDF: CIERRE DE CAJA (SEPARADO POR EFECTIVO Y QR)
     // =========================================================
     public function generateFinancialReportPdf(Request $request)
     {
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate = $request->query('end_date', now()->toDateString());
-        // Recibimos el parámetro del usuario (por defecto 'todos')
         $userId = $request->query('user_id', 'todos');
-        
-        // Recibimos el tipo de registro (efectivo/bancos/ambos)
         $recordType = $request->query('record_type', 'ambos');
 
-        // Construimos la consulta base
+        // --- 1. CONSULTA DE INGRESOS (PAGOS Y ADELANTOS) ---
         $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
 
-        // Si el usuario no es 'todos', filtramos por ese usuario en específico
         if ($userId !== 'todos') {
             $query->where('user_id', $userId);
         }
 
-        // Aplicamos el filtro usando la variable en inglés
         if ($recordType === 'efectivo') {
             $query->where('method', 'EFECTIVO');
         } elseif ($recordType === 'bancos') {
             $query->where('method', '!=', 'EFECTIVO');
         }
 
-        $payments = $query->orderBy('user_id')
-            ->orderBy('created_at')
-            ->get();
+        $payments = $query->orderBy('created_at')->get();
 
+        // Dividimos los pagos en dos grupos: Efectivo y QR/Bancos
+        $efectivoPayments = $payments->filter(function($p) {
+            return strtoupper($p->method) === 'EFECTIVO';
+        });
+        
+        $qrPayments = $payments->filter(function($p) {
+            return strtoupper($p->method) !== 'EFECTIVO';
+        });
+
+        // --- 2. CONSULTA DE GASTOS ---
+        $expensesQuery = Expense::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        if ($userId !== 'todos') {
+            $expensesQuery->where('user_id', $userId);
+        }
+        $gastos = $expensesQuery->orderBy('created_at')->get();
+        $totalGastos = $gastos->sum('amount');
+
+        // --- 3. CONSULTA DE APERTURA DE CAJA ---
+        $aperturaQuery = CashRegister::whereBetween('opened_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        if ($userId !== 'todos') {
+            $aperturaQuery->where('user_id', $userId);
+        }
+        $totalApertura = $aperturaQuery->sum('opening_amount');
+
+        // --- INICIO DEL PDF ---
         $pdf = new \FPDF('P', 'mm', 'Letter');
         $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->SetAutoPageBreak(true, 30); 
         $pdf->AddPage();
         
-        // ==========================================
-        // CABECERA
-        // ==========================================
-       
-        $pdf->SetFont('Arial', 'B', 14);
+        // --- CABECERA ---
+        $pdf->SetFont('Arial', 'B', 15);
         $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
         
-        // TÍTULO DINÁMICO: Indica qué botón presionó el usuario
-        $tipoTexto = 'AMBOS (EFECTIVO Y QR)';
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(0, 6, utf8_decode('REPORTE DE CAJA'), 0, 1, 'C');
+
+        $tipoTexto = 'AMBOS (Efectivo y QR/Bancos)';
         if ($recordType === 'efectivo') $tipoTexto = 'SOLO EFECTIVO';
         if ($recordType === 'bancos') $tipoTexto = 'SOLO QR / BANCOS';
 
-        $pdf->SetFont('Arial', 'B', 11);
-        $pdf->Cell(0, 6, utf8_decode('REPORTE DE CIERRE DE CAJA - ' . $tipoTexto), 0, 1, 'C');
-
         $pdf->SetFont('Arial', '', 9);
+        $pdf->Cell(0, 5, utf8_decode('Tipo de Registro: ' . $tipoTexto), 0, 1, 'C');
+        
+        // Mostrar de quién es la caja
+        $cajeroTexto = $userId === 'todos' ? 'TODOS LOS RECEPCIONISTAS' : ($payments->first()->user->name ?? 'Usuario');
+        $pdf->Cell(0, 5, utf8_decode('Cajero / Usuario: ' . strtoupper($cajeroTexto)), 0, 1, 'C');
+        
         $rangoTexto = "Desde: " . \Carbon\Carbon::parse($startDate)->format('d/m/Y') . "  Hasta: " . \Carbon\Carbon::parse($endDate)->format('d/m/Y');
         $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'C');
-        $pdf->Ln(5);
+        $pdf->Ln(6);
 
-        if ($payments->isEmpty()) {
-            $pdf->SetFont('Arial', 'I', 10);
-            $pdf->Cell(0, 10, 'No hay transacciones registradas con estos filtros.', 0, 1, 'C');
-            return response($pdf->Output('S'), 200)->header('Content-Type', 'application/pdf');
-        }
-
-        $grouped = $payments->groupBy('user_id');
-        $granTotal = 0;
         $granTotalEfectivo = 0;
         $granTotalQR = 0;
 
-        foreach ($grouped as $grupoUserId => $userPayments) {
-            $userName = $userPayments->first()->user->name ?? 'Desconocido';
-
-            $pdf->SetFont('Arial', 'B', 9);
-            $pdf->SetFillColor(200, 220, 255);
-            $pdf->Cell(0, 6, utf8_decode(' CAJERO / USUARIO: ' . strtoupper($userName)), 1, 1, 'L', true);
+        // ==========================================
+        // TABLA 1: SOLO EFECTIVO
+        // ==========================================
+        if ($efectivoPayments->isNotEmpty()) {
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->SetFillColor(210, 255, 210); // Verde clarito
+            $pdf->Cell(0, 6, utf8_decode(' INGRESOS EN EFECTIVO'), 1, 1, 'L', true);
 
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->SetFillColor(240, 240, 240);
-            $pdf->Cell(15, 5, 'Fecha', 1, 0, 'C', true);
-            $pdf->Cell(12, 5, 'Hora', 1, 0, 'C', true);
-            $pdf->Cell(12, 5, 'Hab', 1, 0, 'C', true);
+            $pdf->Cell(13, 5, 'Fecha', 1, 0, 'C', true);
+            $pdf->Cell(10, 5, 'Hora', 1, 0, 'C', true);
+            $pdf->Cell(10, 5, 'Hab', 1, 0, 'C', true);
             $pdf->Cell(65, 5, 'Huesped', 1, 0, 'L', true);
-            $pdf->Cell(33, 5, 'Metodo', 1, 0, 'C', true);
-            $pdf->Cell(24, 5, 'Tipo', 1, 0, 'C', true);
+            $pdf->Cell(32, 5, 'Cajero', 1, 0, 'L', true);
+            $pdf->Cell(30, 5, 'Concepto', 1, 0, 'C', true);
             $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
 
             $pdf->SetFont('Arial', '', 7);
-
-            $subEfectivo = 0;
-            $subQR = 0;
-            $qrPorBanco = [];
-
-            foreach ($userPayments as $p) {
+            foreach ($efectivoPayments as $p) {
                 $montoReal = $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+                $granTotalEfectivo += $montoReal;
 
-                if (strtoupper($p->method) === 'EFECTIVO') {
-                    $subEfectivo += $montoReal;
-                } else {
-                    $subQR += $montoReal;
-                    $banco = strtoupper($p->bank_name ?: 'OTROS');
-                    if (!isset($qrPorBanco[$banco])) $qrPorBanco[$banco] = 0;
-                    $qrPorBanco[$banco] += $montoReal;
-                }
-
-                $pdf->Cell(15, 5, $p->created_at->format('d/m'), 1, 0, 'C');
-                $pdf->Cell(12, 5, $p->created_at->format('H:i'), 1, 0, 'C');
-                $pdf->Cell(12, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
+                $pdf->Cell(13, 5, $p->created_at->format('d/m'), 1, 0, 'C');
+                $pdf->Cell(10, 5, $p->created_at->format('H:i'), 1, 0, 'C');
+                $pdf->Cell(10, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
                 $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
-
-                $metodoText = $p->method . ($p->bank_name ? ' (' . $p->bank_name . ')' : '');
-                $pdf->Cell(33, 5, utf8_decode(substr($metodoText, 0, 18)), 1, 0, 'C');
-
+                $pdf->Cell(32, 5, utf8_decode(substr($p->user->name ?? '', 0, 18)), 1, 0, 'L');
+                
                 if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
-                $pdf->Cell(24, 5, utf8_decode($p->type), 1, 0, 'C');
+                $pdf->Cell(30, 5, utf8_decode($p->type), 1, 0, 'C');
                 $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');
                 $pdf->SetTextColor(0, 0, 0);
             }
-
-            $subTotal = $subEfectivo + $subQR;
-            $granTotal += $subTotal;
-            $granTotalEfectivo += $subEfectivo;
-            $granTotalQR += $subQR;
-
+            // Subtotal Efectivo
             $pdf->SetFont('Arial', 'B', 8);
-            
-            // Imprimir línea de Efectivo (Si se solicitó o si hay monto)
-            if ($recordType === 'efectivo' || $recordType === 'ambos' || $subEfectivo > 0) {
-                $pdf->Cell(137, 5, '', 0, 0);
-                $pdf->Cell(24, 5, 'Efectivo:', 1, 0, 'R');
-                $pdf->Cell(25, 5, number_format($subEfectivo, 2), 1, 1, 'R');
-            }
-
-            // Imprimir líneas de QR
-            if ($recordType === 'bancos' || $recordType === 'ambos' || $subQR > 0) {
-                if ($subQR > 0) {
-                    foreach ($qrPorBanco as $bco => $mnt) {
-                        $pdf->Cell(137, 5, '', 0, 0);
-                        $pdf->Cell(24, 5, substr("QR $bco:", 0, 12), 1, 0, 'R');
-                        $pdf->Cell(25, 5, number_format($mnt, 2), 1, 1, 'R');
-                    }
-                } elseif ($recordType === 'bancos') {
-                    // Muestra 0.00 si filtró bancos y no hay nada (para que no quede vacío)
-                    $pdf->Cell(137, 5, '', 0, 0);
-                    $pdf->Cell(24, 5, 'QR/Bancos:', 1, 0, 'R');
-                    $pdf->Cell(25, 5, '0.00', 1, 1, 'R');
-                }
-            }
-
-            $pdf->Cell(137, 5, '', 0, 0);
-            $pdf->SetFillColor(220, 255, 220);
-            $pdf->Cell(24, 5, 'TOTAL:', 1, 0, 'R', true);
-            $pdf->Cell(25, 5, number_format($subTotal, 2), 1, 1, 'R', true);
+            $pdf->Cell(160, 5, 'TOTAL INGRESOS EFECTIVO:', 1, 0, 'R');
+            $pdf->Cell(25, 5, number_format($granTotalEfectivo, 2), 1, 1, 'R');
             $pdf->Ln(4);
         }
 
         // ==========================================
-        // GRAN TOTAL DE RECAUDACIÓN
+        // TABLA 2: SOLO QR / BANCOS
         // ==========================================
+        if ($qrPayments->isNotEmpty()) {
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->SetFillColor(210, 235, 255); // Azul clarito
+            $pdf->Cell(0, 6, utf8_decode(' INGRESOS POR QR Y TRANSFERENCIAS BANCARIAS'), 1, 1, 'L', true);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->SetFillColor(240, 240, 240);
+            $pdf->Cell(13, 5, 'Fecha', 1, 0, 'C', true);
+            $pdf->Cell(10, 5, 'Hora', 1, 0, 'C', true);
+            $pdf->Cell(10, 5, 'Hab', 1, 0, 'C', true);
+            $pdf->Cell(65, 5, 'Huesped', 1, 0, 'L', true);
+            $pdf->Cell(32, 5, 'Banco Destino', 1, 0, 'C', true);
+            $pdf->Cell(30, 5, 'Concepto', 1, 0, 'C', true);
+            $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
+
+            $pdf->SetFont('Arial', '', 7);
+            foreach ($qrPayments as $p) {
+                $montoReal = $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+                $granTotalQR += $montoReal;
+
+                $pdf->Cell(13, 5, $p->created_at->format('d/m'), 1, 0, 'C');
+                $pdf->Cell(10, 5, $p->created_at->format('H:i'), 1, 0, 'C');
+                $pdf->Cell(10, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
+                $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
+                
+                // Mostrar a qué banco entró (Ej: "QR - BCP")
+                $bancoText = 'QR - ' . ($p->bank_name ? strtoupper($p->bank_name) : 'OTROS');
+                $pdf->Cell(32, 5, utf8_decode(substr($bancoText, 0, 18)), 1, 0, 'C');
+                
+                if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
+                $pdf->Cell(30, 5, utf8_decode($p->type), 1, 0, 'C');
+                $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');
+                $pdf->SetTextColor(0, 0, 0);
+            }
+            // Subtotal QR
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(160, 5, 'TOTAL INGRESOS QR/BANCOS:', 1, 0, 'R');
+            $pdf->Cell(25, 5, number_format($granTotalQR, 2), 1, 1, 'R');
+            $pdf->Ln(4);
+        }
+
+        // ==========================================
+        // TABLA 3: GASTOS / EGRESOS (Solo Efectivo)
+        // ==========================================
+        if ($gastos->isNotEmpty() && $recordType !== 'bancos') {
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->SetFillColor(255, 210, 200); // Fondo de la cabecera
+            $pdf->Cell(0, 6, utf8_decode(' DETALLE DE GASTOS / EGRESOS (Descontados de Caja Física)'), 1, 1, 'L', true);
+
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->SetFillColor(240, 240, 240);
+            $pdf->Cell(20, 5, 'Hora', 1, 0, 'C', true);
+            $pdf->Cell(140, 5, utf8_decode('Descripción / Concepto del Gasto'), 1, 0, 'L', true);
+            $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true); // 'R' = Alineado a la Derecha
+
+            $pdf->SetFont('Arial', '', 8);
+            foreach ($gastos as $g) {
+                $pdf->Cell(20, 5, $g->created_at->format('H:i'), 1, 0, 'C');
+                $pdf->Cell(140, 5, utf8_decode($g->description), 1, 0, 'L');
+                // Quitamos el color rojo, se imprimirá en negro alineado a la derecha ('R')
+                $pdf->Cell(25, 5, number_format($g->amount, 2), 1, 1, 'R');
+            }
+            
+            // Subtotal Gastos
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(160, 5, 'TOTAL GASTOS:', 1, 0, 'R'); // Título alineado a la derecha
+            // Quitamos el color rojo del subtotal
+            $pdf->Cell(25, 5, number_format($totalGastos, 2), 1, 1, 'R');
+            $pdf->Ln(4);
+        }
+
+        // ==========================================
+        // GRAN TOTAL DE LIQUIDACIÓN
+        // ==========================================
+        $pdf->Ln(4);
+        $pdf->SetFont('Arial', 'B', 11);
+        $pdf->Cell(0, 6, utf8_decode('RESUMEN FINAL DE LIQUIDACIÓN'), 0, 1, 'C');
         $pdf->Ln(2);
-        $pdf->SetFont('Arial', 'B', 10);
-        $pdf->SetFillColor(180, 255, 180);
-        $pdf->Cell(137, 7, '', 0, 0);
-        $pdf->Cell(49, 7, 'RECAUDACION TOTAL:', 1, 0, 'R', true);
-        $pdf->Ln();
 
-        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->SetFont('Arial', '', 10);
         
-        // Muestra el resumen de efectivo si el filtro lo permite
+        // MATEMÁTICA DE EFECTIVO FÍSICO
         if ($recordType === 'efectivo' || $recordType === 'ambos') {
-            $pdf->Cell(137, 6, '', 0, 0);
-            $pdf->Cell(24, 6, 'Efectivo:', 1, 0, 'R');
-            $pdf->Cell(25, 6, number_format($granTotalEfectivo, 2) . ' Bs', 1, 1, 'R');
-        }
-        
-        // Muestra el resumen de QR si el filtro lo permite
-        if ($recordType === 'bancos' || $recordType === 'ambos') {
-            $pdf->Cell(137, 6, '', 0, 0);
-            $pdf->Cell(24, 6, 'QR/Bancos:', 1, 0, 'R');
-            $pdf->Cell(25, 6, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R');
+            $pdf->Cell(136, 6, utf8_decode('(+) Monto Inicial de Apertura de Caja:'), 0, 0, 'R');
+            $pdf->Cell(50, 6, number_format($totalApertura, 2) . ' Bs', 0, 1, 'R');
+
+            $pdf->Cell(136, 6, utf8_decode('(+) Ingresos Recaudados (Solo Efectivo):'), 0, 0, 'R');
+            $pdf->Cell(50, 6, number_format($granTotalEfectivo, 2) . ' Bs', 0, 1, 'R');
+
+            $pdf->SetTextColor(200, 0, 0);
+            $pdf->Cell(136, 6, utf8_decode('(-) Gastos Realizados en el Turno:'), 0, 0, 'R');
+            $pdf->Cell(50, 6, '- ' . number_format($totalGastos, 2) . ' Bs', 0, 1, 'R');
+            $pdf->SetTextColor(0, 0, 0);
+
+            // CÁLCULO EXACTO: Apertura + Ingresos - Gastos
+            $efectivoNeto = $totalApertura + $granTotalEfectivo - $totalGastos;
+            
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 12);
+            $pdf->SetFillColor(210, 255, 210); // Verde clarito
+            $pdf->Cell(106, 8, '', 0, 0);
+            $pdf->Cell(50, 8, utf8_decode('EFECTIVO EN CAJA:'), 1, 0, 'R', true);
+            $pdf->Cell(40, 8, number_format($efectivoNeto, 2) . ' Bs', 1, 1, 'R', true);
         }
 
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(137, 8, '', 0, 0);
-        $pdf->Cell(24, 8, 'NETO:', 1, 0, 'R', true);
-        $pdf->Cell(25, 8, number_format($granTotal, 2) . ' Bs', 1, 1, 'R', true);
+        // RESUMEN DE BANCOS (Aparte)
+        if ($recordType === 'bancos' || $recordType === 'ambos') {
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 11);
+            $pdf->SetFillColor(210, 235, 255); // Azul clarito
+            $pdf->Cell(106, 7, '', 0, 0);
+            $pdf->Cell(50, 7, utf8_decode('TOTAL EN BANCOS (QR):'), 1, 0, 'R', true);
+            $pdf->Cell(40, 7, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R', true);
+        }
+
+        // ==========================================
+        // FIRMAS DE CONFORMIDAD
+        // ==========================================
+        $pdf->Ln(25);
+        $pdf->SetFont('Arial', '', 10);
+        
+        $pdf->Cell(93, 5, '___________________________________', 0, 0, 'C');
+        $pdf->Cell(93, 5, '___________________________________', 0, 1, 'C');
+        $pdf->Cell(93, 5, 'Firma Recepcionista', 0, 0, 'C');
+        $pdf->Cell(93, 5, 'Firma Administrador (Conforme)', 0, 1, 'C');
 
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')

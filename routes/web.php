@@ -14,6 +14,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\CashRegisterController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
@@ -172,7 +173,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
 
-
+    //Gastos
+    Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
+    Route::post('/gastos', [ExpenseController::class, 'store'])->name('gastos.store');
 
 });
 
