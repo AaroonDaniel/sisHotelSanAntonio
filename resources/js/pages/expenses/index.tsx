@@ -83,7 +83,6 @@ export default function ExpensesIndex({ auth, gastos }: Props) {
                 {/* Cabecera */}
                 <div>
                     <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-                        
                         Historial General de Gastos
                     </h2>
                 </div>
