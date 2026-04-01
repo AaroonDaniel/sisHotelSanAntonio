@@ -31,6 +31,12 @@ return Application::configure(basePath: dirname(__DIR__))
             // Solo si el error persiste, puedes añadir rutas aquí para probar,
             // pero con statefulApi() debería bastar.
         ]);
+
+        $middleware->alias([
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
