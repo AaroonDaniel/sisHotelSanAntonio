@@ -16,6 +16,7 @@ use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -114,10 +115,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
     Route::get('/search/issued-in', [\App\Http\Controllers\GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
-
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
 
-    // --- CORRECCIÓN 2: Diferenciación de nombres en Transferencia ---
     // Ruta Original (POST)
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
     
@@ -167,17 +166,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
-
     //Gastos
     Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
     Route::post('/gastos', [ExpenseController::class, 'store'])->name('gastos.store');
-
-    // Historial Global
     Route::get('/historial-gastos', [ExpenseController::class, 'history'])->name('gastos.history');
-    // Rutas para Editar y Eliminar
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
-
+    
+    //Roles y Permisos
+    Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+    Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
+    Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
+    Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
 });
 
 require __DIR__ . '/settings.php';
