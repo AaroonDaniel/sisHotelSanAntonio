@@ -67,7 +67,7 @@ const hotelModules = [
             { name: 'Facturación', icon: Receipt, url: '/facturacion' },
             { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
             { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
-            { name: 'Gastos', icon: FileText, url: '/gastos' },
+            { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
         ],
     },
     {

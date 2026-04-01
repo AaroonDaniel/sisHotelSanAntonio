@@ -54,12 +54,19 @@ class FortifyServiceProvider extends ServiceProvider
 
     private function configureViews(): void
     {
-        Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
-            'users' => \App\Models\User::where('is_active', true)->get(),
-            'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'status' => $request->session()->get('status'),
-        ]));
-        
+        // Convertimos la función flecha (fn) a una función normal para poder agregar lógica
+        Fortify::loginView(function (Request $request) {
+            
+            // 1. EL TRUCO: Borramos la memoria de la "URL prevista" de Laravel
+            $request->session()->forget('url.intended');
+
+            // 2. Retornamos la vista de Inertia normalmente
+            return Inertia::render('auth/login', [
+                'users' => \App\Models\User::where('is_active', true)->get(),
+                'canResetPassword' => Features::enabled(Features::resetPasswords()),
+                'status' => $request->session()->get('status'),
+            ]);
+        });
         // ... resto de tus vistas ...
     }
 

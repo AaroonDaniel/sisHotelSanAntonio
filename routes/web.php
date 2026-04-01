@@ -30,12 +30,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
     })->name('Inicio');
-
-    //Habitaciones
-    Route::get('/gestion-habitaciones', function () {
-        return Inertia::render('rooms/menu');
-    })->name('rooms.menu');
-
+    
     //Usuarios
     Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
 
@@ -176,10 +171,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Gastos
     Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
     Route::post('/gastos', [ExpenseController::class, 'store'])->name('gastos.store');
-    
+
     // Historial Global
     Route::get('/historial-gastos', [ExpenseController::class, 'history'])->name('gastos.history');
-    
     // Rutas para Editar y Eliminar
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');

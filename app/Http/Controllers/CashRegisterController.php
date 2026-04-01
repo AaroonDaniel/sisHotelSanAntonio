@@ -55,6 +55,6 @@ class CashRegisterController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return back()->with('success', 'Turno cerrado correctamente. ¡Buen trabajo!');
+        return redirect('/login')->with('success', 'Turno cerrado correctamente. ¡Buen trabajo!');
     }
 }

@@ -667,10 +667,10 @@ export default function RoomsStatus({
                     des:
                         room.price?.bathroom_type === 'private' ||
                         room.price?.bathroom_type === 'privado'
-                            ? 'B.Priv'
+                            ? 'Privado'
                             : room.price?.bathroom_type === 'shared' ||
                                 room.price?.bathroom_type === 'compartido'
-                              ? 'B.Comp'
+                              ? 'Compartido'
                               : 'Tipo de baño no definido',
                     actionLabel: 'Asignar',
                 };
@@ -1182,10 +1182,10 @@ export default function RoomsStatus({
                                                     <span
                                                         className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold tracking-widest uppercase shadow-sm backdrop-blur-md transition-colors ${
                                                             config.des ===
-                                                            'B.Priv'
+                                                            'Privado'
                                                                 ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700'
                                                                 : config.des ===
-                                                                    'B.Comp'
+                                                                    'Compartido'
                                                                   ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700'
                                                                   : 'border border-gray-200/50 bg-gray-50/90 text-gray-700'
                                                         }`}
