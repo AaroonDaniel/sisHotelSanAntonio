@@ -20,7 +20,9 @@ import {
     Briefcase,
     Clock,
     Wallet,
-    User,      // Icono archivo
+    User,
+    Key,
+    UserCog,      // Icono archivo
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios'; // Importamos axios para la petición
@@ -54,7 +56,9 @@ const hotelModules = [
             { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
             { name: 'Huéspedes', icon: Users, url: '/invitados' },
             { name: 'Horarios', icon: Clock, url: '/horarios' },
-            { name: 'Personal', icon: User, url: '/usuarios'}
+            { name: 'Personal', icon: User, url: '/usuarios'},
+            { name: 'Permisos', icon: Key, url: '/permisos' },
+            { name: 'Cargos/Roles', icon: UserCog, url: '/roles' },
         ],
     },
     {
@@ -139,7 +143,7 @@ export default function Dashboard({ auth }: DashboardProps) {
             <Head title="Panel Principal" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* Header con Bienvenida */}
-                <div className="mb-8 flex items-end justify-between">
+                <div className="mb-2 flex items-end justify-between">
                     <div>
                         <h2 className="text-3xl font-bold text-white">
                             Panel de Control

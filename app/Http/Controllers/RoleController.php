@@ -52,12 +52,29 @@ class RoleController extends Controller
     }
 
 
-    public function destroy(Role $role) {
-        if ($role->name === 'Administrador') {
-            return back()->with('error', 'No se puede eliminar el rol de Administrador');
+    public function destroy($id) {
+        try {
+            // 1. Buscamos el rol manualmente (Evita errores de traducción de Laravel)
+            $role = \Spatie\Permission\Models\Role::find($id);
+
+            // 2. Si alguien intenta borrar un rol que ya no existe (o doble clic)
+            if (!$role) {
+                return back()->with('error', 'El cargo no existe o ya fue eliminado.');
+            }
+
+            // 3. Protección Nivel Dios
+            if ($role->name === 'Administrador') {
+                return back()->with('error', 'Seguridad: No se puede eliminar el cargo principal de Administrador.');
+            }
+            
+            // 4. Eliminamos
+            $role->delete();
+            return back()->with('success', 'Cargo eliminado del sistema correctamente.');
+
+        } catch (\Exception $e) {
+            // 5. Si hay un error SQL (Ej: está atado a otro registro), no rompemos el JSON de React
+            return back()->with('error', 'Error al eliminar el cargo: Puede que haya usuarios usándolo.');
         }
-        $role->delete();
-        return back()->with('success', 'Rol eliminado correctamente');
     }
 
 }

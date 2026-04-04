@@ -27,19 +27,27 @@ class PermissionController extends Controller
         return back()->with('success', 'Permiso creado correctamente');
     }
 
-    public function update(Request $request, Permission $permission) { 
+    public function update(Request $request, Permission $permiso) { 
         $request->validate([
-            'name' => 'required|string|max:100|unique:permissions,name,'.$permission->id,
+            'name' => 'required|string|max:100|unique:permissions,name,'.$permiso->id,
         ]);
         
         $name = strtolower(str_replace(' ', '_', $request->name));
-        $permission->update(['name' => $name]);
+        $permiso->update(['name' => $name]);
         
         return back()->with('success', 'Permiso actualizado correctamente');
     }
 
-    public function destroy(Permission $permission) {
-        $permission->delete();
-        return back()->with('success', 'Permiso eliminado correctamente');
-    }
+    public function destroy($id) {
+    $permiso = Permission::find($id);
+    
+    // Guardamos datos que queremos ver en Chrome
+    $datosDebug = "Se eliminó el permiso: " . $permiso->name . " (ID: " . $id . ")";
+    
+    $permiso->delete();
+
+    return back()
+        ->with('success', 'Permiso eliminado correctamente')
+        ->with('console_log', $datosDebug); // <-- PASAMOS EL DATO A REACT
+}
 }
