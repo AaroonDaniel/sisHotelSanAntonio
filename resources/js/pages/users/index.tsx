@@ -9,6 +9,7 @@ import {
     ShieldAlert,
     UserCheck,
     UserX,
+    ShieldCheck // <-- NUEVO: Icono para los roles
 } from 'lucide-react';
 import { useState } from 'react';
 import UserModal from './userModal';
@@ -21,16 +22,18 @@ export interface User {
     full_name: string;
     phone: string;
     address: string;
-    shift?: string; // <-- Aseguramos que el turno esté aquí
+    shift?: string; 
     is_active: boolean;
+    roles?: { id: number, name: string }[]; // <-- NUEVO: Relación de roles de Spatie
 }
 
 interface Props {
     auth: { user: User };
     users: User[];
+    roles: any[]; // <-- NUEVO: Lista de todos los roles disponibles (Gerente, Cajero, etc.)
 }
 
-export default function UsersIndex({ auth, users }: Props) {
+export default function UsersIndex({ auth, users, roles }: Props) { // <-- NUEVO: Recibimos roles aquí
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados para el Modal de Crear/Editar
@@ -130,7 +133,7 @@ export default function UsersIndex({ auth, users }: Props) {
                                                 key={user.id}
                                                 className={`transition-colors hover:bg-gray-50 ${!user.is_active ? 'bg-gray-50' : ''}`}
                                             >
-                                                {/* Columna: Nombre, Nickname y Turno */}
+                                                {/* Columna: Nombre, Nickname, Turno y ROL */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="font-bold text-gray-900 uppercase">
@@ -140,6 +143,13 @@ export default function UsersIndex({ auth, users }: Props) {
                                                         {user.shift && (
                                                             <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-blue-700">
                                                                 {user.shift}
+                                                            </span>
+                                                        )}
+                                                        {/* --- NUEVO: AQUÍ SE MUESTRA EL ROL --- */}
+                                                        {user.roles && user.roles.length > 0 && (
+                                                            <span className="flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-purple-700 uppercase border border-purple-200">
+                                                                <ShieldCheck className="h-3 w-3" />
+                                                                {user.roles[0].name}
                                                             </span>
                                                         )}
                                                     </div>
@@ -220,6 +230,7 @@ export default function UsersIndex({ auth, users }: Props) {
                     show={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     userToEdit={editingUser}
+                    roles={roles} // <-- NUEVO: Enviamos los roles al Modal
                 />
 
                 {/* Modal Habilitar/Deshabilitar (DeleteModal) */}

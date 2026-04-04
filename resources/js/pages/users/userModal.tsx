@@ -7,6 +7,7 @@ import {
     Save,
     UserCircle,
     X,
+    ShieldCheck // <-- Agregado el ícono para el rol
 } from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
 
@@ -14,7 +15,9 @@ interface UserModalProps {
     show: boolean;
     onClose: () => void;
     userToEdit?: User | null;
+    roles: any[];
 }
+
 export interface User {
     id: number;
     nickname: string;
@@ -23,11 +26,14 @@ export interface User {
     address: string;
     shift?: string;
     is_active: boolean;
+    roles?: any[]; // <-- CORRECCIÓN TS: Agregamos roles a la interfaz para que no dé error
 }
+
 export default function UserModal({
     show,
     onClose,
     userToEdit,
+    roles,
 }: UserModalProps) {
     const isEditing = !!userToEdit;
 
@@ -39,6 +45,7 @@ export default function UserModal({
             address: '',
             shift: '',
             password: '',
+            role: '' // <-- Campo de rol inicializado
         });
 
     useEffect(() => {
@@ -51,6 +58,8 @@ export default function UserModal({
                     address: userToEdit.address || '',
                     shift: userToEdit.shift || '',
                     password: '',
+                    // CORRECCIÓN: Extraemos el rol de forma segura
+                    role: userToEdit.roles && userToEdit.roles.length > 0 ? userToEdit.roles[0].name : '',
                 });
             } else {
                 reset();
@@ -180,27 +189,53 @@ export default function UserModal({
                             {errors.address && <p className="mt-1 text-xs font-bold text-red-500">{errors.address}</p>}
                         </div>
 
-                        {/* Campo Turno Asignado (Debajo de dirección, ocupando todo el ancho) */}
-                        <div>
-                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                                Turno Asignado
-                            </label>
-                            <div className="relative">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <Clock className="h-4 w-4 text-gray-400" />
+                        {/* Fila Dividida: Turno y ROL */}
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Campo Turno */}
+                            <div>
+                                <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                    Turno Asignado
+                                </label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <Clock className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <select
+                                        value={data.shift}
+                                        onChange={(e) => setData('shift', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-sm text-black focus:border-gray-600 focus:ring-0"
+                                    >
+                                        <option value="" disabled>SELECCIONAR...</option>
+                                        <option value="DÍA">DÍA (08:00 a 20:00)</option>
+                                        <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
+                                    </select>
                                 </div>
-                                <select
-                                    value={data.shift}
-                                    onChange={(e) => setData('shift', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
-                                >
-                                    <option value="" disabled>SELECCIONAR TURNO...</option>
-                                    <option value="DÍA">DÍA (08:00 a 20:00)</option>
-                                    <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
-                                </select>
+                                {errors.shift && <p className="mt-1 text-xs font-bold text-red-500">{errors.shift}</p>}
                             </div>
-                           
-                            {errors.shift && <p className="mt-1 text-xs font-bold text-red-500">{errors.shift}</p>}
+
+                            {/* --- NUEVO CAMPO: Selector de Cargo (Rol) --- */}
+                            <div>
+                                <label className="mb-1.5 block text-sm font-semibold text-blue-700">
+                                    Cargo (Rol)
+                                </label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <ShieldCheck className="h-4 w-4 text-blue-500" />
+                                    </div>
+                                    <select
+                                        value={data.role}
+                                        onChange={(e) => setData('role', e.target.value)}
+                                        className="w-full rounded-lg border border-blue-300 bg-blue-50 py-2 pr-3 pl-10 text-sm font-bold text-blue-900 focus:border-blue-600 focus:ring-0"
+                                        required
+                                    >
+                                        <option value="" disabled>SELECCIONAR CARGO...</option>
+                                        {roles && roles.map((r: any) => (
+                                            <option key={r.id} value={r.name}>{r.name.toUpperCase()}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {errors.role && <p className="mt-1 text-xs font-bold text-red-500">{errors.role}</p>}
+                            </div>
                         </div>
 
                         {/* Campo Contraseña */}
@@ -218,6 +253,7 @@ export default function UserModal({
                                     onChange={(e) => setData('password', e.target.value)}
                                     className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
                                     placeholder="********"
+                                    required={!isEditing} // <-- Requerido solo al crear
                                 />
                             </div>
                             {errors.password && <p className="mt-1 text-xs font-bold text-red-500">{errors.password}</p>}
