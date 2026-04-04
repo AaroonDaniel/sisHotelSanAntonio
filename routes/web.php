@@ -17,6 +17,7 @@ use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\PermissionController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -173,11 +174,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
     
-    //Roles y Permisos
+    //Roles 
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
     Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
     Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+
+    //Permisos
+    Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
+    Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
+    Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
+    Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 });
 
 require __DIR__ . '/settings.php';
