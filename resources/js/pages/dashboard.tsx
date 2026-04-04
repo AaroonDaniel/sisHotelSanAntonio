@@ -14,18 +14,18 @@ import {
     Layers,
     Tag,
     BookDown,
-    AlertTriangle, // Icono para modal de error
-    X,             // Icono cerrar
+    AlertTriangle,
+    X,
     FileText,
     Briefcase,
     Clock,
     Wallet,
     User,
     Key,
-    UserCog,      // Icono archivo
+    UserCog,
 } from 'lucide-react';
 import { useState } from 'react';
-import axios from 'axios'; // Importamos axios para la petición
+import axios from 'axios';
 
 // Interfaces Locales
 interface User {
@@ -34,64 +34,74 @@ interface User {
     email: string;
     nickname?: string;
     full_name?: string;
+    roles?: string[]; // <-- Aseguramos que TypeScript sepa que vienen los roles
     [key: string]: any; 
 }
 
 interface DashboardProps {
     auth: {
         user: User;
+        roles?: string[];
     };
 }
 
-const hotelModules = [
-    {
-        title: 'Parámetros',
-        theme: 'blue',
-        items: [
-            { name: 'Bloques', icon: Building, url: '/bloques' },
-            { name: 'Pisos', icon: Layers, url: '/pisos' },
-            { name: 'Tipos Hab.', icon: BedDouble, url: '/tipohabitacion' },
-            { name: 'Precios', icon: Tag, url: '/precios' },
-            { name: 'Habitaciones', icon: Hotel, url: '/habitaciones' },
-            { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
-            { name: 'Huéspedes', icon: Users, url: '/invitados' },
-            { name: 'Horarios', icon: Clock, url: '/horarios' },
-            { name: 'Personal', icon: User, url: '/usuarios'},
-            { name: 'Permisos', icon: Key, url: '/permisos' },
-            { name: 'Cargos/Roles', icon: UserCog, url: '/roles' },
-        ],
-    },
-    {
-        title: 'Procesos',
-        theme: 'red',
-        items: [
-            { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservas' },
-            { name: 'Asignación', icon: BedDouble, url: '/checks' },
-            { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
-            { name: 'Facturación', icon: Receipt, url: '/facturacion' },
-            { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
-            { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
-            { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
-        ],
-    },
-    {
-        title: 'Reportes',
-        theme: 'amber',
-        items: [
-            // URL '#' porque interceptaremos el clic
-            
-            { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
-            { name: 'Libro Diario', icon: BookDown, url: '#' }, 
-            { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
-        ],
-    },
-];
-
 export default function Dashboard({ auth }: DashboardProps) {
+    // --- LÓGICA DE SEGURIDAD (ROLES) ---
+    // Extraemos los roles del usuario logueado. Si no hay, es un array vacío.
+    const userRoles = auth.roles || [];
+    // Verificamos si tiene el rol de Admin
+    const isAdmin = userRoles.includes('ADMINISTRADOR');
+
     // --- ESTADOS PARA LA LÓGICA DE REPORTE ---
     const [loading, setLoading] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorDetails, setErrorDetails] = useState<string[]>([]);
+
+    // --- DEFINICIÓN DE MÓDULOS (AHORA ADENTRO PARA QUE LEA LOS ROLES) ---
+    const hotelModules = [
+        {
+            title: 'Parámetros',
+            theme: 'blue',
+            items: [
+                { name: 'Bloques', icon: Building, url: '/bloques' },
+                { name: 'Pisos', icon: Layers, url: '/pisos' },
+                { name: 'Tipos Hab.', icon: BedDouble, url: '/tipohabitacion' },
+                { name: 'Precios', icon: Tag, url: '/precios' },
+                { name: 'Habitaciones', icon: Hotel, url: '/habitaciones' },
+                { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
+                { name: 'Huéspedes', icon: Users, url: '/invitados' },
+                { name: 'Horarios', icon: Clock, url: '/horarios' },
+                { name: 'Personal', icon: User, url: '/usuarios'},
+                
+                ...(isAdmin ? [
+                    { name: 'Permisos', icon: Key, url: '/permisos' },
+                    { name: 'Cargos/Roles', icon: UserCog, url: '/roles' },
+                ] : []),
+            ],
+        },
+        {
+            title: 'Procesos',
+            theme: 'red',
+            items: [
+                { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservas' },
+                { name: 'Asignación', icon: BedDouble, url: '/checks' },
+                { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
+                { name: 'Facturación', icon: Receipt, url: '/facturacion' },
+                { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
+                { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
+                { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
+            ],
+        },
+        {
+            title: 'Reportes',
+            theme: 'amber',
+            items: [
+                { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
+                { name: 'Libro Diario', icon: BookDown, url: '#' }, 
+                { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
+            ],
+        },
+    ];
 
     const getThemeClasses = (theme: string) => {
         switch (theme) {
@@ -106,18 +116,13 @@ export default function Dashboard({ auth }: DashboardProps) {
         }
     };
 
-    // --- FUNCIÓN PARA GENERAR EL LIBRO DIARIO (Misma lógica que en Reports) ---
     const handleGenerateDailyBook = async () => {
         setLoading(true);
         try {
-            // 1. Validar datos en backend
             const response = await axios.get('/reports/check-daily-book');
-            
             if (response.data.can_generate) {
-                // 2. Si todo está bien, abrir PDF
                 window.open('/reports/daily-book-pdf', '_blank');
             } else {
-                // 3. Si faltan datos, mostrar modal
                 setErrorDetails(response.data.details || []);
                 setShowErrorModal(true);
             }
@@ -129,7 +134,6 @@ export default function Dashboard({ auth }: DashboardProps) {
         }
     };
 
-    // Manejador genérico de clicks
     const handleItemClick = (item: any) => {
         if (item.name === 'Libro Diario') {
             handleGenerateDailyBook();
@@ -137,7 +141,7 @@ export default function Dashboard({ auth }: DashboardProps) {
             router.visit(item.url);
         }
     };
-
+    
     return (
         <AuthenticatedLayout user={auth.user as any}>
             <Head title="Panel Principal" />
@@ -188,7 +192,6 @@ export default function Dashboard({ auth }: DashboardProps) {
                                         <div className="absolute -top-10 -right-6 h-32 w-32 rounded-full bg-white/10 blur-2xl transition-all group-hover:scale-150"></div>
                                         
                                         <div className="relative z-10 mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black/20 text-white shadow-inner backdrop-blur-sm transition-transform group-hover:scale-110 group-hover:rotate-12">
-                                            {/* Si está cargando y es este item, mostramos un spinner simple (opcional), sino el icono */}
                                             <item.icon className={`h-6 w-6 ${loading && item.name === 'Libro Diario' ? 'animate-pulse' : ''}`} />
                                         </div>
 
@@ -205,11 +208,10 @@ export default function Dashboard({ auth }: DashboardProps) {
                 </div>
             </div>
 
-            {/* --- MODAL FLOTANTE DE ERROR (DATOS FALTANTES) --- */}
+            {/* Modal de Error */}
             {showErrorModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-                        {/* Header Rojo */}
                         <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-6 py-4">
                             <h3 className="flex items-center gap-2 text-lg font-bold text-red-700">
                                 <AlertTriangle className="h-6 w-6" />
@@ -231,7 +233,6 @@ export default function Dashboard({ auth }: DashboardProps) {
                                 </p>
                             </div>
 
-                            {/* Lista de habitaciones con problemas */}
                             <div className="max-h-48 overflow-y-auto rounded-xl border border-red-100 bg-red-50/50 p-3">
                                 <ul className="space-y-2">
                                     {errorDetails.map((detail, idx) => (

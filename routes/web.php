@@ -32,7 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
     })->name('Inicio');
-    
+
     //Usuarios
     Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
 
@@ -40,20 +40,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('user.profile.edit'); // <-- Le agregamos 'user.' al inicio
     Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('user.profile.update');
     Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('user.profile.password');
-    
-    Route::middleware(['role:PRUEBA'])->group(function () {
-        
-        // Bloques (Pueden entrar ambos)
-        Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
-        Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
-        Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
-        Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
-        Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
-        Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
-        
-        // Personal / Usuarios (Pueden ver y crear personal)
-        Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
-    });
+
+    // Bloques 
+    Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
+    Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
+    Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
+    Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
+    Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
+    Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
+
 
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
@@ -110,7 +105,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
-    
+
     // Rutas adicionales de checks
     Route::put('/checks/{checkin}/checkout', [CheckinController::class, 'checkout']);
     Route::get('/checks/{checkin}/checkout-receipt', [CheckinController::class, 'generateCheckoutReceipt']);
@@ -126,10 +121,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Ruta Original (POST)
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
-    
+
     // Ruta de Tolerancia (PUT) - LE CAMBIÉ EL NOMBRE A .update_transfer
-    Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.update_transfer'); 
-    
+    Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.update_transfer');
+
     Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])->name('checkins.addPayment');
     Route::post('/checkins/from-reservation', [App\Http\Controllers\CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
 
@@ -141,7 +136,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkin-details', [CheckinDetailController::class, 'store'])->name('checkindetails.store');
     Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
-    
+
     // Vista previa de servicios adicionales huesped (Esta es la que vale, borré la de arriba)
     Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
     Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
@@ -179,18 +174,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/historial-gastos', [ExpenseController::class, 'history'])->name('gastos.history');
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
-    
-    //Roles 
-    Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
-    Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
-    Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
-    Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
 
-    //Permisos
-    Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
-    Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
-    Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
-    Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
+    Route::middleware(['role:ADMINISTRADOR'])->group(function () {
+        //Roles 
+        Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
+        Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+
+        //Permisos
+        Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
+        Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
+        Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
+        Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
+    });
 });
 
 require __DIR__ . '/settings.php';

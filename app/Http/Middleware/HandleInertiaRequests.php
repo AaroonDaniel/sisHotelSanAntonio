@@ -43,14 +43,18 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->user() ? array_merge($request->user()->toArray(), [
+                    'roles' => $request->user()->getRoleNames(),
+                    'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                ]) : null,
+                
                 'active_register' => $request->user() 
                     ? \App\Models\CashRegister::where('user_id', $request->user()->id)
                                               ->where('status', 'ABIERTA')
                                               ->first() 
                     : null,
             ],
-            // 🚀 AÑADIMOS ESTE BLOQUE 'flash' PARA LOS MENSAJES Y LA COLA DE CHECKINS
+            
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
