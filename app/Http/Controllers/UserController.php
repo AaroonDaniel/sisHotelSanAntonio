@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Spatie\Permission\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -16,11 +17,12 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $users = User::orderBy('id', 'desc')->get();
+        $users = User::with('roles')->orderBy('id', 'desc')->get();
+        $roles = Role::all();
 
-        // DEBE SER TODO MINÚSCULAS para que coincida con tu carpeta y archivo
         return Inertia::render('users/index', [
-            'users' => $users
+            'users' => $users,
+            'roles' => $roles
         ]);
     }
 
@@ -36,18 +38,25 @@ class UserController extends Controller
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
             'password' => 'required|string|min:8',
+            'role' => 'required|string|exists:roles,name', // Validamos que el rol exista
         ]);
 
-        User::create([
+        // CORRECCIÓN: Asignamos el resultado a la variable $user
+        $user = User::create([
             'nickname' => $request->nickname,
             'full_name' => $request->full_name,
             'phone' => $request->phone,
             'address' => $request->address,
             'shift' => $request->shift,
-            'password' => Hash::make($request->password), // Encriptamos la contraseña
+            'password' => Hash::make($request->password), 
             'is_active' => true,
         ]);
 
+        // Ahora sí podemos asignarle el rol
+        if ($request->role) {
+            $user->assignRole($request->role);
+        }
+        
         return redirect()->back()->with('success', 'Usuario creado correctamente.');
     }
 
@@ -57,19 +66,17 @@ class UserController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            // EL CAMBIO ESTÁ EN ESTA LÍNEA 👇 (Le decimos que ignore el $id actual)
             'nickname' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($id)],
-            
             'full_name' => 'required|string|max:255',
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
-            'shift' => 'required|string|max:50', // Tu nuevo campo
-            'password' => 'nullable|string|min:8', // Nullable porque si está vacío, no se cambia
+            'shift' => 'required|string|max:50', 
+            'password' => 'nullable|string|min:8',
+            'role' => 'required|string|exists:roles,name', // Validamos el rol
         ]);
 
         $user = User::findOrFail($id);
 
-        // Preparamos los datos a actualizar
         $data = [
             'nickname' => $request->nickname,
             'full_name' => $request->full_name,
@@ -78,23 +85,35 @@ class UserController extends Controller
             'shift' => $request->shift,
         ];
 
-        // Solo actualizamos la contraseña si el usuario escribió una nueva
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
 
         $user->update($data);
 
+        // CORRECCIÓN: Sincronizamos el nuevo rol del usuario
+        if ($request->role) {
+            // syncRoles borra el rol viejo y le pone el nuevo
+            $user->syncRoles([$request->role]); 
+        }
+
         return redirect()->back()->with('success', 'Usuario actualizado correctamente.');
     }
 
+    /**
+     * Habilita o Deshabilita un usuario (Eliminado lógico)
+     */
     public function destroy($id)
     {
         $user = User::findOrFail($id);
 
-        // Usamos la Facade Auth que Intelephense sí reconoce
         if (Auth::id() === $user->id) {
             return redirect()->back()->with('error', 'No puedes desactivar tu propio usuario.');
+        }
+
+        // Protección adicional opcional: evitar apagar al Administrador
+        if ($user->hasRole('Administrador')) {
+            return redirect()->back()->with('error', 'Seguridad: No se puede desactivar al Administrador principal.');
         }
 
         $user->update([

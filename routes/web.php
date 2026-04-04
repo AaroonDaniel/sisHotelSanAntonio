@@ -41,13 +41,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('user.profile.update');
     Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('user.profile.password');
     
-    //Bloques
-    Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
-    Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
-    Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
-    Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
-    Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
-    Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
+    Route::middleware(['role:PRUEBA'])->group(function () {
+        
+        // Bloques (Pueden entrar ambos)
+        Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
+        Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
+        Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
+        Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
+        Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
+        Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
+        
+        // Personal / Usuarios (Pueden ver y crear personal)
+        Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
+    });
 
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
