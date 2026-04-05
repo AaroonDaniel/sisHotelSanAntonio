@@ -793,8 +793,7 @@ class CheckinController extends Controller
                 // CASO A: ¡EL CASTIGO! El trato estaba activo y lo acaban de apagar
                 $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
                 $now = \Carbon\Carbon::now();
-                $corporateDays = max(0, $checkInDate->diffInDays($now)); // Congelamos días baratos
-                
+                $corporateDays = max(0, intval($checkInDate->diffInDays($now)));
                 $updatedAgreedPrice = $basePrice; // Vuelve a precio normal
                 $paymentFrequency = null; 
             } 

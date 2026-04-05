@@ -13,6 +13,7 @@ import {
     Construction,
     FileEdit,
     FileText,
+    History,
     Home,
     Loader2,
     LogOut,
@@ -170,6 +171,15 @@ export default function RoomsStatus({
     // Detalles de una nueva vista para los datos del usuario
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
+
+    // Detslles de historial de adelantos y pagos realizados
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyCheckinData, setHistoryCheckinData] = useState<any>(null);
+
+    const handleOpenHistory = (checkin: any, room: any) => {
+        setHistoryCheckinData({ ...checkin, room: room });
+        setIsHistoryModalOpen(true);
+    };
 
     // [DOC] SINCRONIZADOR MAESTRO DE DATOS (Actualiza TODOS los modales al hacer pagos)
     useEffect(() => {
@@ -874,15 +884,15 @@ export default function RoomsStatus({
                     <div className="flex flex-col items-end gap-3">
                         <div className="flex flex-row items-center justify-end gap-2">
                             {(auth as any).active_register && (
-                                    <button
-                                        onClick={handleOpenQuickPreview}
-                                        className="flex min-w-[220px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-6 py-2.5 text-sm font-bold text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95"
-                                        title="Ver resumen visual del dinero cobrado"
-                                    >
-                                        <FileText className="h-5 w-5" />
-                                        Vista Previa de Caja
-                                    </button>
-                                )}
+                                <button
+                                    onClick={handleOpenQuickPreview}
+                                    className="flex min-w-[220px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-6 py-2.5 text-sm font-bold text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95"
+                                    title="Ver resumen visual del dinero cobrado"
+                                >
+                                    <FileText className="h-5 w-5" />
+                                    Vista Previa de Caja
+                                </button>
+                            )}
                             {/* Selector de Tipo de Habitación */}
                             <div className="relative">
                                 <select
@@ -1134,13 +1144,31 @@ export default function RoomsStatus({
                                 className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
                                 {/* 🚦 EL SEMÁFORO VISUAL (Pegado arriba a la derecha) 🚦 */}
-                                {corpState && (
-                                    <div
-                                        className={`absolute top-0 right-0 z-20 rounded-tr-lg rounded-bl-xl px-3 py-1 text-[10px] font-black tracking-wider uppercase shadow-md ${corpState.badge}`}
-                                    >
-                                        {corpState.text}
-                                    </div>
-                                )}
+                                {/* 🚦 CONTROLES SUPERIOR DERECHA (Historial + Semáforo) 🚦 */}
+                                <div className="absolute top-0 right-0 z-30 flex overflow-hidden rounded-tr-lg rounded-bl-xl shadow-md">
+                                    {activeCheckin && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenHistory(
+                                                    activeCheckin,
+                                                    room,
+                                                );
+                                            }}
+                                            className="flex items-center justify-center border-r border-yellow-500/30 bg-yellow-400 px-2 py-1 text-yellow-900 transition-colors hover:bg-yellow-300"
+                                            title="Ver Historial Financiero"
+                                        >
+                                            <History className="h-4 w-4 shadow-sm" />
+                                        </button>
+                                    )}
+                                    {corpState && (
+                                        <div
+                                            className={`flex items-center px-3 py-1 text-[10px] font-black tracking-wider uppercase ${corpState.badge}`}
+                                        >
+                                            {corpState.text}
+                                        </div>
+                                    )}
+                                </div>
 
                                 {/* Check original (Lo bajamos un poquitito si es corporativo para que no choque) */}
                                 {isSelected && (
@@ -1377,6 +1405,14 @@ export default function RoomsStatus({
                 rooms={Rooms}
                 guests={Guests}
                 onClose={() => setShowMultiCheckoutModal(false)}
+            />
+            <FinancialHistoryModal 
+                show={isHistoryModalOpen}
+                onClose={() => {
+                    setIsHistoryModalOpen(false);
+                    setHistoryCheckinData(null);
+                }}
+                checkin={historyCheckinData}
             />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
@@ -2960,6 +2996,172 @@ function CheckoutConfirmationModal({
                     action: 'exit', // Importante: 'exit' para mensaje de salida
                 }}
             />
+        </div>
+    );
+}
+
+// =========================================================================
+// 🚀 NUEVO COMPONENTE: HISTORIAL FINANCIERO Y AUDITORÍA CORPORATIVA
+// =========================================================================
+function FinancialHistoryModal({ 
+    show, 
+    onClose, 
+    checkin 
+}: { 
+    show: boolean; 
+    onClose: () => void; 
+    checkin: any 
+}) {
+    if (!show || !checkin) return null;
+
+    // 🛠️ Función mágica para reparar fechas de Laravel
+    const parseLaravelDate = (dateString: string) => {
+        if (!dateString) return new Date();
+        return new Date(dateString.replace(' ', 'T'));
+    };
+
+    const room = checkin.room;
+    const normalPrice = parseFloat(room?.price?.amount || 0);
+    const agreedPrice = parseFloat(checkin.agreed_price || 0);
+    const isCorporate = checkin.is_corporate && agreedPrice > 0 && agreedPrice < normalPrice;
+
+    // Calcular el total de pagos reales
+    const payments = checkin.payments || [];
+    const totalPaid = payments.reduce((acc: number, p: any) => {
+        const amount = parseFloat(p.amount) || 0;
+        return p.type === 'DEVOLUCION' ? acc - amount : acc + amount;
+    }, 0);
+
+    // Lógica inteligente de Tarifas Corporativas
+    let corporateMessage = null;
+    if (isCorporate) {
+        const frequency = parseInt(String(checkin.payment_frequency)) || 1;
+        const daysPaid = Math.floor(totalPaid / agreedPrice);
+        
+        // 🚀 AQUÍ APLICAMOS LA FUNCIÓN REPARADORA
+        const checkinDate = parseLaravelDate(checkin.check_in_date);
+        checkinDate.setHours(0, 0, 0, 0);
+        
+        const limitDate = new Date(checkinDate);
+        limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (today > limitDate) {
+            corporateMessage = (
+                <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-4 rounded-r-xl shadow-sm">
+                    <h4 className="text-red-800 font-black flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <AlertTriangle className="h-5 w-5" /> Acuerdo Vencido
+                    </h4>
+                    <p className="text-sm text-red-700 mt-2 leading-relaxed">
+                        El huésped cubrió la tarifa corporativa (<b>Bs. {agreedPrice}</b>) hasta el <b className="text-red-900">{limitDate.toLocaleDateString()}</b>. 
+                        A partir de esa fecha, el sistema aplicará la tarifa normal de <b className="text-red-900 border-b border-red-300 pb-0.5">Bs. {normalPrice}</b> por cada día extra de mora.
+                    </p>
+                </div>
+            );
+        } else {
+            corporateMessage = (
+                <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 mb-4 rounded-r-xl shadow-sm">
+                    <h4 className="text-emerald-800 font-black flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <CheckCircle2 className="h-5 w-5" /> Acuerdo Activo
+                    </h4>
+                    <p className="text-sm text-emerald-700 mt-2 leading-relaxed">
+                        El huésped está al día con sus pagos. La tarifa corporativa de <b>Bs. {agreedPrice}</b> está asegurada hasta el <b className="text-emerald-900">{limitDate.toLocaleDateString()}</b>.
+                        <br/><span className="text-xs opacity-70 mt-1 block">(Tarifa normal sin acuerdo: Bs. {normalPrice})</span>
+                    </p>
+                </div>
+            );
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
+            <div className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4 shrink-0">
+                    <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                        <div className="rounded-lg bg-yellow-100 p-1.5 text-yellow-600 shadow-inner">
+                            <History className="h-5 w-5" />
+                        </div>
+                        Historial Financiero
+                    </h3>
+                    <button onClick={onClose} className="rounded-full p-2 text-gray-400 hover:bg-gray-200 transition-colors">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+                    <div className="mb-6 flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <div>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Titular de la Habitación</p>
+                            <p className="text-base font-black text-gray-800 mt-0.5">{checkin.guest?.full_name || 'Desconocido'}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Adelantos</p>
+                            <p className="text-2xl font-black text-emerald-600 mt-0.5">Bs. {totalPaid.toFixed(2)}</p>
+                        </div>
+                    </div>
+
+                    {corporateMessage}
+
+                    <h4 className="text-sm font-black text-gray-700 mb-3 uppercase tracking-wider flex items-center gap-2">
+                        <Banknote className="h-4 w-4 text-gray-400" /> Detalle de Pagos
+                    </h4>
+                    
+                    {payments.length > 0 ? (
+                        <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-100 border-b border-gray-200">
+                                    <tr>
+                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider">Fecha y Hora</th>
+                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider text-center">Método</th>
+                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider text-right">Monto</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                    {payments.map((p: any) => (
+                                        <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                            {/* 🚀 AQUÍ TAMBIÉN APLICAMOS LA FUNCIÓN REPARADORA */}
+                                            <td className="px-4 py-3 text-gray-600 font-medium">
+                                                {parseLaravelDate(p.created_at).toLocaleString('es-BO', { 
+                                                    day: '2-digit', month: '2-digit', year: 'numeric', 
+                                                    hour: '2-digit', minute: '2-digit', hour12: true 
+                                                })}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                                                    p.method?.toLowerCase() === 'qr' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 
+                                                    p.method?.toLowerCase() === 'efectivo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 
+                                                    'bg-gray-100 text-gray-700 border border-gray-200'
+                                                }`}>
+                                                    {p.method || p.type}
+                                                </span>
+                                            </td>
+                                            <td className={`px-4 py-3 text-right font-black ${p.type === 'DEVOLUCION' ? 'text-red-500' : 'text-gray-800'}`}>
+                                                {p.type === 'DEVOLUCION' ? '-' : '+'} Bs. {parseFloat(p.amount).toFixed(2)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-center p-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                            <Banknote className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                            <p className="text-gray-500 font-medium">No hay pagos registrados aún.</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex shrink-0 justify-end border-t border-gray-100 bg-gray-50 p-4">
+                    <button
+                        onClick={onClose}
+                        className="rounded-xl px-6 py-2.5 text-sm font-bold text-gray-700 bg-white border border-gray-300 shadow-sm transition hover:bg-gray-100 active:scale-95"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

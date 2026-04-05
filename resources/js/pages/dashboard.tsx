@@ -48,10 +48,9 @@ interface DashboardProps {
 export default function Dashboard({ auth }: DashboardProps) {
     // --- LÓGICA DE SEGURIDAD (ROLES) ---
     // Extraemos los roles del usuario logueado. Si no hay, es un array vacío.
-    const userRoles = auth.roles || [];
+    const userRoles = auth.user?.roles || [];
     // Verificamos si tiene el rol de Admin
-    const isAdmin = userRoles.includes('ADMINISTRADOR');
-
+    const isAdmin = userRoles.some(role => role.toLowerCase() === 'administrador');
     // --- ESTADOS PARA LA LÓGICA DE REPORTE ---
     const [loading, setLoading] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);

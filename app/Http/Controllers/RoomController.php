@@ -167,25 +167,27 @@ class RoomController
                         'companions',
                         'checkinDetails.service',
                         'services',
-                        'payments',
-                        // 👇 ESTAS 2 LÍNEAS SON LA SOLUCIÓN AL "0.00"
+                        'payments' => function($query) {
+                            $query->orderBy('created_at', 'asc'); 
+                        },
+                        
                         'room.price',
                         'room.roomType'
                     ]);
             }
         ])->orderBy('number')->get();
 
-        // 2. Cargamos los checkins activos (para el buscador global)
-        // 👇 AQUÍ TAMBIÉN AGREGAMOS 'payments'
+        
         $activeCheckins = \App\Models\Checkin::with([
             'guest',
             'companions',
             'checkinDetails.service',
-            'room.price',     // 👈 Asegúrate que diga room.price
-            'room.roomType',  // 👈 Y room.roomType
+            'room.price',     
+            'room.roomType',  
             'services',
-            // [DOC] AGREGADO: Necesario para que el buscador sepa cuánto se ha pagado realmente
-            'payments'
+            'payments' => function($query) {
+                $query->orderBy('created_at', 'asc'); 
+            }
         ])
             ->where('status', 'activo')
             ->get();
