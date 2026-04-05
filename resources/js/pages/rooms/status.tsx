@@ -37,6 +37,7 @@ import ReservationModal from '../reservations/reservationModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
+import CleanConfirmModal from '@/components/cleanConfirmModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -171,6 +172,10 @@ export default function RoomsStatus({
     // Detalles de una nueva vista para los datos del usuario
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
+
+    // Cambio de estado para confirmar limpieza
+    const [isCleanConfirmModalOpen, setIsCleanConfirmModalOpen] = useState(false);
+    const [roomToClean, setRoomToClean] = useState<Room | null>(null);
 
     // Detslles de historial de adelantos y pagos realizados
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -490,7 +495,8 @@ export default function RoomsStatus({
         }
 
         if (status === 'cleaning') {
-            getCleanRoom(room);
+            setRoomToClean(room);
+            setIsCleanConfirmModalOpen(true);
             return;
         }
     };
@@ -1414,6 +1420,14 @@ export default function RoomsStatus({
                 }}
                 checkin={historyCheckinData}
             />
+            <CleanConfirmModal
+                show={isCleanConfirmModalOpen}
+                onClose={() => {
+                    setIsCleanConfirmModalOpen(false);
+                    setRoomToClean(null);
+                }}
+                room={roomToClean}
+            />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
                     <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
@@ -1458,7 +1472,7 @@ export default function RoomsStatus({
 }
 
 // --- COMPONENTE MODAL MODIFICADO ---
-// Reemplaza toda la función CheckoutConfirmationModal con esto:
+
 function CheckoutConfirmationModal({
     checkin,
     room,
@@ -3000,9 +3014,6 @@ function CheckoutConfirmationModal({
     );
 }
 
-// =========================================================================
-// 🚀 NUEVO COMPONENTE: HISTORIAL FINANCIERO Y AUDITORÍA CORPORATIVA
-// =========================================================================
 function FinancialHistoryModal({ 
     show, 
     onClose, 

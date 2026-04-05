@@ -86,7 +86,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                 { name: 'Asignación', icon: BedDouble, url: '/checks' },
                 { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
                 { name: 'Facturación', icon: Receipt, url: '/facturacion' },
-                { name: 'Limpieza', icon: SprayCan, url: '/housekeeping' },
+                
                 { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
                 { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
             ],
