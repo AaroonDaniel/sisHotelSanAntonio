@@ -14,7 +14,7 @@ class CheckinDetail extends Model
         'service_id',
         'quantity',
         'selling_price',
-        'notes', 
+        
     ];
     
    

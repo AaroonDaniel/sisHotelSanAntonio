@@ -76,8 +76,7 @@ export default function CheckinDetailModal({
         checkin_id: '',
         service_id: '',
         quantity: 1,
-        custom_price: '', 
-        notes: '',
+        
     });
 
     const [processing, setProcessing] = useState(false);

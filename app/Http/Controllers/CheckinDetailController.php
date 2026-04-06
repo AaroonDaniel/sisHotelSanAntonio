@@ -49,8 +49,8 @@ class CheckinDetailController extends Controller
             'checkin_id' => 'required|exists:checkins,id',
             'service_id' => 'required|exists:services,id',
             'quantity' => 'required|integer|min:1',
-            'custom_price' => 'nullable|numeric|min:0', 
-            'notes' => 'nullable|string|max:255',
+            
+            
         ]);
 
         //buscador del servicio para obtener su precio actual
