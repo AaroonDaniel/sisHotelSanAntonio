@@ -38,6 +38,7 @@ import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
+import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
@@ -176,6 +177,10 @@ export default function RoomsStatus({
     // Cambio de estado para confirmar limpieza
     const [isCleanConfirmModalOpen, setIsCleanConfirmModalOpen] = useState(false);
     const [roomToClean, setRoomToClean] = useState<Room | null>(null);
+
+    //cambio de estado para finalizar mantenimiento
+    const [isFinishMaintenanceModalOpen, setIsFinishMaintenanceModalOpen] = useState(false);
+    const [roomToFinishMaintenance, setRoomToFinishMaintenance] = useState<Room | null>(null);
 
     // Detslles de historial de adelantos y pagos realizados
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -497,6 +502,12 @@ export default function RoomsStatus({
         if (status === 'cleaning') {
             setRoomToClean(room);
             setIsCleanConfirmModalOpen(true);
+            return;
+        }
+
+        if (status === 'maintenance') {
+            setRoomToFinishMaintenance(room);
+            setIsFinishMaintenanceModalOpen(true);
             return;
         }
     };
@@ -1427,6 +1438,14 @@ export default function RoomsStatus({
                     setRoomToClean(null);
                 }}
                 room={roomToClean}
+            />
+            <FinishMaintenanceModal
+                show={isFinishMaintenanceModalOpen}
+                onClose={() => {
+                    setIsFinishMaintenanceModalOpen(false);
+                    setRoomToFinishMaintenance(null);
+                }}
+                room={roomToFinishMaintenance}
             />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">

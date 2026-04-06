@@ -57,7 +57,7 @@ export default function RoleModal({ show, onClose, RoleToEdit, allPermissions }:
         setData('permissions', current);
     };
 
-    const isProtected = RoleToEdit?.name === 'Administrador';
+    const isProtected = RoleToEdit?.name === 'ADMINISTRADOR';
 
     if (!show) return null;
 

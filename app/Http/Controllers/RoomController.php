@@ -11,6 +11,7 @@ use App\Models\Guest;
 use App\Models\Service;
 use App\Models\Schedule;
 use App\Models\Reservation;
+use App\Models\Maintenance;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -221,6 +222,61 @@ class RoomController
         ]);
     }
 
+    public function markAsMaintenance(Request $request, Room $room)
+    {
+        // 1. Validar los datos que vienen del formulario de React
+        $request->validate([
+            'issue' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:5120', // Máximo 5MB
+        ]);
+
+        // 2. Manejar la subida de la foto (Si es que enviaron una)
+        $photoPath = null;
+        if ($request->hasFile('photo')) {
+            // Guarda la imagen en la carpeta "storage/app/public/maintenances"
+            $photoPath = $request->file('photo')->store('maintenances', 'public');
+        }
+
+        // 3. Buscar si hay un Check-in activo en esa habitación (para saber a quién culpar/cobrar)
+        $activeCheckin = $room->checkins()->where('status', 'activo')->first();
+
+        // 4. Crear el registro oficial de Mantenimiento
+        Maintenance::create([
+            'room_id' => $room->id,
+            'user_id' => $request->user()->id, 
+            'issue' => strtoupper($request->issue),
+            'description' => strtoupper($request->description),
+            'photo_path' => $photoPath,
+            'checkin_id' => $activeCheckin ? $activeCheckin->id : null, 
+        ]);
+
+        // 5. Cambiar el estado de la habitación para que ya no se pueda vender
+        $room->update(['status' => 'Mantenimiento']);
+
+        // 6. Recargar la página
+        return redirect()->back()->with('success', 'Habitación bloqueada y daño reportado exitosamente.');
+    }
+
+    public function finishMaintenance(Room $room)
+    {
+        // 1. Buscamos el reporte de daño que sigue pendiente en esta habitación
+        $maintenance = \App\Models\Maintenance::where('room_id', $room->id)
+            ->whereNull('resolved_at')
+            ->first();
+
+        // 2. Si lo encontramos, le ponemos la fecha y hora actual de resolución
+        if ($maintenance) {
+            $maintenance->update([
+                'resolved_at' => now()
+            ]);
+        }
+
+        // 3. Cambiamos la habitación a estado Limpieza (porque el técnico ensució)
+        $room->update(['status' => 'Limpieza']);
+
+        return redirect()->back()->with('success', 'Mantenimiento terminado. La habitación ha pasado a Limpieza.');
+    }
     // Funcion de limpieza de habitacion (PROVICIONAL)
     public function markAsClean(Room $room)
     {

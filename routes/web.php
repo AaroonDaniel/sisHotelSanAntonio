@@ -82,7 +82,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/habitaciones/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::delete('/habitaciones/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
     Route::patch('/habitaciones/{room}/toggle', [RoomController::class, 'toggleStatus'])->name('rooms.toggle');
-
+    Route::post('/rooms/{room}/maintenance', [App\Http\Controllers\RoomController::class, 'markAsMaintenance'])->name('rooms.maintenance');
+    Route::put('/rooms/{room}/finish-maintenance', [App\Http\Controllers\RoomController::class, 'finishMaintenance'])->name('rooms.finish_maintenance');
+    Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
+    
     //Invitados
     Route::get('/invitados', [GuestController::class, 'index'])->name('guests.index');
     Route::get('/invitados/crear', [GuestController::class, 'create'])->name('guests.create');
@@ -175,19 +178,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
 
-    Route::middleware(['role:ADMINISTRADOR'])->group(function () {
-        //Roles 
-        Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
-        Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
-        Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
-        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+    Route::middleware(['role:ADMINISTRADOR'])->group(function () {});
+    //Roles 
+    Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+    Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
+    Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
+    Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
 
-        //Permisos
-        Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
-        Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
-        Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
-        Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
-    });
+    //Permisos
+    Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
+    Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
+    Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
+    Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 });
 
 require __DIR__ . '/settings.php';

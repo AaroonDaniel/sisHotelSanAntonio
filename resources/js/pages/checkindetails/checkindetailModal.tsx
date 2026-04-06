@@ -14,6 +14,7 @@ import {
     ShoppingBasket,
     Hash,
     X,
+    DollarSign
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -75,6 +76,8 @@ export default function CheckinDetailModal({
         checkin_id: '',
         service_id: '',
         quantity: 1,
+        custom_price: '', 
+        notes: '',
     });
 
     const [processing, setProcessing] = useState(false);
