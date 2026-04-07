@@ -54,7 +54,7 @@ export default function FinishMaintenanceModal({ show, onClose, room }: FinishMa
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 transition"
+                            className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition"
                         >
                             Cancelar
                         </button>

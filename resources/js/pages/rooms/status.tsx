@@ -39,6 +39,7 @@ import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
+
 // Evitar errores de TS con Ziggy
 declare var route: any;
 

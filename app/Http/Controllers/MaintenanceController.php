@@ -6,6 +6,8 @@ use App\Models\Maintenance;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+// 👇 NUEVO: Importación obligatoria para usar Storage
+use Illuminate\Support\Facades\Storage; 
 
 class MaintenanceController extends Controller
 {
@@ -44,7 +46,8 @@ class MaintenanceController extends Controller
 
         Maintenance::create([
             'room_id' => $request->room_id,
-            'user_id' => auth()->$request()->id(),
+            // 👇 CORRECCIÓN: Se quitó el $request()-> sobrante
+            'user_id' => auth()->$request->id(), 
             'issue' => $request->issue,
             'description' => $request->description,
             'photo_path' => $photoPath,
@@ -72,5 +75,19 @@ class MaintenanceController extends Controller
         $maintenance->room->update(['status' => $request->room_status]);
 
         return back()->with('success', 'Mantenimiento finalizado. Habitación actualizada.');
+    }
+    
+    // 👇 METODO DESTROY CORREGIDO Y HABILITADO
+    public function destroy(Maintenance $maintenance)
+    {
+        // Si el mantenimiento tiene una foto, eliminarla del almacenamiento
+        if ($maintenance->photo_path) {
+            // Ya no es necesario poner la \ invertida, porque importamos la fachada arriba
+            Storage::disk('public')->delete($maintenance->photo_path); 
+        }
+
+        $maintenance->delete();
+
+        return back()->with('success', 'Mantenimiento eliminado correctamente.');
     }
 }
