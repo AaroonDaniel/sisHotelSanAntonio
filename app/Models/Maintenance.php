@@ -14,9 +14,7 @@ class Maintenance extends Model
         'user_id',
         'issue',
         'description',
-        'photo_path', // <-- Agregado
-        'checkin_id',
-        'repair_cost',
+        'photo_path',
         'resolved_at',
     ];
 
