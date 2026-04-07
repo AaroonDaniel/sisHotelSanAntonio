@@ -87,7 +87,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                 { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
                 { name: 'Facturación', icon: Receipt, url: '/facturacion' },
                 
-                { name: 'Mantenimiento', icon: Wrench, url: '/maintenance' },
+                { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos' },
                 { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
             ],
         },

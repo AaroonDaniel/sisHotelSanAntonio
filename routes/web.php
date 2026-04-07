@@ -85,7 +85,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/rooms/{room}/maintenance', [App\Http\Controllers\RoomController::class, 'markAsMaintenance'])->name('rooms.maintenance');
     Route::put('/rooms/{room}/finish-maintenance', [App\Http\Controllers\RoomController::class, 'finishMaintenance'])->name('rooms.finish_maintenance');
     Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
-    
+
     //Invitados
     Route::get('/invitados', [GuestController::class, 'index'])->name('guests.index');
     Route::get('/invitados/crear', [GuestController::class, 'create'])->name('guests.create');
@@ -178,6 +178,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
 
+    // Mantenimiento
+    Route::get('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'index'])->name('maintenances.index');
+    Route::post('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'store'])->name('maintenances.store');
+    Route::put('/mantenimientos/{maintenance}/resolve', [App\Http\Controllers\MaintenanceController::class, 'resolve'])->name('maintenances.resolve');
+    Route::delete('/mantenimientos/{maintenance}', [App\Http\Controllers\MaintenanceController::class, 'destroy'])->name('maintenances.destroy');
+    
     Route::middleware(['role:ADMINISTRADOR'])->group(function () {});
     //Roles 
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
