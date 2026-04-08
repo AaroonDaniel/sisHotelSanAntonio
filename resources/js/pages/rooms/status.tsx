@@ -23,9 +23,13 @@ import {
     User,
     User as UserIcon,
     X,
+    Presentation,
+    Users
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import CleanConfirmModal from '@/components/cleanConfirmModal';
+import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
@@ -37,8 +41,8 @@ import ReservationModal from '../reservations/reservationModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
-import CleanConfirmModal from '@/components/cleanConfirmModal';
-import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
+import EventCheckinModal from '../checkins/EventCheckinModal';
+import EventOccupiedModal from './EventOccupiedModal';
 
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -109,6 +113,10 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
+
+    // Campo para el salon
+    const [isEventCheckinModalOpen, setIsEventCheckinModalOpen] = useState(false);
+    const [isEventOccupiedModalOpen, setIsEventOccupiedModalOpen] = useState(false);
     // Controlador Seleccion multiple
     const [isMultiCheckoutMode, setIsMultiCheckoutMode] = useState(false);
     // guarda los ids de las habitaciones que han sido seleccionadas
@@ -176,12 +184,15 @@ export default function RoomsStatus({
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
 
     // Cambio de estado para confirmar limpieza
-    const [isCleanConfirmModalOpen, setIsCleanConfirmModalOpen] = useState(false);
+    const [isCleanConfirmModalOpen, setIsCleanConfirmModalOpen] =
+        useState(false);
     const [roomToClean, setRoomToClean] = useState<Room | null>(null);
 
     //cambio de estado para finalizar mantenimiento
-    const [isFinishMaintenanceModalOpen, setIsFinishMaintenanceModalOpen] = useState(false);
-    const [roomToFinishMaintenance, setRoomToFinishMaintenance] = useState<Room | null>(null);
+    const [isFinishMaintenanceModalOpen, setIsFinishMaintenanceModalOpen] =
+        useState(false);
+    const [roomToFinishMaintenance, setRoomToFinishMaintenance] =
+        useState<Room | null>(null);
 
     // Detslles de historial de adelantos y pagos realizados
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -413,12 +424,8 @@ export default function RoomsStatus({
     // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
     // =========================================================
     const handleRoomClick = (room: Room) => {
-        console.log('====================================');
-        console.log('👆 CLIC EN HABITACIÓN:', room.number, '| ID:', room.id);
-        console.log('Estado original de la BD (room.status):', room.status);
-
         const status = getDisplayStatus(room);
-        console.log('Estado visual calculado (getDisplayStatus):', status);
+        const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
         if (isMultiCheckoutMode) {
             if (status === 'occupied') {
@@ -431,41 +438,37 @@ export default function RoomsStatus({
             return;
         }
 
+        // ==========================================
+        // 🚀 BLOQUE SUPREMO PARA EL SALÓN (OCUPADO O INCOMPLETO)
+        // ==========================================
+        if (isSalon && (status === 'occupied' || status === 'incomplete')) {
+            const activeCheckin = Checkins?.find((c) => c.room_id === room.id && c.status === 'activo') || room.checkins?.[0];
+            
+            if (activeCheckin) {
+                // Siempre abrimos el Dashboard de Eventos para finalizar
+                setOccupiedCheckinData({ ...activeCheckin, room });
+                setIsEventOccupiedModalOpen(true);
+            }
+            return; // 🛑 El return evita que siga bajando hacia la lógica de habitaciones normales
+        }
+        // ==========================================
+
         if (status === 'occupied') {
             const fullCheckinData = Checkins?.find(
                 (c) => c.room_id === room.id && c.status === 'activo',
             );
-
             const activeCheckin = fullCheckinData || room.checkins?.[0];
 
-            console.log('--- EVALUANDO EL CHECK-IN ACTIVO ---');
             if (activeCheckin) {
-                console.log('Datos completos del Checkin:', activeCheckin);
-                console.log(
-                    '¿Es Temporal? (is_temporary):',
-                    activeCheckin.is_temporary,
-                );
-                console.log('Precio Acordado:', activeCheckin.agreed_price);
-
                 if (activeCheckin.is_temporary) {
-                    console.log(
-                        '🛑 INTERCEPTADO: is_temporary es TRUE (o 1). Abriendo Modal de EDICIÓN...',
-                    );
                     setCheckinToEdit(activeCheckin);
                     setSelectedRoomId(room.id);
                     setIsCheckinModalOpen(true);
                     return;
                 }
 
-                console.log(
-                    '✅ TODO EN ORDEN: is_temporary es FALSE (o 0). Abriendo Modal de INFORMACIÓN (OccupiedModal)...',
-                );
                 setOccupiedCheckinData({ ...activeCheckin, room });
                 setIsOccupiedModalOpen(true);
-            } else {
-                console.log(
-                    '⚠️ ERROR: La habitación está ocupada pero no se encontró el Checkin activo.',
-                );
             }
             return;
         }
@@ -488,9 +491,15 @@ export default function RoomsStatus({
         setSelectedForAction(null);
 
         if (status === 'available') {
-            setCheckinToEdit(null);
-            setSelectedRoomId(room.id);
-            setIsCheckinModalOpen(true);
+            if (isSalon) {
+                setCheckinToEdit(null);
+                setSelectedRoomId(room.id);
+                setIsEventCheckinModalOpen(true); 
+            } else {
+                setCheckinToEdit(null);
+                setSelectedRoomId(room.id);
+                setIsCheckinModalOpen(true);
+            }
         } else if (status === 'incomplete') {
             const activeCheckin = room.checkins?.[0];
             if (activeCheckin) {
@@ -680,41 +689,65 @@ export default function RoomsStatus({
 
     const getStatusConfig = (room: Room) => {
         const status = getDisplayStatus(room);
+        
+        // 🚀 Detectamos si esta "habitación" es un salón
+        const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
+
         switch (status) {
             case 'available':
                 return {
-                    colorClass:
-                        'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
-                    borderColor: 'border-emerald-700',
+                    colorClass: isSalon 
+                        ? 'bg-indigo-600 hover:bg-indigo-500 cursor-pointer'
+                        : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
+                    borderColor: isSalon ? 'border-indigo-700' : 'border-emerald-700',
                     label: 'Disponible',
-                    icon: (
+                    icon: isSalon ? (
+                        <Presentation className="h-10 w-10 text-indigo-200/50" />
+                    ) : (
                         <BedDouble className="h-10 w-10 text-emerald-200/50" />
                     ),
-
                     info: room.room_type?.name || 'Libre',
-                    des:
+                    des: isSalon ? 'Eventos / Reuniones' : (
                         room.price?.bathroom_type === 'private' ||
                         room.price?.bathroom_type === 'privado'
                             ? 'Privado'
                             : room.price?.bathroom_type === 'shared' ||
                                 room.price?.bathroom_type === 'compartido'
                               ? 'Compartido'
-                              : 'Tipo de baño no definido',
+                              : 'Tipo de baño no definido'
+                    ),
                     actionLabel: 'Asignar',
                 };
 
             case 'occupied':
-                // CAMBIO: CELESTE (Cyan/Sky)
                 return {
-                    colorClass: 'bg-cyan-600 hover:bg-cyan-500 cursor-pointer',
-                    borderColor: 'border-cyan-700',
+                    colorClass: isSalon
+                        ? 'bg-violet-700 hover:bg-violet-600 cursor-pointer'
+                        : 'bg-cyan-600 hover:bg-cyan-500 cursor-pointer',
+                    borderColor: isSalon ? 'border-violet-800' : 'border-cyan-700',
                     label: 'Ocupado',
-                    icon: <UserIcon className="h-10 w-10 text-cyan-200/50" />,
+                    icon: isSalon ? (
+                        <Users className="h-10 w-10 text-violet-200/50" />
+                    ) : (
+                        <UserIcon className="h-10 w-10 text-cyan-200/50" />
+                    ),
                     info: getOccupantName(room),
-                    actionLabel: 'Ver / Editar',
+                    actionLabel: isSalon ? 'Ver / Finalizar' : 'Ver / Editar',
                 };
 
             case 'incomplete':
+                // 🚀 SI ES SALÓN: Forzamos a que se vea como OCUPADO, no queremos que se vea naranja ni pida datos
+                if (isSalon) {
+                    return {
+                        colorClass: 'bg-violet-700 hover:bg-violet-600 cursor-pointer',
+                        borderColor: 'border-violet-800',
+                        label: 'Ocupado',
+                        icon: <Users className="h-10 w-10 text-violet-200/50" />,
+                        info: getOccupantName(room),
+                        actionLabel: 'Ver / Finalizar',
+                    };
+                }
+                // Si es habitación normal, sigue siendo naranja
                 return {
                     colorClass:
                         'bg-amber-500 hover:bg-amber-400 cursor-pointer ring-2 ring-amber-300 ring-offset-2 ring-offset-gray-900',
@@ -728,7 +761,6 @@ export default function RoomsStatus({
                 };
 
             case 'cleaning':
-                // CAMBIO: PLOMO (Gray)
                 return {
                     colorClass: 'bg-gray-500 hover:bg-gray-400 cursor-pointer',
                     borderColor: 'border-gray-600',
@@ -739,7 +771,6 @@ export default function RoomsStatus({
                 };
 
             case 'maintenance':
-                // CAMBIO: ROJO (Red)
                 return {
                     colorClass: 'bg-red-600',
                     borderColor: 'border-red-700',
@@ -757,7 +788,7 @@ export default function RoomsStatus({
                         'bg-purple-600 hover:bg-purple-500 cursor-pointer',
                     borderColor: 'border-purple-700',
                     label: 'Reservado',
-                    icon: <FileEdit className="h-0 w-10 text-purple-200/50" />,
+                    icon: <FileEdit className="h-10 w-10 text-purple-200/50" />,
                     info: getReservationName(room),
                     actionLabel: 'Ver reserva',
                 };
@@ -840,10 +871,11 @@ export default function RoomsStatus({
         <AuthenticatedLayout user={auth.user}>
             <Head title="Estado de Habitaciones" />
 
-            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                {/* HEADER Y FILTROS (Mismo código de antes) */}
-                <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-                    <div>
+            <div className="mx-auto max-w-7xl px-4 py-1 sm:px-6 lg:px-8">
+                {/* HEADER Y FILTROS */}
+                <div className="mb-8 flex w-full flex-col justify-between gap-4 lg:flex-row lg:items-end">
+                    {/* --- LADO IZQUIERDO: Título y Botones --- */}
+                    <div className="shrink-0">
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
@@ -852,7 +884,6 @@ export default function RoomsStatus({
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleTopCheckoutTrigger}
-                                    // Deshabilitado solo si el modo está activo pero NO hay habitaciones seleccionadas
                                     disabled={
                                         isMultiCheckoutMode &&
                                         selectedRoomsForCheckout.length === 0
@@ -861,9 +892,9 @@ export default function RoomsStatus({
                                         isMultiCheckoutMode
                                             ? selectedRoomsForCheckout.length >
                                               0
-                                                ? 'animate-bounce bg-green-600 text-white shadow-lg hover:scale-105 hover:bg-green-500' // Listo para cobrar
-                                                : 'animate-pulse bg-yellow-500 text-white' // Esperando que seleccione
-                                            : 'bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500' // Botón normal inactivo
+                                                ? 'animate-bounce bg-green-600 text-white shadow-lg hover:scale-105 hover:bg-green-500'
+                                                : 'animate-pulse bg-yellow-500 text-white'
+                                            : 'bg-red-600 text-white shadow-lg hover:scale-105 hover:bg-red-500'
                                     }`}
                                 >
                                     <LogOut className="h-4 w-4" />
@@ -873,7 +904,6 @@ export default function RoomsStatus({
                                             : 'Seleccione Habitaciones...'
                                         : 'Finalizar Estadía'}
 
-                                    {/* Mantenemos tu alerta de selección individual por si acaso */}
                                     {!isMultiCheckoutMode &&
                                         selectedForAction && (
                                             <span className="ml-1 rounded-full bg-white px-1.5 text-xs text-red-600">
@@ -882,7 +912,6 @@ export default function RoomsStatus({
                                         )}
                                 </button>
 
-                                {/* Botón para cancelar el modo selección rápidamente */}
                                 {isMultiCheckoutMode && (
                                     <button
                                         onClick={() => {
@@ -898,27 +927,33 @@ export default function RoomsStatus({
                         </div>
                     </div>
 
-                    {/*Filtros por tipo de estados de la habitacion*/}
-                    <div className="flex flex-col items-end gap-3">
-                        <div className="flex flex-row items-center justify-end gap-2">
+                    {/* --- LADO DERECHO: Filtros --- */}
+                    <div className="flex w-full min-w-0 flex-1 flex-col items-end gap-3">
+                        {/* PRIMERA FILA: Controles de Filtros */}
+                        {/* Eliminamos 'justify-end' para evitar el corte izquierdo, usamos 'xl:ml-auto' en el primer botón */}
+                        <div className="flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-2">
                             {(auth as any).active_register && (
                                 <button
                                     onClick={handleOpenQuickPreview}
-                                    className="flex min-w-[220px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-6 py-2.5 text-sm font-bold text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95"
+                                    // MAGIA AQUÍ: w-auto y xl:ml-auto empujan toda la fila a la derecha sin cortarla
+                                    className="flex w-auto shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95 xl:ml-auto"
                                     title="Ver resumen visual del dinero cobrado"
                                 >
                                     <FileText className="h-5 w-5" />
-                                    Vista Previa de Caja
+                                    Vista Previa
                                 </button>
                             )}
-                            {/* Selector de Tipo de Habitación */}
-                            <div className="relative">
+
+                            {/* Selector de Tipo de Habitación (Reducido a w-32) */}
+                            <div
+                                className={`relative shrink-0 ${(auth as any).active_register ? '' : 'xl:ml-auto'}`}
+                            >
                                 <select
                                     value={selectedRoomType}
                                     onChange={(e) =>
                                         setSelectedRoomType(e.target.value)
                                     }
-                                    className="block min-w-[160px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                    className="block w-32 cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
                                 >
                                     <option value="">TODOS</option>
                                     {RoomTypes?.map((type) => (
@@ -929,22 +964,23 @@ export default function RoomsStatus({
                                 </select>
                             </div>
 
-                            <div className="relative">
+                            {/* Selector de Tipo de Baño (Reducido a w-36) */}
+                            <div className="relative shrink-0">
                                 <select
                                     value={selectedBathroom}
                                     onChange={(e) =>
                                         setSelectedBathroom(e.target.value)
                                     }
-                                    className="block min-w-[180px] cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-10 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                                    className="block w-36 cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
                                 >
-                                    <option value="">TIPO DE BAÑO</option>
+                                    <option value="">TIPO BAÑO</option>
                                     <option value="private">PRIVADO</option>
                                     <option value="shared">COMPARTIDO</option>
                                 </select>
                             </div>
 
-                            {/* Barra de Búsqueda */}
-                            <div className="relative w-full max-w-xs">
+                            {/* Barra de Búsqueda (Flexible) */}
+                            <div className="relative max-w-[350px] min-w-[150px] flex-1">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Search className="h-4 w-4 text-gray-400" />
                                 </div>
@@ -955,36 +991,37 @@ export default function RoomsStatus({
                                         setSearchTerm(e.target.value)
                                     }
                                     className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="BUSCAR HABITACIÓN..."
+                                    placeholder="BUSCAR..."
                                 />
                             </div>
-                            <div className="relative flex items-center gap-2">
+
+                            {/* Campo de Fecha (Ajustado) */}
+                            <div className="relative flex shrink-0 items-center gap-2">
                                 <input
                                     type="date"
                                     value={selectedDate}
                                     onChange={(e) =>
                                         setSelectedDate(e.target.value)
                                     }
-                                    className="block h-9 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                    className="block w-36 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                                     style={{ colorScheme: 'dark' }}
                                     title="Filtrar por fecha exacta de ingreso"
                                 />
 
-                                {/* Botón extra MÁS VISIBLE para limpiar la fecha */}
                                 {selectedDate && (
                                     <button
                                         onClick={() => setSelectedDate('')}
-                                        className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white uppercase shadow-md transition-colors hover:bg-red-500 active:scale-95"
+                                        className="flex shrink-0 items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white uppercase shadow-md transition-colors hover:bg-red-500 active:scale-95"
                                         title="Borrar filtro de fecha"
                                     >
                                         <X className="h-4 w-4" />
-                                        Limpiar
                                     </button>
                                 )}
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap justify-end gap-2">
+                        {/* SEGUNDA FILA: Badges de Estado */}
+                        <div className="flex w-full flex-wrap justify-end gap-2">
                             <Badge
                                 count={countStatus('available')}
                                 label="Libre"
@@ -992,8 +1029,6 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('available')}
                                 active={filterStatus === 'available'}
                             />
-
-                            {/* CAMBIO: De Rojo a Cian para coincidir con la tarjeta */}
                             <Badge
                                 count={countStatus('occupied')}
                                 label="Ocupadas"
@@ -1008,7 +1043,6 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('reserved')}
                                 active={filterStatus === 'reserved'}
                             />
-
                             <Badge
                                 count={countStatus('incomplete')}
                                 label="Pendientes"
@@ -1016,8 +1050,6 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('incomplete')}
                                 active={filterStatus === 'incomplete'}
                             />
-
-                            {/* CAMBIO: De Azul a Gris para coincidir con la tarjeta */}
                             <Badge
                                 count={countStatus('cleaning')}
                                 label="Limpieza"
@@ -1025,8 +1057,6 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('cleaning')}
                                 active={filterStatus === 'cleaning'}
                             />
-
-                            {/* CAMBIO: De Gris a Rojo (Semántica de Alerta/Atención) */}
                             <Badge
                                 count={countStatus('maintenance')}
                                 label="Mant."
@@ -1034,7 +1064,6 @@ export default function RoomsStatus({
                                 onClick={() => setFilterStatus('maintenance')}
                                 active={filterStatus === 'maintenance'}
                             />
-
                             <Badge
                                 count={Rooms.length}
                                 label="Todas"
@@ -1347,6 +1376,31 @@ export default function RoomsStatus({
                 }
             />
 
+            <EventCheckinModal
+                    show={isEventCheckinModalOpen}
+                    onClose={(isSuccess) => {
+                        setIsEventCheckinModalOpen(false);
+                        setSelectedRoomId(null);
+                        // Opcional: si quieres recargar los datos al guardar
+                        if (isSuccess) {
+                           router.reload({ only: ['Rooms', 'Checkins', 'Guests'] });
+                        }
+                    }}
+                    guests={Guests || []}
+                    rooms={Rooms || []}
+                    initialRoomId={selectedRoomId}
+                />
+            <EventOccupiedModal
+                    show={isEventOccupiedModalOpen}
+                    onClose={(reload) => {
+                        setIsEventOccupiedModalOpen(false);
+                        if (reload) {
+                            router.reload({ only: ['Rooms', 'Checkins', 'Guests'] });
+                        }
+                    }}
+                    checkinData={occupiedCheckinData}
+                />
+
             <DetailModal
                 show={isDetailsModalOpen}
                 onClose={() => {
@@ -1424,7 +1478,7 @@ export default function RoomsStatus({
                 guests={Guests}
                 onClose={() => setShowMultiCheckoutModal(false)}
             />
-            <FinancialHistoryModal 
+            <FinancialHistoryModal
                 show={isHistoryModalOpen}
                 onClose={() => {
                     setIsHistoryModalOpen(false);
@@ -3034,14 +3088,14 @@ function CheckoutConfirmationModal({
     );
 }
 
-function FinancialHistoryModal({ 
-    show, 
-    onClose, 
-    checkin 
-}: { 
-    show: boolean; 
-    onClose: () => void; 
-    checkin: any 
+function FinancialHistoryModal({
+    show,
+    onClose,
+    checkin,
+}: {
+    show: boolean;
+    onClose: () => void;
+    checkin: any;
 }) {
     if (!show || !checkin) return null;
 
@@ -3054,7 +3108,8 @@ function FinancialHistoryModal({
     const room = checkin.room;
     const normalPrice = parseFloat(room?.price?.amount || 0);
     const agreedPrice = parseFloat(checkin.agreed_price || 0);
-    const isCorporate = checkin.is_corporate && agreedPrice > 0 && agreedPrice < normalPrice;
+    const isCorporate =
+        checkin.is_corporate && agreedPrice > 0 && agreedPrice < normalPrice;
 
     // Calcular el total de pagos reales
     const payments = checkin.payments || [];
@@ -3068,38 +3123,56 @@ function FinancialHistoryModal({
     if (isCorporate) {
         const frequency = parseInt(String(checkin.payment_frequency)) || 1;
         const daysPaid = Math.floor(totalPaid / agreedPrice);
-        
+
         // 🚀 AQUÍ APLICAMOS LA FUNCIÓN REPARADORA
         const checkinDate = parseLaravelDate(checkin.check_in_date);
         checkinDate.setHours(0, 0, 0, 0);
-        
+
         const limitDate = new Date(checkinDate);
         limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
-        
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         if (today > limitDate) {
             corporateMessage = (
-                <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-4 rounded-r-xl shadow-sm">
-                    <h4 className="text-red-800 font-black flex items-center gap-2 text-sm uppercase tracking-wider">
+                <div className="mb-4 rounded-r-xl border-l-4 border-red-600 bg-red-50 p-4 shadow-sm">
+                    <h4 className="flex items-center gap-2 text-sm font-black tracking-wider text-red-800 uppercase">
                         <AlertTriangle className="h-5 w-5" /> Acuerdo Vencido
                     </h4>
-                    <p className="text-sm text-red-700 mt-2 leading-relaxed">
-                        El huésped cubrió la tarifa corporativa (<b>Bs. {agreedPrice}</b>) hasta el <b className="text-red-900">{limitDate.toLocaleDateString()}</b>. 
-                        A partir de esa fecha, el sistema aplicará la tarifa normal de <b className="text-red-900 border-b border-red-300 pb-0.5">Bs. {normalPrice}</b> por cada día extra de mora.
+                    <p className="mt-2 text-sm leading-relaxed text-red-700">
+                        El huésped cubrió la tarifa corporativa (
+                        <b>Bs. {agreedPrice}</b>) hasta el{' '}
+                        <b className="text-red-900">
+                            {limitDate.toLocaleDateString()}
+                        </b>
+                        . A partir de esa fecha, el sistema aplicará la tarifa
+                        normal de{' '}
+                        <b className="border-b border-red-300 pb-0.5 text-red-900">
+                            Bs. {normalPrice}
+                        </b>{' '}
+                        por cada día extra de mora.
                     </p>
                 </div>
             );
         } else {
             corporateMessage = (
-                <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 mb-4 rounded-r-xl shadow-sm">
-                    <h4 className="text-emerald-800 font-black flex items-center gap-2 text-sm uppercase tracking-wider">
+                <div className="mb-4 rounded-r-xl border-l-4 border-emerald-500 bg-emerald-50 p-4 shadow-sm">
+                    <h4 className="flex items-center gap-2 text-sm font-black tracking-wider text-emerald-800 uppercase">
                         <CheckCircle2 className="h-5 w-5" /> Acuerdo Activo
                     </h4>
-                    <p className="text-sm text-emerald-700 mt-2 leading-relaxed">
-                        El huésped está al día con sus pagos. La tarifa corporativa de <b>Bs. {agreedPrice}</b> está asegurada hasta el <b className="text-emerald-900">{limitDate.toLocaleDateString()}</b>.
-                        <br/><span className="text-xs opacity-70 mt-1 block">(Tarifa normal sin acuerdo: Bs. {normalPrice})</span>
+                    <p className="mt-2 text-sm leading-relaxed text-emerald-700">
+                        El huésped está al día con sus pagos. La tarifa
+                        corporativa de <b>Bs. {agreedPrice}</b> está asegurada
+                        hasta el{' '}
+                        <b className="text-emerald-900">
+                            {limitDate.toLocaleDateString()}
+                        </b>
+                        .
+                        <br />
+                        <span className="mt-1 block text-xs opacity-70">
+                            (Tarifa normal sin acuerdo: Bs. {normalPrice})
+                        </span>
                     </p>
                 </div>
             );
@@ -3109,67 +3182,108 @@ function FinancialHistoryModal({
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
             <div className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4 shrink-0">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-yellow-100 p-1.5 text-yellow-600 shadow-inner">
                             <History className="h-5 w-5" />
                         </div>
                         Historial Financiero
                     </h3>
-                    <button onClick={onClose} className="rounded-full p-2 text-gray-400 hover:bg-gray-200 transition-colors">
+                    <button
+                        onClick={onClose}
+                        className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-200"
+                    >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
-                    <div className="mb-6 flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="custom-scrollbar flex-1 overflow-y-auto p-6">
+                    <div className="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
                         <div>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Titular de la Habitación</p>
-                            <p className="text-base font-black text-gray-800 mt-0.5">{checkin.guest?.full_name || 'Desconocido'}</p>
+                            <p className="text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                Titular de la Habitación
+                            </p>
+                            <p className="mt-0.5 text-base font-black text-gray-800">
+                                {checkin.guest?.full_name || 'Desconocido'}
+                            </p>
                         </div>
                         <div className="text-right">
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Adelantos</p>
-                            <p className="text-2xl font-black text-emerald-600 mt-0.5">Bs. {totalPaid.toFixed(2)}</p>
+                            <p className="text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                Total Adelantos
+                            </p>
+                            <p className="mt-0.5 text-2xl font-black text-emerald-600">
+                                Bs. {totalPaid.toFixed(2)}
+                            </p>
                         </div>
                     </div>
 
                     {corporateMessage}
 
-                    <h4 className="text-sm font-black text-gray-700 mb-3 uppercase tracking-wider flex items-center gap-2">
-                        <Banknote className="h-4 w-4 text-gray-400" /> Detalle de Pagos
+                    <h4 className="mb-3 flex items-center gap-2 text-sm font-black tracking-wider text-gray-700 uppercase">
+                        <Banknote className="h-4 w-4 text-gray-400" /> Detalle
+                        de Pagos
                     </h4>
-                    
+
                     {payments.length > 0 ? (
-                        <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-100 border-b border-gray-200">
+                                <thead className="border-b border-gray-200 bg-gray-100">
                                     <tr>
-                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider">Fecha y Hora</th>
-                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider text-center">Método</th>
-                                        <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase tracking-wider text-right">Monto</th>
+                                        <th className="px-4 py-3 text-xs font-bold tracking-wider text-gray-600 uppercase">
+                                            Fecha y Hora
+                                        </th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold tracking-wider text-gray-600 uppercase">
+                                            Método
+                                        </th>
+                                        <th className="px-4 py-3 text-right text-xs font-bold tracking-wider text-gray-600 uppercase">
+                                            Monto
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
                                     {payments.map((p: any) => (
-                                        <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                        <tr
+                                            key={p.id}
+                                            className="transition-colors hover:bg-gray-50"
+                                        >
                                             {/* 🚀 AQUÍ TAMBIÉN APLICAMOS LA FUNCIÓN REPARADORA */}
-                                            <td className="px-4 py-3 text-gray-600 font-medium">
-                                                {parseLaravelDate(p.created_at).toLocaleString('es-BO', { 
-                                                    day: '2-digit', month: '2-digit', year: 'numeric', 
-                                                    hour: '2-digit', minute: '2-digit', hour12: true 
+                                            <td className="px-4 py-3 font-medium text-gray-600">
+                                                {parseLaravelDate(
+                                                    p.created_at,
+                                                ).toLocaleString('es-BO', {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: true,
                                                 })}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
-                                                    p.method?.toLowerCase() === 'qr' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 
-                                                    p.method?.toLowerCase() === 'efectivo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 
-                                                    'bg-gray-100 text-gray-700 border border-gray-200'
-                                                }`}>
+                                                <span
+                                                    className={`rounded-md px-2.5 py-1 text-[10px] font-black tracking-wider uppercase shadow-sm ${
+                                                        p.method?.toLowerCase() ===
+                                                        'qr'
+                                                            ? 'border border-indigo-200 bg-indigo-100 text-indigo-700'
+                                                            : p.method?.toLowerCase() ===
+                                                                'efectivo'
+                                                              ? 'border border-emerald-200 bg-emerald-100 text-emerald-700'
+                                                              : 'border border-gray-200 bg-gray-100 text-gray-700'
+                                                    }`}
+                                                >
                                                     {p.method || p.type}
                                                 </span>
                                             </td>
-                                            <td className={`px-4 py-3 text-right font-black ${p.type === 'DEVOLUCION' ? 'text-red-500' : 'text-gray-800'}`}>
-                                                {p.type === 'DEVOLUCION' ? '-' : '+'} Bs. {parseFloat(p.amount).toFixed(2)}
+                                            <td
+                                                className={`px-4 py-3 text-right font-black ${p.type === 'DEVOLUCION' ? 'text-red-500' : 'text-gray-800'}`}
+                                            >
+                                                {p.type === 'DEVOLUCION'
+                                                    ? '-'
+                                                    : '+'}{' '}
+                                                Bs.{' '}
+                                                {parseFloat(p.amount).toFixed(
+                                                    2,
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
@@ -3177,9 +3291,11 @@ function FinancialHistoryModal({
                             </table>
                         </div>
                     ) : (
-                        <div className="text-center p-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                            <Banknote className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                            <p className="text-gray-500 font-medium">No hay pagos registrados aún.</p>
+                        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+                            <Banknote className="mx-auto mb-2 h-8 w-8 text-gray-300" />
+                            <p className="font-medium text-gray-500">
+                                No hay pagos registrados aún.
+                            </p>
                         </div>
                     )}
                 </div>
@@ -3187,7 +3303,7 @@ function FinancialHistoryModal({
                 <div className="flex shrink-0 justify-end border-t border-gray-100 bg-gray-50 p-4">
                     <button
                         onClick={onClose}
-                        className="rounded-xl px-6 py-2.5 text-sm font-bold text-gray-700 bg-white border border-gray-300 shadow-sm transition hover:bg-gray-100 active:scale-95"
+                        className="rounded-xl border border-gray-300 bg-white px-6 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-100 active:scale-95"
                     >
                         Cerrar
                     </button>
