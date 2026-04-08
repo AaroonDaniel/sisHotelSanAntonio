@@ -47,8 +47,8 @@ export default function EventCheckinModal({
         tables: 0,
         whiteboards: 0,
         projector: false,
-        startDateTime: now, // 🚀 Ahora guardamos FECHA y HORA
-        endDateTime: '',    // 🚀 Ahora guardamos FECHA y HORA
+        startDateTime: now, 
+        endDateTime: '',    
         extraDetails: '',
     });
 
@@ -56,7 +56,7 @@ export default function EventCheckinModal({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
-   const { data, setData, post, put, processing, reset, transform } = useForm({
+    const { data, setData, post, put, processing, reset, transform } = useForm({
         guest_id: '' as string | null,
         room_id: '',
         check_in_date: now,
@@ -71,7 +71,7 @@ export default function EventCheckinModal({
         phone: '',
         nationality: 'BOLIVIANA',
         profession: 'S/D',
-        civil_status: 'SOLTERO',
+        civil_status: 'SOLTERO', 
         birth_date: '1990-01-01',
         issued_in: 'PT', 
     });
@@ -92,9 +92,7 @@ export default function EventCheckinModal({
                     extraDetails: '',
                 };
 
-                // 🚀 NUEVO LECTOR INTELIGENTE PARA FECHAS
                 parts.forEach((part: string) => {
-                    // Compatibilidad con eventos viejos que solo tenían horario
                     if (part.includes('Horario:')) {
                         const timeStr = part.replace('[EVENTO] Horario:', '').trim();
                         const times = timeStr.split('a');
@@ -104,13 +102,11 @@ export default function EventCheckinModal({
                             extracted.endDateTime = `${today}T${times[1].trim()}`;
                         }
                     }
-                    // Nuevo formato con fechas completas
                     if (part.includes('Inicio:'))
                         extracted.startDateTime = part.replace('[EVENTO] Inicio:', '').trim();
                     if (part.includes('Fin:'))
                         extracted.endDateTime = part.replace('Fin:', '').trim();
                     
-                    // Resto de inventario
                     if (part.includes('Sillas:'))
                         extracted.chairs = parseInt(part.split(':')[1]) || 0;
                     if (part.includes('Mesas:'))
@@ -199,29 +195,32 @@ export default function EventCheckinModal({
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        // 🚀 CÁLCULO DE DÍAS DE DURACIÓN
+        // 🚀 BARRERA DE SEGURIDAD: Solo clientes registrados
+        if (!data.guest_id) {
+            alert('⚠️ ACCIÓN DENEGADA\n\nEl Salón de Eventos solo puede ser reservado por clientes que ya se encuentren registrados en la base de datos del hotel.\n\nPor favor, busque y seleccione un cliente de la lista.');
+            if (nameInputRef.current) nameInputRef.current.focus();
+            return; // 🛑 Detenemos la ejecución aquí
+        }
+
         let diffDays = 1;
         if (eventData.startDateTime && eventData.endDateTime) {
             const start = new Date(eventData.startDateTime);
             const end = new Date(eventData.endDateTime);
             const diffMs = end.getTime() - start.getTime();
             if (diffMs > 0) {
-                // Redondeamos hacia arriba (ej: 1 hora = 1 día cobrado en base de datos)
                 diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
             }
         }
 
-        // Formato para guardar en las notas visible para el humano
         const proyectorTexto = eventData.projector ? 'SÍ' : 'NO';
         const notasCompiladas = `[EVENTO] Inicio: ${eventData.startDateTime || 'S/D'} | Fin: ${eventData.endDateTime || 'S/D'} | Sillas: ${eventData.chairs} | Mesas: ${eventData.tables} | Pizarras: ${eventData.whiteboards} | Proyector: ${proyectorTexto} | Detalle: ${eventData.extraDetails}`;
 
-        // Laravel necesita formato "YYYY-MM-DD HH:mm:ss" o "YYYY-MM-DDTHH:mm", reemplazamos la T por un espacio
         const checkInFormatted = eventData.startDateTime ? eventData.startDateTime.replace('T', ' ') : now.replace('T', ' ');
 
         transform((currentData) => ({
             ...currentData,
-            check_in_date: checkInFormatted, // 🚀 Inyectamos la fecha real de inicio
-            duration_days: diffDays,         // 🚀 Inyectamos los días calculados
+            check_in_date: checkInFormatted, 
+            duration_days: diffDays,         
             notes: notasCompiladas,
             origin: 'POTOSI',
             agreed_price: currentData.agreed_price,
@@ -278,7 +277,7 @@ export default function EventCheckinModal({
                     {/* IZQUIERDA: DATOS DEL TITULAR Y COBROS */}
                     <div className="flex-1 border-r border-gray-200 p-6">
                         <h3 className="mb-4 border-b-2 border-emerald-100 pb-2 text-sm font-black text-emerald-800 uppercase">
-                            1. Titular del Evento
+                            1. Encargado del salón
                         </h3>
 
                         <div className="relative mb-5" ref={dropdownRef}>
@@ -291,6 +290,7 @@ export default function EventCheckinModal({
                                     ref={nameInputRef}
                                     type="text"
                                     className="w-full rounded-xl border-2 border-slate-400 bg-white py-2.5 pl-11 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
+                                    
                                     value={data.full_name}
                                     onChange={(e) => {
                                         const newName = e.target.value.toUpperCase();
@@ -304,16 +304,20 @@ export default function EventCheckinModal({
                                             }));
                                         } else {
                                             setData('full_name', newName);
+                                            // Si el usuario edita el nombre manualmente, quitamos el guest_id para obligarlo a seleccionar de nuevo
+                                            if (data.guest_id) {
+                                                setData('guest_id', null);
+                                            }
                                         }
                                         setIsDropdownOpen(true);
                                     }}
                                     onFocus={() => setIsDropdownOpen(true)}
                                     required
                                 />
-                                {isDropdownOpen &&
-                                    filteredGuests.length > 0 && (
-                                        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border-2 border-slate-300 bg-white shadow-xl">
-                                            {filteredGuests.map((g) => (
+                                {isDropdownOpen && data.full_name.length > 1 && (
+                                    <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border-2 border-slate-300 bg-white shadow-xl">
+                                        {filteredGuests.length > 0 ? (
+                                            filteredGuests.map((g) => (
                                                 <div
                                                     key={g.id}
                                                     onClick={() => handleSelectGuest(g)}
@@ -326,9 +330,14 @@ export default function EventCheckinModal({
                                                         CI: {g.identification_number}
                                                     </span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-sm font-bold text-red-500 bg-red-50">
+                                                ⚠️ Cliente no encontrado.<br/>Debe estar registrado en el sistema.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -339,12 +348,10 @@ export default function EventCheckinModal({
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-slate-100 p-2.5 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
                                     value={data.identification_number}
-                                    onChange={(e) =>
-                                        setData('identification_number', e.target.value.toUpperCase())
-                                    }
-                                    required
+                                    readOnly // Hacemos de solo lectura para evitar alteraciones
+                                   
                                 />
                             </div>
                             <div>
@@ -353,10 +360,10 @@ export default function EventCheckinModal({
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-base font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-slate-100 p-2.5 text-base font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
                                     value={data.phone}
-                                    onChange={(e) => setData('phone', e.target.value)}
-                                    required
+                                    readOnly // Hacemos de solo lectura para evitar alteraciones
+                                   
                                 />
                             </div>
                         </div>
@@ -410,7 +417,6 @@ export default function EventCheckinModal({
                             3. Logística e Inventario
                         </h3>
 
-                        {/* 🚀 FECHAS COMPLETAS 🚀 */}
                         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
                             <div>
                                 <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-700 uppercase">
@@ -539,6 +545,7 @@ export default function EventCheckinModal({
                                     })
                                 }
                                 className="w-full rounded-xl border-2 border-slate-400 bg-white p-3 text-base font-semibold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
+                                
                             ></textarea>
                         </div>
                     </div>
