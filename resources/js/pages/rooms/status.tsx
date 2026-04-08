@@ -244,6 +244,9 @@ export default function RoomsStatus({
             (room: any) =>
                 room.checkins
                     ?.filter((c: any) => {
+                        const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
+                        if (isSalon) return false; // NUNCA INCOMPLETOS
+
                         const isTitularIncomplete =
                             c.guest?.profile_status === 'INCOMPLETE';
                         const isOriginMissing =
@@ -255,7 +258,6 @@ export default function RoomsStatus({
                     })
                     .map((c: any) => ({ ...c, room })) || [],
         ) || [];
-
     const handleCompleteCheckin = (room: any) => {
         const activeCheckin = room.checkins?.find(
             (c: any) => c.status === 'activo',
@@ -352,15 +354,22 @@ export default function RoomsStatus({
         }
     }, [Rooms, isCheckinModalOpen]);
     // =========================================================
-    // 1. LÓGICA DE ESTADO (Corregida para detectar libres con checkin)
+    // 1. LÓGICA DE ESTADO (Corregida para no afectar salones)
     // =========================================================
     const getDisplayStatus = (room: Room) => {
         const dbStatus = room.status ? room.status.toLowerCase().trim() : '';
         const activeCheckin =
             room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
 
+        const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
+
         // 🛑 1. EVALUAR CHECK-IN PRIMERO:
         if (activeCheckin) {
+            // 🚀 PROTECCIÓN ABSOLUTA PARA SALONES: Nunca están incompletos
+            if (isSalon) {
+                return 'occupied';
+            }
+
             const guest = activeCheckin.guest as Guest | undefined;
             const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
 
@@ -373,8 +382,7 @@ export default function RoomsStatus({
             const isOriginMissing =
                 !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            // --- 🚀 NUEVO: VERIFICAR SI FALTAN PERSONAS PARA LLENAR LA CAPACIDAD ---
-            // --- 🚀 NUEVO: VERIFICAR CAPACIDAD O AUTO-AJUSTE ---
+            // --- VERIFICAR CAPACIDAD O AUTO-AJUSTE ---
             const roomCapacity = room.room_type?.capacity || 1;
             const totalGuests = 1 + (companions?.length || 0);
 
@@ -438,21 +446,6 @@ export default function RoomsStatus({
             return;
         }
 
-        // ==========================================
-        // 🚀 BLOQUE SUPREMO PARA EL SALÓN (OCUPADO O INCOMPLETO)
-        // ==========================================
-        if (isSalon && (status === 'occupied' || status === 'incomplete')) {
-            const activeCheckin = Checkins?.find((c) => c.room_id === room.id && c.status === 'activo') || room.checkins?.[0];
-            
-            if (activeCheckin) {
-                // Siempre abrimos el Dashboard de Eventos para finalizar
-                setOccupiedCheckinData({ ...activeCheckin, room });
-                setIsEventOccupiedModalOpen(true);
-            }
-            return; // 🛑 El return evita que siga bajando hacia la lógica de habitaciones normales
-        }
-        // ==========================================
-
         if (status === 'occupied') {
             const fullCheckinData = Checkins?.find(
                 (c) => c.room_id === room.id && c.status === 'activo',
@@ -460,6 +453,14 @@ export default function RoomsStatus({
             const activeCheckin = fullCheckinData || room.checkins?.[0];
 
             if (activeCheckin) {
+                // 🚀 1. SI ES SALÓN: Abrimos el Panel Violeta (que lee el Precio Acordado)
+                if (isSalon) {
+                    setOccupiedCheckinData({ ...activeCheckin, room });
+                    setIsEventOccupiedModalOpen(true);
+                    return; // 🛑 Importante: Este return detiene la ejecución aquí
+                }
+
+                // 2. Si es temporal y NO es un salón, pedimos editar
                 if (activeCheckin.is_temporary) {
                     setCheckinToEdit(activeCheckin);
                     setSelectedRoomId(room.id);
@@ -467,6 +468,7 @@ export default function RoomsStatus({
                     return;
                 }
 
+                // 3. SI ES HABITACIÓN NORMAL, usamos el visualizador estándar
                 setOccupiedCheckinData({ ...activeCheckin, room });
                 setIsOccupiedModalOpen(true);
             }
@@ -1285,17 +1287,20 @@ export default function RoomsStatus({
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
                                     <div className="z-20 flex border-t border-cyan-700">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleOpenDetails(room);
-                                            }}
-                                            title="Datos del usuario"
-                                            className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
-                                        >
-                                            <UserIcon className="h-3 w-3" />{' '}
-                                        </button>
-                                        <button></button>
+                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            handleOpenDetails(room); // Acción original para habitaciones normales
+        }}
+        title="Datos del usuario"
+        className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
+    >
+        <UserIcon className="h-3 w-3" />{' '}
+    </button>
+)}
+                                        
+                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1309,6 +1314,7 @@ export default function RoomsStatus({
                                         >
                                             <ShoppingCart className="h-3 w-3" />
                                         </button>
+                                        )}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1502,6 +1508,21 @@ export default function RoomsStatus({
                 }}
                 room={roomToFinishMaintenance}
             />
+            <EventCheckinModal
+                    show={isEventCheckinModalOpen}
+                    onClose={(isSuccess) => {
+                        setIsEventCheckinModalOpen(false);
+                        setSelectedRoomId(null);
+                        setCheckinToEdit(null); // 🚀 Limpiamos la variable al cerrar
+                        if (isSuccess) {
+                           // reload de inertia si es necesario
+                        }
+                    }}
+                    guests={Guests || []}
+                    rooms={Rooms || []}
+                    initialRoomId={selectedRoomId}
+                    checkinToEdit={checkinToEdit} // 🚀 AÑADIDO: Le mandamos los datos
+                />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
                     <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">

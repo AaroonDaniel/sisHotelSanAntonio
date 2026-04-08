@@ -78,13 +78,11 @@ class CheckinController extends Controller
         // =========================================================
         if ($request->filled('birth_date')) {
             $fecha = trim($request->birth_date);
-            // Si solo enviaron 4 números (ej: 1990), lo completamos a 1990-01-01
             if (preg_match('/^\d{4}$/', $fecha)) {
                 $request->merge(['birth_date' => $fecha . '-01-01']);
             }
         }
 
-        // También aplicamos el normalizador para los acompañantes (companions)
         if ($request->has('companions') && is_array($request->companions)) {
             $companions = $request->companions;
             foreach ($companions as $key => $comp) {
@@ -95,7 +93,6 @@ class CheckinController extends Controller
                     }
                 }
             }
-            // Reemplazamos el array viejo con las fechas ya corregidas
             $request->merge(['companions' => $companions]);
         }
 
@@ -105,7 +102,6 @@ class CheckinController extends Controller
         $inputOrigin = $request->input('origin');
         $cleanOrigin = null;
 
-        // Limpiamos basura (URLs, nulls, espacios)
         if (
             !empty($inputOrigin) &&
             is_string($inputOrigin) &&
@@ -124,7 +120,6 @@ class CheckinController extends Controller
         $missingField = null;
 
         if (!$request->filled('guest_id')) {
-            // A. Si es NUEVO: Verificamos que el formulario traiga todo
             foreach ($requiredFields as $field) {
                 if (!$request->filled($field)) {
                     $isTitularComplete = false;
@@ -133,7 +128,6 @@ class CheckinController extends Controller
                 }
             }
         } else {
-            // B. Si ya EXISTE: Verificamos sus datos actuales + lo nuevo que llega
             $existingGuestCheck = \App\Models\Guest::find($request->guest_id);
             if ($existingGuestCheck) {
                 foreach ($requiredFields as $field) {
@@ -147,18 +141,22 @@ class CheckinController extends Controller
             }
         }
 
-        // C. Verificar Procedencia (Origin) - CRÍTICO
         if ($isTitularComplete && is_null($cleanOrigin)) {
             $isTitularComplete = false;
             $missingField = 'origin';
         }
 
         // =========================================================
-        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN (CON PROTECCIÓN)
+        // 🚀 VERIFICAR SI ESTAMOS ASIGNANDO UN SALÓN
+        // =========================================================
+        $roomToAssign = \App\Models\Room::with('roomType')->find($request->room_id);
+        $isAssigningSalon = $roomToAssign && str_contains(strtoupper($roomToAssign->roomType->name ?? ''), 'SALON');
+
+        // =========================================================
+        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN
         // =========================================================
 
         if (!$request->filled('guest_id')) {
-            // --- DATOS INGRESADOS MANUALMENTE ---
             $request->validate([
                 'full_name' => 'required|string|max:150',
                 'identification_number' => 'nullable|string|max:50',
@@ -169,37 +167,37 @@ class CheckinController extends Controller
             $birthDate = $request->birth_date;
             $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-            // BÚSQUEDA BLINDADA
             $existingGuest = null;
 
-            // 1. Prioridad Absoluta: Buscar por Carnet de Identidad
             if (!empty($idNumber)) {
                 $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
             }
 
-            // 2. Si no hay carnet, buscar por Nombre EXACTO (sin importar la fecha de nacimiento por ahora)
             if (!$existingGuest) {
                 $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
-
                 if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
-                    $existingGuest = null; // Falsa alarma, se llaman igual pero tienen carnets distintos. Creamos uno nuevo.
+                    $existingGuest = null; 
                 }
             }
 
             if ($existingGuest) {
-                // 🛑 BARRERA 1: ¿EL CLIENTE ENCONTRADO YA ESTÁ HOSPEDADO?
-                $ocupacionPrevia = \App\Models\Checkin::with('room')
+                // 🛑 BARRERA 1 INTELIGENTE: Mezcla Cuarto + Salón permitida
+                $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
                     ->where('guest_id', $existingGuest->id)
                     ->where('status', 'activo')
-                    ->first();
+                    ->get();
 
-                if ($ocupacionPrevia) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
-                    ]);
+                foreach ($ocupacionesPrevias as $ocupacion) {
+                    $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
+                    
+                    // Solo bloquea si intenta tener DOS habitaciones normales o DOS salones idénticos
+                    if ($isAssigningSalon === $isPreviousSalon) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
+                        ]);
+                    }
                 }
 
-                // SI PASA LA BARRERA: Recién lo actualizamos
                 $existingGuest->update([
                     'identification_number' => $idNumber ?? $existingGuest->identification_number,
                     'nationality' => $request->nationality ?? $existingGuest->nationality,
@@ -212,7 +210,6 @@ class CheckinController extends Controller
                 ]);
                 $guestId = $existingGuest->id;
             } else {
-                // SI NO EXISTE EN LA BD: Lo Creamos
                 $guest = \App\Models\Guest::create([
                     'full_name' => $fullName,
                     'identification_number' => $idNumber,
@@ -227,22 +224,24 @@ class CheckinController extends Controller
                 $guestId = $guest->id;
             }
         } else {
-            // --- CLIENTE SELECCIONADO DESDE EL BUSCADOR ---
             $guestId = $request->guest_id;
 
-            // 🛑 BARRERA 2: ¿EL CLIENTE SELECCIONADO YA ESTÁ HOSPEDADO?
-            $ocupacionPrevia = \App\Models\Checkin::with('room')
+            // 🛑 BARRERA 2 INTELIGENTE: Mezcla Cuarto + Salón permitida
+            $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
                 ->where('guest_id', $guestId)
                 ->where('status', 'activo')
-                ->first();
+                ->get();
 
-            if ($ocupacionPrevia) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en la Habitación " . $ocupacionPrevia->room->number,
-                ]);
+            foreach ($ocupacionesPrevias as $ocupacion) {
+                $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
+                
+                if ($isAssigningSalon === $isPreviousSalon) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
+                    ]);
+                }
             }
 
-            // SI PASA LA BARRERA: Recién lo actualizamos
             $existingGuest = \App\Models\Guest::find($guestId);
             if ($existingGuest) {
                 $existingGuest->update([
@@ -269,8 +268,6 @@ class CheckinController extends Controller
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
             'discount' => 'nullable|numeric|min:0',
-            
-            // 👇 NUEVOS CAMPOS CORPORATIVOS PERMITIDOS
             'is_corporate' => 'nullable|boolean',
             'payment_frequency' => 'nullable|string|max:255',
         ]);
@@ -285,7 +282,7 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 🌟 LÓGICA DE PRECIO Y PLAN CORPORATIVO (NUEVO REGISTRO)
+        // 🌟 LÓGICA DE PRECIO Y PLAN CORPORATIVO
         // =========================================================
         $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
         $basePrice = $roomModelForPrice->price->amount ?? 0;
@@ -293,24 +290,22 @@ class CheckinController extends Controller
 
         $isCorporate = $request->boolean('is_corporate');
 
-        // Si activó Plan Corporativo, descuento fijo de 20Bs
         if ($isCorporate) {
             $agreedPrice = max(0, $basePrice - 20);
         } 
-        // Si no es corporativo, pero uso Auto-Ajuste
         elseif ($request->boolean('auto_adjust_price')) {
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
 
-        // Lógica extra de descuento manual por si acaso
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $minAllowed = $agreedPrice * 0.5;
-            $agreedPrice = max(floatval($request->discount), $minAllowed);
+            // Quitamos el limitante mínimo para que el salón pueda guardar su precio especial sin restricciones
+            $agreedPrice = max(floatval($request->discount), $isAssigningSalon ? 0 : $minAllowed); 
         }
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isCorporate, $totalGuest) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isCorporate, $totalGuest, $isAssigningSalon) {
 
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
@@ -326,8 +321,6 @@ class CheckinController extends Controller
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
                 'is_temporary' => $request->boolean('is_temporary'),
-                
-                // 👇 NUEVOS CAMPOS CORPORATIVOS
                 'is_corporate' => $isCorporate,
                 'payment_frequency' => $isCorporate ? $request->input('payment_frequency') : null,
                 'corporate_days' => 0,
@@ -343,7 +336,7 @@ class CheckinController extends Controller
                     'amount' => $montoInicial,
                     'method' => $request->payment_method,
                     'bank_name' => $banco,
-                    'description' => 'PAGO INICIAL (CHECK-IN) / GARANTÍA CORPORATIVA',
+                    'description' => 'PAGO INICIAL (CHECK-IN) / GARANTÍA',
                     'type' => 'PAGO'
                 ]);
             }
@@ -414,13 +407,12 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 🛑 LÓGICA DE ESTADO (Rápido vs Completo)
+            // 🛑 LÓGICA DE ESTADO
             // =========================================================
             $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
             
-            // 🌟 MAGIA: Si ajustó precio manual o corporativo, perdonamos capacidad
-            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporate) ? true : ($totalGuest >= $maxCapacity);
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporate || $isAssigningSalon) ? true : ($totalGuest >= $maxCapacity);
 
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
@@ -428,7 +420,7 @@ class CheckinController extends Controller
 
             if ($isEverythingComplete) {
                 $checkin->update(['is_temporary' => false]);
-                return redirect()->back()->with('success', 'Asignación y Check-in completados correctamente. La habitación está ahora OCUPADA.');
+                return redirect()->back()->with('success', 'Asignación completada correctamente. La instalación está OCUPADA.');
             } else {
                 $checkin->update(['is_temporary' => true]);
 
@@ -439,7 +431,7 @@ class CheckinController extends Controller
                     $mensaje = 'El titular está completo, pero faltan datos de los Acompañantes.';
                 } elseif (!$isCapacityFull) {
                     $faltantes = $maxCapacity - $totalGuest;
-                    $mensaje = "Aún falta registrar a {$faltantes} persona(s). Si no llegarán más, active el 'Auto-Ajuste' o el 'Plan Corporativo'.";
+                    $mensaje = "Aún falta registrar a {$faltantes} persona(s).";
                 }
 
                 return redirect()->back()->with('success', 'Asignación registrada. ATENCIÓN: ' . $mensaje);

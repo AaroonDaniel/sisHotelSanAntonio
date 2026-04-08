@@ -1,21 +1,7 @@
-import { router, useForm } from '@inertiajs/react';
-import axios from 'axios';
-import {
-    AlertCircle,
-    Banknote,
-    CheckCircle2,
-    Clock,
-    FileText,
-    Save,
-    User,
-    X,
-    Presentation,
-    Users,
-    MonitorPlay
-} from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { CalendarDays, MonitorPlay, Presentation, Save, User, X } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
-// Reutilizamos tus interfaces base
 export interface Guest {
     id: number;
     full_name: string;
@@ -34,7 +20,8 @@ interface EventCheckinModalProps {
     onClose: (isSuccess?: boolean) => void;
     guests: Guest[];
     rooms: Room[];
-    initialRoomId?: number | null; // El ID del Salón
+    initialRoomId?: number | null;
+    checkinToEdit?: any | null; // Prop para recibir los datos existentes
 }
 
 export default function EventCheckinModal({
@@ -43,76 +30,160 @@ export default function EventCheckinModal({
     guests,
     rooms,
     initialRoomId,
+    checkinToEdit,
 }: EventCheckinModalProps) {
-    // 1. Estados para el Inventario del Evento
+    
+    // Función para obtener la fecha y hora actual en formato exacto para <input type="datetime-local">
+    const getNowLocal = () => {
+        const date = new Date();
+        const offset = date.getTimezoneOffset() * 60000;
+        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    };
+
+    const now = getNowLocal();
+
     const [eventData, setEventData] = useState({
         chairs: 0,
         tables: 0,
         whiteboards: 0,
         projector: false,
-        startTime: '',
-        endTime: '',
-        extraDetails: ''
+        startDateTime: now, // 🚀 Ahora guardamos FECHA y HORA
+        endDateTime: '',    // 🚀 Ahora guardamos FECHA y HORA
+        extraDetails: '',
     });
 
-    // 2. Estado para el Buscador de Clientes
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
-    const now = (() => {
-        const date = new Date();
-        const offset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-    })();
-
-    // 3. Formulario principal (Inertia)
-    const { data, setData, post, processing, reset, clearErrors, errors,transform } = useForm({
+   const { data, setData, post, put, processing, reset, transform } = useForm({
         guest_id: '' as string | null,
         room_id: '',
         check_in_date: now,
-        duration_days: 1, // Por defecto 1 día
-        agreed_price: '', // PRECIO TOTAL DEL EVENTO
-        advance_payment: '', // ADELANTO (Si dejan seña)
+        duration_days: 1,
+        agreed_price: '',
+        advance_payment: '',
         payment_method: 'EFECTIVO',
         qr_bank: '',
-        notes: '', // Aquí guardaremos todo el texto del inventario
+        notes: '',
         full_name: '',
         identification_number: '',
         phone: '',
+        nationality: 'BOLIVIANA',
+        profession: 'S/D',
+        civil_status: 'SOLTERO',
+        birth_date: '1990-01-01',
+        issued_in: 'PT', 
     });
 
-    // Inicializar el modal
     useEffect(() => {
         if (show) {
-            reset();
-            setEventData({ chairs: 0, tables: 0, whiteboards: 0, projector: false, startTime: '', endTime: '', extraDetails: '' });
-            setData('room_id', initialRoomId ? String(initialRoomId) : '');
-            
+            if (checkinToEdit) {
+                const notes = checkinToEdit.notes || '';
+                const parts = notes.split('|').map((p: string) => p.trim());
+
+                let extracted = {
+                    chairs: 0,
+                    tables: 0,
+                    whiteboards: 0,
+                    projector: false,
+                    startDateTime: now,
+                    endDateTime: '',
+                    extraDetails: '',
+                };
+
+                // 🚀 NUEVO LECTOR INTELIGENTE PARA FECHAS
+                parts.forEach((part: string) => {
+                    // Compatibilidad con eventos viejos que solo tenían horario
+                    if (part.includes('Horario:')) {
+                        const timeStr = part.replace('[EVENTO] Horario:', '').trim();
+                        const times = timeStr.split('a');
+                        if (times.length === 2) {
+                            const today = now.split('T')[0];
+                            extracted.startDateTime = `${today}T${times[0].trim()}`;
+                            extracted.endDateTime = `${today}T${times[1].trim()}`;
+                        }
+                    }
+                    // Nuevo formato con fechas completas
+                    if (part.includes('Inicio:'))
+                        extracted.startDateTime = part.replace('[EVENTO] Inicio:', '').trim();
+                    if (part.includes('Fin:'))
+                        extracted.endDateTime = part.replace('Fin:', '').trim();
+                    
+                    // Resto de inventario
+                    if (part.includes('Sillas:'))
+                        extracted.chairs = parseInt(part.split(':')[1]) || 0;
+                    if (part.includes('Mesas:'))
+                        extracted.tables = parseInt(part.split(':')[1]) || 0;
+                    if (part.includes('Pizarras:'))
+                        extracted.whiteboards = parseInt(part.split(':')[1]) || 0;
+                    if (part.includes('Proyector:'))
+                        extracted.projector = part.includes('SÍ');
+                    if (part.includes('Detalle:'))
+                        extracted.extraDetails = part.substring(part.indexOf('Detalle:') + 8).trim();
+                });
+
+                setEventData(extracted);
+
+                setData({
+                    guest_id: String(checkinToEdit.guest_id || ''),
+                    room_id: String(checkinToEdit.room_id || ''),
+                    check_in_date: checkinToEdit.check_in_date ? checkinToEdit.check_in_date.slice(0, 16) : now,
+                    duration_days: checkinToEdit.duration_days || 1,
+                    agreed_price: checkinToEdit.agreed_price || '',
+                    advance_payment: checkinToEdit.advance_payment || '',
+                    payment_method: checkinToEdit.payment_method || 'EFECTIVO',
+                    qr_bank: checkinToEdit.qr_bank || '',
+                    notes: notes,
+                    full_name: checkinToEdit.guest?.full_name || '',
+                    identification_number: checkinToEdit.guest?.identification_number || '',
+                    phone: checkinToEdit.guest?.phone || '',
+                });
+            } else {
+                reset();
+                setEventData({
+                    chairs: 0,
+                    tables: 0,
+                    whiteboards: 0,
+                    projector: false,
+                    startDateTime: now,
+                    endDateTime: '',
+                    extraDetails: '',
+                });
+                setData('room_id', initialRoomId ? String(initialRoomId) : '');
+            }
+
             setTimeout(() => {
                 if (nameInputRef.current) nameInputRef.current.focus();
             }, 200);
         }
-    }, [show, initialRoomId]);
+    }, [show, initialRoomId, checkinToEdit]);
 
-    // Cerrar buscador al hacer clic fuera
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(event.target as Node)
+            ) {
                 setIsDropdownOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        return () =>
+            document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // 4. Lógica de Búsqueda de Cliente (Igual que tu checkin normal)
-    const filteredGuests = data.full_name.length > 1
-        ? guests.filter((g) => {
-              const term = data.full_name.toLowerCase();
-              return g.full_name.toLowerCase().includes(term) || (g.identification_number && g.identification_number.includes(term));
-          })
-        : [];
+    const filteredGuests =
+        data.full_name.length > 1
+            ? guests.filter((g) => {
+                  const term = data.full_name.toLowerCase();
+                  return (
+                      g.full_name.toLowerCase().includes(term) ||
+                      (g.identification_number &&
+                          g.identification_number.includes(term))
+                  );
+              })
+            : [];
 
     const handleSelectGuest = (guest: Guest) => {
         setData((prev) => ({
@@ -125,182 +196,371 @@ export default function EventCheckinModal({
         setIsDropdownOpen(false);
     };
 
-    // 5. Enviar el formulario
-    // 5. Enviar el formulario
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        // CONSTRUIR LAS NOTAS AUTOMÁTICAMENTE
-        const proyectorTexto = eventData.projector ? 'SÍ' : 'NO';
-        const notasCompiladas = `[EVENTO] Horario: ${eventData.startTime || 'S/D'} a ${eventData.endTime || 'S/D'} | Sillas: ${eventData.chairs} | Mesas: ${eventData.tables} | Pizarras: ${eventData.whiteboards} | Proyector: ${proyectorTexto} | Detalle: ${eventData.extraDetails}`;
+        // 🚀 CÁLCULO DE DÍAS DE DURACIÓN
+        let diffDays = 1;
+        if (eventData.startDateTime && eventData.endDateTime) {
+            const start = new Date(eventData.startDateTime);
+            const end = new Date(eventData.endDateTime);
+            const diffMs = end.getTime() - start.getTime();
+            if (diffMs > 0) {
+                // Redondeamos hacia arriba (ej: 1 hora = 1 día cobrado en base de datos)
+                diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            }
+        }
 
-        // Usamos 'transform' para inyectar las notas en los datos justo antes de volar al servidor
+        // Formato para guardar en las notas visible para el humano
+        const proyectorTexto = eventData.projector ? 'SÍ' : 'NO';
+        const notasCompiladas = `[EVENTO] Inicio: ${eventData.startDateTime || 'S/D'} | Fin: ${eventData.endDateTime || 'S/D'} | Sillas: ${eventData.chairs} | Mesas: ${eventData.tables} | Pizarras: ${eventData.whiteboards} | Proyector: ${proyectorTexto} | Detalle: ${eventData.extraDetails}`;
+
+        // Laravel necesita formato "YYYY-MM-DD HH:mm:ss" o "YYYY-MM-DDTHH:mm", reemplazamos la T por un espacio
+        const checkInFormatted = eventData.startDateTime ? eventData.startDateTime.replace('T', ' ') : now.replace('T', ' ');
+
         transform((currentData) => ({
             ...currentData,
-            notes: notasCompiladas
+            check_in_date: checkInFormatted, // 🚀 Inyectamos la fecha real de inicio
+            duration_days: diffDays,         // 🚀 Inyectamos los días calculados
+            notes: notasCompiladas,
+            origin: 'POTOSI',
+            agreed_price: currentData.agreed_price,
+            discount: currentData.agreed_price,
+            is_temporary: false,
         }));
 
-        // Ahora enviamos limpiamente sin el error de TS
-        post('/checks', {
-            onSuccess: () => {
-                reset();
-                onClose(true);
-            },
-            onError: (err) => console.error(err)
-        });
+        if (checkinToEdit) {
+            put(`/checks/${checkinToEdit.id}`, {
+                onSuccess: () => {
+                    reset();
+                    onClose(true);
+                },
+                onError: (err) => console.error(err),
+            });
+        } else {
+            post('/checks', {
+                onSuccess: () => {
+                    reset();
+                    onClose(true);
+                },
+                onError: (err) => console.error(err),
+            });
+        }
     };
 
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
             <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                {/* Cabecera */}
-                <div className="flex items-center justify-between border-b border-gray-100 bg-emerald-50 px-6 py-4">
-                    <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-800">
-                        <div className="rounded-lg bg-emerald-200 p-1.5 text-emerald-700">
+                {/* Cabecera dinámica */}
+                <div className="flex items-center justify-between border-b border-gray-200 bg-emerald-50 px-6 py-4">
+                    <h2 className="flex items-center gap-2 text-lg font-black text-emerald-900">
+                        <div className="rounded-lg bg-emerald-200 p-1.5 text-emerald-800">
                             <Presentation className="h-5 w-5" />
                         </div>
-                        Registro de Salón / Evento
+                        {checkinToEdit
+                            ? 'Editar Registro de Evento'
+                            : 'Nuevo Registro de Salón / Evento'}
                     </h2>
-                    <button onClick={() => onClose(false)} className="rounded-full p-1 text-gray-400 hover:bg-gray-200">
-                        <X className="h-5 w-5" />
+                    <button
+                        onClick={() => onClose(false)}
+                        className="rounded-full p-1 text-gray-500 hover:bg-gray-300"
+                    >
+                        <X className="h-6 w-6" />
                     </button>
                 </div>
 
-                <form onSubmit={submit} className="flex flex-col md:flex-row max-h-[80vh] overflow-y-auto">
+                <form
+                    onSubmit={submit}
+                    className="flex max-h-[80vh] flex-col overflow-y-auto md:flex-row"
+                >
                     {/* IZQUIERDA: DATOS DEL TITULAR Y COBROS */}
-                    <div className="flex-1 border-r border-gray-100 p-6">
-                        <h3 className="text-sm font-bold text-emerald-700 uppercase mb-4 border-b pb-2">1. Titular del Evento</h3>
-                        
-                        {/* Buscador de cliente */}
-                        <div className="relative mb-4" ref={dropdownRef}>
-                            <label className="text-xs font-bold text-gray-800 uppercase mb-1 block">Nombre del Responsable</label>
+                    <div className="flex-1 border-r border-gray-200 p-6">
+                        <h3 className="mb-4 border-b-2 border-emerald-100 pb-2 text-sm font-black text-emerald-800 uppercase">
+                            1. Titular del Evento
+                        </h3>
+
+                        <div className="relative mb-5" ref={dropdownRef}>
+                            <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase">
+                                Nombre del Responsable
+                            </label>
                             <div className="relative">
-                                <User className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                <User className="absolute top-2.5 left-3 h-5 w-5 text-gray-500" />
                                 <input
                                     ref={nameInputRef}
                                     type="text"
-                                    className="w-full rounded-xl border border-gray-800 py-2 pl-10 text-sm uppercase focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="BUSCAR O CREAR..."
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-white py-2.5 pl-11 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
                                     value={data.full_name}
                                     onChange={(e) => {
-                                        setData('full_name', e.target.value.toUpperCase());
-                                        if (e.target.value === '') setData('guest_id', null);
+                                        const newName = e.target.value.toUpperCase();
+                                        if (newName === '') {
+                                            setData((prev) => ({
+                                                ...prev,
+                                                full_name: '',
+                                                guest_id: null,
+                                                identification_number: '',
+                                                phone: '',
+                                            }));
+                                        } else {
+                                            setData('full_name', newName);
+                                        }
                                         setIsDropdownOpen(true);
                                     }}
                                     onFocus={() => setIsDropdownOpen(true)}
                                     required
                                 />
-                                {isDropdownOpen && filteredGuests.length > 0 && (
-                                    <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto rounded-xl border bg-white shadow-xl">
-                                        {filteredGuests.map((g) => (
-                                            <div key={g.id} onClick={() => handleSelectGuest(g)} className="cursor-pointer p-3 border-b hover:bg-emerald-50 text-sm">
-                                                <span className="font-bold block">{g.full_name}</span>
-                                                <span className="text-xs text-gray-500">CI: {g.identification_number}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                {isDropdownOpen &&
+                                    filteredGuests.length > 0 && (
+                                        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border-2 border-slate-300 bg-white shadow-xl">
+                                            {filteredGuests.map((g) => (
+                                                <div
+                                                    key={g.id}
+                                                    onClick={() => handleSelectGuest(g)}
+                                                    className="cursor-pointer border-b border-slate-100 p-3 text-sm hover:bg-emerald-50"
+                                                >
+                                                    <span className="block font-bold text-gray-900">
+                                                        {g.full_name}
+                                                    </span>
+                                                    <span className="text-xs font-semibold text-gray-600">
+                                                        CI: {g.identification_number}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                             </div>
                         </div>
 
-                        {/* CI y Teléfono */}
-                        <div className="grid grid-cols-2 gap-3 mb-6">
+                        <div className="mb-6 grid grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Carnet / CI</label>
-                                <input type="text" className="w-full rounded-xl border border-gray-400 p-2 text-sm uppercase focus:border-emerald-500" value={data.identification_number} onChange={(e) => setData('identification_number', e.target.value.toUpperCase())} required />
+                                <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase">
+                                    Carnet / CI
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
+                                    value={data.identification_number}
+                                    onChange={(e) =>
+                                        setData('identification_number', e.target.value.toUpperCase())
+                                    }
+                                    required
+                                />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Teléfono</label>
-                                <input type="text" className="w-full rounded-xl border border-gray-400 p-2 text-sm focus:border-emerald-500" value={data.phone} onChange={(e) => setData('phone', e.target.value)} required />
+                                <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase">
+                                    Teléfono
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-base font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
+                                    value={data.phone}
+                                    onChange={(e) => setData('phone', e.target.value)}
+                                    required
+                                />
                             </div>
                         </div>
 
-                        <h3 className="text-sm font-bold text-emerald-700 uppercase mb-4 border-b pb-2">2. Costos y Pagos</h3>
-                        
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                            {/* PRECIO ACORDADO (Lo que cuesta alquilar el salón) */}
-                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                                <label className="text-xs font-black text-emerald-800 uppercase block mb-1">Precio Acordado Total</label>
+                        <h3 className="mb-4 border-b-2 border-emerald-100 pb-2 text-sm font-black text-emerald-800 uppercase">
+                            2. Costos y Pagos
+                        </h3>
+
+                        <div className="mb-4 grid grid-cols-2 gap-4">
+                            <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm">
+                                <label className="mb-2 block text-xs font-black text-emerald-900 uppercase">
+                                    Precio Total
+                                </label>
                                 <div className="flex items-center">
-                                    <input type="number" required min="0" value={data.agreed_price} onChange={(e) => setData('agreed_price', e.target.value)} className="w-full rounded-lg border-emerald-300 text-lg font-black text-emerald-900 px-2 py-1" placeholder="Ej. 500" />
-                                    <span className="ml-2 font-bold text-emerald-700">Bs.</span>
+                                    <input
+                                        type="number"
+                                        required
+                                        min="0"
+                                        value={data.agreed_price}
+                                        onChange={(e) => setData('agreed_price', e.target.value)}
+                                        className="w-full rounded-lg border-2 border-emerald-400 bg-white px-3 py-2 text-xl font-black text-emerald-950 shadow-inner focus:border-emerald-600 focus:ring-emerald-600 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    />
+                                    <span className="ml-2 font-black text-emerald-800">
+                                        Bs.
+                                    </span>
                                 </div>
                             </div>
-                            
-                            {/* ADELANTO (Si deja algo de seña) */}
-                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                <label className="text-xs font-bold text-gray-600 uppercase block mb-1">Adelanto / A Cuenta</label>
+                            <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-4 shadow-sm">
+                                <label className="mb-2 block text-xs font-black text-slate-800 uppercase">
+                                    A Cuenta (Adelanto)
+                                </label>
                                 <div className="flex items-center">
-                                    <input type="number" min="0" value={data.advance_payment} onChange={(e) => setData('advance_payment', e.target.value)} className="w-full rounded-lg border-gray-300 text-lg font-bold text-gray-800 px-2 py-1" placeholder="Ej. 100" />
-                                    <span className="ml-2 font-bold text-gray-500">Bs.</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={data.advance_payment}
+                                        onChange={(e) => setData('advance_payment', e.target.value)}
+                                        className="w-full rounded-lg border-2 border-slate-400 bg-white px-3 py-2 text-xl font-black text-gray-900 shadow-inner focus:border-slate-600 focus:ring-slate-600 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    />
+                                    <span className="ml-2 font-black text-slate-600">
+                                        Bs.
+                                    </span>
                                 </div>
                             </div>
                         </div>
-
                     </div>
 
                     {/* DERECHA: LOGÍSTICA DEL EVENTO */}
-                    <div className="flex-1 bg-gray-50 p-6">
-                        <h3 className="text-sm font-bold text-emerald-700 uppercase mb-4 border-b pb-2">3. Logística e Inventario</h3>
-                        
-                        {/* Horarios */}
-                        <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div className="flex-1 bg-slate-50 p-6">
+                        <h3 className="mb-4 border-b-2 border-emerald-100 pb-2 text-sm font-black text-emerald-800 uppercase">
+                            3. Logística e Inventario
+                        </h3>
+
+                        {/* 🚀 FECHAS COMPLETAS 🚀 */}
+                        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Hora Inicio</label>
-                                <input type="time" value={eventData.startTime} onChange={(e) => setEventData({...eventData, startTime: e.target.value})} className="w-full rounded-xl border-gray-400 p-2 text-sm font-bold" required/>
+                                <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-700 uppercase">
+                                    <CalendarDays className="h-4 w-4" /> Ingreso (Fecha y Hora)
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={eventData.startDateTime}
+                                    onChange={(e) =>
+                                        setEventData({
+                                            ...eventData,
+                                            startDateTime: e.target.value,
+                                        })
+                                    }
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-sm font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
+                                    required
+                                />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Hora Fin</label>
-                                <input type="time" value={eventData.endTime} onChange={(e) => setEventData({...eventData, endTime: e.target.value})} className="w-full rounded-xl border-gray-400 p-2 text-sm font-bold" required/>
+                                <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-700 uppercase">
+                                    <CalendarDays className="h-4 w-4" /> Salida (Fecha y Hora)
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={eventData.endDateTime}
+                                    onChange={(e) =>
+                                        setEventData({
+                                            ...eventData,
+                                            endDateTime: e.target.value,
+                                        })
+                                    }
+                                    className="w-full rounded-xl border-2 border-slate-400 bg-white p-2.5 text-sm font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
+                                    required
+                                />
                             </div>
                         </div>
 
-                        {/* Inventario */}
-                        <div className="grid grid-cols-3 gap-3 mb-5">
-                            <div className="bg-white p-3 rounded-xl border border-gray-200 text-center">
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Sillas</label>
-                                <input type="number" min="0" value={eventData.chairs || ''} onChange={(e) => setEventData({...eventData, chairs: Number(e.target.value)})} className="w-full text-center text-lg font-bold border-b-2 border-t-0 border-l-0 border-r-0 border-gray-300 focus:border-emerald-500 bg-transparent p-0" placeholder="0" />
+                        <div className="mb-6 grid grid-cols-3 gap-4">
+                            <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-3 text-center shadow-sm">
+                                <label className="mb-2 block text-xs font-extrabold text-slate-700 uppercase">
+                                    Sillas
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={eventData.chairs === 0 ? '' : eventData.chairs}
+                                    onChange={(e) =>
+                                        setEventData({
+                                            ...eventData,
+                                            chairs: Number(e.target.value),
+                                        })
+                                    }
+                                    className="w-full rounded-lg border-2 border-slate-400 bg-white p-2 text-center text-xl font-black text-gray-900 shadow-inner focus:border-emerald-600 focus:ring-emerald-600"
+                                    placeholder="0"
+                                />
                             </div>
-                            <div className="bg-white p-3 rounded-xl border border-gray-200 text-center">
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Mesas</label>
-                                <input type="number" min="0" value={eventData.tables || ''} onChange={(e) => setEventData({...eventData, tables: Number(e.target.value)})} className="w-full text-center text-lg font-bold border-b-2 border-t-0 border-l-0 border-r-0 border-gray-300 focus:border-emerald-500 bg-transparent p-0" placeholder="0" />
+                            <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-3 text-center shadow-sm">
+                                <label className="mb-2 block text-xs font-extrabold text-slate-700 uppercase">
+                                    Mesas
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={eventData.tables === 0 ? '' : eventData.tables}
+                                    onChange={(e) =>
+                                        setEventData({
+                                            ...eventData,
+                                            tables: Number(e.target.value),
+                                        })
+                                    }
+                                    className="w-full rounded-lg border-2 border-slate-400 bg-white p-2 text-center text-xl font-black text-gray-900 shadow-inner focus:border-emerald-600 focus:ring-emerald-600"
+                                    placeholder="0"
+                                />
                             </div>
-                            <div className="bg-white p-3 rounded-xl border border-gray-200 text-center">
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Pizarras</label>
-                                <input type="number" min="0" value={eventData.whiteboards || ''} onChange={(e) => setEventData({...eventData, whiteboards: Number(e.target.value)})} className="w-full text-center text-lg font-bold border-b-2 border-t-0 border-l-0 border-r-0 border-gray-300 focus:border-emerald-500 bg-transparent p-0" placeholder="0" />
+                            <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-3 text-center shadow-sm">
+                                <label className="mb-2 block text-xs font-extrabold text-slate-700 uppercase">
+                                    Pizarras
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={eventData.whiteboards === 0 ? '' : eventData.whiteboards}
+                                    onChange={(e) =>
+                                        setEventData({
+                                            ...eventData,
+                                            whiteboards: Number(e.target.value),
+                                        })
+                                    }
+                                    className="w-full rounded-lg border-2 border-slate-400 bg-white p-2 text-center text-xl font-black text-gray-900 shadow-inner focus:border-emerald-600 focus:ring-emerald-600"
+                                    placeholder="0"
+                                />
                             </div>
                         </div>
 
-                        {/* Proyector Toggle */}
-                        <div className="mb-5 bg-white p-3 rounded-xl border border-gray-200 flex items-center justify-between cursor-pointer" onClick={() => setEventData({...eventData, projector: !eventData.projector})}>
-                            <div className="flex items-center gap-2">
-                                <MonitorPlay className={`w-5 h-5 ${eventData.projector ? 'text-emerald-500' : 'text-gray-400'}`} />
-                                <span className="text-sm font-bold uppercase text-gray-700">Incluye Proyector</span>
+                        <div
+                            className="mb-6 flex cursor-pointer items-center justify-between rounded-xl border-2 border-slate-300 bg-white p-4 shadow-sm transition-colors hover:bg-slate-50"
+                            onClick={() =>
+                                setEventData({
+                                    ...eventData,
+                                    projector: !eventData.projector,
+                                })
+                            }
+                        >
+                            <div className="flex items-center gap-3">
+                                <MonitorPlay className={`h-6 w-6 ${eventData.projector ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                <span className="text-sm font-black text-slate-800 uppercase">
+                                    Incluye Proyector
+                                </span>
                             </div>
-                            <div className={`w-10 h-6 rounded-full flex items-center p-1 transition-colors ${eventData.projector ? 'bg-emerald-500' : 'bg-gray-300'}`}>
-                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${eventData.projector ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                            <div className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${eventData.projector ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                                <div className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${eventData.projector ? 'translate-x-5' : 'translate-x-0'}`}></div>
                             </div>
                         </div>
 
-                        {/* Notas extra */}
                         <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Detalles Adicionales del Evento</label>
-                            <textarea rows={2} value={eventData.extraDetails} onChange={(e) => setEventData({...eventData, extraDetails: e.target.value.toUpperCase()})} className="w-full rounded-xl border-gray-400 p-2 text-sm uppercase focus:border-emerald-500" placeholder="Ej. Boda, Decoración, etc..."></textarea>
+                            <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase">
+                                Detalles Adicionales
+                            </label>
+                            <textarea
+                                rows={3}
+                                value={eventData.extraDetails}
+                                onChange={(e) =>
+                                    setEventData({
+                                        ...eventData,
+                                        extraDetails: e.target.value.toUpperCase(),
+                                    })
+                                }
+                                className="w-full rounded-xl border-2 border-slate-400 bg-white p-3 text-base font-semibold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
+                            ></textarea>
                         </div>
-
                     </div>
                 </form>
 
-                {/* Footer Buttons */}
-                <div className="border-t border-gray-100 bg-white p-4 flex justify-end gap-3">
-                    <button type="button" onClick={() => onClose(false)} className="rounded-xl border border-gray-300 bg-white px-5 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95">
+                {/* Footer Buttons dinámicos */}
+                <div className="flex justify-end gap-3 border-t-2 border-slate-200 bg-slate-50 p-4">
+                    <button
+                        type="button"
+                        onClick={() => onClose(false)}
+                        className="rounded-xl border-2 border-slate-300 bg-white px-6 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                    >
                         Cancelar
                     </button>
-                    <button type="button" onClick={submit} disabled={processing} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50">
-                        <Save className="h-4 w-4" />
-                        Confirmar Evento
+                    <button
+                        type="button"
+                        onClick={submit}
+                        disabled={processing}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-8 py-2.5 text-sm font-black text-white shadow-md transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+                    >
+                        <Save className="h-5 w-5" />
+                        {checkinToEdit ? 'Actualizar Evento' : 'Confirmar Evento'}
                     </button>
                 </div>
             </div>
