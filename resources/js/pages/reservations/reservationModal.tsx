@@ -2,16 +2,15 @@ import { useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
-    Bath,
+    Banknote,
     BedDouble,
+    Building2,
     Calendar,
     CheckCircle,
-    DollarSign,
-    Info,
-    Link as LinkIcon,
     Loader2,
+    Plus,
     Save,
-    Unlink,
+    Trash2,
     User,
     Users,
     X,
@@ -25,7 +24,6 @@ export interface Guest {
     last_name: string;
     full_name?: string;
     identification_number?: string;
-    nationality?: string;
 }
 
 export interface Price {
@@ -37,6 +35,7 @@ export interface Price {
 export interface RoomType {
     id: number;
     name: string;
+    capacity?: number;
 }
 
 export interface Room {
@@ -54,10 +53,13 @@ export interface DetailItem {
     room_id: string | null;
     price_id: string;
     price: number;
-    requested_room_type_id: string; // 🚀 NUEVO: Lo que pide el cliente
-    requested_bathroom: string; // 🚀 NUEVO: El baño que pide el cliente
-
+    requested_room_type_id: string;
+    requested_bathroom: string;
+    // Variables temporales exclusivas para la UI
     _temp_pax_count?: number;
+    _temp_room_name?: string;
+    _temp_id?: number;
+    _temp_advance_payment?: number;
 }
 
 export interface Reservation {
@@ -80,7 +82,7 @@ interface ReservationFormData {
     guest_id: string;
     new_guest_name: string;
     new_guest_ci: string;
-    guest_count: number;
+    guest_count: number | '';
     arrival_date: string;
     arrival_time: string;
     duration_days: number;
@@ -126,8 +128,15 @@ const getExactRoomPrice = (room: Room): Price | null => {
     return null;
 };
 
-// CONSTANTES CORPORATIVAS
-const CORPORATE_MIN_GUESTS = 30;
+const getRoomCapacity = (rt: RoomType): number => {
+    if (rt.capacity) return rt.capacity;
+    const n = rt.name.toLowerCase();
+    if (n.includes('simple')) return 1;
+    if (n.includes('doble') || n.includes('matrimonial')) return 2;
+    if (n.includes('triple')) return 3;
+    if (n.includes('cuadruple') || n.includes('familiar')) return 4;
+    return 1; // Default
+};
 
 export default function ReservationModal({
     show,
@@ -139,9 +148,11 @@ export default function ReservationModal({
     const [guestQuery, setGuestQuery] = useState('');
     const [isGuestDropdownOpen, setIsGuestDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const [breaks, setBreaks] = useState<boolean[]>([]);
 
-    // 🚀 ESTADOS PARA EL SEMÁFORO DE DISPONIBILIDAD
+    // Interruptores
+    const [isCorporateToggle, setIsCorporateToggle] = useState<boolean>(false);
+
+    // Semáforo
     const [availabilityData, setAvailabilityData] = useState<any>(null);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
 
@@ -170,7 +181,41 @@ export default function ReservationModal({
         details: [],
     });
 
-    // 🚀 EFECTO: Consulta la disponibilidad predictiva al cambiar la fecha
+    const validGuestCount =
+        typeof data.guest_count === 'number' ? data.guest_count : 0;
+
+    // 🚀 REGLA ESTRICTA: Si es corporativo, se anula la delegación automáticamente
+    const isDelegation = validGuestCount >= 20 && !isCorporateToggle;
+
+    // Cálculo Interactivo de la "Sala de Espera"
+    const totalCapacityAssigned = data.details.reduce(
+        (sum, item) => sum + (item._temp_pax_count || 1),
+        0,
+    );
+    const unassignedGuests = Math.max(
+        0,
+        validGuestCount - totalCapacityAssigned,
+    );
+
+    // Filtrar Tipos de Habitación (Excluir Salón) y mapear únicos
+    const uniqueRoomTypes = useMemo(() => {
+        const map = new Map();
+        rooms.forEach((r) => {
+            const type = r.room_type;
+            if (type) {
+                const nameLower = type.name.toLowerCase();
+                if (
+                    !nameLower.includes('salon') &&
+                    !nameLower.includes('salón')
+                ) {
+                    if (!map.has(type.id)) map.set(type.id, type);
+                }
+            }
+        });
+        return Array.from(map.values());
+    }, [rooms]);
+
+    // Semáforo Predictivo
     useEffect(() => {
         if (show && data.arrival_date) {
             setIsLoadingAvailability(true);
@@ -179,57 +224,38 @@ export default function ReservationModal({
                     `/api/reservations/availability?arrival_date=${data.arrival_date}`,
                 )
                 .then((res) => setAvailabilityData(res.data))
-                .catch((err) =>
-                    console.error('Error consultando disponibilidad:', err),
-                )
+                .catch((err) => console.error(err))
                 .finally(() => setIsLoadingAvailability(false));
         }
     }, [show, data.arrival_date]);
 
-    // Lista única de Tipos de Habitación para los Selectores
-    const uniqueRoomTypes = useMemo(() => {
-        const map = new Map();
-        rooms.forEach((r) => {
-            const type = r.room_type;
-            if (type && !map.has(type.id)) {
-                map.set(type.id, type);
-            }
-        });
-        return Array.from(map.values());
-    }, [rooms]);
-
+    // Carga Inicial
     useEffect(() => {
         if (show) {
             if (reservationToEdit) {
-                // Modo Edición
                 const mappedDetails: DetailItem[] = (
                     reservationToEdit.details || []
-                ).map((det: any) => {
+                ).map((det: any, index: number) => {
+                    const typeId = det.requested_room_type_id?.toString() || '';
+                    const rType = uniqueRoomTypes.find(
+                        (t: any) => t.id.toString() === typeId,
+                    );
+                    const name = rType ? rType.name : 'Desconocida';
                     return {
+                        _temp_id: Date.now() + index,
                         room_id: det.room_id || null,
                         price_id: det.price_id ? det.price_id.toString() : '',
                         price:
                             typeof det.price === 'object'
                                 ? Number(det.price.amount)
                                 : Number(det.price),
-                        requested_room_type_id:
-                            det.requested_room_type_id?.toString() || '',
+                        requested_room_type_id: typeId,
                         requested_bathroom: det.requested_bathroom || '',
-                        _temp_pax_count: 1,
+                        _temp_pax_count: rType ? getRoomCapacity(rType) : 1,
+                        _temp_room_name: name,
+                        _temp_advance_payment: 0,
                     };
                 });
-
-                const totalRooms = mappedDetails.length;
-                const totalGuests = reservationToEdit.guest_count;
-                const newBreaks = new Array(Math.max(0, totalGuests - 1)).fill(
-                    false,
-                );
-                if (totalRooms > 1 && totalGuests > 1) {
-                    for (let i = 0; i < totalRooms - 1; i++) {
-                        if (i < newBreaks.length) newBreaks[i] = true;
-                    }
-                }
-                setBreaks(newBreaks);
 
                 setData({
                     ...data,
@@ -249,229 +275,138 @@ export default function ReservationModal({
                 const currentGuest = guests.find(
                     (g) => g.id === reservationToEdit.guest_id,
                 );
-                if (currentGuest) {
+                if (currentGuest)
                     setGuestQuery(
                         currentGuest.full_name ||
                             `${currentGuest.name} ${currentGuest.last_name}`,
                     );
-                }
+                setIsCorporateToggle(false);
             } else {
-                // Nueva Reserva Rápida
                 reset();
                 setGuestQuery('');
-                setBreaks([]);
-                setData((prev) => ({
-                    ...prev,
-                    guest_count: 1,
-                    arrival_date: new Date().toISOString().split('T')[0],
-                    details: [
-                        {
-                            room_id: null,
-                            price_id: '',
-                            price: 0,
-                            requested_room_type_id: '',
-                            requested_bathroom: '',
-                            _temp_pax_count: 1,
-                        },
-                    ],
-                }));
+                setIsCorporateToggle(false);
             }
             clearErrors();
             setIsGuestDropdownOpen(false);
         }
     }, [show, reservationToEdit, rooms]);
 
-    // 🚀 LÓGICA DE PRECIOS AUTOMÁTICA
-    // Calcula el precio basándose SÓLO en el tipo de habitación y baño solicitados
+    // LÓGICA DE PRECIOS OFICIAL
     const recalculatePrice = (
         typeId: string,
         bath: string,
         paxCount: number,
-        isCorporate: boolean,
+        isDel: boolean,
+        isCorp: boolean,
     ) => {
-        // 1. Si no hay baño, el precio es 0 (Obligatorio)
-        if (!bath) return { price: 0, priceId: '' };
+        if (!bath || !typeId) return { price: 0, priceId: '' };
 
-        // 2. 🚀 NUEVO: Si no eligieron tipo de cuarto, asumimos "SIMPLE"
-        let effectiveTypeId = typeId;
-        if (!effectiveTypeId) {
-            const simpleType = uniqueRoomTypes.find((t: any) =>
-                t.name.toUpperCase().includes('SIMPLE'),
-            );
-            if (simpleType) {
-                effectiveTypeId = simpleType.id.toString();
-            }
-        }
+        const dbBath = bath === 'compartido_sindesayuno' ? 'shared' : bath;
 
-        // 3. Buscamos la habitación usando effectiveTypeId en lugar de typeId
         const matchingRoom = rooms.find((r) => {
             const rType =
                 r.room_type?.id?.toString() || r.room_type_id?.toString();
             const p = getExactRoomPrice(r);
             return (
-                rType === effectiveTypeId &&
-                isMatchingBathroom(p?.bathroom_type, bath)
+                rType === typeId && isMatchingBathroom(p?.bathroom_type, dbBath)
             );
         });
 
-        if (matchingRoom) {
-            const p = getExactRoomPrice(matchingRoom);
-            if (isCorporate) {
-                const isPrivate =
-                    bath.toLowerCase() === 'private' ||
-                    bath.toLowerCase() === 'privado';
-                const rate = isPrivate ? 90 : 60;
-                return { price: rate * paxCount, priceId: p!.id.toString() };
-            } else {
-                return { price: Number(p!.amount), priceId: p!.id.toString() };
-            }
+        const p = matchingRoom ? getExactRoomPrice(matchingRoom) : null;
+        let finalPrice = p ? Number(p.amount) : 0;
+        let finalPriceId = p ? p.id.toString() : '';
+
+        if (isDel) {
+            if (bath === 'private' || bath === 'privado')
+                finalPrice = 90 * paxCount;
+            else if (bath === 'compartido_sindesayuno')
+                finalPrice = 50 * paxCount;
+            else if (bath === 'shared' || bath === 'compartido')
+                finalPrice = 60 * paxCount;
+            finalPriceId = '';
         }
-        return { price: 0, priceId: '' };
+
+        return { price: finalPrice, priceId: finalPriceId };
     };
+
+    // Agregar Habitación (Pila)
+    const addRoomBox = () => {
+        const select = document.getElementById(
+            'roomSelector',
+        ) as HTMLSelectElement;
+        const typeId = select.value;
+        if (!typeId) return;
+
+        const rType = uniqueRoomTypes.find(
+            (t: any) => t.id.toString() === typeId,
+        );
+        if (!rType) return;
+
+        const cap = getRoomCapacity(rType);
+        const defaultBath = '';
+
+        const res = recalculatePrice(
+            typeId,
+            defaultBath,
+            cap,
+            isDelegation,
+            isCorporateToggle,
+        );
+
+        const newDetail: DetailItem = {
+            _temp_id: Date.now(),
+            room_id: null,
+            price_id: res.priceId,
+            price: res.price,
+            requested_room_type_id: typeId,
+            requested_bathroom: defaultBath,
+            _temp_pax_count: cap,
+            _temp_room_name: rType.name,
+            _temp_advance_payment: 0,
+        };
+
+        setData('details', [newDetail, ...data.details]);
+        select.value = '';
+    };
+
+    const removeRoomBox = (tempId: number | undefined) => {
+        if (!tempId) return;
+        setData(
+            'details',
+            data.details.filter((d) => d._temp_id !== tempId),
+        );
+    };
+
     const updateDetailRow = (
         index: number,
         field: keyof DetailItem,
         value: any,
     ) => {
         const newDetails = [...data.details];
-        const isCorporate = data.guest_count >= 30;
-
         // @ts-ignore
         newDetails[index][field] = value;
 
-        // Al cambiar tipo de habitación o baño, recalculamos el precio de esa fila
-        if (
-            field === 'requested_room_type_id' ||
-            field === 'requested_bathroom'
-        ) {
-            const typeId = newDetails[index].requested_room_type_id;
-            const bath = newDetails[index].requested_bathroom;
-
-            // Si es corporativo y cambió el baño, forzamos el baño en todas las filas
-            if (isCorporate && field === 'requested_bathroom') {
-                newDetails.forEach((det, i) => {
-                    det.requested_bathroom = value;
-                    const res = recalculatePrice(
-                        det.requested_room_type_id,
-                        value,
-                        det._temp_pax_count || 1,
-                        true,
-                    );
-                    det.price = res.price;
-                    det.price_id = res.priceId;
-                });
-            } else {
-                const res = recalculatePrice(
-                    typeId,
-                    bath,
-                    newDetails[index]._temp_pax_count || 1,
-                    isCorporate,
-                );
-                newDetails[index].price = res.price;
-                newDetails[index].price_id = res.priceId;
-            }
+        if (field === 'requested_bathroom') {
+            const res = recalculatePrice(
+                newDetails[index].requested_room_type_id,
+                value,
+                newDetails[index]._temp_pax_count || 1,
+                isDelegation,
+                isCorporateToggle,
+            );
+            newDetails[index].price = res.price;
+            newDetails[index].price_id = res.priceId;
         }
 
         setData('details', newDetails);
     };
 
-    const handleGuestCountChange = (newCount: number) => {
-        const validCount = Math.max(1, newCount);
-        const newBreaks = new Array(Math.max(0, validCount - 1)).fill(true);
-        for (let i = 0; i < Math.min(breaks.length, newBreaks.length); i++) {
-            newBreaks[i] = breaks[i];
+    const handleGuestCountChange = (val: string) => {
+        if (val === '' || Number(val) <= 0) {
+            setData((prev) => ({ ...prev, guest_count: '', details: [] }));
+        } else {
+            setData('guest_count', Number(val));
         }
-        setBreaks(newBreaks);
-
-        setData((prev) => {
-            const groups: number[] = [];
-            let currentGroupSize = 1;
-            for (let i = 0; i < newBreaks.length; i++) {
-                if (newBreaks[i]) {
-                    groups.push(currentGroupSize);
-                    currentGroupSize = 1;
-                } else {
-                    currentGroupSize++;
-                }
-            }
-            groups.push(currentGroupSize);
-
-            const isCorporate = validCount >= 30;
-            const forcedBath = isCorporate
-                ? prev.details.find((d) => d.requested_bathroom)
-                      ?.requested_bathroom || ''
-                : '';
-
-            const newDetails: DetailItem[] = groups.map((groupSize, index) => {
-                const existing = prev.details[index];
-                let newBath = existing ? existing.requested_bathroom : '';
-                let newType = existing ? existing.requested_room_type_id : '';
-
-                if (isCorporate && forcedBath) newBath = forcedBath;
-
-                const res = recalculatePrice(
-                    newType,
-                    newBath,
-                    groupSize,
-                    isCorporate,
-                );
-
-                return {
-                    room_id: null, // Siempre nulo en la vista de venta
-                    price_id: res.priceId,
-                    price: res.price,
-                    requested_bathroom: newBath,
-                    requested_room_type_id: newType,
-                    _temp_pax_count: groupSize,
-                };
-            });
-            return { ...prev, guest_count: validCount, details: newDetails };
-        });
-    };
-
-    const toggleBreak = (index: number) => {
-        const newBreaks = [...breaks];
-        newBreaks[index] = !newBreaks[index];
-        setBreaks(newBreaks);
-
-        setData((prev) => {
-            const groups: number[] = [];
-            let currentGroupSize = 1;
-            for (let i = 0; i < newBreaks.length; i++) {
-                if (newBreaks[i]) {
-                    groups.push(currentGroupSize);
-                    currentGroupSize = 1;
-                } else {
-                    currentGroupSize++;
-                }
-            }
-            groups.push(currentGroupSize);
-
-            const isCorporate = prev.guest_count >= 30;
-
-            const newDetails: DetailItem[] = groups.map((groupSize, idx) => {
-                const existing = prev.details[idx];
-                const newBath = existing ? existing.requested_bathroom : '';
-                const newType = existing ? existing.requested_room_type_id : '';
-
-                const res = recalculatePrice(
-                    newType,
-                    newBath,
-                    groupSize,
-                    isCorporate,
-                );
-
-                return {
-                    room_id: null,
-                    price_id: res.priceId,
-                    price: res.price,
-                    requested_bathroom: newBath,
-                    requested_room_type_id: newType,
-                    _temp_pax_count: groupSize,
-                };
-            });
-            return { ...prev, details: newDetails };
-        });
     };
 
     const filteredGuests = useMemo(() => {
@@ -492,47 +427,63 @@ export default function ReservationModal({
         setIsGuestDropdownOpen(false);
     };
 
+    // Totales
     const totalPerNight = data.details.reduce(
         (acc, item) => acc + Number(item.price),
         0,
     );
     const grandTotal = totalPerNight * Number(data.duration_days);
-    const balance = grandTotal - Number(data.advance_payment);
+
+    const totalAdvancePayment = isCorporateToggle
+        ? data.details.reduce(
+              (sum, item) => sum + (Number(item._temp_advance_payment) || 0),
+              0,
+          )
+        : Number(data.advance_payment);
+
+    const balance = grandTotal - totalAdvancePayment;
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        // 1. PRIMERO DEBES DECLARAR Y CALCULAR hasEmptyBath
-        const hasEmptyBath = data.details.some(det => !det.requested_bathroom);
-
-        if (hasEmptyBath) {
+        if (typeof data.guest_count !== 'number' || data.guest_count <= 0) {
+            alert('⚠️ Ingrese una cantidad de huéspedes válida.');
+            return;
+        }
+        if (unassignedGuests > 0) {
             alert(
-                '⚠️ El campo "Tipo de Baño" es obligatorio en todas las habitaciones.',
+                `⚠️ Faltan acomodar ${unassignedGuests} personas en habitaciones.`,
+            );
+            return;
+        }
+        if (data.details.length === 0) {
+            alert('⚠️ Debe agregar al menos una habitación.');
+            return;
+        }
+        if (data.details.some((det) => !det.requested_bathroom)) {
+            alert(
+                '⚠️ El campo "Tipo de Baño" es obligatorio en todas las habitaciones agregadas.',
+            );
+            return;
+        }
+        if (isCorporateToggle && totalAdvancePayment <= 0) {
+            alert(
+                '⚠️ Las Reservas Corporativas exigen dejar un adelanto económico mayor a 0 sumando todas las habitaciones.',
             );
             return;
         }
 
-        if (
-            data.payment_type === 'QR' &&
-            data.advance_payment > 0 &&
-            !data.qr_bank
-        ) {
-            alert('Seleccione un banco para el pago QR.');
-            return;
-        }
-
-        // 2. APLICAR LA TRANSFORMACIÓN PARA HABITACIONES VACÍAS (SIMPLE)
-        const simpleType = uniqueRoomTypes.find((t: any) => 
-            t.name.toUpperCase().includes('SIMPLE')
-        );
-
         transform((currentData) => ({
             ...currentData,
-            details: currentData.details.map(det => ({
-                ...det,
-                // Si el cuarto está vacío, le pone el ID de Simple automáticamente
-                requested_room_type_id: det.requested_room_type_id || (simpleType ? simpleType.id.toString() : '')
-            }))
+            guest_count: Number(currentData.guest_count),
+            advance_payment: totalAdvancePayment,
+            details: currentData.details.map((det) => ({
+                room_id: det.room_id,
+                price_id: det.price_id,
+                price: det.price,
+                requested_room_type_id: det.requested_room_type_id,
+                requested_bathroom: det.requested_bathroom,
+            })),
         }));
 
         const options = {
@@ -548,965 +499,630 @@ export default function ReservationModal({
         else post('/reservas', options);
     };
 
+    // Drag to scroll horizontal
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [startX, setStartX] = useState(0);
+    const [scrollLeft, setScrollLeft] = useState(0);
+
+    const startDrag = (e: React.MouseEvent) => {
+        setIsDragging(true);
+        if (scrollContainerRef.current) {
+            setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+            setScrollLeft(scrollContainerRef.current.scrollLeft);
+        }
+    };
+    const stopDrag = () => setIsDragging(false);
+    const onDrag = (e: React.MouseEvent) => {
+        if (!isDragging || !scrollContainerRef.current) return;
+        e.preventDefault();
+        const x = e.pageX - scrollContainerRef.current.offsetLeft;
+        const walk = (x - startX) * 2;
+        scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+    };
+
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-            <div className="flex h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                {/* CABECERA */}
-                <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
-                    <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                        <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
-                            <Calendar className="h-5 w-5" />
-                        </div>
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm fade-in">
+            <div className="flex h-[80vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                    <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
+                        <Building2 className="h-6 w-6 text-green-600" />
                         {reservationToEdit
-                            ? 'Editar Requerimientos'
-                            : 'Reserva Rápida (Recepción)'}
+                            ? 'Editar Requerimientos de Reserva'
+                            : 'Nueva Reserva Inteligente'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-red-100 hover:text-red-500"
                     >
-                        <X className="h-5 w-5" />
+                        <X className="h-6 w-6" />
                     </button>
                 </div>
 
-                <form
-                    id="reservation-form"
-                    onSubmit={submit}
-                    className="flex flex-1 flex-col overflow-hidden bg-white"
-                >
-                    <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
-                        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                            {/* ==================================================== */}
-                            {/* COLUMNA IZQUIERDA (DATOS HUÉSPED Y FECHAS)           */}
-                            {/* ==================================================== */}
-                            <div className="space-y-4 lg:col-span-5">
-                                <div
-                                    className="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
-                                    ref={dropdownRef}
-                                >
-                                    <label className="mb-3 block border-b border-red-100 pb-2 text-center text-base font-bold tracking-wide text-red-700 uppercase">
-                                        1. DATO DEL HUESPED
+                <div className="flex flex-1 overflow-hidden">
+                    {/* ========================================================= */}
+                    {/* COLUMNA IZQUIERDA (PANEL ADMINISTRATIVO COMPRIMIDO)       */}
+                    {/* ========================================================= */}
+                    <div className="flex w-1/3 flex-col justify-between space-y-4 overflow-y-auto border-r border-gray-200 bg-white p-4 lg:p-5">
+                        <div className="space-y-3">
+                            {/* Buscador */}
+                            <div className="relative" ref={dropdownRef}>
+                                <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                    Buscar Huésped (CI / Nombre)
+                                </label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <User className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm font-bold text-gray-600 uppercase focus:border-green-500 focus:ring-green-500"
+                                        value={guestQuery}
+                                        onChange={(e) => {
+                                            const val = e.target.value.toUpperCase();
+                                            setGuestQuery(val);
+                                            setIsGuestDropdownOpen(true);
+                                            if (data.guest_id)
+                                                setData('guest_id', '');
+                                            setData('new_guest_name', val);
+                                            setData('is_new_guest', true);
+                                        }}
+                                        onFocus={() => {
+                                            if (guestQuery.length > 0)
+                                                setIsGuestDropdownOpen(true);
+                                        }}
+                                    />
+                                    {isGuestDropdownOpen &&
+                                        filteredGuests.length > 0 && (
+                                            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
+                                                {filteredGuests.map((g) => (
+                                                    <div
+                                                        key={g.id}
+                                                        onClick={() =>
+                                                            selectGuest(g)
+                                                        }
+                                                        className="cursor-pointer border-b px-4 py-2.5 transition-colors hover:bg-green-50"
+                                                    >
+                                                        <div className="text-sm font-bold text-gray-800 uppercase">
+                                                            {g.full_name ||
+                                                                `${g.name} ${g.last_name}`}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500">
+                                                            CI:{' '}
+                                                            {g.identification_number ||
+                                                                'S/N'}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                </div>
+                            </div>
+
+                            {/* Fechas y Personas */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                        Llegada
                                     </label>
-                                    <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                                        Nombre Completo
+                                    <input
+                                        type="date"
+                                        value={data.arrival_date}
+                                        onChange={(e) =>
+                                            setData(
+                                                'arrival_date',
+                                                e.target.value,
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-gray-400 py-1.5 text-sm text-center font-bold text-gray-600 focus:border-green-500 focus:ring-green-500 [&::-webkit-datetime-edit]:justify-center"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                        Noches
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={data.duration_days}
+                                        onChange={(e) =>
+                                            setData(
+                                                'duration_days',
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-gray-400 py-1.5 text-center text-sm font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]"
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                        Cantidad de Personas
                                     </label>
                                     <div className="relative">
-                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                            <User className="h-4 w-4 text-gray-400" />
-                                        </div>
+                                        <Users className="absolute top-2 left-3 h-4 w-4 text-blue-500" />
                                         <input
-                                            type="text"
-                                            className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500 disabled:bg-gray-50"
-                                            placeholder="ESCRIBE PARA BUSCAR..."
-                                            value={guestQuery}
-                                            onChange={(e) => {
-                                                const newValue =
-                                                    e.target.value.toUpperCase();
-                                                setGuestQuery(newValue);
-                                                setIsGuestDropdownOpen(true);
-                                                if (data.guest_id)
-                                                    setData('guest_id', '');
-                                                setData(
-                                                    'new_guest_name',
-                                                    newValue,
-                                                );
-                                                setData('is_new_guest', true);
-                                            }}
-                                            onFocus={() => {
-                                                if (guestQuery.length > 0)
-                                                    setIsGuestDropdownOpen(
-                                                        true,
-                                                    );
-                                            }}
-                                            autoComplete="off"
+                                            type="number"
+                                            min="0"
+                                            value={data.guest_count}
+                                            onChange={(e) =>
+                                                handleGuestCountChange(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            className="w-full rounded-xl border-blue-300 bg-blue-50 py-1.5 pl-9 text-lg font-black text-blue-900 focus:border-blue-500 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]"
                                         />
-                                        {isGuestDropdownOpen &&
-                                            filteredGuests.length > 0 && (
-                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                    {filteredGuests.map((g) => (
-                                                        <div
-                                                            key={g.id}
-                                                            onClick={() =>
-                                                                selectGuest(g)
-                                                            }
-                                                            className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm transition-colors hover:bg-green-50"
-                                                        >
-                                                            <div className="font-bold text-gray-800 uppercase">
-                                                                {g.full_name ||
-                                                                    `${g.name} ${g.last_name}`}
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                <span className="rounded bg-gray-100 px-1.5 py-0.5">
-                                                                    CI:{' '}
-                                                                    {g.identification_number ||
-                                                                        'S/N'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                    </div>
-                                    {data.is_new_guest && (
-                                        <div className="mt-3 animate-in fade-in slide-in-from-top-2">
-                                            <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                                                CI / DNI
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={data.new_guest_ci}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'new_guest_ci',
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-400 px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500"
-                                                placeholder="Número de Documento"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                                    <label className="mb-3 block border-b border-gray-100 pb-2 text-center text-sm font-bold tracking-wide text-gray-700 uppercase">
-                                        2. FECHAS Y ESTADÍA
-                                    </label>
-                                    <div className="mb-4 grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                                                Llegada
-                                            </label>
-
-                                            <div className="relative">
-                                                <input
-                                                    type="date"
-                                                    value={data.arrival_date}
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'arrival_date',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-left text-sm text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                                                Hora Aprox.
-                                            </label>
-                                            <div className="relative">
-                                                <input
-                                                    type="time"
-                                                    value={data.arrival_time}
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'arrival_time',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-left text-sm text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
-                                                Estancia (Noches)
-                                            </label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={data.duration_days}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'duration_days',
-                                                        Number(e.target.value),
-                                                    )
-                                                }
-                                                className="w-full rounded-xl border border-gray-400 py-2 text-center text-sm font-bold text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="mb-1.5 flex justify-between text-xs font-bold text-gray-500 uppercase">
-                                                <span>Cant. Personas</span>
-                                                {data.guest_count >=
-                                                    CORPORATE_MIN_GUESTS && (
-                                                    <span className="animate-in rounded bg-green-100 px-1.5 py-0.5 text-[9px] text-green-700 fade-in">
-                                                        CORPORATIVO
-                                                    </span>
-                                                )}
-                                            </label>
-                                            <div className="relative">
-                                                <Users className="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-gray-400" />
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={data.guest_count}
-                                                    onChange={(e) =>
-                                                        handleGuestCountChange(
-                                                            Number(
-                                                                e.target.value,
-                                                            ),
-                                                        )
-                                                    }
-                                                    className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm font-bold text-gray-900 focus:border-gray-500 focus:ring-gray-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* BLOQUE VISUAL DE DISTRIBUCIÓN DE CAMAS */}
-                                <div className="rounded-xl border border-green-100 bg-green-100 p-4 shadow-sm">
-                                    <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-gray-800 uppercase">
-                                        <Info className="h-4 w-4 text-green-600" />{' '}
-                                        Distribución de Huéspedes
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {(() => {
-                                            const visualBlocks = [];
-                                            let currentBlock: number[] = [];
-                                            for (
-                                                let i = 0;
-                                                i < data.guest_count;
-                                                i++
-                                            ) {
-                                                currentBlock.push(i);
-                                                if (
-                                                    breaks[i] &&
-                                                    i < data.guest_count - 1
-                                                ) {
-                                                    visualBlocks.push(
-                                                        currentBlock,
-                                                    );
-                                                    currentBlock = [];
-                                                }
-                                            }
-                                            if (currentBlock.length > 0)
-                                                visualBlocks.push(currentBlock);
-                                            const renderedElements: any[] = [];
-                                            let accumulatedSingles: number[][] =
-                                                [];
-
-                                            visualBlocks.forEach(
-                                                (block, blockIndex) => {
-                                                    if (block.length > 1) {
-                                                        if (
-                                                            accumulatedSingles.length >
-                                                            0
-                                                        ) {
-                                                            renderedElements.push(
-                                                                <div
-                                                                    key={`grid-${blockIndex}`}
-                                                                    className="flex flex-wrap justify-start gap-1 rounded-lg border border-green-100 bg-white p-2"
-                                                                >
-                                                                    {accumulatedSingles.map(
-                                                                        (
-                                                                            singleGroup,
-                                                                        ) => (
-                                                                            <div
-                                                                                key={
-                                                                                    singleGroup[0]
-                                                                                }
-                                                                                className="flex items-center"
-                                                                            >
-                                                                                <div
-                                                                                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-green-100 ${singleGroup[0] === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-gray-200 bg-gray-50 text-gray-500'}`}
-                                                                                >
-                                                                                    {singleGroup[0] +
-                                                                                        1}
-                                                                                </div>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        toggleBreak(
-                                                                                            singleGroup[0],
-                                                                                        )
-                                                                                    }
-                                                                                    className="mx-0.5 text-gray-300 transition-colors hover:text-green-500"
-                                                                                >
-                                                                                    <LinkIcon className="h-3 w-3" />
-                                                                                </button>
-                                                                            </div>
-                                                                        ),
-                                                                    )}
-                                                                </div>,
-                                                            );
-                                                            accumulatedSingles =
-                                                                [];
-                                                        }
-                                                        renderedElements.push(
-                                                            <div
-                                                                key={`row-${blockIndex}`}
-                                                                className="flex w-full animate-in flex-col items-center fade-in slide-in-from-left-2"
-                                                            >
-                                                                {blockIndex >
-                                                                    0 && (
-                                                                    <div className="relative my-0.5 flex h-4 w-0.5 items-center justify-center bg-gray-300">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() =>
-                                                                                toggleBreak(
-                                                                                    block[0] -
-                                                                                        1,
-                                                                                )
-                                                                            }
-                                                                            className="absolute z-10 rounded-full border border-gray-300 bg-white p-0.5 shadow-sm hover:border-green-500 hover:text-green-600"
-                                                                        >
-                                                                            <LinkIcon className="h-2 w-2" />
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                                <div className="relative flex w-full flex-wrap items-center justify-start gap-2 rounded-lg border border-green-200 bg-white p-2 shadow-sm">
-                                                                    <div className="absolute top-0 bottom-0 left-0 w-1 rounded-l-lg bg-green-500"></div>
-                                                                    <span className="ml-2 text-[9px] font-bold text-gray-400">
-                                                                        HAB{' '}
-                                                                        {blockIndex +
-                                                                            1}
-                                                                    </span>
-                                                                    {block.map(
-                                                                        (
-                                                                            guestIdx,
-                                                                            localIdx,
-                                                                        ) => (
-                                                                            <div
-                                                                                key={
-                                                                                    guestIdx
-                                                                                }
-                                                                                className="flex items-center"
-                                                                            >
-                                                                                <div
-                                                                                    className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold ${guestIdx === 0 ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-                                                                                >
-                                                                                    {guestIdx +
-                                                                                        1}
-                                                                                </div>
-                                                                                {localIdx <
-                                                                                    block.length -
-                                                                                        1 && (
-                                                                                    <div className="mx-1">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                toggleBreak(
-                                                                                                    guestIdx,
-                                                                                                )
-                                                                                            }
-                                                                                            className="flex h-5 w-5 items-center justify-center rounded-full border border-green-200 bg-green-50 text-green-400 transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-500"
-                                                                                        >
-                                                                                            <Unlink className="h-3 w-3" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ),
-                                                                    )}
-                                                                </div>
-                                                            </div>,
-                                                        );
-                                                    } else {
-                                                        accumulatedSingles.push(
-                                                            block,
-                                                        );
-                                                    }
-                                                },
-                                            );
-                                            if (accumulatedSingles.length > 0) {
-                                                renderedElements.push(
-                                                    <div
-                                                        key="grid-last"
-                                                        className="flex w-full flex-col"
-                                                    >
-                                                        {renderedElements.length >
-                                                            0 && (
-                                                            <div className="relative my-0.5 flex h-4 w-full justify-center">
-                                                                <div className="h-full w-0.5 bg-gray-300"></div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        toggleBreak(
-                                                                            accumulatedSingles[0][0] -
-                                                                                1,
-                                                                        )
-                                                                    }
-                                                                    className="absolute top-1/2 z-10 -translate-y-1/2 rounded-full border border-gray-300 bg-white p-0.5 shadow-sm hover:border-green-500 hover:text-green-600"
-                                                                >
-                                                                    <LinkIcon className="h-2 w-2" />
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex min-h-[50px] flex-wrap justify-start gap-1.5 rounded-lg border border-green-100 bg-white p-2">
-                                                            {accumulatedSingles.map(
-                                                                (
-                                                                    singleGroup,
-                                                                ) => {
-                                                                    const guestIdx =
-                                                                        singleGroup[0];
-                                                                    const isLastAbsolute =
-                                                                        guestIdx ===
-                                                                        data.guest_count -
-                                                                            1;
-                                                                    return (
-                                                                        <div
-                                                                            key={
-                                                                                guestIdx
-                                                                            }
-                                                                            className="flex items-center"
-                                                                        >
-                                                                            <div
-                                                                                className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-[10px] font-bold transition-all hover:bg-green-500 ${guestIdx === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-green-500 bg-green-50 text-green-500'}`}
-                                                                            >
-                                                                                {guestIdx +
-                                                                                    1}
-                                                                            </div>
-                                                                            {!isLastAbsolute && (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        toggleBreak(
-                                                                                            guestIdx,
-                                                                                        )
-                                                                                    }
-                                                                                    className="mx-0.5 p-0.5 text-green-300 transition-all hover:scale-125 hover:text-green-500"
-                                                                                >
-                                                                                    <LinkIcon className="h-3 w-3" />
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                },
-                                                            )}
-                                                        </div>
-                                                    </div>,
-                                                );
-                                            }
-                                            return renderedElements;
-                                        })()}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* ==================================================== */}
-                            {/* COLUMNA DERECHA (EL SEMÁFORO Y REQUISITOS)           */}
-                            {/* ==================================================== */}
-                            <div className="flex h-full flex-col space-y-4 lg:col-span-7">
-                                {/* 1. EL SEMÁFORO PREDICTIVO (EL ARGUMENTO DEL RECEPCIONISTA) */}
-                                <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-                                    <div className="absolute top-0 right-0 p-3 opacity-10">
-                                        <Calendar className="h-16 w-16" />
+                            {/* Botón Corporativo y Mensaje Delegación (Compacto en 1 sola fila) */}
+                            <div className="flex min-h-[24px] items-center justify-between pt-1">
+                                {/* Checkbox Corporativo */}
+                                <label className="group flex cursor-pointer items-center gap-2 select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={isCorporateToggle}
+                                        onChange={() =>
+                                            setIsCorporateToggle(
+                                                !isCorporateToggle,
+                                            )
+                                        }
+                                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500"
+                                    />
+                                    <span
+                                        className={`flex items-center gap-1.5 text-[11px] font-black tracking-wide uppercase transition-colors ${isCorporateToggle ? 'text-indigo-800' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        <Banknote className="h-3.5 w-3.5" /> Plan
+                                        Corporativo
+                                    </span>
+                                </label>
+
+                                {/* Alerta Delegación (Solo aparece si hay >= 20 personas Y corporativo está apagado) */}
+                                {isDelegation && (
+                                    <div className="flex animate-in items-center rounded-lg border border-blue-200 bg-blue-100 px-2 py-0.5 shadow-sm fade-in slide-in-from-right-2">
+                                        <span className="text-[9px] font-black tracking-wide text-blue-800 uppercase">
+                                            🏷️ Modo Delegación
+                                        </span>
                                     </div>
-                                    <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-gray-700 uppercase">
-                                        <Calendar className="h-4 w-4 text-green-600" />
-                                        Panorama para el{' '}
-                                        {new Date(
-                                            data.arrival_date + 'T00:00:00',
-                                        ).toLocaleDateString()}
-                                    </h3>
+                                )}
+                            </div>
+                        </div>
 
-                                    {isLoadingAvailability ? (
-                                        <div className="flex items-center justify-center p-4">
-                                            <Loader2 className="h-6 w-6 animate-spin text-green-500" />
-                                        </div>
-                                    ) : availabilityData ? (
-                                        <div className="space-y-4">
-                                            {/* Evaluador visual inteligente */}
-                                            {(() => {
-                                                const requestedRooms =
-                                                    data.details.length;
-                                                const availableRooms =
-                                                    availabilityData.total_available;
-                                                const isAvailable =
-                                                    requestedRooms <=
-                                                    availableRooms;
-                                                const missingRooms =
-                                                    requestedRooms -
-                                                    availableRooms;
-
-                                                return (
-                                                    <div
-                                                        className={`flex items-start gap-4 rounded-xl border-2 p-4 transition-all ${isAvailable ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50 shadow-inner'}`}
-                                                    >
-                                                        <div
-                                                            className={`mt-0.5 rounded-full p-2 ${isAvailable ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}
-                                                        >
-                                                            {isAvailable ? (
-                                                                <CheckCircle className="h-6 w-6" />
-                                                            ) : (
-                                                                <AlertCircle className="h-6 w-6" />
-                                                            )}
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <h4
-                                                                className={`text-sm font-black tracking-wide uppercase ${isAvailable ? 'text-green-700' : 'text-red-700'}`}
-                                                            >
-                                                                {isAvailable
-                                                                    ? '¡Espacio Disponible!'
-                                                                    : 'Capacidad Insuficiente'}
-                                                            </h4>
-
-                                                            {isAvailable ? (
-                                                                <p className="mt-1 text-xs font-medium text-green-700">
-                                                                    El hotel
-                                                                    tiene{' '}
-                                                                    {
-                                                                        availableRooms
-                                                                    }{' '}
-                                                                    habitaciones
-                                                                    y el cliente
-                                                                    pide{' '}
-                                                                    {
-                                                                        requestedRooms
-                                                                    }
-                                                                    . Puede
-                                                                    proceder con
-                                                                    la reserva
-                                                                    con total
-                                                                    seguridad.
-                                                                </p>
-                                                            ) : (
-                                                                <div className="mt-2 space-y-1">
-                                                                    <p className="text-xs font-bold text-red-700">
-                                                                        No
-                                                                        podemos
-                                                                        cumplir
-                                                                        la
-                                                                        petición
-                                                                        por
-                                                                        completo.
-                                                                    </p>
-                                                                    <ul className="ml-2 list-inside list-disc text-[11px] text-red-600">
-                                                                        <li>
-                                                                            El
-                                                                            cliente
-                                                                            solicita:{' '}
-                                                                            <b>
-                                                                                {
-                                                                                    requestedRooms
-                                                                                }{' '}
-                                                                                habitaciones
-                                                                            </b>
-                                                                            .
-                                                                        </li>
-                                                                        <li>
-                                                                            Solo
-                                                                            tenemos:{' '}
-                                                                            <b>
-                                                                                {
-                                                                                    availableRooms
-                                                                                }{' '}
-                                                                                libres
-                                                                            </b>{' '}
-                                                                            proyectadas
-                                                                            para
-                                                                            esa
-                                                                            fecha.
-                                                                        </li>
-                                                                        <li>
-                                                                            Faltan:{' '}
-                                                                            <b className="underline">
-                                                                                {
-                                                                                    missingRooms
-                                                                                }{' '}
-                                                                                habitaciones
-                                                                            </b>
-                                                                            .
-                                                                        </li>
-                                                                    </ul>
-                                                                    <p className="mt-2 rounded-md bg-red-100 p-2 text-[10px] text-red-500 italic">
-                                                                        💡
-                                                                        Sugerencia
-                                                                        al
-                                                                        huésped:
-                                                                        "Señor,
-                                                                        para esa
-                                                                        fecha el
-                                                                        hotel
-                                                                        estará
-                                                                        muy
-                                                                        lleno,
-                                                                        solo me
-                                                                        quedan{' '}
-                                                                        {
-                                                                            availableRooms
-                                                                        }{' '}
-                                                                        habitaciones.
-                                                                        ¿Desea
-                                                                        acomodarse
-                                                                        en esas
-                                                                        o
-                                                                        cambiamos
-                                                                        de
-                                                                        fecha?"
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                                                <div className="rounded-lg border border-gray-200 bg-white p-2">
-                                                    <span className="block text-[9px] font-bold text-gray-400 uppercase">
-                                                        Libres Hoy
-                                                    </span>
-                                                    <span className="text-xl font-black text-gray-700">
-                                                        {
-                                                            availabilityData.currently_free
-                                                        }
-                                                    </span>
-                                                </div>
-                                                <div className="rounded-lg border border-gray-200 bg-white p-2">
-                                                    <span className="block text-[9px] font-bold text-gray-400 uppercase">
-                                                        Saldrán para esa fecha
-                                                    </span>
-                                                    <span className="text-xl font-black text-gray-700">
-                                                        {
-                                                            availabilityData.will_be_freed
-                                                        }
-                                                    </span>
-                                                </div>
-                                                <div className="rounded-lg bg-green-600 p-2 text-white shadow-sm">
-                                                    <span className="block text-[9px] font-bold text-green-200 uppercase">
-                                                        Total Proyectado
-                                                    </span>
-                                                    <span className="text-xl font-black">
-                                                        {
-                                                            availabilityData.total_available
-                                                        }
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-xl border-2 border-dashed border-gray-200 py-6 text-center text-xs font-medium text-gray-400">
-                                            Selecciona una Fecha de Llegada
-                                            válida para evaluar el calendario
-                                            del hotel.
-                                        </div>
-                                    )}
+                        {/* Bloque Financiero Inferior */}
+                        <div className="space-y-3 border-t border-gray-200 pt-4">
+                            {!isCorporateToggle && (
+                                <div>
+                                    <label className="mb-1 block text-[10px] font-bold text-gray-600 uppercase">
+                                        Adelanto General (Bs)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        value={data.advance_payment}
+                                        onChange={(e) =>
+                                            setData(
+                                                'advance_payment',
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-gray-400 py-1.5 text-md text-gray-700 text-center font-black focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]"
+                                    />
                                 </div>
+                            )}
 
-                                {/* 2. REQUISITOS DEL CLIENTE (SIN CUARTOS ASIGNADOS) */}
-                                <div className="mt-1 flex items-center justify-between border-b border-gray-100 pb-2">
-                                    <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 uppercase">
-                                        <BedDouble className="h-5 w-5 text-green-500" />
-                                        3. Requisitos de la Reserva
-                                    </h3>
-                                    <div className="text-[10px] font-medium text-gray-400">
-                                        {data.details.length} Requisito(s) de
-                                        Habitación
-                                    </div>
-                                </div>
+                            <div className="flex rounded-lg bg-gray-100 p-1">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setData((prev) => ({
+                                            ...prev,
+                                            payment_type: 'EFECTIVO',
+                                            qr_bank: '',
+                                        }))
+                                    }
+                                    className={`flex-1 rounded-md py-1 text-[10px] font-bold transition-all ${data.payment_type === 'EFECTIVO' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    EFECTIVO
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setData('payment_type', 'QR')
+                                    }
+                                    className={`flex-1 rounded-md py-1 text-[10px] font-bold transition-all ${data.payment_type === 'QR' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    QR BANCARIO
+                                </button>
+                            </div>
 
-                                <div className="max-h-[250px] flex-1 space-y-3 overflow-y-auto p-1">
-                                    {data.details.map((detail, index) => (
-                                        <div
-                                            key={index}
-                                            className="animate-in rounded-xl border border-green-100 bg-white p-3 shadow-sm transition-shadow fade-in slide-in-from-right-2 hover:shadow-md"
+                            {data.payment_type === 'QR' && (
+                                <div className="mt-1.5 grid animate-in grid-cols-4 gap-1.5 fade-in slide-in-from-top-1">
+                                    {[
+                                        {
+                                            id: 'YAPE',
+                                            img: '/images/bancos/yape.png',
+                                        },
+                                        {
+                                            id: 'FIE',
+                                            img: '/images/bancos/fie.png',
+                                        },
+                                        {
+                                            id: 'BNB',
+                                            img: '/images/bancos/bnb.png',
+                                        },
+                                        {
+                                            id: 'ECO',
+                                            img: '/images/bancos/eco.png',
+                                        },
+                                    ].map((banco) => (
+                                        <button
+                                            key={banco.id}
+                                            type="button"
+                                            title={banco.id}
+                                            onClick={() =>
+                                                setData('qr_bank', banco.id)
+                                            }
+                                            className={`relative flex h-10 w-full items-center justify-center rounded-lg border p-1 transition-all duration-200 ${
+                                                data.qr_bank === banco.id
+                                                    ? 'z-10 scale-105 border-green-500 bg-green-50 shadow-sm'
+                                                    : 'border-gray-200 bg-white opacity-70 grayscale-[30%] hover:border-gray-300 hover:bg-gray-50 hover:opacity-100 hover:grayscale-0'
+                                            }`}
                                         >
-                                            <div className="flex flex-col gap-3">
-                                                <div className="flex items-center gap-2 border-b border-gray-50 pb-2">
-                                                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-[10px] font-bold text-white">
-                                                        {index + 1}
-                                                    </div>
-                                                    <span className="text-xs font-bold text-gray-500 uppercase">
-                                                        Para{' '}
-                                                        {detail._temp_pax_count}{' '}
-                                                        persona(s)
-                                                    </span>
-                                                </div>
+                                            <img
+                                                src={banco.img}
+                                                alt={banco.id}
+                                                className="h-full w-full object-contain"
+                                            />
 
-                                                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                                    {/* 1. TIPO DE BAÑO */}
-                                                <div>
-                                                    <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">
-                                                        Tipo de Baño
-                                                    </label>
-                                                    <div className="relative">
-                                                        <Bath className="absolute top-2 left-2 h-3.5 w-3.5 text-gray-400" />
-                                                        <select
-                                                            required
-                                                            value={
-                                                                detail.requested_bathroom ||
-                                                                ''
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateDetailRow(
-                                                                    index,
-                                                                    'requested_bathroom',
-                                                                    e.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            className="w-full rounded-lg border-gray-300 py-1.5 pl-8 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
-                                                        >
-                                                            <option value="" disabled>
-                                                                Seleccionar...
-                                                            </option>
-                                                            <option value="private">
-                                                                Privado
-                                                            </option>
-                                                            <option value="shared">
-                                                                Compartido
-                                                            </option>
-                                                        </select>
-                                                    </div>
+                                            {/* El icono de "Check" cuando está seleccionado */}
+                                            {data.qr_bank === banco.id && (
+                                                <div className="absolute -top-1.5 -right-1.5 rounded-full bg-green-500 text-white shadow-sm">
+                                                    <CheckCircle className="h-3.5 w-3.5" />
                                                 </div>
-
-                                                {/* 2. TIPO DE HABITACIÓN */}
-                                                <div>
-                                                    <label className="mb-1 flex justify-between text-[9px] font-bold text-gray-400 uppercase">
-                                                        <span>Tipo de Hab.</span>
-                                                        <span className="text-[8px] font-medium normal-case text-gray-400">(Opcional)</span>
-                                                    </label>
-                                                    <div className="relative">
-                                                        <select
-                                                            value={
-                                                                detail.requested_room_type_id ||
-                                                                ''
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateDetailRow(
-                                                                    index,
-                                                                    'requested_room_type_id',
-                                                                    e.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
-                                                        >
-                                                            <option value="">
-                                                                Seleccionar...
-                                                            </option>
-                                                            {uniqueRoomTypes.map(
-                                                                (
-                                                                    type: any,
-                                                                ) => (
-                                                                    <option
-                                                                        key={
-                                                                            type.id
-                                                                        }
-                                                                        value={
-                                                                            type.id
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            type.name
-                                                                        }
-                                                                    </option>
-                                                                ),
-                                                            )}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                    {/* 3. PRECIO AUTOMÁTICO */}
-                                                    <div>
-                                                        <label className="mb-1 block text-[9px] font-bold text-gray-400 uppercase">
-                                                            Precio Automático
-                                                        </label>
-                                                        <div className="relative">
-                                                            <DollarSign className="absolute top-2 left-2 h-3.5 w-3.5 text-green-600" />
-                                                            <input
-                                                                type="text"
-                                                                readOnly
-                                                                value={
-                                                                    detail.price >
-                                                                    0
-                                                                        ? detail.price
-                                                                        : ''
-                                                                }
-                                                                className={`w-full cursor-not-allowed rounded-lg py-1.5 pl-8 text-xs font-bold focus:ring-0 ${detail.price > 0 ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 bg-gray-100 text-gray-400'}`}
-                                                                placeholder="0.00 Bs"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            )}
+                                        </button>
                                     ))}
                                 </div>
+                            )}
 
-                                {/* 3. BLOQUE DE PAGO INFERIOR */}
-                                <div className="mt-auto rounded-2xl border border-gray-200 bg-gray-50 p-5">
-                                    <div className="flex flex-col gap-6 md:flex-row">
-                                        <div className="relative -top-3 -mt-4 flex flex-1 animate-in flex-col gap-2 pt-6 duration-300 fade-in slide-in-from-top-2">
-                                            <div className="flex gap-2">
-                                                <div className="w-1/2">
-                                                    <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                        Método de Adelanto
-                                                    </label>
-                                                    <div className="flex rounded-lg bg-gray-200 p-0.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setData(
-                                                                    (prev) => ({
-                                                                        ...prev,
-                                                                        payment_type:
-                                                                            'EFECTIVO',
-                                                                        qr_bank:
-                                                                            '',
-                                                                    }),
-                                                                )
-                                                            }
-                                                            className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${data.payment_type === 'EFECTIVO' ? 'bg-white text-green-700 shadow-sm ring-1 ring-gray-300' : 'text-gray-500 hover:text-gray-700'}`}
-                                                        >
-                                                            EFECTIVO
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setData(
-                                                                    'payment_type',
-                                                                    'QR',
-                                                                )
-                                                            }
-                                                            className={`flex-1 rounded py-1 text-[9px] font-bold transition-all ${data.payment_type === 'QR' ? 'bg-white text-green-700 shadow-sm ring-1 ring-gray-300' : 'text-gray-500 hover:text-gray-700'}`}
-                                                        >
-                                                            QR
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="w-1/2">
-                                                    <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                        Monto de Adelanto
-                                                    </label>
-                                                    <div className="relative">
-                                                        <span
-                                                            className={`absolute inset-y-0 left-2 flex items-center text-[10px] font-bold ${data.advance_payment > 0 ? 'text-green-600' : 'text-gray-400'}`}
-                                                        >
-                                                            Bs
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.50"
-                                                            min="0"
-                                                            value={
-                                                                data.advance_payment
-                                                            }
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    'advance_payment',
-                                                                    Number(
-                                                                        e.target
-                                                                            .value,
-                                                                    ),
-                                                                )
-                                                            }
-                                                            className="w-full rounded-lg border border-gray-400 py-1 pl-6 text-xs font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                                            placeholder="0.00"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div
-                                                className={`border-t border-gray-200 pt-1.5 transition-all duration-300 ${data.payment_type === 'QR' ? 'visible opacity-100' : 'invisible h-0 overflow-hidden opacity-0'}`}
-                                            >
-                                                <div className="mb-1 flex items-center justify-between">
-                                                    {data.qr_bank && (
-                                                        <span className="rounded bg-green-100 px-1 text-[8px] font-bold text-green-700">
-                                                            {data.qr_bank}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="grid grid-cols-4 gap-1">
-                                                    {[
-                                                        {
-                                                            id: 'YAPE',
-                                                            label: 'YAPE',
-                                                            color: 'border-green-200 bg-green-50 text-green-700',
-                                                        },
-                                                        {
-                                                            id: 'FIE',
-                                                            label: 'FIE',
-                                                            color: 'border-orange-200 bg-orange-50 text-orange-700',
-                                                        },
-                                                        {
-                                                            id: 'BNB',
-                                                            label: 'BNB',
-                                                            color: 'border-green-200 bg-green-50 text-green-700',
-                                                        },
-                                                        {
-                                                            id: 'ECO',
-                                                            label: 'ECO',
-                                                            color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
-                                                        },
-                                                    ].map((banco) => (
-                                                        <button
-                                                            key={banco.id}
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setData(
-                                                                    'qr_bank',
-                                                                    banco.id,
-                                                                )
-                                                            }
-                                                            className={`rounded border px-0.5 py-1 text-[8px] font-bold transition-all active:scale-95 ${data.qr_bank === banco.id ? `ring-1 ring-green-500 ring-offset-0 ${banco.color} scale-105 shadow-sm brightness-95` : `border-gray-300 bg-white text-gray-500 hover:bg-gray-100`}`}
-                                                        >
-                                                            {banco.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-1 flex-col justify-center space-y-1 border-l border-gray-300 pl-6">
-                                            <div className="flex justify-between text-xs text-gray-500">
-                                                <span>Subtotal Noche:</span>
-                                                <span>{totalPerNight} Bs</span>
-                                            </div>
-                                            <div className="flex justify-between text-base font-bold text-gray-800">
-                                                <span>
-                                                    Total ({data.duration_days}{' '}
-                                                    noches):
-                                                </span>
-                                                <span>{grandTotal} Bs</span>
-                                            </div>
-                                            <div className="mt-1 flex justify-between border-t border-gray-300 pt-1 text-sm font-bold text-red-600">
-                                                <span>Saldo Pendiente:</span>
-                                                <span>
-                                                    {balance > 0 ? balance : 0}{' '}
-                                                    Bs
-                                                </span>
-                                            </div>
-                                        </div>
+                            <div className="space-y-1.5 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs">
+                                <div className="flex justify-between text-gray-500">
+                                    <span>
+                                        Subtotal ({data.duration_days} noches):
+                                    </span>
+                                    <span>{grandTotal.toFixed(2)} Bs</span>
+                                </div>
+                                {isCorporateToggle && (
+                                    <div className="flex justify-between border-t pt-1.5 font-bold text-indigo-600">
+                                        <span>Adelanto (Sumado):</span>
+                                        <span>
+                                            - {totalAdvancePayment.toFixed(2)}{' '}
+                                            Bs
+                                        </span>
                                     </div>
+                                )}
+                                <div className="flex justify-between border-t pt-1.5 text-md font-bold text-gray-800">
+                                    <span>Saldo Restante:</span>
+                                    <span
+                                        className={
+                                            balance > 0
+                                                ? 'text-red-600'
+                                                : 'text-green-600'
+                                        }
+                                    >
+                                        {Math.max(0, balance).toFixed(2)} Bs
+                                    </span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
-                        >
-                            {processing ? (
-                                'Guardando...'
-                            ) : (
-                                <>
-                                    <Save className="h-4 w-4" />{' '}
-                                    {reservationToEdit
-                                        ? 'Actualizar Requisitos'
-                                        : 'Guardar Reserva'}
-                                </>
+                    {/* ========================================================= */}
+                    {/* COLUMNA DERECHA (PIZARRA INTERACTIVA)                     */}
+                    {/* ========================================================= */}
+                    <div className="relative flex w-2/3 flex-col bg-gray-100">
+                        {/* ZONA SUPERIOR: SALA DE ESPERA (DESAPARECEN Y CON SCROLL) */}
+                        <div className="sticky top-0 z-10 border-b border-gray-200 bg-white p-6 shadow-sm transition-all duration-300">
+                            <div className="flex items-center justify-between">
+                                <h3 className="flex items-center gap-2 text-sm font-bold text-gray-500 uppercase">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    {unassignedGuests > 0 ? (
+                                        `Por Asignar (${unassignedGuests} personas)`
+                                    ) : validGuestCount > 0 ? (
+                                        <span className="flex animate-in items-center gap-1.5 text-green-600 fade-in">
+                                            <CheckCircle className="h-4 w-4" />{' '}
+                                            ¡Todos los huéspedes asignados a
+                                            cuartos!
+                                        </span>
+                                    ) : (
+                                        'Ingrese cantidad de huéspedes'
+                                    )}
+                                </h3>
+                                {availabilityData && !isLoadingAvailability && (
+                                    <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-[10px] font-bold text-gray-500">
+                                        <Calendar className="h-3 w-3" /> Hoy
+                                        libres:{' '}
+                                        {availabilityData.currently_free} |
+                                        Proyectadas al inicio:{' '}
+                                        <span className="text-green-600">
+                                            {availabilityData.total_available}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* CONTENEDOR GRID: SÓLO APARECE SI HAY PERSONAS SIN ASIGNAR */}
+                            {unassignedGuests > 0 && validGuestCount > 0 && (
+                                <div
+                                    ref={scrollContainerRef}
+                                    onMouseDown={startDrag}
+                                    onMouseLeave={stopDrag}
+                                    onMouseUp={stopDrag}
+                                    onMouseMove={onDrag}
+                                    className="mt-4 flex animate-in cursor-grab overflow-x-auto pb-2 select-none fade-in slide-in-from-top-2 active:cursor-grabbing"
+                                    style={{
+                                        scrollbarWidth: 'none',
+                                        msOverflowStyle: 'none',
+                                    }}
+                                >
+                                    <div
+                                        className={`grid ${unassignedGuests > 12 ? 'grid-rows-2' : 'grid-rows-1'} auto-cols-max grid-flow-col gap-3 px-1`}
+                                    >
+                                        {Array.from({
+                                            length: unassignedGuests,
+                                        }).map((_, i) => (
+                                            <div
+                                                key={`wait-${i}`}
+                                                className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-400 shadow-sm transition-transform hover:scale-110"
+                                            >
+                                                <User className="h-5 w-5" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
-                        </button>
+                        </div>
+
+                        {/* ZONA INFERIOR: DISTRIBUCIÓN DE CAJAS */}
+                        <div className="flex-1 space-y-4 overflow-y-auto p-6">
+                            {/* Barra de Herramientas para Agregar - SE OCULTA SI ES CERO O YA ESTÁN TODOS ASIGNADOS */}
+                            {unassignedGuests > 0 && validGuestCount > 0 && (
+                                <div className="mb-6 flex animate-in gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm zoom-in-95 fade-in">
+                                    <select
+                                        id="roomSelector"
+                                        className="flex-1 cursor-pointer border-0 bg-transparent px-4 py-2 text-sm font-bold text-gray-700 uppercase focus:ring-0"
+                                    >
+                                        <option value="" disabled selected>
+                                            Elegir tipo de habitación a
+                                            ocupar...
+                                        </option>
+                                        {uniqueRoomTypes.map((rt: any) => (
+                                            <option key={rt.id} value={rt.id}>
+                                                {rt.name} (Entran:{' '}
+                                                {getRoomCapacity(rt)} personas)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={addRoomBox}
+                                        className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 font-bold text-white shadow-md transition-colors hover:bg-green-500 active:scale-95"
+                                    >
+                                        <Plus className="h-5 w-5" /> Insertar
+                                        Arriba
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Cajas Dinámicas */}
+                            {data.details.length === 0 && (
+                                <div className="mt-4 flex h-40 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 text-gray-400">
+                                    <BedDouble className="mb-2 h-12 w-12 opacity-50" />
+                                    <p className="text-sm font-medium">
+                                        Aún no hay habitaciones en la reserva.
+                                    </p>
+                                </div>
+                            )}
+
+                            {data.details.map((room, index) => (
+                                <div
+                                    key={room._temp_id || index}
+                                    className="relative animate-in rounded-2xl border-2 border-green-100 bg-white p-4 shadow-sm fade-in slide-in-from-top-4"
+                                >
+                                    <div className="mb-3 flex items-center justify-between border-b border-gray-50 pb-3">
+                                        <h4 className="flex items-center gap-2 text-lg font-black text-green-800 uppercase">
+                                            🛏️{' '}
+                                            {room._temp_room_name ||
+                                                'Habitación'}
+                                        </h4>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                removeRoomBox(room._temp_id)
+                                            }
+                                            className="rounded-full bg-red-50 p-2 text-red-300 transition-colors hover:text-red-500"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex flex-col items-start justify-between gap-4 xl:flex-row xl:items-center">
+                                        <div className="flex w-full flex-1 gap-4">
+                                            {/* Selector de Baño */}
+                                            <div className="flex-1">
+                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                    Tipo de Baño{' '}
+                                                    <span className="text-red-500">
+                                                        *
+                                                    </span>
+                                                </label>
+                                                <select
+                                                    value={
+                                                        room.requested_bathroom
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateDetailRow(
+                                                            index,
+                                                            'requested_bathroom',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className={`w-full rounded-xl border border-gray-400 px-3 py-2.5 text-sm font-bold focus:border-green-500 focus:ring-green-500 ${room.requested_bathroom === '' ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-500 bg-gray-50 font-bold text-gray-700'}`}
+                                                >
+                                                    <option value="" disabled>
+                                                        SELECCIONAR...
+                                                    </option>
+                                                    <option value="private">
+                                                        Privado
+                                                    </option>
+                                                    <option value="shared">
+                                                        Compartido con Desayuno
+                                                    </option>
+                                                    {isDelegation && (
+                                                        <option value="compartido_sindesayuno">
+                                                            Compartido SIN
+                                                            Desayuno
+                                                        </option>
+                                                    )}
+                                                </select>
+                                            </div>
+
+                                            {/* Precio Dinámico */}
+                                            <div className="w-1/4 min-w-[90px]">
+                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                    Precio (Bs)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={room.price}
+                                                    onChange={(e) =>
+                                                        isCorporateToggle
+                                                            ? updateDetailRow(
+                                                                  index,
+                                                                  'price',
+                                                                  Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  ),
+                                                              )
+                                                            : null
+                                                    }
+                                                    readOnly={
+                                                        !isCorporateToggle
+                                                    }
+                                                    className={`w-full rounded-xl border px-3 py-1.5 text-right ${isCorporateToggle ? 'border-indigo-300 bg-white text-indigo-700 ring-2 ring-indigo-100 focus:border-indigo-500 focus:ring-indigo-500' : 'cursor-not-allowed border-gray-200 bg-gray-100 font-bold text-gray-800'}`}
+                                                />
+                                            </div>
+
+                                            {/* Adelanto de Habitación */}
+                                            {isCorporateToggle && (
+                                                <div className="w-1/4 min-w-[100px] animate-in fade-in slide-in-from-left-2">
+                                                    <label className="mb-1 block text-[10px] font-bold text-indigo-500 uppercase">
+                                                        Adelanto{' '}
+                                                        <span className="text-red-500">
+                                                            *
+                                                        </span>
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.5"
+                                                        min="0"
+                                                        value={
+                                                            room._temp_advance_payment ||
+                                                            ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            updateDetailRow(
+                                                                index,
+                                                                '_temp_advance_payment',
+                                                                Number(
+                                                                    e.target
+                                                                        .value,
+                                                                ),
+                                                            )
+                                                        }
+                                                        className="w-full rounded-lg border-indigo-300 bg-indigo-50 text-right text-sm font-black text-indigo-800 focus:border-indigo-500 focus:ring-indigo-500"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Iconos Verdes */}
+                                        <div className="ml-0 flex gap-1.5 rounded-xl border border-green-200 bg-green-50 p-2.5 xl:ml-4">
+                                            {Array.from({
+                                                length:
+                                                    room._temp_pax_count || 1,
+                                            }).map((_, i) => (
+                                                <div
+                                                    key={`in-${i}`}
+                                                    className="rounded-full bg-green-500 p-1.5 text-white shadow-sm"
+                                                >
+                                                    <User className="h-4 w-4" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </form>
+                </div>
+
+                {/* PIE DEL MODAL */}
+                <div className="flex justify-end gap-3 border-t border-gray-200 bg-white p-4">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-xl border border-gray-400 bg-white px-5 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={submit}
+                        disabled={
+                            unassignedGuests > 0 ||
+                            processing ||
+                            (isCorporateToggle && totalAdvancePayment <= 0)
+                        }
+                        className={`flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition-all ${
+                            unassignedGuests === 0 &&
+                            (!isCorporateToggle || totalAdvancePayment > 0) &&
+                            data.details.length > 0
+                                ? 'bg-green-600 text-white shadow-lg hover:-translate-y-0.5 hover:bg-green-500 active:scale-95'
+                                : 'cursor-not-allowed bg-gray-200 text-gray-400'
+                        }`}
+                    >
+                        {processing ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />{' '}
+                                Procesando...
+                            </>
+                        ) : unassignedGuests > 0 ? (
+                            <>
+                                <AlertCircle className="h-4 w-4" /> Acomoda{' '}
+                                {unassignedGuests} personas para guardar
+                            </>
+                        ) : isCorporateToggle && totalAdvancePayment <= 0 ? (
+                            <>
+                                <AlertCircle className="h-4 w-4" /> Adelanto
+                                obligatorio en corporativo
+                            </>
+                        ) : data.details.length === 0 ? (
+                            <>
+                                <AlertCircle className="h-4 w-4" /> Agregue
+                                habitaciones
+                            </>
+                        ) : (
+                            <>
+                                <Save className="h-4 w-4" /> Guardar Reserva
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );

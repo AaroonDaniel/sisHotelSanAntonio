@@ -23,6 +23,7 @@ import {
     User,
     Key,
     UserCog,
+    Coins,
 } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
@@ -89,6 +90,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                 
                 { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos' },
                 { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
+                { name: 'Adelantos', icon: Coins, url: '/adelantos' },
             ],
         },
         {
