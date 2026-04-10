@@ -50,6 +50,7 @@ export interface Room {
 }
 
 export interface DetailItem {
+    id?: number;
     room_id: string | null;
     price_id: string;
     price: number;
@@ -76,6 +77,8 @@ export interface Reservation {
     payment_type: string;
     qr_bank?: string;
     status: string;
+    is_corporate?: boolean;  
+    is_delegation?: boolean;
     details?: DetailItem[];
 }
 
@@ -92,6 +95,8 @@ interface ReservationFormData {
     payment_type: string;
     qr_bank: string;
     status: string;
+    is_corporate: boolean;
+    is_delegation: boolean;
     details: DetailItem[];
 }
 
@@ -180,11 +185,12 @@ export default function ReservationModal({
         payment_type: 'EFECTIVO',
         qr_bank: '',
         status: 'pendiente',
+        is_corporate: false,
+        is_delegation: false,
         details: [],
     });
 
-    const validGuestCount =
-        typeof data.guest_count === 'number' ? data.guest_count : 0;
+    const validGuestCount = typeof data.guest_count === 'number' ? data.guest_count : 0;
 
     // 🚀 REGLA ESTRICTA: Si es corporativo, se anula la delegación automáticamente
     const isDelegation = validGuestCount >= 20 && !isCorporateToggle;
@@ -231,67 +237,55 @@ export default function ReservationModal({
         }
     }, [show, data.arrival_date]);
 
-    // Carga Inicial
-    useEffect(() => {
-        if (show) {
-            if (reservationToEdit) {
-                const mappedDetails: DetailItem[] = (
-                    reservationToEdit.details || []
-                ).map((det: any, index: number) => {
-                    const typeId = det.requested_room_type_id?.toString() || '';
-                    const rType = uniqueRoomTypes.find(
-                        (t: any) => t.id.toString() === typeId,
-                    );
-                    const name = rType ? rType.name : 'Desconocida';
-                    return {
-                        _temp_id: Date.now() + index,
-                        room_id: det.room_id || null,
-                        price_id: det.price_id ? det.price_id.toString() : '',
-                        price:
-                            typeof det.price === 'object'
-                                ? Number(det.price.amount)
-                                : Number(det.price),
-                        requested_room_type_id: typeId,
-                        requested_bathroom: det.requested_bathroom || '',
-                        _temp_pax_count: rType ? getRoomCapacity(rType) : 1,
-                        _temp_room_name: name,
-                        _temp_advance_payment: 0,
-                    };
-                });
+    // Cargar datos al Editar
+useEffect(() => {
+    if (show && reservationToEdit) {
+        setData((prev) => ({
+            ...prev,
+            guest_id: String(reservationToEdit.guest_id || ''),
+            arrival_date: reservationToEdit.arrival_date || '',
+            arrival_time: reservationToEdit.arrival_time || '',
+            duration_days: Number(reservationToEdit.duration_days || 1),
+            guest_count: Number(reservationToEdit.guest_count || 1),
+            advance_payment: Number(reservationToEdit.advance_payment || 0),
+            payment_type: reservationToEdit.payment_type || 'EFECTIVO',
+            is_delegation: Boolean(reservationToEdit.is_delegation),
+            is_corporate: Boolean(reservationToEdit.is_corporate),
+            details: (reservationToEdit.details || []).map((detail: any) => {
+                // Capturar el precio real: Priorizar el valor numérico directo
+                let priceValue = 0;
+                if (detail.price && typeof detail.price === 'object') {
+                    priceValue = Number(detail.price.amount);
+                } else {
+                    priceValue = Number(detail.price);
+                }
 
-                setData({
-                    ...data,
-                    is_new_guest: false,
-                    guest_count: reservationToEdit.guest_count,
-                    arrival_date: reservationToEdit.arrival_date,
-                    arrival_time: reservationToEdit.arrival_time,
-                    duration_days: reservationToEdit.duration_days,
-                    status: reservationToEdit.status,
-                    guest_id: reservationToEdit.guest_id.toString(),
-                    details: mappedDetails,
-                    advance_payment: reservationToEdit.advance_payment,
-                    payment_type: reservationToEdit.payment_type || 'EFECTIVO',
-                    qr_bank: reservationToEdit.qr_bank || '',
-                });
+                return {
+                    id: detail.id,
+                    _temp_id: detail.id || Math.random(),
+                    room_id: detail.room_id || null,
+                    price_id: String(detail.price_id || ''),
+                    price: priceValue || 0, // Aquí ya no debería ser 0 si hay dato
+                    requested_room_type_id: String(detail.requested_room_type_id || ''),
+                    requested_bathroom: detail.requested_bathroom || 'private',
+                    room: detail.room, 
+                    room_type: detail.room_type || detail.requested_room_type,
+                    _temp_pax_count: detail.room_type?.capacity || 1,
+                };
+            }),
+        })); 
 
-                const currentGuest = guests.find(
-                    (g) => g.id === reservationToEdit.guest_id,
-                );
-                if (currentGuest)
-                    setGuestQuery(
-                        currentGuest.full_name ||
-                            `${currentGuest.name} ${currentGuest.last_name}`,
-                    );
-                setIsCorporateToggle(false);
-            } else {
-                reset();
-                setGuestQuery('');
-                setIsCorporateToggle(false);
-            }
-            clearErrors();
-            setIsGuestDropdownOpen(false);
+        if (reservationToEdit.guest) {
+            setGuestQuery(reservationToEdit.guest.full_name || `${reservationToEdit.guest.name} ${reservationToEdit.guest.last_name}`); 
         }
-    }, [show, reservationToEdit, rooms]);
+        setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
+        
+    } else if (!show) {
+        reset();
+        clearErrors();
+        setGuestQuery('');
+    }
+}, [show, reservationToEdit]);
 
     // LÓGICA DE PRECIOS OFICIAL
     const recalculatePrice = (
@@ -306,8 +300,7 @@ export default function ReservationModal({
         const dbBath = bath === 'compartido_sindesayuno' ? 'shared' : bath;
 
         const matchingRoom = rooms.find((r) => {
-            const rType =
-                r.room_type?.id?.toString() || r.room_type_id?.toString();
+            const rType = r.room_type?.id?.toString() || r.room_type_id?.toString();
             const p = getExactRoomPrice(r);
             return (
                 rType === typeId && isMatchingBathroom(p?.bathroom_type, dbBath)
@@ -345,7 +338,7 @@ export default function ReservationModal({
         if (!rType) return;
 
         const cap = getRoomCapacity(rType);
-        const defaultBath = '';
+        const defaultBath = 'private'; // Por defecto privado para forzar cálculo
 
         const res = recalculatePrice(
             typeId,
@@ -448,7 +441,8 @@ export default function ReservationModal({
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
-        if (typeof data.guest_count !== 'number' || data.guest_count <= 0) {
+        // CORREGIDO: Validación numérica segura
+        if (Number(data.guest_count) <= 0 || isNaN(Number(data.guest_count))) {
             alert('⚠️ Ingrese una cantidad de huéspedes válida.');
             return;
         }
@@ -479,7 +473,10 @@ export default function ReservationModal({
             ...currentData,
             guest_count: Number(currentData.guest_count),
             advance_payment: totalAdvancePayment,
+            is_delegation: isDelegation,
+            is_corporate: isCorporateToggle,
             details: currentData.details.map((det) => ({
+                id: det.id, // Pasamos el ID para que actualice y no duplique al editar
                 room_id: det.room_id,
                 price_id: det.price_id,
                 price: det.price,
@@ -914,7 +911,6 @@ export default function ReservationModal({
                                         className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 font-bold text-white shadow-md transition-colors hover:bg-green-500 active:scale-95"
                                     >
                                         <Plus className="h-5 w-5" /> Insertar
-                                        Arriba
                                     </button>
                                 </div>
                             )}
@@ -929,147 +925,73 @@ export default function ReservationModal({
                                 </div>
                             )}
 
-                            {data.details.map((room, index) => (
-                                <div
-                                    key={room._temp_id || index}
-                                    className="relative animate-in rounded-2xl border-2 border-green-100 bg-white p-4 shadow-sm fade-in slide-in-from-top-4"
-                                >
-                                    <div className="mb-3 flex items-center justify-between border-b border-gray-50 pb-3">
-                                        <h4 className="flex items-center gap-2 text-lg font-black text-green-800 uppercase">
-                                            🛏️{' '}
-                                            {room._temp_room_name ||
-                                                'Habitación'}
-                                        </h4>
+                            {/* CAJAS INTERACTIVAS (CORREGIDAS PARA PERMITIR EDITAR Y BORRAR) */}
+                            {data.details.map((detail, index) => (
+                                <div key={detail._temp_id || index} className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <BedDouble className="h-5 w-5 text-indigo-500" />
+                                            <span className="text-sm font-bold text-gray-800 uppercase">
+                                                {detail.room_type?.name || detail._temp_room_name || 'Habitación'}
+                                            </span>
+                                        </div>
+                                        {/* Botón Borrar (Solo se muestra si no tiene un cuarto físico ya asignado, o si decides permitirlo siempre) */}
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                removeRoomBox(room._temp_id)
-                                            }
-                                            className="rounded-full bg-red-50 p-2 text-red-300 transition-colors hover:text-red-500"
+                                            onClick={() => removeRoomBox(detail._temp_id)}
+                                            className="rounded-full bg-red-50 p-2 text-red-500 transition-colors hover:bg-red-100"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>
+                                    
+                                    <div className="flex items-center justify-between gap-4 mt-1">
+                                        {/* Seleccionador de Baño */}
+                                        <div className="flex-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo de Baño</label>
+                                            <select
+                                                value={detail.requested_bathroom}
+                                                onChange={(e) => updateDetailRow(index, 'requested_bathroom', e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 py-1.5 text-xs font-bold text-gray-700 focus:border-green-500 focus:ring-green-500"
+                                            >
+                                                <option value="private">Privado</option>
+                                                <option value="shared">Compartido</option>
+                                                {isDelegation && <option value="compartido_sindesayuno">Compartido S/Desayuno</option>}
+                                            </select>
+                                        </div>
 
-                                    <div className="flex flex-col items-start justify-between gap-4 xl:flex-row xl:items-center">
-                                        <div className="flex w-full flex-1 gap-4">
-                                            {/* Selector de Baño */}
+                                        {/* Input Adelanto (Solo en Corporativo) */}
+                                        {isCorporateToggle && (
                                             <div className="flex-1">
-                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                    Tipo de Baño{' '}
-                                                    <span className="text-red-500">
-                                                        *
-                                                    </span>
-                                                </label>
-                                                <select
-                                                    value={
-                                                        room.requested_bathroom
-                                                    }
-                                                    onChange={(e) =>
-                                                        updateDetailRow(
-                                                            index,
-                                                            'requested_bathroom',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className={`w-full rounded-xl border border-gray-400 px-3 py-2.5 text-sm font-bold focus:border-green-500 focus:ring-green-500 ${room.requested_bathroom === '' ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-500 bg-gray-50 font-bold text-gray-700'}`}
-                                                >
-                                                    <option value="" disabled>
-                                                        SELECCIONAR...
-                                                    </option>
-                                                    <option value="private">
-                                                        Privado
-                                                    </option>
-                                                    <option value="shared">
-                                                        Compartido con Desayuno
-                                                    </option>
-                                                    {isDelegation && (
-                                                        <option value="compartido_sindesayuno">
-                                                            Compartido SIN
-                                                            Desayuno
-                                                        </option>
-                                                    )}
-                                                </select>
-                                            </div>
-
-                                            {/* Precio Dinámico */}
-                                            <div className="w-1/4 min-w-[90px]">
-                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
-                                                    Precio (Bs)
-                                                </label>
+                                                <label className="text-[10px] font-bold text-indigo-500 uppercase mb-1 block">Adelanto (Bs)</label>
                                                 <input
                                                     type="number"
-                                                    value={room.price}
-                                                    onChange={(e) =>
-                                                        isCorporateToggle
-                                                            ? updateDetailRow(
-                                                                  index,
-                                                                  'price',
-                                                                  Number(
-                                                                      e.target
-                                                                          .value,
-                                                                  ),
-                                                              )
-                                                            : null
-                                                    }
-                                                    readOnly={
-                                                        !isCorporateToggle
-                                                    }
-                                                    className={`w-full rounded-xl border px-3 py-1.5 text-right ${isCorporateToggle ? 'border-indigo-300 bg-white text-indigo-700 ring-2 ring-indigo-100 focus:border-indigo-500 focus:ring-indigo-500' : 'cursor-not-allowed border-gray-200 bg-gray-100 font-bold text-gray-800'}`}
+                                                    min="0"
+                                                    value={detail._temp_advance_payment || ''}
+                                                    onChange={(e) => updateDetailRow(index, '_temp_advance_payment', Number(e.target.value))}
+                                                    placeholder="0.00"
+                                                    className="w-full rounded-lg border-indigo-200 bg-indigo-50 py-1.5 text-xs font-bold text-indigo-800 focus:border-indigo-500 focus:ring-indigo-500"
                                                 />
                                             </div>
+                                        )}
 
-                                            {/* Adelanto de Habitación */}
-                                            {isCorporateToggle && (
-                                                <div className="w-1/4 min-w-[100px] animate-in fade-in slide-in-from-left-2">
-                                                    <label className="mb-1 block text-[10px] font-bold text-indigo-500 uppercase">
-                                                        Adelanto{' '}
-                                                        <span className="text-red-500">
-                                                            *
-                                                        </span>
-                                                    </label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.5"
-                                                        min="0"
-                                                        value={
-                                                            room._temp_advance_payment ||
-                                                            ''
-                                                        }
-                                                        onChange={(e) =>
-                                                            updateDetailRow(
-                                                                index,
-                                                                '_temp_advance_payment',
-                                                                Number(
-                                                                    e.target
-                                                                        .value,
-                                                                ),
-                                                            )
-                                                        }
-                                                        className="w-full rounded-lg border-indigo-300 bg-indigo-50 text-right text-sm font-black text-indigo-800 focus:border-indigo-500 focus:ring-indigo-500"
-                                                        placeholder="0.00"
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Iconos Verdes */}
-                                        <div className="ml-0 flex gap-1.5 rounded-xl border border-green-200 bg-green-50 p-2.5 xl:ml-4">
-                                            {Array.from({
-                                                length:
-                                                    room._temp_pax_count || 1,
-                                            }).map((_, i) => (
-                                                <div
-                                                    key={`in-${i}`}
-                                                    className="rounded-full bg-green-500 p-1.5 text-white shadow-sm"
-                                                >
-                                                    <User className="h-4 w-4" />
-                                                </div>
-                                            ))}
+                                        {/* Visualizador de Precio Final */}
+                                        <div className="flex-1 text-right">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Precio / Noche</label>
+                                            <div className="text-lg font-black text-blue-600">Bs. {detail.price}</div>
                                         </div>
                                     </div>
+
+                                    {/* Etiqueta de Habitación Físicamente Asignada */}
+                                    {detail.room && (
+                                        <div className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-xs font-bold text-green-700 border border-green-200 flex items-center gap-2">
+                                            <CheckCircle className="w-4 h-4" /> 
+                                            Asignada físicamente: Habitación {detail.room.number}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
+
                         </div>
                     </div>
                 </div>

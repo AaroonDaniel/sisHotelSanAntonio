@@ -83,7 +83,7 @@ export default function Dashboard({ auth }: DashboardProps) {
             title: 'Procesos',
             theme: 'red',
             items: [
-                { name: 'Nueva Reserva', icon: CalendarDays, url: '/reservas' },
+                { name: 'Nueva Reserva', icon: CalendarDays, url: '/admin/reservas' },
                 { name: 'Asignación', icon: BedDouble, url: '/checks' },
                 { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
                 { name: 'Facturación', icon: Receipt, url: '/facturacion' },
