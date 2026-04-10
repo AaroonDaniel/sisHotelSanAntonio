@@ -56,6 +56,8 @@ export interface DetailItem {
     requested_room_type_id: string;
     requested_bathroom: string;
     // Variables temporales exclusivas para la UI
+    room?: Room; 
+    room_type?: { id: number; name: string };
     _temp_pax_count?: number;
     _temp_room_name?: string;
     _temp_id?: number;

@@ -241,35 +241,61 @@ class ReservationController extends Controller
         }
     }
 
-    public function assignRooms(Request $request, Reservation $reservation)
+    public function assignRooms(Request $request, $id)
     {
-        try {
-            DB::transaction(function () use ($request, $reservation) {
-                $assignments = $request->input('assignments'); 
+        // 1. Validamos que el frontend nos envíe correctamente la lista de asignaciones
+        $request->validate([
+            'assignments' => 'required|array',
+            'assignments.*.detail_id' => 'required|exists:reservation_details,id',
+            'assignments.*.room_id' => 'required|exists:rooms,id',
+        ]);
 
-                foreach ($assignments as $detailId => $roomId) {
-                    $detail = ReservationDetail::find($detailId);
-                    if ($detail) {
-                        $detail->room_id = $roomId;
-                        $detail->save();
-                    }
+        // 2. Usamos una transacción para que si algo falla, no se guarde a medias
+        DB::transaction(function () use ($request) {
+            foreach ($request->assignments as $assignment) {
+                
+                // Buscamos el detalle de la reserva que estaba en "espera"
+                $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
+                
+                // Le asignamos el cuarto físico que eligió el recepcionista
+                $detail->room_id = $assignment['room_id'];
+                $detail->save();
 
-                    // Habitaciones pasan a estado MORADO
-                    $room = Room::find($roomId);
-                    if ($room) {
-                        $room->status = 'RESERVADO';
-                        $room->save();
-                    }
-                }
-            });
+                // Opcional: Podrías cambiar el estado del Room a 'reservada' temporalmente,
+                // aunque lo ideal es pasarlo a 'ocupada' recién cuando confirmen el Check-in final.
+            }
+        });
 
-            return response()->json(['success' => true]);
-        } catch (\Exception $e) {
-            Log::error("Error asignando habitaciones: " . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        // 3. Devolvemos la respuesta al Frontend de React
+        return back()->with('success', 'Habitaciones asignadas correctamente.');
     }
 
+    public function reception()
+    {
+        // 1. Traemos las reservas con sus relaciones exactas (usando camelCase)
+        $reservations = Reservation::with([
+            'guest', 
+            'details.room.roomType', 
+            'details.requestedRoomType' // 👈 Usamos el nombre correcto de tu modelo
+        ])
+        ->whereIn('status', ['pendiente']) // En recepción solo queremos ver las pendientes
+        ->orderBy('arrival_date', 'asc')
+        ->get();
+
+        // 2. Traer huéspedes
+        $guests = Guest::all();
+
+        // 3. Traer habitaciones (usando camelCase)
+        $rooms = Room::with(['roomType', 'floor'])->get();
+
+        // 4. Renderizamos tu nuevo Modal a pantalla completa
+        return Inertia::render('reservations/viewReservationModal', [
+            'reservations' => $reservations,
+            'guests' => $guests,
+            'rooms' => $rooms
+        ]);
+    }
+    
     public function checkAvailability(Request $request)
     {
         $request->validate(['arrival_date' => 'required|date']);

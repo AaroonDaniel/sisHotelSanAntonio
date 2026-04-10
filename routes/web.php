@@ -152,12 +152,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/horarios/{schedule}/toggle', [ScheduleController::class, 'toggleStatus'])->name('schedules.toggle');
 
     //Reserva
-    Route::get('/reservas', [ReservationController::class, 'index'])->name('reservations.index');
+    Route::get('/reservas', [ReservationController::class, 'reception'])->name('reservations.index');
+    Route::get('/admin/reservas', [ReservationController::class, 'index'])->name('reservations.admin');
     Route::post('/reservas', [ReservationController::class, 'store'])->name('reservations.store');
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
     Route::get('/api/reservations/availability', [ReservationController::class, 'checkAvailability'])->name('reservations.availability');
-    Route::post('/reservas/{reservation}/assign-rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assignRooms');
+    Route::post('/reservas/{id}/assign-rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assign');
+
     //Facturacion
     Route::get('/facturacion', [\App\Http\Controllers\InvoiceController::class, 'index'])->name('invoices.index');
 
