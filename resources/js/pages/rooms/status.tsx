@@ -9,7 +9,9 @@ import {
     Banknote,
     BedDouble,
     Brush,
+    Calendar,
     CheckCircle2,
+    Clock,
     Construction,
     FileEdit,
     FileText,
@@ -17,14 +19,14 @@ import {
     Home,
     Loader2,
     LogOut,
+    Presentation,
     Search,
     ShoppingCart,
     SplitSquareHorizontal,
     User,
     User as UserIcon,
+    Users,
     X,
-    Presentation,
-    Users
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -36,13 +38,13 @@ import CheckinModal, {
     Guest as ModalGuest,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
+import EventCheckinModal from '../checkins/EventCheckinModal';
 import MultiCheckoutModal from '../checkins/multiCheckoutModal';
 import ReservationModal from '../reservations/reservationModal';
+import EventOccupiedModal from './EventOccupiedModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
-import EventCheckinModal from '../checkins/EventCheckinModal';
-import EventOccupiedModal from './EventOccupiedModal';
 
 // Evitar errores de TS con Ziggy
 declare var route: any;
@@ -113,10 +115,11 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
-
     // Campo para el salon
-    const [isEventCheckinModalOpen, setIsEventCheckinModalOpen] = useState(false);
-    const [isEventOccupiedModalOpen, setIsEventOccupiedModalOpen] = useState(false);
+    const [isEventCheckinModalOpen, setIsEventCheckinModalOpen] =
+        useState(false);
+    const [isEventOccupiedModalOpen, setIsEventOccupiedModalOpen] =
+        useState(false);
     // Controlador Seleccion multiple
     const [isMultiCheckoutMode, setIsMultiCheckoutMode] = useState(false);
     // guarda los ids de las habitaciones que han sido seleccionadas
@@ -244,7 +247,9 @@ export default function RoomsStatus({
             (room: any) =>
                 room.checkins
                     ?.filter((c: any) => {
-                        const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
+                        const isSalon = room.room_type?.name
+                            ?.toUpperCase()
+                            .includes('SALON');
                         if (isSalon) return false; // NUNCA INCOMPLETOS
 
                         const isTitularIncomplete =
@@ -496,7 +501,7 @@ export default function RoomsStatus({
             if (isSalon) {
                 setCheckinToEdit(null);
                 setSelectedRoomId(room.id);
-                setIsEventCheckinModalOpen(true); 
+                setIsEventCheckinModalOpen(true);
             } else {
                 setCheckinToEdit(null);
                 setSelectedRoomId(room.id);
@@ -691,33 +696,36 @@ export default function RoomsStatus({
 
     const getStatusConfig = (room: Room) => {
         const status = getDisplayStatus(room);
-        
+
         // 🚀 Detectamos si esta "habitación" es un salón
         const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
         switch (status) {
             case 'available':
+            case 'reserved': // 🚀 TRUCO: Tratamos "Reservado" exactamente igual que "Libre" físicamente
                 return {
-                    colorClass: isSalon 
+                    colorClass: isSalon
                         ? 'bg-indigo-600 hover:bg-indigo-500 cursor-pointer'
                         : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer',
-                    borderColor: isSalon ? 'border-indigo-700' : 'border-emerald-700',
-                    label: 'Disponible',
+                    borderColor: isSalon
+                        ? 'border-indigo-700'
+                        : 'border-emerald-700',
+                    label: status === 'reserved' ? 'Libre (Con Reserva)' : 'Disponible',
                     icon: isSalon ? (
                         <Presentation className="h-10 w-10 text-indigo-200/50" />
                     ) : (
                         <BedDouble className="h-10 w-10 text-emerald-200/50" />
                     ),
                     info: room.room_type?.name || 'Libre',
-                    des: isSalon ? 'Eventos / Reuniones' : (
-                        room.price?.bathroom_type === 'private' ||
-                        room.price?.bathroom_type === 'privado'
-                            ? 'Privado'
-                            : room.price?.bathroom_type === 'shared' ||
-                                room.price?.bathroom_type === 'compartido'
-                              ? 'Compartido'
-                              : 'Tipo de baño no definido'
-                    ),
+                    des: isSalon
+                        ? 'Eventos / Reuniones'
+                        : room.price?.bathroom_type === 'private' ||
+                          room.price?.bathroom_type === 'privado'
+                          ? 'Privado'
+                          : room.price?.bathroom_type === 'shared' ||
+                              room.price?.bathroom_type === 'compartido'
+                            ? 'Compartido'
+                            : 'Tipo de baño no definido',
                     actionLabel: 'Asignar',
                 };
 
@@ -726,7 +734,9 @@ export default function RoomsStatus({
                     colorClass: isSalon
                         ? 'bg-violet-700 hover:bg-violet-600 cursor-pointer'
                         : 'bg-cyan-600 hover:bg-cyan-500 cursor-pointer',
-                    borderColor: isSalon ? 'border-violet-800' : 'border-cyan-700',
+                    borderColor: isSalon
+                        ? 'border-violet-800'
+                        : 'border-cyan-700',
                     label: 'Ocupado',
                     icon: isSalon ? (
                         <Users className="h-10 w-10 text-violet-200/50" />
@@ -738,13 +748,16 @@ export default function RoomsStatus({
                 };
 
             case 'incomplete':
-                // 🚀 SI ES SALÓN: Forzamos a que se vea como OCUPADO, no queremos que se vea naranja ni pida datos
+                // 🚀 SI ES SALÓN: Forzamos a que se vea como OCUPADO
                 if (isSalon) {
                     return {
-                        colorClass: 'bg-violet-700 hover:bg-violet-600 cursor-pointer',
+                        colorClass:
+                            'bg-violet-700 hover:bg-violet-600 cursor-pointer',
                         borderColor: 'border-violet-800',
                         label: 'Ocupado',
-                        icon: <Users className="h-10 w-10 text-violet-200/50" />,
+                        icon: (
+                            <Users className="h-10 w-10 text-violet-200/50" />
+                        ),
                         info: getOccupantName(room),
                         actionLabel: 'Ver / Finalizar',
                     };
@@ -784,16 +797,8 @@ export default function RoomsStatus({
                     actionLabel: '-',
                 };
 
-            case 'reserved':
-                return {
-                    colorClass:
-                        'bg-purple-600 hover:bg-purple-500 cursor-pointer',
-                    borderColor: 'border-purple-700',
-                    label: 'Reservado',
-                    icon: <FileEdit className="h-10 w-10 text-purple-200/50" />,
-                    info: getReservationName(room),
-                    actionLabel: 'Ver reserva',
-                };
+            // NOTA: Eliminamos completamente el "case 'reserved':" antiguo porque
+            // ahora lo manejamos arriba junto con 'available'.
 
             default:
                 return {
@@ -1190,30 +1195,166 @@ export default function RoomsStatus({
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
                                 // 🚨 Quitamos el "glow" de aquí para que la tarjeta no brille 🚨
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
+                                className={`relative flex h-36 flex-col justify-between overflow-hidden overflow-visible rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
-                                {/* 🚦 EL SEMÁFORO VISUAL (Pegado arriba a la derecha) 🚦 */}
-                                {/* 🚦 CONTROLES SUPERIOR DERECHA (Historial + Semáforo) 🚦 */}
-                                <div className="absolute top-0 right-0 z-30 flex overflow-hidden rounded-tr-lg rounded-bl-xl shadow-md">
+                                {/* 👇 AQUÍ EMPIEZA LO NUEVO (Distintivo Morado) 👇 */}
+                                {/* 💜 DISTINTIVO DE RESERVAS FUTURAS CON POPOVER 💜 */}
+                                {(room as any).future_reservations &&
+                                    (room as any).future_reservations.length >
+                                        0 && (
+                                        <div className="group absolute -top-3 -right-3 z-40">
+                                            {/* Etiqueta Morada */}
+                                            {(() => {
+                                                const firstRes = (room as any)
+                                                    .future_reservations[0];
+                                                const arrival = new Date(
+                                                    firstRes.date + 'T00:00:00',
+                                                );
+                                                const today = new Date();
+                                                today.setHours(0, 0, 0, 0);
+                                                const diff = Math.ceil(
+                                                    (arrival.getTime() -
+                                                        today.getTime()) /
+                                                        (1000 * 60 * 60 * 24),
+                                                );
+                                                const isUrgent = diff <= 1; // Hoy o Mañana
+
+                                                return (
+                                                    <div
+                                                        className={`flex cursor-help items-center gap-1 rounded-md border px-2 py-1 shadow-lg transition-all ${
+                                                            isUrgent
+                                                                ? 'scale-110 animate-pulse border-purple-400 bg-purple-600 text-white shadow-purple-500/50'
+                                                                : 'border-purple-300 bg-purple-100 text-purple-800 hover:bg-purple-200'
+                                                        }`}
+                                                    >
+                                                        <Calendar className="h-3 w-3" />
+                                                        <span className="text-[9px] font-black italic">
+                                                            {isUrgent
+                                                                ? '¡LLEGA PRONTO!'
+                                                                : `RES. ${firstRes.date}`}
+                                                        </span>
+                                                        {(room as any)
+                                                            .future_reservations
+                                                            .length > 1 && (
+                                                            <span className="ml-1 rounded-full bg-purple-800 px-1.5 py-0.5 text-[7px] text-white">
+                                                                +
+                                                                {(room as any)
+                                                                    .future_reservations
+                                                                    .length - 1}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* 📝 VENTANITA DE INFORMACIÓN (Aparece al pasar el mouse) */}
+                                            <div className="pointer-events-none absolute top-full right-0 z-50 mt-2 hidden w-56 animate-in rounded-xl border border-gray-200 bg-white p-4 shadow-2xl zoom-in-95 fade-in group-hover:block">
+                                                <p className="mb-3 flex items-center gap-2 border-b border-purple-100 pb-1 text-[10px] font-black text-purple-600 uppercase">
+                                                    <Clock className="h-3 w-3" />{' '}
+                                                    Próximas Entradas
+                                                </p>
+                                                <div className="space-y-3">
+                                                    {(
+                                                        room as any
+                                                    ).future_reservations.map(
+                                                        (
+                                                            res: any,
+                                                            idx: number,
+                                                        ) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex flex-col border-l-2 border-purple-300 pl-3"
+                                                            >
+                                                                <span className="text-[9px] font-bold text-gray-400">
+                                                                    {res.date}
+                                                                </span>
+                                                                <span className="text-[11px] leading-tight font-black text-gray-800 uppercase">
+                                                                    {res.guest}
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                {/* 🚦 CONTROLES SUPERIOR DERECHA (Calendario + Historial + Semáforo) 🚦 */}
+                                <div className="absolute top-0 right-0 z-40 flex shadow-md bg-white/90 backdrop-blur-sm rounded-tr-lg rounded-bl-xl overflow-visible">
+                                    
+                                    {/* 💜 1. CALENDARIO DE RESERVA (Solo Icono + Popover al pasar el mouse) 💜 */}
+                                    {(room as any).future_reservations && (room as any).future_reservations.length > 0 && (() => {
+                                        const firstRes = (room as any).future_reservations[0];
+                                        const arrival = new Date(firstRes.date + 'T00:00:00');
+                                        const today = new Date();
+                                        today.setHours(0,0,0,0);
+                                        const diff = Math.ceil((arrival.getTime() - today.getTime()) / (1000*60*60*24));
+                                        const isUrgent = diff <= 1; // Hoy o Mañana
+
+                                        return (
+                                            <div className="group relative flex">
+                                                {/* EL BOTÓN (Solo icono, sin texto que estorbe) */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // 👇 AQUÍ ABRES TU MODAL DE CONFIRMACIÓN DE RESERVA 👇
+                                                        console.log("Abriendo modal de confirmación para la habitación:", room.number);
+                                                        // Ejemplo: setConfirmReservationModal(room);
+                                                    }}
+                                                    className={`flex items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
+                                                        isUrgent 
+                                                        ? 'bg-purple-600 text-white hover:bg-purple-700' 
+                                                        : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
+                                                    } ${(!activeCheckin && !corpState) ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-200/50'}`}
+                                                >
+                                                    <Calendar className={`h-4 w-4 ${isUrgent ? 'animate-pulse' : ''}`} />
+                                                </button>
+
+                                                {/* 📝 PANTALLITA FLOTANTE (Se ve al acercar el mouse) */}
+                                                <div className="hidden group-hover:block absolute top-full right-0 mt-1 w-48 bg-white border border-purple-200 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 cursor-default text-left pointer-events-none">
+                                                    <p className="text-[10px] font-black text-purple-600 uppercase mb-2 border-b border-purple-100 pb-1 flex items-center justify-between">
+                                                        <span><Clock className="w-3 h-3 inline mr-1" /> Entradas</span>
+                                                        <span className="bg-purple-100 text-purple-800 px-1.5 rounded-full">
+                                                            { (room as any).future_reservations.length }
+                                                        </span>
+                                                    </p>
+                                                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                                                        {(room as any).future_reservations.map((res: any, idx: number) => (
+                                                            <div key={idx} className="flex flex-col border-l-2 border-purple-400 pl-2">
+                                                                <span className={`text-[9px] font-bold ${idx === 0 && isUrgent ? 'text-red-500' : 'text-gray-500'}`}>
+                                                                    {res.date}
+                                                                </span>
+                                                                <span className="text-[10px] font-black text-gray-800 uppercase leading-tight truncate">
+                                                                    {res.guest}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 🟡 2. BOTÓN HISTORIAL ORIGINAL 🟡 */}
                                     {activeCheckin && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleOpenHistory(
-                                                    activeCheckin,
-                                                    room,
-                                                );
+                                                handleOpenHistory(activeCheckin, room);
                                             }}
-                                            className="flex items-center justify-center border-r border-yellow-500/30 bg-yellow-400 px-2 py-1 text-yellow-900 transition-colors hover:bg-yellow-300"
+                                            className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${
+                                                !((room as any).future_reservations && (room as any).future_reservations.length > 0) ? 'rounded-bl-xl' : ''
+                                            } ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
                                             title="Ver Historial Financiero"
                                         >
-                                            <History className="h-4 w-4 shadow-sm" />
+                                            <History className="h-4 w-4 shadow-sm" /> 
                                         </button>
                                     )}
+
+                                    {/* 🟢/🔴 3. SEMÁFORO CORPORATIVO ORIGINAL */}
                                     {corpState && (
-                                        <div
-                                            className={`flex items-center px-3 py-1 text-[10px] font-black tracking-wider uppercase ${corpState.badge}`}
-                                        >
+                                        <div className={`flex items-center px-3 py-1.5 text-[10px] font-black tracking-wider uppercase rounded-tr-lg ${
+                                            !activeCheckin && !((room as any).future_reservations && (room as any).future_reservations.length > 0) ? 'rounded-bl-xl' : ''
+                                        } ${corpState.badge}`}>
                                             {corpState.text}
                                         </div>
                                     )}
@@ -1287,33 +1428,37 @@ export default function RoomsStatus({
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
                                     <div className="z-20 flex border-t border-cyan-700">
-                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
-    <button
-        onClick={(e) => {
-            e.stopPropagation();
-            handleOpenDetails(room); // Acción original para habitaciones normales
-        }}
-        title="Datos del usuario"
-        className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
-    >
-        <UserIcon className="h-3 w-3" />{' '}
-    </button>
-)}
-                                        
-                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleShowCheckinDetails(
-                                                    activeCheckin,
-                                                    room,
-                                                );
-                                            }}
-                                            className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-blue-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-700"
-                                            title="Ver lista de consumos y detalles"
-                                        >
-                                            <ShoppingCart className="h-3 w-3" />
-                                        </button>
+                                        {!room.room_type?.name
+                                            ?.toUpperCase()
+                                            .includes('SALON') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenDetails(room); // Acción original para habitaciones normales
+                                                }}
+                                                title="Datos del usuario"
+                                                className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
+                                            >
+                                                <UserIcon className="h-3 w-3" />{' '}
+                                            </button>
+                                        )}
+
+                                        {!room.room_type?.name
+                                            ?.toUpperCase()
+                                            .includes('SALON') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleShowCheckinDetails(
+                                                        activeCheckin,
+                                                        room,
+                                                    );
+                                                }}
+                                                className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-blue-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-700"
+                                                title="Ver lista de consumos y detalles"
+                                            >
+                                                <ShoppingCart className="h-3 w-3" />
+                                            </button>
                                         )}
                                         <button
                                             onClick={(e) => {
@@ -1383,29 +1528,33 @@ export default function RoomsStatus({
             />
 
             <EventCheckinModal
-                    show={isEventCheckinModalOpen}
-                    onClose={(isSuccess) => {
-                        setIsEventCheckinModalOpen(false);
-                        setSelectedRoomId(null);
-                        // Opcional: si quieres recargar los datos al guardar
-                        if (isSuccess) {
-                           router.reload({ only: ['Rooms', 'Checkins', 'Guests'] });
-                        }
-                    }}
-                    guests={Guests || []}
-                    rooms={Rooms || []}
-                    initialRoomId={selectedRoomId}
-                />
+                show={isEventCheckinModalOpen}
+                onClose={(isSuccess) => {
+                    setIsEventCheckinModalOpen(false);
+                    setSelectedRoomId(null);
+                    // Opcional: si quieres recargar los datos al guardar
+                    if (isSuccess) {
+                        router.reload({
+                            only: ['Rooms', 'Checkins', 'Guests'],
+                        });
+                    }
+                }}
+                guests={Guests || []}
+                rooms={Rooms || []}
+                initialRoomId={selectedRoomId}
+            />
             <EventOccupiedModal
-                    show={isEventOccupiedModalOpen}
-                    onClose={(reload) => {
-                        setIsEventOccupiedModalOpen(false);
-                        if (reload) {
-                            router.reload({ only: ['Rooms', 'Checkins', 'Guests'] });
-                        }
-                    }}
-                    checkinData={occupiedCheckinData}
-                />
+                show={isEventOccupiedModalOpen}
+                onClose={(reload) => {
+                    setIsEventOccupiedModalOpen(false);
+                    if (reload) {
+                        router.reload({
+                            only: ['Rooms', 'Checkins', 'Guests'],
+                        });
+                    }
+                }}
+                checkinData={occupiedCheckinData}
+            />
 
             <DetailModal
                 show={isDetailsModalOpen}
@@ -1509,20 +1658,20 @@ export default function RoomsStatus({
                 room={roomToFinishMaintenance}
             />
             <EventCheckinModal
-                    show={isEventCheckinModalOpen}
-                    onClose={(isSuccess) => {
-                        setIsEventCheckinModalOpen(false);
-                        setSelectedRoomId(null);
-                        setCheckinToEdit(null); // 🚀 Limpiamos la variable al cerrar
-                        if (isSuccess) {
-                           // reload de inertia si es necesario
-                        }
-                    }}
-                    guests={Guests || []}
-                    rooms={Rooms || []}
-                    initialRoomId={selectedRoomId}
-                    checkinToEdit={checkinToEdit} // 🚀 AÑADIDO: Le mandamos los datos
-                />
+                show={isEventCheckinModalOpen}
+                onClose={(isSuccess) => {
+                    setIsEventCheckinModalOpen(false);
+                    setSelectedRoomId(null);
+                    setCheckinToEdit(null); // 🚀 Limpiamos la variable al cerrar
+                    if (isSuccess) {
+                        // reload de inertia si es necesario
+                    }
+                }}
+                guests={Guests || []}
+                rooms={Rooms || []}
+                initialRoomId={selectedRoomId}
+                checkinToEdit={checkinToEdit} // 🚀 AÑADIDO: Le mandamos los datos
+            />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
                     <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
