@@ -10,7 +10,7 @@ class ReservationDetail extends Model
         'reservation_id',
         'room_id',
         'requested_room_type_id',
-        'requested_bathroom',     
+        'requested_bathroom',
         'price_id',
         'price', // El precio que se pactó en ese momento
     ];
@@ -19,7 +19,7 @@ class ReservationDetail extends Model
     {
         return $this->belongsTo(Room::class);
     }
-    
+
     public function price()
     {
         return $this->belongsTo(Price::class); // Si tienes modelo Price
@@ -27,5 +27,9 @@ class ReservationDetail extends Model
     public function requestedRoomType()
     {
         return $this->belongsTo(RoomType::class, 'requested_room_type_id');
+    }
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class);
     }
 }

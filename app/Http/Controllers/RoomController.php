@@ -157,7 +157,7 @@ class RoomController
     }
     public function status()
     {
-        // 1. Cargamos las habitaciones
+        // 1. Cargamos las habitaciones y les agregamos las próximas reservas si existen
         $rooms = Room::with([
             'roomType',
             'price',
@@ -171,14 +171,37 @@ class RoomController
                         'payments' => function($query) {
                             $query->orderBy('created_at', 'asc'); 
                         },
-                        
                         'room.price',
                         'room.roomType'
                     ]);
             }
-        ])->orderBy('number')->get();
+        ])->orderBy('number')->get()->map(function ($room) {
+            
+            // 💜 MAGIA MORADA: Buscamos TODAS las reservas futuras para esta habitación
+            $futureReservations = \App\Models\ReservationDetail::where('room_id', $room->id)
+                ->whereHas('reservation', function ($query) {
+                    $query->whereIn('status', ['pendiente', 'confirmada'])
+                          ->whereDate('arrival_date', '>=', now()->toDateString());
+                })
+                ->with(['reservation.guest'])
+                ->get()
+                ->map(function($detail) {
+                    return [
+                        'date' => $detail->reservation->arrival_date,
+                        'guest' => $detail->reservation->guest->full_name ?? 'Huésped'
+                    ];
+                })
+                ->sortBy('date')
+                ->values()
+                ->toArray(); // Convertimos a array para evitar problemas en React
 
-        
+            // Asignamos el arreglo de reservas futuras a la habitación
+            $room->future_reservations = $futureReservations;
+            
+            return $room;
+        });
+
+        // 2. Active Checkins
         $activeCheckins = \App\Models\Checkin::with([
             'guest',
             'companions',
@@ -193,18 +216,18 @@ class RoomController
             ->where('status', 'activo')
             ->get();
 
-        // 3. Reservas pendientes (sin cambios)
+        // 3. Reservas pendientes
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
             ->get();
 
-        // 🚀 NUEVO: 4. Separamos las habitaciones para el Modal de Transferencia
+        // 4. Separamos las habitaciones para el Modal de Transferencia
         $availableRooms = $rooms->filter(function ($room) {
-            return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']); // O solo 'LIBRE' según tu regla
+            return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']); 
         })->values();
 
         $occupiedRooms = $rooms->filter(function ($room) {
-            return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']); // Incluye ambas por si acaso
+            return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']); 
         })->values();
 
 

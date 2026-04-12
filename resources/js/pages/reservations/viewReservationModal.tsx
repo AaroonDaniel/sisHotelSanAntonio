@@ -1,5 +1,5 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { 
     BedDouble, 
     Calendar, 
@@ -11,11 +11,14 @@ import {
     AlertCircle,
     ArrowRight,
     ChevronLeft,
-    ArrowLeft
+    ArrowLeft,
+    Pencil,
+    XCircle
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import ReservationModal from './reservationModal';
 import AssignRoomsModal from './AssignRoomsModal'; 
+import CancelModal from '@/components/cancelModal'; // Importamos tu CancelModal
 
 interface Props {
     auth: { user: User };
@@ -29,6 +32,11 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [assigningReservation, setAssigningReservation] = useState<any>(null);
     const [confirmingStayRes, setConfirmingStayRes] = useState<any>(null);
+    const [editingReservation, setEditingReservation] = useState<any>(null); 
+    
+    // Estados para tu CancelModal
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
 
     const filteredReservations = useMemo(() => {
         return reservations.filter(res => 
@@ -45,7 +53,7 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
         filteredReservations.filter(res => res.details.every((d: any) => d.room_id !== null) && res.status === 'pendiente'),
     [filteredReservations]);
 
-    // VISTA PANTALLA COMPLETA DE CONFIRMACIÓN
+    // VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
     if (confirmingStayRes) {
         return (
             <AuthenticatedLayout user={auth.user}>
@@ -114,17 +122,22 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                                     <p className="text-gray-500 mb-6 max-w-sm mx-auto font-medium">
                                         Al confirmar, las habitaciones pasarán a estado "Ocupadas" y se generará el registro oficial de Check-in.
                                     </p>
-                                    <button 
-                                        onClick={() => {
-                                            // Petición nativa sin Ziggy
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        // Usamos Inertia Form/Router para hacer el PUT
+                                        import('@inertiajs/react').then(({ router }) => {
                                             router.put(`/reservas/${confirmingStayRes.id}`, { status: 'confirmada' }, {
                                                 onSuccess: () => setConfirmingStayRes(null)
                                             });
-                                        }}
-                                        className="w-full py-5 bg-black text-white rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl shadow-gray-200 active:scale-95"
-                                    >
-                                        ✓ Confirmar Entrada del Huésped
-                                    </button>
+                                        });
+                                    }}>
+                                        <button 
+                                            type="submit"
+                                            className="w-full py-5 bg-black text-white rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl shadow-gray-200 active:scale-95"
+                                        >
+                                            ✓ Confirmar Entrada del Huésped
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -139,7 +152,6 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Reservas" />
 
-            {/* pt-2 para reducir el margen superior muerto */}
             <div className="p-4 pt-2 lg:p-2 lg:pt-0.5 space-y-4 max-w-[1400px] mx-auto">
                 <button
                     onClick={() => window.history.back()}
@@ -180,6 +192,7 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
                     
+                    {/* TABLA 1: PENDIENTES DE HABITACIÓN */}
                     <section className="flex flex-col h-full">
                         <div className="bg-white rounded-[2rem] border border-gray-200 shadow-xl overflow-hidden flex flex-col h-full min-h-[450px]">
                             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gray-50/80">
@@ -200,31 +213,58 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                                             <tr className="bg-white border-b border-gray-100">
                                                 <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Huésped</th>
                                                 <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-center">Req.</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acción</th>
+                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
-                                            {pendingAssignment.map(res => (
-                                                <tr key={res.id} className="hover:bg-orange-50/30 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="font-black text-gray-800 uppercase text-sm">{res.guest?.full_name}</div>
-                                                        <div className="text-[10px] font-bold text-gray-400">CI: {res.guest?.identification_number}</div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className="bg-orange-100 text-orange-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-orange-200">
-                                                            {res.details.length} Hab.
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button 
-                                                            onClick={() => setAssigningReservation(res)}
-                                                            className="inline-flex items-center gap-1.5 bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-orange-700 transition-all shadow-md active:scale-95"
-                                                        >
-                                                            Asignar <ArrowRight className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {pendingAssignment.map(res => {
+                                                const assignedCount = res.details.filter((d: any) => d.room_id).length;
+                                                const buttonText = assignedCount > 0 ? 'Asignar / Editar' : 'Asignar';
+
+                                                return (
+                                                    <tr key={res.id} className="hover:bg-orange-50/30 transition-colors group">
+                                                        <td className="px-6 py-4">
+                                                            <div className="font-black text-gray-800 uppercase text-sm">{res.guest?.full_name}</div>
+                                                            <div className="text-[10px] font-bold text-gray-400">CI: {res.guest?.identification_number}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <span className="bg-orange-100 text-orange-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-orange-200">
+                                                                {res.details.length} Hab.
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                {/* Lápiz para editar reserva general */}
+                                                                <button 
+                                                                    onClick={() => setEditingReservation(res)}
+                                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                    title="Editar Datos de Reserva"
+                                                                >
+                                                                    <Pencil className="w-4 h-4" />
+                                                                </button>
+                                                                
+                                                                {/* BOTÓN CANCELAR -> Dispara cancelModal */}
+                                                                {res.status !== 'cancelado' && (
+                                                                    <button 
+                                                                        onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
+                                                                        className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
+                                                                        title="Cancelar"
+                                                                    >
+                                                                        <XCircle className="h-4 w-4" />
+                                                                    </button>
+                                                                )}
+                                                                
+                                                                <button 
+                                                                    onClick={() => setAssigningReservation(res)}
+                                                                    className="inline-flex items-center gap-1.5 bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-orange-700 transition-all shadow-md active:scale-95 ml-2"
+                                                                >
+                                                                    {buttonText} <ArrowRight className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 )}
@@ -232,6 +272,7 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                         </div>
                     </section>
 
+                    {/* TABLA 2: LISTAS PARA CONFIRMAR */}
                     <section className="flex flex-col h-full">
                         <div className="bg-white rounded-[2rem] border border-gray-200 shadow-xl overflow-hidden flex flex-col h-full min-h-[450px]">
                             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gray-50/80">
@@ -252,7 +293,7 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                                             <tr className="bg-white border-b border-gray-100">
                                                 <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Huésped</th>
                                                 <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Habitaciones</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acción</th>
+                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
@@ -271,13 +312,37 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                                                             ))}
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button 
-                                                            onClick={() => setConfirmingStayRes(res)}
-                                                            className="bg-green-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase hover:bg-green-700 transition-all shadow-md active:scale-95"
-                                                        >
-                                                            Confirmar Llegada
-                                                        </button>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            
+                                                            {/* BOTÓN PARA RE-ASIGNAR O CAMBIAR HABITACIONES */}
+                                                            <button 
+                                                                onClick={() => setAssigningReservation(res)}
+                                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title="Cambiar Habitaciones Asignadas"
+                                                            >
+                                                                <BedDouble className="w-4 h-4" />
+                                                            </button>
+
+                                                            {/* BOTÓN CANCELAR -> Dispara cancelModal */}
+                                                            {res.status !== 'cancelado' && (
+                                                                <button 
+                                                                    onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
+                                                                    className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
+                                                                    title="Cancelar"
+                                                                >
+                                                                    <XCircle className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+
+                                                            <button 
+                                                                onClick={() => setConfirmingStayRes(res)}
+                                                                className="bg-green-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase hover:bg-green-700 transition-all shadow-md active:scale-95 ml-2"
+                                                            >
+                                                                Confirmar
+                                                            </button>
+                                                            
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -290,6 +355,17 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                 </div>
             </div>
 
+            {/* MODAL CANCELAR TUYO */}
+            <CancelModal
+                show={isCancelModalOpen}
+                onClose={() => {
+                    setIsCancelModalOpen(false);
+                    setCancelingReservationId(null);
+                }}
+                actionUrl={cancelingReservationId ? `/reservas/${cancelingReservationId}` : null}
+            />
+
+            {/* Modal para NUEVA reserva */}
             <ReservationModal 
                 show={isCreateModalOpen} 
                 onClose={() => setIsCreateModalOpen(false)} 
@@ -297,6 +373,16 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                 rooms={rooms} 
             />
 
+            {/* Modal para EDITAR reserva */}
+            <ReservationModal 
+                show={!!editingReservation} 
+                onClose={() => setEditingReservation(null)} 
+                reservationToEdit={editingReservation} 
+                guests={guests} 
+                rooms={rooms} 
+            />
+
+            {/* Modal para ASIGNAR / REASIGNAR HABITACIONES */}
             {assigningReservation && (
                 <AssignRoomsModal 
                     show={!!assigningReservation} 
