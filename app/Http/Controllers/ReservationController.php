@@ -24,10 +24,11 @@ class ReservationController extends Controller
             ->get();
             
         return Inertia::render('reservations/index', [
+            // 👇 AQUÍ ESTÁ LA CORRECCIÓN PRINCIPAL 👇
             'Reservations' => Reservation::with([
                 'guest',
                 'details.room.roomType',
-                'details.price'
+                'details.requestedRoomType' // 👈 Cambiamos details.price por requestedRoomType
             ])->latest()->get(),
 
             'Guests' => Guest::all(),
@@ -54,6 +55,8 @@ class ReservationController extends Controller
                 'advance_payment' => 'nullable|numeric|min:0',
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
+                'is_corporate' => 'boolean|nullable',
+                'is_delegation' => 'boolean|nullable',
                 'details' => 'required|array|min:1', 
                 'details.*.room_id' => 'nullable', 
                 'details.*.requested_room_type_id' => 'nullable', 
@@ -85,10 +88,12 @@ class ReservationController extends Controller
                     'guest_id' => $guestId,
                     'guest_count' => $request->guest_count,
                     'arrival_date' => $request->arrival_date,
-                    'arrival_time' => $request->arrival_time,
+                    'arrival_time' => $request->arrival_time ?? '14:00:00',
                     'duration_days' => $request->duration_days,
                     'advance_payment' => $request->advance_payment ?? 0,
                     'payment_type' => $request->payment_type,
+                    'is_corporate' => $request->is_corporate ?? false,
+                    'is_delegation' => $request->is_delegation ?? false,
                     'status' => 'pendiente', 
                 ]);
 
@@ -134,14 +139,15 @@ class ReservationController extends Controller
     public function update(Request $request, Reservation $reservation)
     {
         $newStatus = $request->status;
-        Log::info("=== ACTUALIZANDO RESERVA {$reservation->id} A: {$newStatus} ===");
+        Log::info("=== ACTUALIZANDO RESERVA {$reservation->id} ===");
 
         try {
-            $checkinIds = []; // 🚀 Cola de check-ins a llenar
+            $checkinIds = []; 
 
             DB::transaction(function () use ($request, $reservation, $newStatus, &$checkinIds) {
-                $statusUpper = strtoupper($newStatus);
+                $statusUpper = $newStatus ? strtoupper($newStatus) : strtoupper($reservation->status);
 
+                // --- 1. SI CANCELAN LA RESERVA ---
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
                     $reservation->update(['status' => 'cancelada']);
                     foreach ($reservation->details as $detail) {
@@ -150,21 +156,19 @@ class ReservationController extends Controller
                         }
                     }
                 } 
+                // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
                     $reservation->update(['status' => 'confirmada']);
-
                     $primerCheckinId = null;
 
                     foreach ($reservation->details as $index => $detail) {
-                        if (!$detail->room_id) continue; // Seguridad anti-error
+                        if (!$detail->room_id) continue; 
 
                         $notaAsignacion = 'Reserva #' . $reservation->id;
                         if ($index > 0) {
                             $notaAsignacion .= ' - ADICIONAL'; 
                         }
 
-                        // 🚨 CREAMOS EL CHECKIN PERO CON ORIGEN NULL
-                        // Esto asegura que la tarjeta se pinte de AMARILLO (Falta de datos)
                         $checkin = Checkin::create([
                             'guest_id' => $reservation->guest_id,
                             'room_id'  => $detail->room_id,
@@ -173,24 +177,21 @@ class ReservationController extends Controller
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
                             'advance_payment' => 0,
-                            'origin' => null, // 👈 CLAVE PARA EL ESTADO ÁMBAR
+                            'origin' => null, 
                             'status' => 'activo',
                             'is_temporary' => false,
                             'notes' => $notaAsignacion,
-                            'agreed_price' => $detail->price ?? 0 // Rescatamos el precio acordado en la reserva
+                            'agreed_price' => $detail->price ?? 0 
                         ]);
 
                         $checkinIds[] = $checkin->id;
-
                         if ($index === 0) {
                             $primerCheckinId = $checkin->id;
                         }
 
-                        // La habitación pasa a estar ocupada físicamente
                         Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
                     }
 
-                    // Movemos el adelanto al primer check-in
                     if ($primerCheckinId && $reservation->advance_payment > 0) {
                         $pagos = Payment::where('reservation_id', $reservation->id)->get();
                         foreach ($pagos as $pago) {
@@ -203,21 +204,82 @@ class ReservationController extends Controller
                         $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                         Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
                     }
-                } else {
-                    $reservation->update($request->only([
-                        'arrival_date', 'arrival_time', 'guest_count', 'status'
-                    ]));
+                } 
+                // --- 3. SI SOLO ESTÁN EDITANDO DATOS DE LA RESERVA (FASE 1) ---
+                else {
+                    // Actualizamos los datos base
+                    $reservation->update([
+                        'arrival_date' => $request->arrival_date ?? $reservation->arrival_date,
+                        'arrival_time' => $request->arrival_time ?? $reservation->arrival_time,
+                        'duration_days' => $request->duration_days ?? $reservation->duration_days,
+                        'guest_count' => $request->guest_count ?? $reservation->guest_count,
+                        'advance_payment' => $request->advance_payment ?? $reservation->advance_payment,
+                        'payment_type' => $request->payment_type ?? $reservation->payment_type,
+                        'is_corporate' => $request->has('is_corporate') ? $request->is_corporate : $reservation->is_corporate,
+                        'is_delegation' => $request->has('is_delegation') ? $request->is_delegation : $reservation->is_delegation,
+                        'status' => 'pendiente' // Forzamos pendiente porque se acaba de editar
+                    ]);
+
+                    // Sincronizamos las Habitaciones (Detalles)
+                    if ($request->has('details')) {
+                        $detailIdsToKeep = [];
+
+                        foreach ($request->details as $detailData) {
+                            if (isset($detailData['id'])) {
+                                // A. Actualizar cuarto existente
+                                $detail = ReservationDetail::find($detailData['id']);
+                                if ($detail) {
+                                    $detail->update([
+                                        'room_id' => $detailData['room_id'] ?? null,
+                                        'price_id' => $detailData['price_id'] ?? null,
+                                        'price' => $detailData['price'] ?? 0,
+                                        'requested_room_type_id' => $detailData['requested_room_type_id'] ?? null,
+                                        'requested_bathroom' => $detailData['requested_bathroom'] ?? null,
+                                    ]);
+                                    $detailIdsToKeep[] = $detail->id;
+                                }
+                            } else {
+                                // B. Insertar nuevo cuarto a la reserva
+                                $newDetail = ReservationDetail::create([
+                                    'reservation_id' => $reservation->id,
+                                    'room_id' => $detailData['room_id'] ?? null,
+                                    'price_id' => $detailData['price_id'] ?? null,
+                                    'price' => $detailData['price'] ?? 0,
+                                    'requested_room_type_id' => $detailData['requested_room_type_id'] ?? null,
+                                    'requested_bathroom' => $detailData['requested_bathroom'] ?? null,
+                                ]);
+                                $detailIdsToKeep[] = $newDetail->id;
+                                
+                                if (isset($detailData['room_id'])) {
+                                    Room::where('id', $detailData['room_id'])->update(['status' => 'RESERVADO']);
+                                }
+                            }
+                        }
+
+                        // C. Borrar los cuartos que el usuario eliminó en la interfaz (Trash2)
+                        $detailsToDelete = ReservationDetail::where('reservation_id', $reservation->id)
+                            ->whereNotIn('id', $detailIdsToKeep)
+                            ->get();
+
+                        foreach ($detailsToDelete as $det) {
+                            if ($det->room_id) {
+                                // Liberar la habitación física antes de borrar el detalle
+                                Room::where('id', $det->room_id)->update(['status' => 'LIBRE']);
+                            }
+                            $det->delete();
+                        }
+                    }
                 }
             });
 
-            // 🚀 SI FUE CONFIRMADA, REDIRIGIMOS PASANDO LA COLA DE IDs
-            if (strtoupper($newStatus) === 'CONFIRMADO' || strtoupper($newStatus) === 'CONFIRMADA') {
+            // Si fue confirmada, redirigir a status de habitaciones
+            if ($newStatus && (strtoupper($newStatus) === 'CONFIRMADO' || strtoupper($newStatus) === 'CONFIRMADA')) {
                 return redirect()->route('rooms.status')
                     ->with('success', 'Llegada confirmada. Por favor, complete los datos de las habitaciones.')
-                    ->with('auto_open_checkins', $checkinIds); // Envía la cola al Frontend
+                    ->with('auto_open_checkins', $checkinIds); 
             }
 
-            return redirect()->back()->with('success', 'Reserva actualizada.');
+            return redirect()->back()->with('success', 'Reserva actualizada y sincronizada correctamente.');
         } catch (\Exception $e) {
             Log::error("❌ ERROR ACTUALIZANDO RESERVA: " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error: ' . $e->getMessage()]);
@@ -243,52 +305,50 @@ class ReservationController extends Controller
 
     public function assignRooms(Request $request, $id)
     {
-        // 1. Validamos que el frontend nos envíe correctamente la lista de asignaciones
         $request->validate([
             'assignments' => 'required|array',
             'assignments.*.detail_id' => 'required|exists:reservation_details,id',
             'assignments.*.room_id' => 'required|exists:rooms,id',
         ]);
 
-        // 2. Usamos una transacción para que si algo falla, no se guarde a medias
         DB::transaction(function () use ($request) {
             foreach ($request->assignments as $assignment) {
-                
-                // Buscamos el detalle de la reserva que estaba en "espera"
                 $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
                 
-                // Le asignamos el cuarto físico que eligió el recepcionista
+                // 1. Si el detalle ya tenía una habitación asignada antes y la están cambiando,
+                // debemos liberar la habitación vieja para que vuelva a estar disponible.
+                if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
+                    Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+                }
+
+                // 2. Asignamos la nueva habitación al detalle de reserva
                 $detail->room_id = $assignment['room_id'];
                 $detail->save();
 
-                // Opcional: Podrías cambiar el estado del Room a 'reservada' temporalmente,
-                // aunque lo ideal es pasarlo a 'ocupada' recién cuando confirmen el Check-in final.
+                // 3. Bloqueamos físicamente la nueva habitación
+                Room::where('id', $assignment['room_id'])->update(['status' => 'RESERVADO']);
             }
         });
 
-        // 3. Devolvemos la respuesta al Frontend de React
-        return back()->with('success', 'Habitaciones asignadas correctamente.');
+        return back()->with('success', 'Habitaciones asignadas correctamente y bloqueadas en el sistema.');
     }
 
     public function reception()
     {
-        // 1. Traemos las reservas con sus relaciones exactas (usando camelCase)
         $reservations = Reservation::with([
             'guest', 
             'details.room.roomType', 
-            'details.requestedRoomType' // 👈 Usamos el nombre correcto de tu modelo
+            'details.requestedRoomType' 
         ])
-        ->whereIn('status', ['pendiente']) // En recepción solo queremos ver las pendientes
+        ->whereIn('status', ['pendiente']) 
         ->orderBy('arrival_date', 'asc')
         ->get();
 
-        // 2. Traer huéspedes
         $guests = Guest::all();
+        
+        // 👇 AQUÍ ESTÁ EL CAMBIO: Agregamos 'price' a la lista 👇
+        $rooms = Room::with(['roomType', 'floor', 'price'])->get();
 
-        // 3. Traer habitaciones (usando camelCase)
-        $rooms = Room::with(['roomType', 'floor'])->get();
-
-        // 4. Renderizamos tu nuevo Modal a pantalla completa
         return Inertia::render('reservations/viewReservationModal', [
             'reservations' => $reservations,
             'guests' => $guests,

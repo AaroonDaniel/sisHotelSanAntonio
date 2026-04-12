@@ -238,54 +238,69 @@ export default function ReservationModal({
     }, [show, data.arrival_date]);
 
     // Cargar datos al Editar
-useEffect(() => {
-    if (show && reservationToEdit) {
-        setData((prev) => ({
-            ...prev,
-            guest_id: String(reservationToEdit.guest_id || ''),
-            arrival_date: reservationToEdit.arrival_date || '',
-            arrival_time: reservationToEdit.arrival_time || '',
-            duration_days: Number(reservationToEdit.duration_days || 1),
-            guest_count: Number(reservationToEdit.guest_count || 1),
-            advance_payment: Number(reservationToEdit.advance_payment || 0),
-            payment_type: reservationToEdit.payment_type || 'EFECTIVO',
-            is_delegation: Boolean(reservationToEdit.is_delegation),
-            is_corporate: Boolean(reservationToEdit.is_corporate),
-            details: (reservationToEdit.details || []).map((detail: any) => {
-                // Capturar el precio real: Priorizar el valor numérico directo
-                let priceValue = 0;
-                if (detail.price && typeof detail.price === 'object') {
-                    priceValue = Number(detail.price.amount);
-                } else {
-                    priceValue = Number(detail.price);
-                }
+    useEffect(() => {
+        if (show && reservationToEdit) {
+            setData((prev) => {
+                // Lógica para repartir el adelanto visualmente si es Corporativo
+                const isCorp = Boolean(reservationToEdit.is_corporate);
+                const advanceTotal = Number(reservationToEdit.advance_payment || 0);
+                const detailsCount = reservationToEdit.details?.length || 1;
+                const splitAdvance = isCorp ? (advanceTotal / detailsCount) : 0;
 
                 return {
-                    id: detail.id,
-                    _temp_id: detail.id || Math.random(),
-                    room_id: detail.room_id || null,
-                    price_id: String(detail.price_id || ''),
-                    price: priceValue || 0, // Aquí ya no debería ser 0 si hay dato
-                    requested_room_type_id: String(detail.requested_room_type_id || ''),
-                    requested_bathroom: detail.requested_bathroom || 'private',
-                    room: detail.room, 
-                    room_type: detail.room_type || detail.requested_room_type,
-                    _temp_pax_count: detail.room_type?.capacity || 1,
-                };
-            }),
-        })); 
+                    ...prev,
+                    guest_id: String(reservationToEdit.guest_id || ''),
+                    arrival_date: reservationToEdit.arrival_date || '',
+                    arrival_time: reservationToEdit.arrival_time || '',
+                    duration_days: Number(reservationToEdit.duration_days || 1),
+                    guest_count: Number(reservationToEdit.guest_count || 1),
+                    advance_payment: advanceTotal,
+                    payment_type: reservationToEdit.payment_type || 'EFECTIVO',
+                    is_delegation: Boolean(reservationToEdit.is_delegation),
+                    is_corporate: isCorp,
+                    details: (reservationToEdit.details || []).map((detail: any) => {
+                        
+                        // 1. Extraer el Precio correctamente
+                        let safePrice = 0;
+                        if (detail.price && typeof detail.price === 'object') {
+                            safePrice = Number(detail.price.amount) || 0;
+                        } else {
+                            safePrice = Number(detail.price) || 0;
+                        }
 
-        if (reservationToEdit.guest) {
-            setGuestQuery(reservationToEdit.guest.full_name || `${reservationToEdit.guest.name} ${reservationToEdit.guest.last_name}`); 
+                        // 2. Extraer el Tipo de Habitación (Soporta camelCase de Laravel)
+                        const roomTypeObj = detail.requested_room_type || detail.requestedRoomType || detail.room?.room_type || detail.room?.roomType;
+
+                        return {
+                            id: detail.id,
+                            _temp_id: detail.id || Math.random(),
+                            room_id: detail.room_id || null,
+                            price_id: String(detail.price_id || ''),
+                            price: safePrice,
+                            requested_room_type_id: String(detail.requested_room_type_id || roomTypeObj?.id || ''),
+                            requested_bathroom: detail.requested_bathroom || 'private',
+                            room: detail.room, 
+                            room_type: roomTypeObj,
+                            _temp_room_name: roomTypeObj?.name || 'Habitación',
+                            _temp_pax_count: roomTypeObj?.capacity || 1,
+                            _temp_advance_payment: splitAdvance // 👈 Llena el adelanto por caja si es corporativo
+                        };
+                    }),
+                };
+            }); 
+
+            if (reservationToEdit.guest) {
+                setGuestQuery(reservationToEdit.guest.full_name || `${reservationToEdit.guest.name} ${reservationToEdit.guest.last_name}`); 
+            }
+            setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
+            
+        } else if (!show) {
+            reset();
+            clearErrors();
+            setGuestQuery('');
+            setIsCorporateToggle(false);
         }
-        setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
-        
-    } else if (!show) {
-        reset();
-        clearErrors();
-        setGuestQuery('');
-    }
-}, [show, reservationToEdit]);
+    }, [show, reservationToEdit]);
 
     // LÓGICA DE PRECIOS OFICIAL
     const recalculatePrice = (

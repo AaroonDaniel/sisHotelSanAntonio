@@ -303,9 +303,8 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                     onClose={() => setAssigningReservation(null)}
                     reservation={assigningReservation}
                     availableRooms={(rooms || []).filter(r => 
-                        r.status?.toLowerCase() === 'disponible' || 
-                        r.status?.toLowerCase() === 'libre' ||
-                        r.status?.toLowerCase() === 'limpia' // Agrega aquí cualquier otro estado que uses
+                        r.status?.toUpperCase() !== 'MANTENIMIENTO' && 
+                        r.status?.toUpperCase() !== 'INHABILITADO'
                     )}
                 />
             )}
