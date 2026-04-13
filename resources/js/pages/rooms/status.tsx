@@ -443,77 +443,49 @@ export default function RoomsStatus({
         if (isMultiCheckoutMode) {
             if (status === 'occupied') {
                 setSelectedRoomsForCheckout((prev) =>
-                    prev.includes(room.id)
-                        ? prev.filter((id) => id !== room.id)
-                        : [...prev, room.id],
+                    prev.includes(room.id) ? prev.filter((id) => id !== room.id) : [...prev, room.id],
                 );
             }
             return;
         }
 
         if (status === 'occupied') {
-            const fullCheckinData = Checkins?.find(
-                (c) => c.room_id === room.id && c.status === 'activo',
-            );
-            const activeCheckin = fullCheckinData || room.checkins?.[0];
-
+            const activeCheckin = Checkins?.find(c => c.room_id === room.id && c.status === 'activo') || room.checkins?.[0];
             if (activeCheckin) {
-                // 🚀 1. SI ES SALÓN: Abrimos el Panel Violeta (que lee el Precio Acordado)
                 if (isSalon) {
                     setOccupiedCheckinData({ ...activeCheckin, room });
                     setIsEventOccupiedModalOpen(true);
-                    return; // 🛑 Importante: Este return detiene la ejecución aquí
+                } else {
+                    if (activeCheckin.is_temporary) {
+                        setCheckinToEdit(activeCheckin);
+                        setSelectedRoomId(room.id);
+                        setIsCheckinModalOpen(true);
+                    } else {
+                        setOccupiedCheckinData({ ...activeCheckin, room });
+                        setIsOccupiedModalOpen(true);
+                    }
                 }
-
-                // 2. Si es temporal y NO es un salón, pedimos editar
-                if (activeCheckin.is_temporary) {
-                    setCheckinToEdit(activeCheckin);
-                    setSelectedRoomId(room.id);
-                    setIsCheckinModalOpen(true);
-                    return;
-                }
-
-                // 3. SI ES HABITACIÓN NORMAL, usamos el visualizador estándar
-                setOccupiedCheckinData({ ...activeCheckin, room });
-                setIsOccupiedModalOpen(true);
             }
             return;
         }
 
-        if (status === 'reserved') {
-            const matchinReservation = reservations?.find((res) =>
-                res.details?.some(
-                    (d: any) => String(d.room_id) === String(room.id),
-                ),
-            );
-            if (matchinReservation) {
-                setPreselectedReservationId(matchinReservation.id);
-            } else {
-                setPreselectedReservationId(null);
-            }
-            setIsPendingModalOpen(true);
+        // 🚨 MAGIA: 'available' y 'reserved' ahora abren el check-in normal al tocar el fondo verde
+        if (status === 'available' || status === 'reserved') {
+            setCheckinToEdit(null);
+            setSelectedRoomId(room.id);
+            if (isSalon) setIsEventCheckinModalOpen(true);
+            else setIsCheckinModalOpen(true);
             return;
         }
 
-        setSelectedForAction(null);
-
-        if (status === 'available') {
-            if (isSalon) {
-                setCheckinToEdit(null);
-                setSelectedRoomId(room.id);
-                setIsEventCheckinModalOpen(true);
-            } else {
-                setCheckinToEdit(null);
-                setSelectedRoomId(room.id);
-                setIsCheckinModalOpen(true);
-            }
-        } else if (status === 'incomplete') {
+        if (status === 'incomplete') {
             const activeCheckin = room.checkins?.[0];
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);
                 setIsCheckinModalOpen(true);
             }
+            return;
         }
 
         if (status === 'cleaning') {
@@ -1089,399 +1061,139 @@ export default function RoomsStatus({
                         const displayStatus = getDisplayStatus(room);
                         const isActionable = displayStatus === 'incomplete';
                         const isOccupied = displayStatus === 'occupied';
-                        const activeCheckin =
-                            room.checkins && room.checkins.length > 0
-                                ? room.checkins[0]
-                                : null;
+                        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
                         const isSelected = selectedForAction === room.id;
+                        const isMultiSelected = selectedRoomsForCheckout.includes(room.id);
+                        const isEligibleForMulti = isMultiCheckoutMode && isOccupied;
 
-                        const isMultiSelected =
-                            selectedRoomsForCheckout.includes(room.id);
-                        const isEligibleForMulti =
-                            isMultiCheckoutMode && isOccupied;
-
-                        // =========================================================
-                        // 🧠 MOTOR MATEMÁTICO: CÁLCULO DEL SEMÁFORO CORPORATIVO
-                        // =========================================================
+                        // SEMÁFORO CORPORATIVO (Cálculos de lógica de pago)
                         const isCorporate = activeCheckin?.is_corporate;
                         let corpState: any = null;
-
                         if (isCorporate && activeCheckin) {
-                            // 1. Sumamos lo que pagó
-                            let totalPaid = 0;
-                            if (
-                                activeCheckin.payments &&
-                                activeCheckin.payments.length > 0
-                            ) {
-                                totalPaid = activeCheckin.payments.reduce(
-                                    (acc: number, p: any) => {
-                                        const monto = parseFloat(p.amount) || 0;
-                                        return p.type === 'DEVOLUCION'
-                                            ? acc - monto
-                                            : acc + monto;
-                                    },
-                                    0,
-                                );
-                            } else {
-                                totalPaid =
-                                    parseFloat(
-                                        String(activeCheckin.advance_payment),
-                                    ) || 0;
-                            }
-
-                            // 2. Días cubiertos por el pago
-                            const agreedPrice =
-                                parseFloat(
-                                    String(activeCheckin.agreed_price),
-                                ) || 0;
-                            const daysPaid =
-                                agreedPrice > 0
-                                    ? Math.floor(totalPaid / agreedPrice)
-                                    : 0;
-
-                            // 3. Frecuencia de crédito pactada
-                            const frequency =
-                                parseInt(
-                                    String(activeCheckin.payment_frequency),
-                                ) || 1;
-
-                            // 4. Fecha Límite a las 00:00 hrs
-                            const checkinDate = new Date(
-                                activeCheckin.check_in_date,
-                            );
-                            checkinDate.setHours(0, 0, 0, 0);
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-
-                            const limitDate = new Date(checkinDate);
-                            limitDate.setDate(
-                                limitDate.getDate() + daysPaid + frequency,
-                            );
-
-                            // 5. Días restantes
-                            const diffTime =
-                                limitDate.getTime() - today.getTime();
-                            const daysRemaining = Math.ceil(
-                                diffTime / (1000 * 60 * 60 * 24),
-                            );
-
-                            // 6. Colores del Semáforo 🚦 (Solo color de fondo y texto)
-                            if (daysRemaining > 1) {
-                                corpState = {
-                                    badge: 'bg-emerald-500 text-white',
-                                    text: `CORP: Al día`,
-                                };
-                            } else if (daysRemaining === 1) {
-                                corpState = {
-                                    badge: 'bg-yellow-400 text-yellow-900',
-                                    text: `CORP: Mañana`,
-                                };
-                            } else if (daysRemaining === 0) {
-                                corpState = {
-                                    badge: 'bg-orange-500 text-white animate-pulse',
-                                    text: `COBRAR HOY`,
-                                };
-                            } else {
-                                corpState = {
-                                    badge: 'bg-red-600 text-white animate-pulse font-black',
-                                    text: `MOROSO (${Math.abs(daysRemaining)}d)`,
-                                };
-                            }
+                            let totalPaid = activeCheckin.payments?.reduce((acc: number, p: any) => p.type === 'DEVOLUCION' ? acc - (parseFloat(p.amount) || 0) : acc + (parseFloat(p.amount) || 0), 0) || parseFloat(String(activeCheckin.advance_payment)) || 0;
+                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
+                            const daysPaid = agreedPrice > 0 ? Math.floor(totalPaid / agreedPrice) : 0;
+                            const frequency = parseInt(String(activeCheckin.payment_frequency)) || 1;
+                            const limitDate = new Date(activeCheckin.check_in_date);
+                            limitDate.setHours(0,0,0,0);
+                            limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
+                            const daysRemaining = Math.ceil((limitDate.getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24));
+                            if (daysRemaining > 1) corpState = { badge: 'bg-emerald-500 text-white', text: `CORP: Al día` };
+                            else if (daysRemaining === 1) corpState = { badge: 'bg-yellow-400 text-yellow-900', text: `CORP: Mañana` };
+                            else if (daysRemaining === 0) corpState = { badge: 'bg-orange-500 text-white animate-pulse', text: `COBRAR HOY` };
+                            else corpState = { badge: 'bg-red-600 text-white animate-pulse font-black', text: `MOROSO (${Math.abs(daysRemaining)}d)` };
                         }
-                        // =========================================================
+
+                        // 🔍 LÓGICA DE RESERVAS ORDENADAS
+                        let sortedReservations: any[] = [];
+                        let firstRes: any = null;
+                        let isToday = false;
+                        if ((room as any).future_reservations?.length > 0) {
+                            sortedReservations = [...(room as any).future_reservations].sort((a: any, b: any) => new Date(a.date + 'T00:00:00').getTime() - new Date(b.date + 'T00:00:00').getTime());
+                            firstRes = sortedReservations[0];
+                            const t = new Date();
+                            const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+                            isToday = (firstRes.date === todayStr);
+                        }
 
                         return (
                             <div
                                 key={room.id}
                                 onClick={() => handleRoomClick(room)}
-                                // 🚨 Quitamos el "glow" de aquí para que la tarjeta no brille 🚨
-                                className={`relative flex h-36 flex-col justify-between overflow-hidden overflow-visible rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
+                                // 🚨 Tarjeta SIN overflow-hidden para que el hover no se corte
+                                className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
-                                {/* 👇 AQUÍ EMPIEZA LO NUEVO (Distintivo Morado) 👇 */}
-                                {/* 💜 DISTINTIVO DE RESERVAS FUTURAS CON POPOVER 💜 */}
-                                {(room as any).future_reservations &&
-                                    (room as any).future_reservations.length >
-                                        0 && (
-                                        <div className="group absolute -top-3 -right-3 z-40">
-                                            {/* Etiqueta Morada */}
-                                            {(() => {
-                                                const firstRes = (room as any)
-                                                    .future_reservations[0];
-                                                const arrival = new Date(
-                                                    firstRes.date + 'T00:00:00',
-                                                );
-                                                const today = new Date();
-                                                today.setHours(0, 0, 0, 0);
-                                                const diff = Math.ceil(
-                                                    (arrival.getTime() -
-                                                        today.getTime()) /
-                                                        (1000 * 60 * 60 * 24),
-                                                );
-                                                const isUrgent = diff <= 1; // Hoy o Mañana
+                                {/* 🚦 CONTROLES SUPERIOR DERECHA */}
+                                <div className="absolute top-0 right-0 z-50 flex shadow-md bg-white/90 backdrop-blur-sm rounded-tr-lg rounded-bl-xl">
+                                    {sortedReservations.length > 0 && (
+                                        <div className="group relative flex">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    console.log("=== EJECUTANDO ASIGNACIÓN ===");
+                                                    console.log("Agarrando a:", firstRes.guest, "ID:", firstRes.id);
+                                                    if (isToday) {
+                                                        // ✅ AQUÍ ESTÁ LA CLAVE: Le pasamos el ID de Fiorela al modal
+                                                        setPreselectedReservationId(firstRes.id);
+                                                        setIsPendingModalOpen(true);
+                                                    } else {
+                                                        alert(`Reserva de ${firstRes.guest} para el ${firstRes.date}. Solo asignable ese día.`);
+                                                    }
+                                                }}
+                                                className={`flex items-center justify-start px-2.5 py-1.5 transition-all duration-300 ease-in-out cursor-pointer overflow-hidden w-9 group-hover:w-[150px] ${isToday ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md' : 'bg-purple-200 text-purple-900 hover:bg-purple-300'} ${(!activeCheckin && !corpState) ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-300/50'}`}
+                                            >
+                                                <Calendar className={`h-4 w-4 shrink-0 ${isToday ? 'animate-pulse text-white' : 'text-purple-800'}`} />
+                                                <div className="ml-2 flex items-center opacity-0 transition-opacity duration-300 group-hover:opacity-100 whitespace-nowrap">
+                                                    <span className={`text-[10px] font-black italic uppercase tracking-tighter ${isToday ? 'text-white' : 'text-purple-900'}`}>
+                                                        {isToday ? '¡Asignar Hoy!' : `Res. ${firstRes.date}`}
+                                                    </span>
+                                                </div>
+                                            </button>
 
-                                                return (
-                                                    <div
-                                                        className={`flex cursor-help items-center gap-1 rounded-md border px-2 py-1 shadow-lg transition-all ${
-                                                            isUrgent
-                                                                ? 'scale-110 animate-pulse border-purple-400 bg-purple-600 text-white shadow-purple-500/50'
-                                                                : 'border-purple-300 bg-purple-100 text-purple-800 hover:bg-purple-200'
-                                                        }`}
-                                                    >
-                                                        <Calendar className="h-3 w-3" />
-                                                        <span className="text-[9px] font-black italic">
-                                                            {isUrgent
-                                                                ? '¡LLEGA PRONTO!'
-                                                                : `RES. ${firstRes.date}`}
-                                                        </span>
-                                                        {(room as any)
-                                                            .future_reservations
-                                                            .length > 1 && (
-                                                            <span className="ml-1 rounded-full bg-purple-800 px-1.5 py-0.5 text-[7px] text-white">
-                                                                +
-                                                                {(room as any)
-                                                                    .future_reservations
-                                                                    .length - 1}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            {/* 📝 VENTANITA DE INFORMACIÓN (Aparece al pasar el mouse) */}
-                                            <div className="pointer-events-none absolute top-full right-0 z-50 mt-2 hidden w-56 animate-in rounded-xl border border-gray-200 bg-white p-4 shadow-2xl zoom-in-95 fade-in group-hover:block">
-                                                <p className="mb-3 flex items-center gap-2 border-b border-purple-100 pb-1 text-[10px] font-black text-purple-600 uppercase">
-                                                    <Clock className="h-3 w-3" />{' '}
-                                                    Próximas Entradas
+                                            {/* 📝 PANTALLITA FLOTANTE (Popover) */}
+                                            <div className="hidden group-hover:block absolute top-full right-0 mt-1 w-56 bg-white border border-purple-200 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 cursor-default text-left pointer-events-none">
+                                                <p className="text-[10px] font-black text-purple-600 uppercase mb-2 border-b border-purple-100 pb-1 flex items-center justify-between pointer-events-none">
+                                                    <span><Clock className="w-3 h-3 inline mr-1" /> Entradas</span>
+                                                    <span className="bg-purple-100 text-purple-800 px-1.5 rounded-full">{ sortedReservations.length }</span>
                                                 </p>
-                                                <div className="space-y-3">
-                                                    {(
-                                                        room as any
-                                                    ).future_reservations.map(
-                                                        (
-                                                            res: any,
-                                                            idx: number,
-                                                        ) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="flex flex-col border-l-2 border-purple-300 pl-3"
-                                                            >
-                                                                <span className="text-[9px] font-bold text-gray-400">
-                                                                    {res.date}
-                                                                </span>
-                                                                <span className="text-[11px] leading-tight font-black text-gray-800 uppercase">
-                                                                    {res.guest}
-                                                                </span>
-                                                            </div>
-                                                        ),
-                                                    )}
+                                                <div className="space-y-2 max-h-32 overflow-y-auto pointer-events-none">
+                                                    {sortedReservations.map((res: any, idx: number) => (
+                                                        <div key={idx} className="flex flex-col border-l-2 border-purple-400 pl-2">
+                                                            <span className={`text-[9px] font-bold ${idx === 0 && isToday ? 'text-red-500 animate-pulse' : 'text-gray-500'}`}>{res.date}</span>
+                                                            <span className="text-[10px] font-black text-gray-800 uppercase leading-tight truncate">{res.guest}</span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         </div>
                                     )}
-                                {/* 🚦 CONTROLES SUPERIOR DERECHA (Calendario + Historial + Semáforo) 🚦 */}
-                                <div className="absolute top-0 right-0 z-40 flex shadow-md bg-white/90 backdrop-blur-sm rounded-tr-lg rounded-bl-xl overflow-visible">
-                                    
-                                    {/* 💜 1. CALENDARIO DE RESERVA (Solo Icono + Popover al pasar el mouse) 💜 */}
-                                    {(room as any).future_reservations && (room as any).future_reservations.length > 0 && (() => {
-                                        const firstRes = (room as any).future_reservations[0];
-                                        const arrival = new Date(firstRes.date + 'T00:00:00');
-                                        const today = new Date();
-                                        today.setHours(0,0,0,0);
-                                        const diff = Math.ceil((arrival.getTime() - today.getTime()) / (1000*60*60*24));
-                                        const isUrgent = diff <= 1; // Hoy o Mañana
 
-                                        return (
-                                            <div className="group relative flex">
-                                                {/* EL BOTÓN (Solo icono, sin texto que estorbe) */}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        // 👇 AQUÍ ABRES TU MODAL DE CONFIRMACIÓN DE RESERVA 👇
-                                                        console.log("Abriendo modal de confirmación para la habitación:", room.number);
-                                                        // Ejemplo: setConfirmReservationModal(room);
-                                                    }}
-                                                    className={`flex items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-                                                        isUrgent 
-                                                        ? 'bg-purple-600 text-white hover:bg-purple-700' 
-                                                        : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
-                                                    } ${(!activeCheckin && !corpState) ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-200/50'}`}
-                                                >
-                                                    <Calendar className={`h-4 w-4 ${isUrgent ? 'animate-pulse' : ''}`} />
-                                                </button>
-
-                                                {/* 📝 PANTALLITA FLOTANTE (Se ve al acercar el mouse) */}
-                                                <div className="hidden group-hover:block absolute top-full right-0 mt-1 w-48 bg-white border border-purple-200 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 cursor-default text-left pointer-events-none">
-                                                    <p className="text-[10px] font-black text-purple-600 uppercase mb-2 border-b border-purple-100 pb-1 flex items-center justify-between">
-                                                        <span><Clock className="w-3 h-3 inline mr-1" /> Entradas</span>
-                                                        <span className="bg-purple-100 text-purple-800 px-1.5 rounded-full">
-                                                            { (room as any).future_reservations.length }
-                                                        </span>
-                                                    </p>
-                                                    <div className="space-y-2 max-h-32 overflow-y-auto">
-                                                        {(room as any).future_reservations.map((res: any, idx: number) => (
-                                                            <div key={idx} className="flex flex-col border-l-2 border-purple-400 pl-2">
-                                                                <span className={`text-[9px] font-bold ${idx === 0 && isUrgent ? 'text-red-500' : 'text-gray-500'}`}>
-                                                                    {res.date}
-                                                                </span>
-                                                                <span className="text-[10px] font-black text-gray-800 uppercase leading-tight truncate">
-                                                                    {res.guest}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* 🟡 2. BOTÓN HISTORIAL ORIGINAL 🟡 */}
                                     {activeCheckin && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleOpenHistory(activeCheckin, room);
-                                            }}
-                                            className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${
-                                                !((room as any).future_reservations && (room as any).future_reservations.length > 0) ? 'rounded-bl-xl' : ''
-                                            } ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
-                                            title="Ver Historial Financiero"
-                                        >
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenHistory(activeCheckin, room); }} className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`} title="Historial Financiero">
                                             <History className="h-4 w-4 shadow-sm" /> 
                                         </button>
                                     )}
 
-                                    {/* 🟢/🔴 3. SEMÁFORO CORPORATIVO ORIGINAL */}
                                     {corpState && (
-                                        <div className={`flex items-center px-3 py-1.5 text-[10px] font-black tracking-wider uppercase rounded-tr-lg ${
-                                            !activeCheckin && !((room as any).future_reservations && (room as any).future_reservations.length > 0) ? 'rounded-bl-xl' : ''
-                                        } ${corpState.badge}`}>
+                                        <div className={`flex items-center px-3 py-1.5 text-[10px] font-black tracking-wider uppercase rounded-tr-lg ${!activeCheckin && !sortedReservations.length ? 'rounded-bl-xl' : ''} ${corpState.badge}`}>
                                             {corpState.text}
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Check original (Lo bajamos un poquitito si es corporativo para que no choque) */}
-                                {isSelected && (
-                                    <div
-                                        className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}
-                                    >
-                                        <CheckCircle2 className="h-5 w-5" />
-                                    </div>
-                                )}
+                                {isSelected && ( <div className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}><CheckCircle2 className="h-5 w-5" /></div> )}
+                                {isMultiSelected && ( <div className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}><CheckCircle2 className="h-6 w-6" /></div> )}
 
-                                {/* Check verde cuando se selecciona para cobro múltiple */}
-                                {isMultiSelected && (
-                                    <div
-                                        className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}
-                                    >
-                                        <CheckCircle2 className="h-6 w-6" />
-                                    </div>
-                                )}
-
-                                <div className="absolute -top-2 -right-2 rotate-12 transform opacity-30">
-                                    {config.icon}
-                                </div>
-                                <div className="relative z-10 p-4 text-white">
-                                    <div className="flex items-start justify-between">
-                                        <div className="w-full">
-                                            <h3 className="text-2xl font-extrabold tracking-tight">
-                                                {room.number}
-                                            </h3>
-                                            <p
-                                                className="mt-1 line-clamp-2 text-xs font-bold text-white/90"
-                                                title={String(config.info)}
-                                            >
-                                                {config.info}
-                                            </p>
-
-                                            {/* TIPO DE BAÑO */}
-                                            {config.des && (
-                                                <div className="mt-2 flex w-full">
-                                                    <span
-                                                        className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold tracking-widest uppercase shadow-sm backdrop-blur-md transition-colors ${
-                                                            config.des ===
-                                                            'Privado'
-                                                                ? 'border border-sky-200/50 bg-sky-50/90 text-sky-700'
-                                                                : config.des ===
-                                                                    'Compartido'
-                                                                  ? 'border border-amber-200/50 bg-amber-50/90 text-amber-700'
-                                                                  : 'border border-gray-200/50 bg-gray-50/90 text-gray-700'
-                                                        }`}
-                                                    >
-                                                        {config.des}
-                                                    </span>
-                                                </div>
-                                            )}
+                                <div className="absolute -top-2 -right-2 rotate-12 transform opacity-30 pointer-events-none">{config.icon}</div>
+                                <div className="relative z-10 p-4 text-white pointer-events-none">
+                                    <h3 className="text-2xl font-extrabold tracking-tight">{room.number}</h3>
+                                    <p className="mt-1 line-clamp-2 text-xs font-bold text-white/90">{config.info}</p>
+                                    {config.des && (
+                                        <div className="mt-2 flex w-full">
+                                            <span className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold uppercase shadow-sm backdrop-blur-md ${config.des === 'Privado' ? 'bg-sky-50/90 text-sky-700' : config.des === 'Compartido' ? 'bg-amber-50/90 text-amber-700' : 'bg-gray-50/90 text-gray-700'}`}>{config.des}</span>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
+
+                                {/* BOTONES INFERIORES con rounded-b-lg para mantener la forma */}
                                 {isActionable ? (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRoomClick(room);
-                                        }}
-                                        className="z-20 flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold tracking-wider text-white uppercase transition-colors hover:bg-amber-800"
-                                    >
-                                        <FileEdit className="h-3 w-3" />{' '}
-                                        Completar Datos
+                                    <button onClick={(e) => { e.stopPropagation(); handleRoomClick(room); }} className="z-20 flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold text-white uppercase hover:bg-amber-800 rounded-b-lg">
+                                        <FileEdit className="h-3 w-3" /> Completar Datos
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
-                                    <div className="z-20 flex border-t border-cyan-700">
-                                        {!room.room_type?.name
-                                            ?.toUpperCase()
-                                            .includes('SALON') && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleOpenDetails(room); // Acción original para habitaciones normales
-                                                }}
-                                                title="Datos del usuario"
-                                                className="flex flex-1 cursor-pointer items-center justify-center gap-1 border-r border-cyan-700 bg-cyan-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-cyan-500"
-                                            >
-                                                <UserIcon className="h-3 w-3" />{' '}
-                                            </button>
+                                    <div className="z-20 flex border-t border-cyan-700 rounded-b-lg overflow-hidden">
+                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleOpenDetails(room); }} className="flex flex-1 items-center justify-center border-r border-cyan-700 bg-cyan-600 py-2 text-white hover:bg-cyan-500"><UserIcon className="h-3 w-3" /></button>
                                         )}
-
-                                        {!room.room_type?.name
-                                            ?.toUpperCase()
-                                            .includes('SALON') && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleShowCheckinDetails(
-                                                        activeCheckin,
-                                                        room,
-                                                    );
-                                                }}
-                                                className="flex flex-1 items-center justify-center gap-1 border-r border-red-800 bg-blue-600 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-blue-700"
-                                                title="Ver lista de consumos y detalles"
-                                            >
-                                                <ShoppingCart className="h-3 w-3" />
-                                            </button>
+                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleShowCheckinDetails(activeCheckin, room); }} className="flex flex-1 items-center justify-center border-r border-red-800 bg-blue-600 py-2 text-white hover:bg-blue-700"><ShoppingCart className="h-3 w-3" /></button>
                                         )}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDirectCheckoutTrigger(
-                                                    activeCheckin.id,
-                                                );
-                                            }}
-                                            className="flex flex-1 items-center justify-center gap-1 bg-gray-900 py-2 text-[10px] font-bold text-white uppercase transition-colors hover:bg-black"
-                                        >
-                                            <LogOut className="h-3 w-3" />{' '}
-                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleDirectCheckoutTrigger(activeCheckin.id); }} className="flex flex-1 items-center justify-center bg-gray-900 py-2 text-white hover:bg-black"><LogOut className="h-3 w-3" /></button>
                                     </div>
                                 ) : (
-                                    <div
-                                        className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2`}
-                                    >
-                                        <span className="flex items-center gap-1 text-xs font-bold tracking-wider text-white uppercase">
-                                            {config.label}
-                                        </span>
-                                        <div
-                                            className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}
-                                        ></div>
+                                    <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2 rounded-b-lg`}>
+                                        <span className="text-xs font-bold text-white uppercase">{config.label}</span>
+                                        <div className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
                                     </div>
                                 )}
                             </div>

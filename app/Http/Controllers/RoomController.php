@@ -31,12 +31,12 @@ class RoomController
             'checkins.guest',
             'checkins.companions'
         ])
-        // 1. Obtenemos los registros primero (quitamos el orderBy de SQL)
-        ->get() 
-        // 2. Aplicamos el ordenamiento Natural usando PHP
-        ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE) 
-        // 3. Re-indexamos los valores para que el Frontend lo reciba como un Array limpio
-        ->values(); 
+            // 1. Obtenemos los registros primero (quitamos el orderBy de SQL)
+            ->get()
+            // 2. Aplicamos el ordenamiento Natural usando PHP
+            ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE)
+            // 3. Re-indexamos los valores para que el Frontend lo reciba como un Array limpio
+            ->values();
 
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
@@ -168,36 +168,42 @@ class RoomController
                         'companions',
                         'checkinDetails.service',
                         'services',
-                        'payments' => function($query) {
-                            $query->orderBy('created_at', 'asc'); 
+                        'payments' => function ($query) {
+                            $query->orderBy('created_at', 'asc');
                         },
                         'room.price',
                         'room.roomType'
                     ]);
             }
         ])->orderBy('number')->get()->map(function ($room) {
-            
+
             // 💜 MAGIA MORADA: Buscamos TODAS las reservas futuras para esta habitación
             $futureReservations = \App\Models\ReservationDetail::where('room_id', $room->id)
                 ->whereHas('reservation', function ($query) {
                     $query->whereIn('status', ['pendiente', 'confirmada'])
-                          ->whereDate('arrival_date', '>=', now()->toDateString());
+                        ->whereDate('arrival_date', '>=', now()->toDateString());
+                })
+                ->whereDoesntHave('room.checkins', function ($q) {
+                    $q->where('status', 'activo')
+                        ->whereDate('created_at', now()->toDateString());
                 })
                 ->with(['reservation.guest'])
                 ->get()
-                ->map(function($detail) {
+                ->map(function ($detail) {
                     return [
+                        'id' => $detail->reservation->id, // 👈 ¡CLAVE! Añadimos el ID
                         'date' => $detail->reservation->arrival_date,
-                        'guest' => $detail->reservation->guest->full_name ?? 'Huésped'
+                        'guest' => $detail->reservation->guest->full_name ?? 'Huésped',
+                        'raw_reservation' => $detail->reservation // 👈 Pasamos el objeto completo para el Modal
                     ];
                 })
                 ->sortBy('date')
                 ->values()
-                ->toArray(); // Convertimos a array para evitar problemas en React
+                ->toArray();
 
             // Asignamos el arreglo de reservas futuras a la habitación
             $room->future_reservations = $futureReservations;
-            
+
             return $room;
         });
 
@@ -206,11 +212,11 @@ class RoomController
             'guest',
             'companions',
             'checkinDetails.service',
-            'room.price',     
-            'room.roomType',  
+            'room.price',
+            'room.roomType',
             'services',
-            'payments' => function($query) {
-                $query->orderBy('created_at', 'asc'); 
+            'payments' => function ($query) {
+                $query->orderBy('created_at', 'asc');
             }
         ])
             ->where('status', 'activo')
@@ -223,11 +229,11 @@ class RoomController
 
         // 4. Separamos las habitaciones para el Modal de Transferencia
         $availableRooms = $rooms->filter(function ($room) {
-            return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']); 
+            return in_array(strtoupper($room->status), ['LIBRE', 'LIMPIEZA']);
         })->values();
 
         $occupiedRooms = $rooms->filter(function ($room) {
-            return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']); 
+            return in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO']);
         })->values();
 
 
@@ -267,11 +273,11 @@ class RoomController
         // 4. Crear el registro oficial de Mantenimiento
         Maintenance::create([
             'room_id' => $room->id,
-            'user_id' => $request->user()->id, 
+            'user_id' => $request->user()->id,
             'issue' => strtoupper($request->issue),
             'description' => strtoupper($request->description),
             'photo_path' => $photoPath,
-            'checkin_id' => $activeCheckin ? $activeCheckin->id : null, 
+            'checkin_id' => $activeCheckin ? $activeCheckin->id : null,
         ]);
 
         // 5. Cambiar el estado de la habitación para que ya no se pueda vender
