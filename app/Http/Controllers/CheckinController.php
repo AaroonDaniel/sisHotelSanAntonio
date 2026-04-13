@@ -663,6 +663,7 @@ class CheckinController extends Controller
             'auto_adjust_price' => 'boolean',
             'is_corporate' => 'nullable|boolean',
             'payment_frequency' => 'nullable|string|max:255',
+            'agreed_price' => 'nullable|numeric|min:0',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
@@ -830,39 +831,45 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 5. LÓGICA DE PRECIO Y PLAN CORPORATIVO
+            // 5. LÓGICA DE GRUPOS ESPECIALES (CORPORATIVO / DELEGACIÓN) Y PRECIO
             // =========================================================
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $basePrice = $roomModelUpdate->price->amount ?? 0;
 
             $isCorporateNow = $request->boolean('is_corporate');
-            $updatedAgreedPrice = $checkin->agreed_price ?? $basePrice; 
+            $isDelegationNow = $request->boolean('is_delegation');
+            $isSpecialGroup = $isCorporateNow || $isDelegationNow;
+
+            // 👇 LA MAGIA: Si el recepcionista escribió un precio negociado, lo usamos. Si no, usamos el base.
+            $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : ($checkin->agreed_price ?? $basePrice); 
+            
             $paymentFrequency = $checkin->payment_frequency;
             $corporateDays = $checkin->corporate_days;
 
-            if ($checkin->is_corporate == true && $isCorporateNow == false) {
+            if ($checkin->is_corporate == false && $checkin->is_delegation == false && $isSpecialGroup == true) {
+                $paymentFrequency = $request->input('payment_frequency');
+                $corporateDays = 0;
+            } 
+            elseif (($checkin->is_corporate == true || $checkin->is_delegation == true) && $isSpecialGroup == false) {
+                // El Castigo: Pierde su privilegio y vuelve al precio normal
                 $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
                 $now = \Carbon\Carbon::now();
                 $corporateDays = max(0, intval($checkInDate->diffInDays($now)));
                 $updatedAgreedPrice = $basePrice; 
                 $paymentFrequency = null; 
             } 
-            elseif ($checkin->is_corporate == false && $isCorporateNow == true) {
-                $updatedAgreedPrice = max(0, $basePrice - 20); 
-                $paymentFrequency = $request->input('payment_frequency');
-                $corporateDays = 0;
-            } 
-            elseif (!$isCorporateNow) {
+            elseif (!$isSpecialGroup) {
                 if ($request->boolean('auto_adjust_price')) {
                     $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+                } else {
+                    $updatedAgreedPrice = $basePrice;
                 }
             } 
             else {
                 $paymentFrequency = $request->input('payment_frequency');
             }
 
-            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporateNow) ? true : ($totalGuests >= $maxCapacity);
-
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialGroup) ? true : ($totalGuests >= $maxCapacity);
             // =========================================================
             // 6. EVALUACIÓN FINAL Y GUARDADO
             // =========================================================

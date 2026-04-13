@@ -163,6 +163,7 @@ export interface CheckinData {
     duration_days: number;
     advance_payment: number;
     agreed_price: number;
+    is_delegation: boolean;
     discount?: number;
     notes?: string;
     services?: string[];
@@ -260,6 +261,8 @@ interface CheckinFormData {
     is_corporate: boolean;
     payment_frequency: string | number;
     corporate_days: number;
+    is_delegation: boolean;
+    agreed_price: number;
 }
 
 export default function CheckinModal({
@@ -407,6 +410,9 @@ export default function CheckinModal({
             is_corporate: false,
             payment_frequency: '',
             corporate_days: 0,
+            is_delegation: false,
+            agreed_price: 0,
+
         });
 
     // =========================================================================
@@ -655,7 +661,8 @@ export default function CheckinModal({
                     auto_adjust_price: isPriceAdjusted,
                     is_temporary: !!checkinToEdit.is_temporary,
 
-                    // 🌟 AQUÍ ESTÁ LA MEMORIA CORPORATIVA 🌟
+                    agreed_price: checkinToEdit.agreed_price ? Number(checkinToEdit.agreed_price) : Number(originalRoomPrice),
+                    is_delegation: !!checkinToEdit.is_delegation,
                     is_corporate: !!checkinToEdit.is_corporate,
                     payment_frequency: checkinToEdit.payment_frequency || '',
                     corporate_days: checkinToEdit.corporate_days || 0,
@@ -721,6 +728,12 @@ export default function CheckinModal({
                 setIsExistingGuest(false);
                 setCurrentIndex(0);
 
+                const initialRoomObj = rooms?.find(
+                    (r: any) => String(r.id) === String(initialRoomId),
+                );
+                const originalRoomPriceForNew =
+                    initialRoomObj?.price?.amount || 0;
+
                 // Valores iniciales
                 setData((prev) => ({
                     ...prev,
@@ -733,9 +746,9 @@ export default function CheckinModal({
                     payment_method: 'EFECTIVO',
                     qr_bank: '',
                     auto_adjust_price: false,
-                    is_temporary: false,
-
-                    // 🌟 LIMPIAMOS LA MEMORIA CORPORATIVA 🌟
+                    is_temporary: false,   
+                    agreed_price: originalRoomPriceForNew ? Number(originalRoomPriceForNew) : 0,
+                    is_delegation: false,
                     is_corporate: false,
                     payment_frequency: '',
                     corporate_days: 0,
@@ -2470,7 +2483,7 @@ export default function CheckinModal({
                                     {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
                                     <div className="rounded-xl border border-green-200 bg-green-50 p-3 shadow-sm transition-all">
                                         {(() => {
-                                            // Buscamos la habitación seleccionada
+                                            // 1. Buscamos la habitación seleccionada
                                             const selectedRoom = rooms.find(
                                                 (r) =>
                                                     r.id ===
@@ -2481,55 +2494,54 @@ export default function CheckinModal({
                                             const originalPrice =
                                                 selectedRoom?.price?.amount ||
                                                 0;
-                                            let autoCalculatedPrice =
-                                                originalPrice;
-                                            let isAutoAdjusted = false;
+                                            let finalPrice = originalPrice;
 
-                                            // Si estamos EDITANDO, leemos el precio real
+                                            // ==========================================
+                                            // 🧠 LÓGICA DE PRECIO FINAL
+                                            // ==========================================
+                                            // Si es Corporativo o Delegación, mandan el campo editable
                                             if (
+                                                data.is_corporate ||
+                                                data.is_delegation
+                                            ) {
+                                                finalPrice =
+                                                    Number(data.agreed_price) ||
+                                                    0;
+                                            }
+                                            // Si no, pero estamos editando un checkin que ya tenía un precio especial
+                                            else if (
                                                 checkinToEdit &&
                                                 checkinToEdit.agreed_price
                                             ) {
-                                                autoCalculatedPrice =
-                                                    checkinToEdit.agreed_price;
-                                                if (
-                                                    autoCalculatedPrice !==
-                                                    originalPrice
-                                                ) {
-                                                    isAutoAdjusted = true;
-                                                }
+                                                finalPrice = Number(
+                                                    checkinToEdit.agreed_price,
+                                                );
                                             }
 
-                                            // Lógica Corporativa
-                                            const isCorporate = data.notes
-                                                ?.toUpperCase()
-                                                .includes('CORPORATIVO');
-                                            if (isCorporate && selectedRoom) {
-                                                const roomAny =
-                                                    selectedRoom as any;
-                                                const bathroomType =
-                                                    roomAny.price?.bathroom_type?.toLowerCase() ||
-                                                    roomAny.room_type?.bathroom_type?.toLowerCase() ||
-                                                    '';
-                                                const isPrivate =
-                                                    bathroomType ===
-                                                        'private' ||
-                                                    bathroomType === 'privado';
-                                                autoCalculatedPrice =
-                                                    (isPrivate ? 90 : 60) *
-                                                    totalPeople;
-                                                isAutoAdjusted = false; // Sobrescribe etiqueta
-                                            }
+                                            const isAutoAdjusted =
+                                                finalPrice !== originalPrice;
 
                                             // ==========================================
-                                            // PRECIO FINAL DIRECTO (SIN DESCUENTO)
+                                            // 💰 LÓGICA DEL TOTAL A COBRAR
                                             // ==========================================
-                                            const finalPrice =
-                                                autoCalculatedPrice;
-
-                                            // Calculamos el total
-                                            const noches =
+                                            let noches =
                                                 Number(data.duration_days) || 0;
+                                            let tituloTotal = isAutoAdjusted
+                                                ? 'Total a cobrar'
+                                                : 'Total sugerido';
+
+                                            // Si es un grupo especial, el total sugerido a cobrar AHORA MISMO es en base a su frecuencia
+                                            if (
+                                                data.is_corporate ||
+                                                data.is_delegation
+                                            ) {
+                                                noches =
+                                                    Number(
+                                                        data.payment_frequency,
+                                                    ) || 1;
+                                                tituloTotal = `Cobro (cada ${noches} días)`;
+                                            }
+
                                             const total = finalPrice * noches;
 
                                             return (
@@ -2573,22 +2585,23 @@ export default function CheckinModal({
 
                                                     {/* DERECHA: Total a cobrar */}
                                                     <div className="flex flex-col border-l border-green-200 pl-4 text-right">
-                                                        <span className="mb-0.5 text-xs font-bold text-green-600 uppercase">
-                                                            {isAutoAdjusted
-                                                                ? 'Total a cobrar'
-                                                                : 'Total sugerido'}
+                                                        <span className="mb-0.5 text-[11px] font-bold text-green-700 uppercase">
+                                                            {tituloTotal}
                                                         </span>
                                                         <span className="text-2xl leading-none font-black text-gray-900">
-                                                            {total} Bs
+                                                            {total.toFixed(2)}{' '}
+                                                            Bs
                                                         </span>
-                                                        {isAutoAdjusted &&
-                                                            noches > 1 && (
-                                                                <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                    {finalPrice}{' '}
-                                                                    x {noches}{' '}
-                                                                    noches
-                                                                </span>
-                                                            )}
+                                                        {noches > 1 && (
+                                                            <span className="mt-0.5 text-[10px] font-medium text-gray-500">
+                                                                {finalPrice} x{' '}
+                                                                {noches}{' '}
+                                                                {data.is_corporate ||
+                                                                data.is_delegation
+                                                                    ? 'días'
+                                                                    : 'noches'}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
