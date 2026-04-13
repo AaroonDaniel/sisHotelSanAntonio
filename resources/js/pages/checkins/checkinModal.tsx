@@ -744,8 +744,7 @@ export default function CheckinModal({
                 // Aseguramos que la caja "OTRO" se oculte
                 setIsCustomFrequency(false);
             }
-        }
-        else {
+        } else {
             // ===============================================
             // 🛑 MAGIA AQUÍ: Cuando se cierra el modal (Cancelar)
             // ===============================================
@@ -1060,11 +1059,13 @@ export default function CheckinModal({
         // =========================================================
         if (data.is_corporate) {
             const montoAdelanto = Number(data.advance_payment);
-            
+
             if (!montoAdelanto || montoAdelanto <= 0) {
                 // 1. Alerta en pantalla
-                alert("⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.");
-                
+                alert(
+                    "⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.",
+                );
+
                 // 2. Pintamos el error usando el sistema de Inertia que ya tienes
                 // (Opcional, pero ayuda a que se vea en rojo abajo del input)
                 return; // 🛑 EL CANDADO SE CIERRA: No ejecutamos executeSubmit()
@@ -1382,7 +1383,7 @@ export default function CheckinModal({
                     )}
 
                     {/* TOAST 3: INFO DE RESERVA (AZUL - 10 SEGUNDOS) */}
-                    {showReservationToast && (
+                    {showReservationToast && checkinToEdit?.is_temporary && (
                         <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-blue-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
                             <div className="flex items-start gap-3">
                                 <div className="rounded-full bg-blue-100 p-2 text-blue-600">
@@ -2846,11 +2847,16 @@ export default function CheckinModal({
                                                             e.target.select()
                                                         }
                                                         disabled={!isTitular}
-                                                        required={data.is_corporate}
+                                                        required={
+                                                            data.is_corporate
+                                                        }
                                                         className={`block w-full [appearance:textfield] rounded-xl border py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-                                                            data.is_corporate && (!data.advance_payment || data.advance_payment <= 0) 
-                                                            ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo
-                                                            : 'border-gray-400'
+                                                            data.is_corporate &&
+                                                            (!data.advance_payment ||
+                                                                data.advance_payment <=
+                                                                    0)
+                                                                ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo
+                                                                : 'border-gray-400'
                                                         }`}
                                                         placeholder="0.00"
                                                     />

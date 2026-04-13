@@ -668,21 +668,17 @@ class CheckinController extends Controller
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
             
             // =========================================================
-            // 🔄 1. PROTECCIÓN Y SWAP DEL TITULAR (Evita reescribir a otra persona)
+            // 🔄 1. PROTECCIÓN Y SWAP DEL TITULAR 
             // =========================================================
             $currentGuest = \App\Models\Guest::find($checkin->guest_id);
             $guestIdToUse = $checkin->guest_id;
 
-            // Si el recepcionista cambia el Carnet para asignar esta habitación a otra persona de la reserva
             if ($request->filled('identification_number') && $currentGuest && $currentGuest->identification_number !== $request->identification_number) {
-                
                 $existingOtherGuest = \App\Models\Guest::where('identification_number', $request->identification_number)->first();
-                
                 if ($existingOtherGuest) {
                     $guestIdToUse = $existingOtherGuest->id;
                     $currentGuest = $existingOtherGuest; 
                 } else {
-                    // Creamos un nuevo huésped para no arruinar los datos del titular original
                     $currentGuest = \App\Models\Guest::create([
                         'full_name' => $request->full_name ? strtoupper($request->full_name) : 'SIN NOMBRE',
                         'identification_number' => $request->identification_number,
@@ -690,35 +686,11 @@ class CheckinController extends Controller
                     ]);
                     $guestIdToUse = $currentGuest->id;
                 }
-                
-                // Desenlazamos esta habitación del titular original y la asignamos al nuevo
                 $checkin->update(['guest_id' => $guestIdToUse]);
             }
 
             // =========================================================
-            // 🛑 2. BARRERA 1-A-1 INTELIGENTE (Adaptada para Update)
-            // =========================================================
-            $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
-            $isAssigningSalon = str_contains(strtoupper($roomModelUpdate->roomType->name ?? ''), 'SALON');
-
-            $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
-                ->where('guest_id', $guestIdToUse)
-                ->where('status', 'activo')
-                ->where('is_temporary', false) // 🔥 CLAVE: Ignoramos las otras habitaciones "Naranjas" temporales
-                ->where('id', '!=', $checkin->id) // 🔥 CLAVE: Ignoramos la habitación actual
-                ->get();
-
-            foreach ($ocupacionesPrevias as $ocupacion) {
-                $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                if ($isAssigningSalon === $isPreviousSalon) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'identification_number' => "ALERTA: Este huésped ya está registrado definitivamente en la Habitación " . $ocupacion->room->number . ". Por favor, ingrese el Carnet de la persona correcta para esta habitación.",
-                    ]);
-                }
-            }
-
-            // =========================================================
-            // 3. ACTUALIZAR LOS DATOS DEL TITULAR (Ahora sí es seguro)
+            // 2. ACTUALIZAR LOS DATOS DEL TITULAR 
             // =========================================================
             if ($currentGuest) {
                 $currentGuest->update([
@@ -732,7 +704,6 @@ class CheckinController extends Controller
                 ]);
             }
 
-            // Limpiamos origin
             $cleanOrigin = null;
             if (!empty($validated['origin'])) {
                 $cleanOrigin = trim($validated['origin']);
@@ -740,7 +711,6 @@ class CheckinController extends Controller
                 $cleanOrigin = strtoupper($cleanOrigin);
             }
 
-            // Verificar si titular está completo
             $isTitularComplete = true;
             if (empty($currentGuest->identification_number) || empty($currentGuest->nationality) || empty($cleanOrigin) || empty($currentGuest->profession) || empty($currentGuest->civil_status) || empty($currentGuest->birth_date)) {
                 $isTitularComplete = false;
@@ -751,14 +721,13 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 4. ACTUALIZAR ACOMPAÑANTES Y VERIFICAR COMPLETITUD
+            // 3. ACTUALIZAR ACOMPAÑANTES Y OBTENER SUS IDs
             // =========================================================
             $allCompanionsComplete = true;
-            $totalGuests = 1; // Contamos al titular
+            $totalGuests = 1; 
+            $idsParaSincronizar = [];
 
             if ($request->has('companions') && is_array($request->companions)) {
-                $idsParaSincronizar = [];
-
                 foreach ($request->companions as $compData) {
                     if (empty($compData['full_name'])) continue;
                     $totalGuests++; 
@@ -802,12 +771,59 @@ class CheckinController extends Controller
                         ]);
                     }
 
-                    if ($companion->id !== $currentGuest->id) {
+                    if ($companion->id !== $guestIdToUse) {
                         $idsParaSincronizar[$companion->id] = [
                             'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
                         ];
                     }
                 }
+            }
+
+            // =========================================================
+            // 🛑 4. BARRERA OMNISCIENTE (TITULAR Y ACOMPAÑANTES)
+            // =========================================================
+            $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
+            $isAssigningSalon = str_contains(strtoupper($roomModelUpdate->roomType->name ?? ''), 'SALON');
+
+            // Metemos en una bolsa a todos los que intentan entrar a esta habitación
+            $allGuestIdsToCheck = array_merge([$guestIdToUse], array_keys($idsParaSincronizar));
+
+            $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType', 'guest', 'companions')
+                ->where('status', 'activo')
+                ->where('is_temporary', false) 
+                ->where('id', '!=', $checkin->id) 
+                ->where(function($q) use ($allGuestIdsToCheck) {
+                    $q->whereIn('guest_id', $allGuestIdsToCheck) 
+                      ->orWhereHas('companions', function($q2) use ($allGuestIdsToCheck) {
+                          $q2->whereIn('guests.id', $allGuestIdsToCheck); 
+                      });
+                })
+                ->get();
+
+            foreach ($ocupacionesPrevias as $ocupacion) {
+                $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
+                
+                if ($isAssigningSalon === $isPreviousSalon) {
+                    $duplicateName = 'Un huésped';
+                    if (in_array($ocupacion->guest_id, $allGuestIdsToCheck)) {
+                        $duplicateName = $ocupacion->guest->full_name ?? 'El titular';
+                    } else {
+                        foreach ($ocupacion->companions as $comp) {
+                            if (in_array($comp->id, $allGuestIdsToCheck)) {
+                                $duplicateName = $comp->full_name;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 👇 EL MENSAJE UNIFICADO QUE PEDISTE 👇
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'guest_id' => "ALERTA: {$duplicateName} ya se encuentra registrado en el/la " . $ocupacion->room->number,
+                    ]);
+                }
+            }
+
+            if (!empty($idsParaSincronizar)) {
                 $checkin->companions()->sync($idsParaSincronizar);
             } else {
                 $checkin->companions()->detach();

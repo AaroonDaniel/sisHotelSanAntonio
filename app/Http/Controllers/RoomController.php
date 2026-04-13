@@ -183,18 +183,15 @@ class RoomController
                     $query->whereIn('status', ['pendiente']) // Solo pendientes o confirmadas
                         ->whereDate('arrival_date', '>=', now()->toDateString());
                 })
-                ->whereDoesntHave('room.checkins', function ($q) {
-                    $q->where('status', 'activo')
-                        ->whereDate('created_at', now()->toDateString());
-                })
+                
                 ->with(['reservation.guest'])
                 ->get()
                 ->map(function ($detail) {
                     return [
-                        'id' => $detail->reservation->id, // 👈 ¡CLAVE! Añadimos el ID
+                        'id' => $detail->reservation->id, 
                         'date' => $detail->reservation->arrival_date,
                         'guest' => $detail->reservation->guest->full_name ?? 'Huésped',
-                        'raw_reservation' => $detail->reservation // 👈 Pasamos el objeto completo para el Modal
+                        'raw_reservation' => $detail->reservation 
                     ];
                 })
                 ->sortBy('date')
