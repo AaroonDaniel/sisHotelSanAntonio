@@ -440,6 +440,7 @@ export default function RoomsStatus({
         const status = getDisplayStatus(room);
         const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
+        console.log(`[Interacción] Clic en Habitación ${room.number}. Estado actual: ${status}`);
         if (isMultiCheckoutMode) {
             if (status === 'occupied') {
                 setSelectedRoomsForCheckout((prev) =>
@@ -480,10 +481,14 @@ export default function RoomsStatus({
 
         if (status === 'incomplete') {
             const activeCheckin = room.checkins?.[0];
+
+            console.log(`⚠️ Habitación ${room.number} está Incompleta.`);
+            console.log("Datos del Check-in pendiente:", activeCheckin);
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);
                 setIsCheckinModalOpen(true);
+                console.log("-> Abriendo modal de Check-in para completar datos.");
             }
             return;
         }

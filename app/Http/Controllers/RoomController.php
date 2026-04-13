@@ -180,7 +180,7 @@ class RoomController
             // 💜 MAGIA MORADA: Buscamos TODAS las reservas futuras para esta habitación
             $futureReservations = \App\Models\ReservationDetail::where('room_id', $room->id)
                 ->whereHas('reservation', function ($query) {
-                    $query->whereIn('status', ['pendiente', 'confirmada'])
+                    $query->whereIn('status', ['pendiente']) // Solo pendientes o confirmadas
                         ->whereDate('arrival_date', '>=', now()->toDateString());
                 })
                 ->whereDoesntHave('room.checkins', function ($q) {

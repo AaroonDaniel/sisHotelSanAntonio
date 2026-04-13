@@ -745,6 +745,15 @@ export default function CheckinModal({
                 setIsCustomFrequency(false);
             }
         }
+        else {
+            // ===============================================
+            // 🛑 MAGIA AQUÍ: Cuando se cierra el modal (Cancelar)
+            // ===============================================
+            reset(); // Forzamos a Inertia a olvidar el estado anterior
+            clearErrors();
+            setIsExistingGuest(false);
+            setCurrentIndex(0);
+        }
         // 🛑 IMPORTANTE: Agregamos 'rooms' al arreglo de dependencias al final
     }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules, rooms]);
 

@@ -160,7 +160,7 @@ class ReservationController extends Controller
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
                     $reservation->update(['status' => 'confirmada']);
                     $primerCheckinId = null;
-
+                    Log::info("✅ Reserva confirmada. Creando check-ins para cada habitación asignada... #{$reservation->id}");
                     foreach ($reservation->details as $index => $detail) {
                         if (!$detail->room_id) continue; 
 
@@ -179,11 +179,11 @@ class ReservationController extends Controller
                             'advance_payment' => 0,
                             'origin' => null, 
                             'status' => 'activo',
-                            'is_temporary' => false,
+                            'is_temporary' => true,
                             'notes' => $notaAsignacion,
                             'agreed_price' => $detail->price ?? 0 
                         ]);
-
+                        Log::info("Check-in Temporal creado (ID: {$checkin->id}) para la Habitación ID: {$detail->room_id}. Faltan datos de origen/acompañantes.");
                         $checkinIds[] = $checkin->id;
                         if ($index === 0) {
                             $primerCheckinId = $checkin->id;
@@ -203,6 +203,8 @@ class ReservationController extends Controller
                         
                         $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                         Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+
+                        Log::info("Adelanto de pagos transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
                 } 
                 // --- 3. SI SOLO ESTÁN EDITANDO DATOS DE LA RESERVA (FASE 1) ---
