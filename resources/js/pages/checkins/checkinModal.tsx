@@ -1383,42 +1383,41 @@ export default function CheckinModal({
                     )}
 
                     {/* TOAST 3: INFO DE RESERVA (AZUL - 10 SEGUNDOS) */}
-                    {showReservationToast && checkinToEdit?.is_temporary && (
-                        <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-blue-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
-                            <div className="flex items-start gap-3">
-                                <div className="rounded-full bg-blue-100 p-2 text-blue-600">
-                                    <AlertCircle className="h-5 w-5" />
+                    {showReservationToast &&
+                        checkinToEdit?.is_temporary &&
+                        checkinToEdit?.notes
+                            ?.toUpperCase()
+                            .includes('RESERVA') && (
+                            <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-blue-200 bg-white p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                                <div className="flex items-start gap-3">
+                                    <div className="rounded-full bg-blue-100 p-2 text-blue-600">
+                                        <AlertCircle className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-bold text-gray-900">
+                                            Asignación de Reserva
+                                        </h3>
+                                        {/* Mostramos la nota directamente, que ahora contiene "RESERVA #74 - TITULAR ORIGINAL: OSCAR" */}
+                                        <p className="mt-1 text-[11px] leading-tight font-bold text-blue-700 uppercase">
+                                            {checkinToEdit?.notes}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowReservationToast(false)
+                                        }
+                                        className="text-gray-400 transition hover:text-gray-600"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
                                 </div>
-                                <div className="flex-1">
-                                    <h3 className="text-sm font-bold text-gray-900">
-                                        Asignación de Reserva
-                                    </h3>
-                                    <p className="mt-0.5 text-xs font-medium text-blue-700">
-                                        Reservado a nombre de:{' '}
-                                        <span className="font-bold uppercase">
-                                            {checkinToEdit?.guest?.full_name}
-                                        </span>
-                                    </p>
-                                    <p className="mt-1 text-[10px] text-blue-500">
-                                        {checkinToEdit?.notes}
-                                    </p>
+                                {/* Barra de tiempo de 10s */}
+                                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-50">
+                                    <div className="h-full w-full origin-left animate-[w-0_10s_linear_forwards] bg-blue-500" />
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setShowReservationToast(false)
-                                    }
-                                    className="text-gray-400 transition hover:text-gray-600"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
                             </div>
-                            {/* Barra de tiempo de 10s */}
-                            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-50">
-                                <div className="h-full w-full origin-left animate-[w-0_10s_linear_forwards] bg-blue-500" />
-                            </div>
-                        </div>
-                    )}
+                        )}
                 </div>
 
                 <form onSubmit={submit} className="flex flex-col md:flex-row">

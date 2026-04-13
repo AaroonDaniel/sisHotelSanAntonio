@@ -20,9 +20,9 @@ class ReservationController extends Controller
     public function index()
     {
         $pendingReservations = Reservation::with(['guest', 'details.room.roomType'])
-            ->where('status', 'pendiente') 
+            ->where('status', 'pendiente')
             ->get();
-            
+
         return Inertia::render('reservations/index', [
             // 👇 AQUÍ ESTÁ LA CORRECCIÓN PRINCIPAL 👇
             'Reservations' => Reservation::with([
@@ -57,10 +57,10 @@ class ReservationController extends Controller
                 'qr_bank' => 'nullable|string',
                 'is_corporate' => 'boolean|nullable',
                 'is_delegation' => 'boolean|nullable',
-                'details' => 'required|array|min:1', 
-                'details.*.room_id' => 'nullable', 
-                'details.*.requested_room_type_id' => 'nullable', 
-                'details.*.requested_bathroom' => 'nullable', 
+                'details' => 'required|array|min:1',
+                'details.*.room_id' => 'nullable',
+                'details.*.requested_room_type_id' => 'nullable',
+                'details.*.requested_bathroom' => 'nullable',
                 'details.*.price_id' => 'nullable',
                 'details.*.price' => 'nullable|numeric',
             ]);
@@ -94,7 +94,7 @@ class ReservationController extends Controller
                     'payment_type' => $request->payment_type,
                     'is_corporate' => $request->is_corporate ?? false,
                     'is_delegation' => $request->is_delegation ?? false,
-                    'status' => 'pendiente', 
+                    'status' => 'pendiente',
                 ]);
 
                 if (!empty($request->details)) {
@@ -103,7 +103,7 @@ class ReservationController extends Controller
 
                         ReservationDetail::create([
                             'reservation_id' => $reservation->id,
-                            'room_id' => $roomId, 
+                            'room_id' => $roomId,
                             'requested_room_type_id' => $detail['requested_room_type_id'] ?? null,
                             'requested_bathroom' => $detail['requested_bathroom'] ?? null,
                             'price_id' => $detail['price_id'] ?? null,
@@ -142,7 +142,7 @@ class ReservationController extends Controller
         Log::info("=== ACTUALIZANDO RESERVA {$reservation->id} ===");
 
         try {
-            $checkinIds = []; 
+            $checkinIds = [];
 
             DB::transaction(function () use ($request, $reservation, $newStatus, &$checkinIds) {
                 $statusUpper = $newStatus ? strtoupper($newStatus) : strtoupper($reservation->status);
@@ -155,18 +155,20 @@ class ReservationController extends Controller
                             Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
                         }
                     }
-                } 
+                }
                 // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
                     $reservation->update(['status' => 'confirmada']);
                     $primerCheckinId = null;
                     Log::info("✅ Reserva confirmada. Creando check-ins para cada habitación asignada... #{$reservation->id}");
                     foreach ($reservation->details as $index => $detail) {
-                        if (!$detail->room_id) continue; 
+                        if (!$detail->room_id) continue;
 
-                        $notaAsignacion = 'Reserva #' . $reservation->id;
+                        // Guardamos el nombre del titular original en la nota para que el frontend lo lea
+                        $notaAsignacion = 'RESERVA #' . $reservation->id . ' - RESERVADO POR: ' . $reservation->guest->full_name;
+
                         if ($index > 0) {
-                            $notaAsignacion .= ' - ADICIONAL'; 
+                            $notaAsignacion .= ' (HABITACIÓN ADICIONAL)';
                         }
 
                         $checkin = Checkin::create([
@@ -177,11 +179,11 @@ class ReservationController extends Controller
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
                             'advance_payment' => 0,
-                            'origin' => null, 
+                            'origin' => null,
                             'status' => 'activo',
                             'is_temporary' => true,
                             'notes' => $notaAsignacion,
-                            'agreed_price' => $detail->price ?? 0 
+                            'agreed_price' => $detail->price ?? 0
                         ]);
                         Log::info("Check-in Temporal creado (ID: {$checkin->id}) para la Habitación ID: {$detail->room_id}. Faltan datos de origen/acompañantes.");
                         $checkinIds[] = $checkin->id;
@@ -200,13 +202,13 @@ class ReservationController extends Controller
                                 'reservation_id' => null
                             ]);
                         }
-                        
+
                         $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
                         Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
 
                         Log::info("Adelanto de pagos transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
-                } 
+                }
                 // --- 3. SI SOLO ESTÁN EDITANDO DATOS DE LA RESERVA (FASE 1) ---
                 else {
                     // Actualizamos los datos base
@@ -251,7 +253,7 @@ class ReservationController extends Controller
                                     'requested_bathroom' => $detailData['requested_bathroom'] ?? null,
                                 ]);
                                 $detailIdsToKeep[] = $newDetail->id;
-                                
+
                                 if (isset($detailData['room_id'])) {
                                     Room::where('id', $detailData['room_id'])->update(['status' => 'RESERVADO']);
                                 }
@@ -278,7 +280,7 @@ class ReservationController extends Controller
             if ($newStatus && (strtoupper($newStatus) === 'CONFIRMADO' || strtoupper($newStatus) === 'CONFIRMADA')) {
                 return redirect()->route('rooms.status')
                     ->with('success', 'Llegada confirmada. Por favor, complete los datos de las habitaciones.')
-                    ->with('auto_open_checkins', $checkinIds); 
+                    ->with('auto_open_checkins', $checkinIds);
             }
 
             return redirect()->back()->with('success', 'Reserva actualizada y sincronizada correctamente.');
@@ -316,7 +318,7 @@ class ReservationController extends Controller
         DB::transaction(function () use ($request) {
             foreach ($request->assignments as $assignment) {
                 $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
-                
+
                 // 1. Si el detalle ya tenía una habitación asignada antes y la están cambiando,
                 // debemos liberar la habitación vieja para que vuelva a estar disponible.
                 if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
@@ -338,16 +340,16 @@ class ReservationController extends Controller
     public function reception()
     {
         $reservations = Reservation::with([
-            'guest', 
-            'details.room.roomType', 
-            'details.requestedRoomType' 
+            'guest',
+            'details.room.roomType',
+            'details.requestedRoomType'
         ])
-        ->whereIn('status', ['pendiente']) 
-        ->orderBy('arrival_date', 'asc')
-        ->get();
+            ->whereIn('status', ['pendiente'])
+            ->orderBy('arrival_date', 'asc')
+            ->get();
 
         $guests = Guest::all();
-        
+
         // 👇 AQUÍ ESTÁ EL CAMBIO: Agregamos 'price' a la lista 👇
         $rooms = Room::with(['roomType', 'floor', 'price'])->get();
 
@@ -357,7 +359,7 @@ class ReservationController extends Controller
             'rooms' => $rooms
         ]);
     }
-    
+
     public function checkAvailability(Request $request)
     {
         $request->validate(['arrival_date' => 'required|date']);
