@@ -443,7 +443,6 @@ class CheckinController extends Controller
     {
         $request->validate([
             'new_room_id' => 'required|exists:rooms,id|different:room_id',
-            
             'selected_guests' => 'required|array|min:1', // <-- OBLIGATORIO recibir quiénes se mueven
             'selected_guests.*' => 'integer',
             'auto_adjust_price' => 'nullable|boolean',
@@ -471,21 +470,20 @@ class CheckinController extends Controller
 
                 // 1. VERIFICAR CAMBIO RÁPIDO (Mismo día)
                 if ($ingreso->isSameDay($ahora)) {
-                    \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']); // MEJORADO: Pasa a limpieza por protocolo
+                    \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
                     \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
 
-                    // Precio original por defecto de la NUEVA habitación
                     $newRoomData = \App\Models\Room::with('price')->find($newRoomId);
                     $nuevoAgreedPrice = $newRoomData->price->amount ?? 0;
 
-                    // Ajuste solo si se solicitó en el modal de transferencia
                     if ($request->boolean('auto_adjust_price')) {
                         $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
                     }
 
                     $checkin->update([
                         'room_id' => $newRoomId,
-                        'agreed_price' => $nuevoAgreedPrice,
+                        // 🌟 HERENCIA: Si es corpo, mantiene su precio intocable
+                        'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $nuevoAgreedPrice,
                         'notes' => $checkin->notes . " TRANSFERENCIA"
                     ]);
                     return redirect()->back()->with('success', 'Cambio rápido realizado. La habitación anterior pasó a LIMPIEZA.');
@@ -504,11 +502,9 @@ class CheckinController extends Controller
                     ]);
                     \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
 
-                    // Precio original por defecto de la NUEVA habitación
                     $newRoomData = \App\Models\Room::with('price')->find($newRoomId);
                     $nuevoAgreedPrice = $newRoomData->price->amount ?? 0;
 
-                    // Ajuste solo si se solicitó en el modal de transferencia
                     if ($request->boolean('auto_adjust_price')) {
                         $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
                     }
@@ -518,19 +514,26 @@ class CheckinController extends Controller
                         'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                         'room_id' => $newRoomId,
                         'check_in_date' => $ahora,
+                        // 🌟 MAGIA 1: Salvamos la fecha original del 8 de abril
+                        'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date, 
                         'schedule_id' => $checkin->schedule_id,
                         'origin' => $checkin->origin,
                         'duration_days' => 0,
                         'advance_payment' => 0,
-                        'agreed_price' => $nuevoAgreedPrice,
+                        // 🌟 MAGIA 2: Herencia de Precio
+                        'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $nuevoAgreedPrice,
                         'parent_checkin_id' => $checkin->id,
                         'carried_balance' => $deudaHospedajeAnterior,
-                        'is_temporary' => $checkin->is_temporary, // <-- MEJORA: Hereda el estado temporal
+                        'is_temporary' => $checkin->is_temporary,
                         'status' => 'activo',
                         'notes' => "Transferencia. Deuda Anterior: {$deudaHospedajeAnterior} Bs.",
+                        
+                        // 🌟 MAGIA 3: Clonamos el trato corporativo
+                        'is_corporate' => $checkin->is_corporate,
+                        'payment_frequency' => $checkin->payment_frequency,
+                        'corporate_days' => $checkin->corporate_days,
                     ]);
 
-                    // MIGRACIÓN COMPLETA (Pagos, Servicios y Acompañantes)
                     DB::table('checkin_details')->where('checkin_id', $checkin->id)->update(['checkin_id' => $nuevoCheckin->id]);
                     DB::table('payments')->where('checkin_id', $checkin->id)->update(['checkin_id' => $nuevoCheckin->id]);
                     if (!empty($companionIds)) {
@@ -539,18 +542,16 @@ class CheckinController extends Controller
 
                     \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
 
-                    return redirect()->back()->with('success', 'Transferencia completa. Todo el historial se movió a la nueva habitación.');
+                    return redirect()->back()->with('success', 'Transferencia completa. Todo el historial y acuerdos se movieron a la nueva habitación.');
                 }
             }
             // =========================================================
             // CASO B: TRANSFERENCIA PARCIAL (Se dividen en 2 habitaciones)
             // =========================================================
             else {
-                // Separar a los que se quedan de los que se van
                 $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
                 $leavingIds = array_values($selectedGuests);
 
-                // El índice 0 siempre asume la "Titularidad" de su respectiva habitación
                 $newOldTitularId = $stayingIds[0];
                 $newOldCompanions = array_slice($stayingIds, 1);
 
@@ -563,20 +564,19 @@ class CheckinController extends Controller
                 $precioViejaHabitacion = $roomViejaData->price->amount ?? 0;
                 $precioNuevaHabitacion = $roomNuevaData->price->amount ?? 0;
 
-                // Si pidieron ajuste automático
                 if ($request->boolean('auto_adjust_price')) {
                     $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
                     $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
                 }
 
-                // 1. Habitación vieja (Sigue activa, conserva deudas y pagos)
+                // 1. Habitación vieja
                 $checkin->update([
                     'guest_id' => $newOldTitularId,
-                    'agreed_price' => $precioViejaHabitacion,
+                    'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $precioViejaHabitacion,
                     'notes' => $checkin->notes . " | DIVISIÓN: " . count($leavingIds) . " huésped(es) transferidos a Hab. " . \App\Models\Room::find($newRoomId)->number
                 ]);
                 $checkin->companions()->sync($newOldCompanions);
-                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']); // Por si estaba Incompleta
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']);
 
                 // 2. Crear nueva cuenta LIMPIA para los que se van
                 $nuevoCheckin = Checkin::create([
@@ -584,16 +584,24 @@ class CheckinController extends Controller
                     'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                     'room_id' => $newRoomId,
                     'check_in_date' => $ahora,
+                    // 🌟 MAGIA 1: Salvamos la fecha original
+                    'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
                     'advance_payment' => 0,
-                    'agreed_price' => $precioNuevaHabitacion,
+                    // 🌟 MAGIA 2: Herencia de precio si era corporativo
+                    'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $precioNuevaHabitacion,
                     'parent_checkin_id' => $checkin->id,
-                    'carried_balance' => 0, // <-- MEJORA: Empiezan sin deudas, la deuda se queda en la hab original
-                    'is_temporary' => $checkin->is_temporary, // <-- MEJORA: Hereda el estado temporal
+                    'carried_balance' => 0, 
+                    'is_temporary' => $checkin->is_temporary, 
                     'status' => 'activo',
                     'notes' => "Transferencia Parcial (División) desde Hab. " . $checkin->room->number,
+
+                    // 🌟 MAGIA 3: Clonamos el trato
+                    'is_corporate' => $checkin->is_corporate,
+                    'payment_frequency' => $checkin->payment_frequency,
+                    'corporate_days' => $checkin->corporate_days,
                 ]);
 
                 if (!empty($newNewCompanions)) {
@@ -602,7 +610,7 @@ class CheckinController extends Controller
 
                 \App\Models\Room::where('id', $newRoomId)->update(['status' => 'OCUPADO']);
 
-                return redirect()->back()->with('success', 'División completada. Los consumos y deudas se quedaron en la habitación original.');
+                return redirect()->back()->with('success', 'División completada. Acuerdos mantenidos.');
             }
         });
     }

@@ -412,7 +412,6 @@ export default function CheckinModal({
             corporate_days: 0,
             is_delegation: false,
             agreed_price: 0,
-
         });
 
     // =========================================================================
@@ -661,7 +660,9 @@ export default function CheckinModal({
                     auto_adjust_price: isPriceAdjusted,
                     is_temporary: !!checkinToEdit.is_temporary,
 
-                    agreed_price: checkinToEdit.agreed_price ? Number(checkinToEdit.agreed_price) : Number(originalRoomPrice),
+                    agreed_price: checkinToEdit.agreed_price
+                        ? Number(checkinToEdit.agreed_price)
+                        : Number(originalRoomPrice),
                     is_delegation: !!checkinToEdit.is_delegation,
                     is_corporate: !!checkinToEdit.is_corporate,
                     payment_frequency: checkinToEdit.payment_frequency || '',
@@ -746,8 +747,10 @@ export default function CheckinModal({
                     payment_method: 'EFECTIVO',
                     qr_bank: '',
                     auto_adjust_price: false,
-                    is_temporary: false,   
-                    agreed_price: originalRoomPriceForNew ? Number(originalRoomPriceForNew) : 0,
+                    is_temporary: false,
+                    agreed_price: originalRoomPriceForNew
+                        ? Number(originalRoomPriceForNew)
+                        : 0,
                     is_delegation: false,
                     is_corporate: false,
                     payment_frequency: '',
@@ -2297,43 +2300,54 @@ export default function CheckinModal({
 
                                 <div className="mb-1">
                                     {/* 1. FILA DE OPCIONES (Solo Temporal Derecha) */}
-                                    <div className="mb-1 flex flex-wrap items-center justify-end rounded-xl border border-gray-200 bg-gray-50/50 p-0.5 shadow-sm">
-                                        <div className="flex w-full items-center gap-2">
-                                            {/* IZQUIERDA: Checkbox Ajuste Automático (50%) */}
-                                            <label
-                                                htmlFor="auto_adjust_price_rec"
-                                                className={`text-bold flex w-[40%] cursor-pointer items-center justify-center gap-2 rounded-lg p-3 text-xs font-bold transition-all select-none ${
+                                    {/* ============================================================== */}
+                                    {/* 🌟 FILA DE CONTROLES COMPACTOS (AUTO AJUSTE Y CORPORATIVO) 🌟 */}
+                                    {/* ============================================================== */}
+                                    <div className="col-span-full mb-2">
+                                        <div className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
+                                            {/* IZQUIERDA: Auto Ajuste de Precio */}
+                                            <div
+                                                className={`flex w-[40%] items-center justify-center rounded-lg p-1 transition-all ${
                                                     data.auto_adjust_price
-                                                        ? 'bg-white text-green-700 shadow-sm'
-                                                        : 'bg-transparent text-gray-500 hover:bg-gray-200/50'
+                                                        ? 'bg-blue-100 shadow-sm'
+                                                        : 'hover:bg-gray-200/50'
                                                 }`}
                                             >
-                                                <input
-                                                    id="auto_adjust_price_rec"
-                                                    type="checkbox"
-                                                    checked={
+                                                <label
+                                                    htmlFor="auto_adjust_price"
+                                                    className={`flex cursor-pointer items-center justify-center gap-1.5 text-xs font-bold transition-all select-none ${
                                                         data.auto_adjust_price
-                                                    }
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'auto_adjust_price',
-                                                            e.target.checked,
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        isReadOnly ||
-                                                        data.is_corporate
-                                                    }
-                                                    className="h-4 w-4 cursor-pointer rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
-                                                />
-                                                AJUSTE DE PRECIO
-                                            </label>
+                                                            ? 'text-blue-800'
+                                                            : 'text-gray-500'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        id="auto_adjust_price"
+                                                        type="checkbox"
+                                                        checked={
+                                                            data.auto_adjust_price
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'auto_adjust_price',
+                                                                e.target
+                                                                    .checked,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isReadOnly ||
+                                                            data.is_corporate
+                                                        }
+                                                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                                    />
+                                                    AUTO AJUSTE
+                                                </label>
+                                            </div>
 
                                             {/* Línea divisoria sutil entre ambos botones */}
                                             <div className="h-5 w-px bg-gray-300"></div>
 
-                                            {/* DERECHA: Checkbox Corporativo y Controles (50%) */}
-                                            {/* DERECHA: Asig. CORP (w-[60%]) */}
+                                            {/* DERECHA: Asig. CORP (w-[60%]) ORIGINAL RESTAURADO */}
                                             <div
                                                 className={`flex w-[60%] items-center justify-center rounded-lg p-1 transition-all ${
                                                     data.is_corporate
@@ -2359,22 +2373,54 @@ export default function CheckinModal({
                                                             const isChecked =
                                                                 e.target
                                                                     .checked;
-                                                            setData(
-                                                                'is_corporate',
-                                                                isChecked,
-                                                            );
+
+                                                            // Buscamos el precio original de la habitación
+                                                            const selectedRoom =
+                                                                rooms.find(
+                                                                    (r) =>
+                                                                        r.id ===
+                                                                            Number(
+                                                                                data.room_id,
+                                                                            ) ||
+                                                                        r.id ===
+                                                                            initialRoomId,
+                                                                );
+                                                            const origPrice =
+                                                                selectedRoom
+                                                                    ?.price
+                                                                    ?.amount ||
+                                                                0;
+
                                                             if (!isChecked) {
+                                                                // Si lo APAGA, limpiamos todo y restauramos el precio normal
                                                                 setData(
-                                                                    'payment_frequency',
-                                                                    '',
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        is_corporate: false,
+                                                                        payment_frequency:
+                                                                            '',
+                                                                        agreed_price:
+                                                                            origPrice,
+                                                                    }),
                                                                 );
                                                                 setIsCustomFrequency(
                                                                     false,
                                                                 );
                                                             } else {
+                                                                // Si lo ENCIENDE, aplicamos el descuento base de -20 Bs
                                                                 setData(
-                                                                    'auto_adjust_price',
-                                                                    false,
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        is_corporate: true,
+                                                                        auto_adjust_price: false,
+                                                                        // Aplicamos -20, pero aseguramos que no baje de 0
+                                                                        agreed_price:
+                                                                            Math.max(
+                                                                                0,
+                                                                                origPrice -
+                                                                                    20,
+                                                                            ),
+                                                                    }),
                                                                 );
                                                             }
                                                         }}
@@ -2384,10 +2430,9 @@ export default function CheckinModal({
                                                     ASIG. CORP
                                                 </label>
 
-                                                {/* Controles que aparecen AL LADO */}
+                                                {/* Controles de Frecuencia que aparecen AL LADO (Diseño Compacto Original) */}
                                                 {data.is_corporate && (
                                                     <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
-                                                        {/* 🚨 SELECTOR MÁS PEQUEÑO: Agregamos w-[68px] y pr-4 */}
                                                         <select
                                                             className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
                                                             value={
@@ -2449,7 +2494,6 @@ export default function CheckinModal({
                                                             </option>
                                                         </select>
 
-                                                        {/* 🚨 CAJA DE TEXTO MÁS ANCHA: Cambiamos w-12 por w-16 y px-2 */}
                                                         {isCustomFrequency && (
                                                             <input
                                                                 type="number"
@@ -2481,7 +2525,7 @@ export default function CheckinModal({
                                     </div>
 
                                     {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
-                                    <div className="rounded-xl border border-green-200 bg-green-50 p-3 shadow-sm transition-all">
+                                    <div className="rounded-xl border border-green-200 bg-green-50 p-1 shadow-sm transition-all">
                                         {(() => {
                                             // 1. Buscamos la habitación seleccionada
                                             const selectedRoom = rooms.find(
@@ -2563,9 +2607,11 @@ export default function CheckinModal({
                                                                         Bs
                                                                     </span>
                                                                     <span className="text-sm font-black text-green-800">
-                                                                        {
-                                                                            finalPrice
-                                                                        }{' '}
+                                                                        {Number(
+                                                                            finalPrice,
+                                                                        ).toFixed(
+                                                                            2,
+                                                                        )}{' '}
                                                                         Bs /
                                                                         noche
                                                                     </span>
@@ -2576,7 +2622,11 @@ export default function CheckinModal({
                                                                 </>
                                                             ) : (
                                                                 <span className="text-sm font-bold text-green-800">
-                                                                    {finalPrice}{' '}
+                                                                    {Number(
+                                                                        finalPrice,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}{' '}
                                                                     Bs / noche
                                                                 </span>
                                                             )}
@@ -2588,14 +2638,72 @@ export default function CheckinModal({
                                                         <span className="mb-0.5 text-[11px] font-bold text-green-700 uppercase">
                                                             {tituloTotal}
                                                         </span>
-                                                        <span className="text-2xl leading-none font-black text-gray-900">
-                                                            {total.toFixed(2)}{' '}
-                                                            Bs
-                                                        </span>
+
+                                                        {/* 🌟 AQUÍ ESTÁ EL CAMBIO: Input si es corporativo, Texto si es normal 🌟 */}
+                                                        {data.is_corporate ? (
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.10"
+                                                                    min="0"
+                                                                    value={
+                                                                        total >
+                                                                        0
+                                                                            ? Number(
+                                                                                  total.toFixed(
+                                                                                      2,
+                                                                                  ),
+                                                                              )
+                                                                            : ''
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const newTotal =
+                                                                            Number(
+                                                                                e
+                                                                                    .target
+                                                                                    .value,
+                                                                            );
+                                                                        // Matemática inversa: Total dividido entre días = precio base
+                                                                        const dailyRate =
+                                                                            noches >
+                                                                            0
+                                                                                ? newTotal /
+                                                                                  noches
+                                                                                : newTotal;
+                                                                        setData(
+                                                                            'agreed_price',
+                                                                            dailyRate,
+                                                                        );
+                                                                    }}
+                                                                    disabled={
+                                                                        isReadOnly
+                                                                    }
+                                                                    className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                    placeholder="0.00"
+                                                                />
+                                                                <span className="text-2xl leading-none font-black text-gray-900">
+                                                                    Bs
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-2xl leading-none font-black text-gray-900">
+                                                                {total.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        )}
+
                                                         {noches > 1 && (
                                                             <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                {finalPrice} x{' '}
-                                                                {noches}{' '}
+                                                                {Number(
+                                                                    finalPrice,
+                                                                ).toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                x {noches}{' '}
                                                                 {data.is_corporate ||
                                                                 data.is_delegation
                                                                     ? 'días'

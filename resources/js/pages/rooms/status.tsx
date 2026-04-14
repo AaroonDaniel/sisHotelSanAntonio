@@ -440,18 +440,25 @@ export default function RoomsStatus({
         const status = getDisplayStatus(room);
         const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
-        console.log(`[Interacción] Clic en Habitación ${room.number}. Estado actual: ${status}`);
+        console.log(
+            `[Interacción] Clic en Habitación ${room.number}. Estado actual: ${status}`,
+        );
         if (isMultiCheckoutMode) {
             if (status === 'occupied') {
                 setSelectedRoomsForCheckout((prev) =>
-                    prev.includes(room.id) ? prev.filter((id) => id !== room.id) : [...prev, room.id],
+                    prev.includes(room.id)
+                        ? prev.filter((id) => id !== room.id)
+                        : [...prev, room.id],
                 );
             }
             return;
         }
 
         if (status === 'occupied') {
-            const activeCheckin = Checkins?.find(c => c.room_id === room.id && c.status === 'activo') || room.checkins?.[0];
+            const activeCheckin =
+                Checkins?.find(
+                    (c) => c.room_id === room.id && c.status === 'activo',
+                ) || room.checkins?.[0];
             if (activeCheckin) {
                 if (isSalon) {
                     setOccupiedCheckinData({ ...activeCheckin, room });
@@ -483,12 +490,14 @@ export default function RoomsStatus({
             const activeCheckin = room.checkins?.[0];
 
             console.log(`⚠️ Habitación ${room.number} está Incompleta.`);
-            console.log("Datos del Check-in pendiente:", activeCheckin);
+            console.log('Datos del Check-in pendiente:', activeCheckin);
             if (activeCheckin) {
                 setCheckinToEdit(activeCheckin);
                 setSelectedRoomId(room.id);
                 setIsCheckinModalOpen(true);
-                console.log("-> Abriendo modal de Check-in para completar datos.");
+                console.log(
+                    '-> Abriendo modal de Check-in para completar datos.',
+                );
             }
             return;
         }
@@ -605,21 +614,6 @@ export default function RoomsStatus({
         });
     });
 
-    //cambio de estado de la habitacion de limpieza a libre
-    const getCleanRoom = (room: Room) => {
-        if (getDisplayStatus(room) === 'cleaning') {
-            router.put(
-                `/rooms/${room.id}/clean`,
-                {},
-                {
-                    onSuccess: () => {
-                        // Opcional: mostrar alerta o simplemente dejar que se refresque
-                    },
-                },
-            );
-        }
-    };
-
     const getOccupantName = (room: Room) => {
         if (room.checkins && room.checkins.length > 0) {
             // Tomamos el checkin activo (el primero)
@@ -687,7 +681,10 @@ export default function RoomsStatus({
                     borderColor: isSalon
                         ? 'border-indigo-700'
                         : 'border-emerald-700',
-                    label: status === 'reserved' ? 'Libre (Con Reserva)' : 'Disponible',
+                    label:
+                        status === 'reserved'
+                            ? 'Libre (Con Reserva)'
+                            : 'Disponible',
                     icon: isSalon ? (
                         <Presentation className="h-10 w-10 text-indigo-200/50" />
                     ) : (
@@ -697,7 +694,7 @@ export default function RoomsStatus({
                     des: isSalon
                         ? 'Eventos / Reuniones'
                         : room.price?.bathroom_type === 'private' ||
-                          room.price?.bathroom_type === 'privado'
+                            room.price?.bathroom_type === 'privado'
                           ? 'Privado'
                           : room.price?.bathroom_type === 'shared' ||
                               room.price?.bathroom_type === 'compartido'
@@ -1066,27 +1063,88 @@ export default function RoomsStatus({
                         const displayStatus = getDisplayStatus(room);
                         const isActionable = displayStatus === 'incomplete';
                         const isOccupied = displayStatus === 'occupied';
-                        const activeCheckin = room.checkins && room.checkins.length > 0 ? room.checkins[0] : null;
+                        const activeCheckin =
+                            room.checkins && room.checkins.length > 0
+                                ? room.checkins[0]
+                                : null;
                         const isSelected = selectedForAction === room.id;
-                        const isMultiSelected = selectedRoomsForCheckout.includes(room.id);
-                        const isEligibleForMulti = isMultiCheckoutMode && isOccupied;
+                        const isMultiSelected =
+                            selectedRoomsForCheckout.includes(room.id);
+                        const isEligibleForMulti =
+                            isMultiCheckoutMode && isOccupied;
 
-                        // SEMÁFORO CORPORATIVO (Cálculos de lógica de pago)
-                        const isCorporate = activeCheckin?.is_corporate;
+                        // 🌟 SEMÁFORO FINANCIERO (CORPORATIVO / DELEGACIÓN) 🌟
+
+                        const isSpecialGroup =
+                            activeCheckin?.is_corporate ||
+                            activeCheckin?.is_delegation;
                         let corpState: any = null;
-                        if (isCorporate && activeCheckin) {
-                            let totalPaid = activeCheckin.payments?.reduce((acc: number, p: any) => p.type === 'DEVOLUCION' ? acc - (parseFloat(p.amount) || 0) : acc + (parseFloat(p.amount) || 0), 0) || parseFloat(String(activeCheckin.advance_payment)) || 0;
-                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
-                            const daysPaid = agreedPrice > 0 ? Math.floor(totalPaid / agreedPrice) : 0;
-                            const frequency = parseInt(String(activeCheckin.payment_frequency)) || 1;
-                            const limitDate = new Date(activeCheckin.check_in_date);
-                            limitDate.setHours(0,0,0,0);
-                            limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
-                            const daysRemaining = Math.ceil((limitDate.getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24));
-                            if (daysRemaining > 1) corpState = { badge: 'bg-emerald-500 text-white', text: `CORP: Al día` };
-                            else if (daysRemaining === 1) corpState = { badge: 'bg-yellow-400 text-yellow-900', text: `CORP: Mañana` };
-                            else if (daysRemaining === 0) corpState = { badge: 'bg-orange-500 text-white animate-pulse', text: `COBRAR HOY` };
-                            else corpState = { badge: 'bg-red-600 text-white animate-pulse font-black', text: `MOROSO (${Math.abs(daysRemaining)}d)` };
+
+                        if (isSpecialGroup && activeCheckin) {
+                            // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
+                            let totalPaid =
+                                activeCheckin.payments?.reduce(
+                                    (acc: number, p: any) =>
+                                        p.type === 'DEVOLUCION'
+                                            ? acc - (parseFloat(p.amount) || 0)
+                                            : acc + (parseFloat(p.amount) || 0),
+                                    0,
+                                ) ||
+                                parseFloat(
+                                    String(activeCheckin.advance_payment),
+                                ) ||
+                                0;
+
+                            // 2. Precio acordado por noche
+                            const agreedPrice =
+                                parseFloat(
+                                    String(activeCheckin.agreed_price),
+                                ) || 0;
+
+                            // 3. ¿Para cuántos días le alcanza el dinero que dio?
+                            const daysPaid =
+                                agreedPrice > 0
+                                    ? Math.floor(totalPaid / agreedPrice)
+                                    : 0;
+
+                            // 4. Calculamos la fecha límite estricta (Fecha de Check-in + Días Pagados)
+                            const realDateString =
+                                activeCheckin.actual_arrival_date ||
+                                activeCheckin.check_in_date;
+                            const limitDate = new Date(realDateString);
+                            limitDate.setHours(0, 0, 0, 0);
+                            limitDate.setDate(limitDate.getDate() + daysPaid);
+
+                            // 5. Comparamos con HOY
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const daysRemaining = Math.ceil(
+                                (limitDate.getTime() - today.getTime()) /
+                                    (1000 * 60 * 60 * 24),
+                            );
+
+                            // 6. Colores del Semáforo
+                            if (daysRemaining > 1) {
+                                corpState = {
+                                    badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
+                                    text: `PAGADO: ${daysRemaining} días`,
+                                };
+                            } else if (daysRemaining === 1) {
+                                corpState = {
+                                    badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                                    text: `COBRAR MAÑANA`,
+                                };
+                            } else if (daysRemaining === 0) {
+                                corpState = {
+                                    badge: 'bg-orange-500 text-white animate-pulse shadow-md border border-orange-600',
+                                    text: `COBRAR HOY`,
+                                };
+                            } else {
+                                corpState = {
+                                    badge: 'bg-red-600 text-white animate-bounce shadow-lg border-2 border-red-800 font-black tracking-widest',
+                                    text: `MOROSO (${Math.abs(daysRemaining)}d)`,
+                                };
+                            }
                         }
 
                         // 🔍 LÓGICA DE RESERVAS ORDENADAS
@@ -1094,11 +1152,17 @@ export default function RoomsStatus({
                         let firstRes: any = null;
                         let isToday = false;
                         if ((room as any).future_reservations?.length > 0) {
-                            sortedReservations = [...(room as any).future_reservations].sort((a: any, b: any) => new Date(a.date + 'T00:00:00').getTime() - new Date(b.date + 'T00:00:00').getTime());
+                            sortedReservations = [
+                                ...(room as any).future_reservations,
+                            ].sort(
+                                (a: any, b: any) =>
+                                    new Date(a.date + 'T00:00:00').getTime() -
+                                    new Date(b.date + 'T00:00:00').getTime(),
+                            );
                             firstRes = sortedReservations[0];
                             const t = new Date();
                             const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-                            isToday = (firstRes.date === todayStr);
+                            isToday = firstRes.date === todayStr;
                         }
 
                         return (
@@ -1109,96 +1173,216 @@ export default function RoomsStatus({
                                 className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
                                 {/* 🚦 CONTROLES SUPERIOR DERECHA */}
-                                <div className="absolute top-0 right-0 z-50 flex shadow-md bg-white/90 backdrop-blur-sm rounded-tr-lg rounded-bl-xl">
+                                <div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
                                     {sortedReservations.length > 0 && (
                                         <div className="group relative flex">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    console.log("=== EJECUTANDO ASIGNACIÓN ===");
-                                                    console.log("Agarrando a:", firstRes.guest, "ID:", firstRes.id);
+                                                    console.log(
+                                                        '=== EJECUTANDO ASIGNACIÓN ===',
+                                                    );
+                                                    console.log(
+                                                        'Agarrando a:',
+                                                        firstRes.guest,
+                                                        'ID:',
+                                                        firstRes.id,
+                                                    );
                                                     if (isToday) {
                                                         // ✅ AQUÍ ESTÁ LA CLAVE: Le pasamos el ID de Fiorela al modal
-                                                        setPreselectedReservationId(firstRes.id);
-                                                        setIsPendingModalOpen(true);
+                                                        setPreselectedReservationId(
+                                                            firstRes.id,
+                                                        );
+                                                        setIsPendingModalOpen(
+                                                            true,
+                                                        );
                                                     } else {
-                                                        alert(`Reserva de ${firstRes.guest} para el ${firstRes.date}. Solo asignable ese día.`);
+                                                        alert(
+                                                            `Reserva de ${firstRes.guest} para el ${firstRes.date}. Solo asignable ese día.`,
+                                                        );
                                                     }
                                                 }}
-                                                className={`flex items-center justify-start px-2.5 py-1.5 transition-all duration-300 ease-in-out cursor-pointer overflow-hidden w-9 group-hover:w-[150px] ${isToday ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md' : 'bg-purple-200 text-purple-900 hover:bg-purple-300'} ${(!activeCheckin && !corpState) ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-300/50'}`}
+                                                className={`flex w-9 cursor-pointer items-center justify-start overflow-hidden px-2.5 py-1.5 transition-all duration-300 ease-in-out group-hover:w-[150px] ${isToday ? 'bg-purple-600 text-white shadow-md hover:bg-purple-700' : 'bg-purple-200 text-purple-900 hover:bg-purple-300'} ${!activeCheckin && !corpState ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-300/50'}`}
                                             >
-                                                <Calendar className={`h-4 w-4 shrink-0 ${isToday ? 'animate-pulse text-white' : 'text-purple-800'}`} />
-                                                <div className="ml-2 flex items-center opacity-0 transition-opacity duration-300 group-hover:opacity-100 whitespace-nowrap">
-                                                    <span className={`text-[10px] font-black italic uppercase tracking-tighter ${isToday ? 'text-white' : 'text-purple-900'}`}>
-                                                        {isToday ? '¡Asignar Hoy!' : `Res. ${firstRes.date}`}
+                                                <Calendar
+                                                    className={`h-4 w-4 shrink-0 ${isToday ? 'animate-pulse text-white' : 'text-purple-800'}`}
+                                                />
+                                                <div className="ml-2 flex items-center whitespace-nowrap opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                                                    <span
+                                                        className={`text-[10px] font-black tracking-tighter uppercase italic ${isToday ? 'text-white' : 'text-purple-900'}`}
+                                                    >
+                                                        {isToday
+                                                            ? '¡Asignar Hoy!'
+                                                            : `Res. ${firstRes.date}`}
                                                     </span>
                                                 </div>
                                             </button>
 
                                             {/* 📝 PANTALLITA FLOTANTE (Popover) */}
-                                            <div className="hidden group-hover:block absolute top-full right-0 mt-1 w-56 bg-white border border-purple-200 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 cursor-default text-left pointer-events-none">
-                                                <p className="text-[10px] font-black text-purple-600 uppercase mb-2 border-b border-purple-100 pb-1 flex items-center justify-between pointer-events-none">
-                                                    <span><Clock className="w-3 h-3 inline mr-1" /> Entradas</span>
-                                                    <span className="bg-purple-100 text-purple-800 px-1.5 rounded-full">{ sortedReservations.length }</span>
+                                            <div className="pointer-events-none absolute top-full right-0 z-50 mt-1 hidden w-56 animate-in cursor-default rounded-xl border border-purple-200 bg-white p-3 text-left shadow-2xl zoom-in-95 fade-in group-hover:block">
+                                                <p className="pointer-events-none mb-2 flex items-center justify-between border-b border-purple-100 pb-1 text-[10px] font-black text-purple-600 uppercase">
+                                                    <span>
+                                                        <Clock className="mr-1 inline h-3 w-3" />{' '}
+                                                        Entradas
+                                                    </span>
+                                                    <span className="rounded-full bg-purple-100 px-1.5 text-purple-800">
+                                                        {
+                                                            sortedReservations.length
+                                                        }
+                                                    </span>
                                                 </p>
-                                                <div className="space-y-2 max-h-32 overflow-y-auto pointer-events-none">
-                                                    {sortedReservations.map((res: any, idx: number) => (
-                                                        <div key={idx} className="flex flex-col border-l-2 border-purple-400 pl-2">
-                                                            <span className={`text-[9px] font-bold ${idx === 0 && isToday ? 'text-red-500 animate-pulse' : 'text-gray-500'}`}>{res.date}</span>
-                                                            <span className="text-[10px] font-black text-gray-800 uppercase leading-tight truncate">{res.guest}</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="pointer-events-none max-h-32 space-y-2 overflow-y-auto">
+                                                    {sortedReservations.map(
+                                                        (
+                                                            res: any,
+                                                            idx: number,
+                                                        ) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex flex-col border-l-2 border-purple-400 pl-2"
+                                                            >
+                                                                <span
+                                                                    className={`text-[9px] font-bold ${idx === 0 && isToday ? 'animate-pulse text-red-500' : 'text-gray-500'}`}
+                                                                >
+                                                                    {res.date}
+                                                                </span>
+                                                                <span className="truncate text-[10px] leading-tight font-black text-gray-800 uppercase">
+                                                                    {res.guest}
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                     )}
 
                                     {activeCheckin && (
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenHistory(activeCheckin, room); }} className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`} title="Historial Financiero">
-                                            <History className="h-4 w-4 shadow-sm" /> 
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenHistory(
+                                                    activeCheckin,
+                                                    room,
+                                                );
+                                            }}
+                                            className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
+                                            title="Historial Financiero"
+                                        >
+                                            <History className="h-4 w-4 shadow-sm" />
                                         </button>
                                     )}
 
                                     {corpState && (
-                                        <div className={`flex items-center px-3 py-1.5 text-[10px] font-black tracking-wider uppercase rounded-tr-lg ${!activeCheckin && !sortedReservations.length ? 'rounded-bl-xl' : ''} ${corpState.badge}`}>
+                                        <div
+                                            className={`flex items-center rounded-tr-lg px-3 py-1.5 text-[10px] font-black tracking-wider uppercase ${!activeCheckin && !sortedReservations.length ? 'rounded-bl-xl' : ''} ${corpState.badge}`}
+                                        >
                                             {corpState.text}
                                         </div>
                                     )}
                                 </div>
 
-                                {isSelected && ( <div className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}><CheckCircle2 className="h-5 w-5" /></div> )}
-                                {isMultiSelected && ( <div className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}><CheckCircle2 className="h-6 w-6" /></div> )}
+                                {isSelected && (
+                                    <div
+                                        className={`absolute right-2 z-20 animate-in rounded-full bg-white p-1 text-red-600 zoom-in ${corpState ? 'top-8' : 'top-2'}`}
+                                    >
+                                        <CheckCircle2 className="h-5 w-5" />
+                                    </div>
+                                )}
+                                {isMultiSelected && (
+                                    <div
+                                        className={`absolute right-2 z-20 animate-in rounded-full bg-green-500 p-1 text-white shadow-lg zoom-in ${corpState ? 'top-8' : 'top-2'}`}
+                                    >
+                                        <CheckCircle2 className="h-6 w-6" />
+                                    </div>
+                                )}
 
-                                <div className="absolute -top-2 -right-2 rotate-12 transform opacity-30 pointer-events-none">{config.icon}</div>
-                                <div className="relative z-10 p-4 text-white pointer-events-none">
-                                    <h3 className="text-2xl font-extrabold tracking-tight">{room.number}</h3>
-                                    <p className="mt-1 line-clamp-2 text-xs font-bold text-white/90">{config.info}</p>
+                                <div className="pointer-events-none absolute -top-2 -right-2 rotate-12 transform opacity-30">
+                                    {config.icon}
+                                </div>
+                                <div className="pointer-events-none relative z-10 p-4 text-white">
+                                    <h3 className="text-2xl font-extrabold tracking-tight">
+                                        {room.number}
+                                    </h3>
+                                    <p className="mt-1 line-clamp-2 text-xs font-bold text-white/90">
+                                        {config.info}
+                                    </p>
                                     {config.des && (
                                         <div className="mt-2 flex w-full">
-                                            <span className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold uppercase shadow-sm backdrop-blur-md ${config.des === 'Privado' ? 'bg-sky-50/90 text-sky-700' : config.des === 'Compartido' ? 'bg-amber-50/90 text-amber-700' : 'bg-gray-50/90 text-gray-700'}`}>{config.des}</span>
+                                            <span
+                                                className={`inline-block rounded px-3 py-0.5 text-[11px] font-bold uppercase shadow-sm backdrop-blur-md ${config.des === 'Privado' ? 'bg-sky-50/90 text-sky-700' : config.des === 'Compartido' ? 'bg-amber-50/90 text-amber-700' : 'bg-gray-50/90 text-gray-700'}`}
+                                            >
+                                                {config.des}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* BOTONES INFERIORES con rounded-b-lg para mantener la forma */}
                                 {isActionable ? (
-                                    <button onClick={(e) => { e.stopPropagation(); handleRoomClick(room); }} className="z-20 flex w-full items-center justify-center gap-2 border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold text-white uppercase hover:bg-amber-800 rounded-b-lg">
-                                        <FileEdit className="h-3 w-3" /> Completar Datos
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRoomClick(room);
+                                        }}
+                                        className="z-20 flex w-full items-center justify-center gap-2 rounded-b-lg border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold text-white uppercase hover:bg-amber-800"
+                                    >
+                                        <FileEdit className="h-3 w-3" />{' '}
+                                        Completar Datos
                                     </button>
                                 ) : isOccupied && activeCheckin ? (
-                                    <div className="z-20 flex border-t border-cyan-700 rounded-b-lg overflow-hidden">
-                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleOpenDetails(room); }} className="flex flex-1 items-center justify-center border-r border-cyan-700 bg-cyan-600 py-2 text-white hover:bg-cyan-500"><UserIcon className="h-3 w-3" /></button>
+                                    <div className="z-20 flex overflow-hidden rounded-b-lg border-t border-cyan-700">
+                                        {!room.room_type?.name
+                                            ?.toUpperCase()
+                                            .includes('SALON') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenDetails(room);
+                                                }}
+                                                className="flex flex-1 items-center justify-center border-r border-cyan-700 bg-cyan-600 py-2 text-white hover:bg-cyan-500"
+                                            >
+                                                <UserIcon className="h-3 w-3" />
+                                            </button>
                                         )}
-                                        {!room.room_type?.name?.toUpperCase().includes('SALON') && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleShowCheckinDetails(activeCheckin, room); }} className="flex flex-1 items-center justify-center border-r border-red-800 bg-blue-600 py-2 text-white hover:bg-blue-700"><ShoppingCart className="h-3 w-3" /></button>
+                                        {!room.room_type?.name
+                                            ?.toUpperCase()
+                                            .includes('SALON') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleShowCheckinDetails(
+                                                        activeCheckin,
+                                                        room,
+                                                    );
+                                                }}
+                                                className="flex flex-1 items-center justify-center border-r border-red-800 bg-blue-600 py-2 text-white hover:bg-blue-700"
+                                            >
+                                                <ShoppingCart className="h-3 w-3" />
+                                            </button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleDirectCheckoutTrigger(activeCheckin.id); }} className="flex flex-1 items-center justify-center bg-gray-900 py-2 text-white hover:bg-black"><LogOut className="h-3 w-3" /></button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDirectCheckoutTrigger(
+                                                    activeCheckin.id,
+                                                );
+                                            }}
+                                            className="flex flex-1 items-center justify-center bg-gray-900 py-2 text-white hover:bg-black"
+                                        >
+                                            <LogOut className="h-3 w-3" />
+                                        </button>
                                     </div>
                                 ) : (
-                                    <div className={`flex items-center justify-between border-t ${config.borderColor} bg-black/10 px-4 py-2 rounded-b-lg`}>
-                                        <span className="text-xs font-bold text-white uppercase">{config.label}</span>
-                                        <div className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}></div>
+                                    <div
+                                        className={`flex items-center justify-between border-t ${config.borderColor} rounded-b-lg bg-black/10 px-4 py-2`}
+                                    >
+                                        <span className="text-xs font-bold text-white uppercase">
+                                            {config.label}
+                                        </span>
+                                        <div
+                                            className={`h-2.5 w-2.5 rounded-full bg-white shadow-sm ${config.label !== 'Disponible' ? 'animate-pulse' : ''}`}
+                                        ></div>
                                     </div>
                                 )}
                             </div>
