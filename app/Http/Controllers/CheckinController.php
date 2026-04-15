@@ -17,7 +17,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin juntos
-
+use App\Models\SpecialAgreement;
 
 class CheckinController extends Controller
 {
@@ -58,11 +58,11 @@ class CheckinController extends Controller
             // Buscamos un precio activo que coincida con el tipo de baño y la cantidad de huéspedes actual
             $adjustedPrice = \App\Models\Price::where('is_active', true)
                 ->where('bathroom_type', $bathroomType)
-                ->whereHas('roomType', function($query) use ($totalGuests) {
+                ->whereHas('roomType', function ($query) use ($totalGuests) {
                     $query->where('capacity', $totalGuests);
                 })
                 ->first();
-                
+
             if ($adjustedPrice) {
                 $agreedPrice = $adjustedPrice->amount;
             }
@@ -153,7 +153,7 @@ class CheckinController extends Controller
         $isAssigningSalon = $roomToAssign && str_contains(strtoupper($roomToAssign->roomType->name ?? ''), 'SALON');
 
         // =========================================================
-        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN
+        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN DE HUÉSPED
         // =========================================================
 
         if (!$request->filled('guest_id')) {
@@ -176,7 +176,7 @@ class CheckinController extends Controller
             if (!$existingGuest) {
                 $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
                 if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
-                    $existingGuest = null; 
+                    $existingGuest = null;
                 }
             }
 
@@ -189,7 +189,7 @@ class CheckinController extends Controller
 
                 foreach ($ocupacionesPrevias as $ocupacion) {
                     $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                    
+
                     // Solo bloquea si intenta tener DOS habitaciones normales o DOS salones idénticos
                     if ($isAssigningSalon === $isPreviousSalon) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
@@ -234,7 +234,7 @@ class CheckinController extends Controller
 
             foreach ($ocupacionesPrevias as $ocupacion) {
                 $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                
+
                 if ($isAssigningSalon === $isPreviousSalon) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
                         'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
@@ -268,8 +268,12 @@ class CheckinController extends Controller
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
             'discount' => 'nullable|numeric|min:0',
-            'is_corporate' => 'nullable|boolean',
+
+            // --- Campos viejos / Nuevos que envía React ---
+            'is_corporate' => 'nullable|boolean', // Asumo que React aún manda esto
+            'type' => 'nullable|string|in:corporativo,delegacion', // Por si ya actualizaste React para mandar el tipo
             'payment_frequency' => 'nullable|string|max:255',
+            'corporate_days' => 'nullable|integer',
         ]);
 
         $totalGuest = 1;
@@ -282,31 +286,58 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // 🌟 LÓGICA DE PRECIO Y PLAN CORPORATIVO
+        // 🌟 LÓGICA DE PRECIO Y PLAN CORPORATIVO / DELEGACIÓN
         // =========================================================
         $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
         $basePrice = $roomModelForPrice->price->amount ?? 0;
         $agreedPrice = $basePrice;
 
-        $isCorporate = $request->boolean('is_corporate');
+        // Detectamos si es un trato especial (Ya sea que React mande 'is_corporate' o 'type')
+        $isSpecialDeal = $request->boolean('is_corporate') || in_array($request->input('type'), ['corporativo', 'delegacion']);
 
-        if ($isCorporate) {
+        if ($isSpecialDeal) {
+            // Lógica actual de descuento corporativo
             $agreedPrice = max(0, $basePrice - 20);
-        } 
-        elseif ($request->boolean('auto_adjust_price')) {
+        } elseif ($request->boolean('auto_adjust_price')) {
+            // Asegúrate de que el método calculateAgreedPrice exista en tu controlador
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
 
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
             $minAllowed = $agreedPrice * 0.5;
             // Quitamos el limitante mínimo para que el salón pueda guardar su precio especial sin restricciones
-            $agreedPrice = max(floatval($request->discount), $isAssigningSalon ? 0 : $minAllowed); 
+            $agreedPrice = max(floatval($request->discount), $isAssigningSalon ? 0 : $minAllowed);
         }
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isCorporate, $totalGuest, $isAssigningSalon) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isSpecialDeal, $totalGuest, $isAssigningSalon) {
 
+            // =========================================================
+            // 🆕 PASO NUEVO: CREAR SPECIAL AGREEMENT SI CORRESPONDE
+            // =========================================================
+            $specialAgreementId = null;
+
+            if ($isSpecialDeal) {
+                // Determinamos el tipo. Si manda 'is_corporate', asumimos 'corporativo'. Si manda 'type', usamos ese.
+                $tipoTrato = $request->input('type') ?? 'corporativo';
+
+                // Calculamos los días numéricos de pago. Si manda 'corporate_days' lo usamos.
+                // Si tu React aún manda strings como "Semanal" en 'payment_frequency', podríamos mapearlo aquí, pero asumo que envía un número.
+                $frecuenciaDias = (int) $request->input('corporate_days', 0);
+
+                $agreement = \App\Models\SpecialAgreement::create([
+                    'type' => $tipoTrato,
+                    'agreed_price' => $agreedPrice,
+                    'payment_frequency_days' => $frecuenciaDias,
+                ]);
+
+                $specialAgreementId = $agreement->id;
+            }
+
+            // =========================================================
+            // 6. GUARDAR EL CHECKIN 
+            // =========================================================
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
                 'room_id' => $validatedCheckin['room_id'],
@@ -317,13 +348,13 @@ class CheckinController extends Controller
                 'origin' => $cleanOrigin,
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-                'agreed_price' => $agreedPrice,
+
+                // Ya no guardamos precio acordado ni los otros 3 campos aquí, ahora usamos la relación:
+                'special_agreement_id' => $specialAgreementId,
+
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
                 'is_temporary' => $request->boolean('is_temporary'),
-                'is_corporate' => $isCorporate,
-                'payment_frequency' => $isCorporate ? $request->input('payment_frequency') : null,
-                'corporate_days' => 0,
             ]);
 
             // --- PAGOS ---
@@ -411,8 +442,8 @@ class CheckinController extends Controller
             // =========================================================
             $roomModel = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
             $maxCapacity = $roomModel->roomType->capacity ?? 1;
-            
-            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isCorporate || $isAssigningSalon) ? true : ($totalGuest >= $maxCapacity);
+
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialDeal || $isAssigningSalon) ? true : ($totalGuest >= $maxCapacity);
 
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
@@ -515,7 +546,7 @@ class CheckinController extends Controller
                         'room_id' => $newRoomId,
                         'check_in_date' => $ahora,
                         // 🌟 MAGIA 1: Salvamos la fecha original del 8 de abril
-                        'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date, 
+                        'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
                         'schedule_id' => $checkin->schedule_id,
                         'origin' => $checkin->origin,
                         'duration_days' => 0,
@@ -527,7 +558,7 @@ class CheckinController extends Controller
                         'is_temporary' => $checkin->is_temporary,
                         'status' => 'activo',
                         'notes' => "Transferencia. Deuda Anterior: {$deudaHospedajeAnterior} Bs.",
-                        
+
                         // 🌟 MAGIA 3: Clonamos el trato corporativo
                         'is_corporate' => $checkin->is_corporate,
                         'payment_frequency' => $checkin->payment_frequency,
@@ -560,7 +591,7 @@ class CheckinController extends Controller
 
                 $roomViejaData = \App\Models\Room::with('price')->find($checkin->room_id);
                 $roomNuevaData = \App\Models\Room::with('price')->find($newRoomId);
-                
+
                 $precioViejaHabitacion = $roomViejaData->price->amount ?? 0;
                 $precioNuevaHabitacion = $roomNuevaData->price->amount ?? 0;
 
@@ -593,8 +624,8 @@ class CheckinController extends Controller
                     // 🌟 MAGIA 2: Herencia de precio si era corporativo
                     'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $precioNuevaHabitacion,
                     'parent_checkin_id' => $checkin->id,
-                    'carried_balance' => 0, 
-                    'is_temporary' => $checkin->is_temporary, 
+                    'carried_balance' => 0,
+                    'is_temporary' => $checkin->is_temporary,
                     'status' => 'activo',
                     'notes' => "Transferencia Parcial (División) desde Hab. " . $checkin->room->number,
 
@@ -669,13 +700,18 @@ class CheckinController extends Controller
             'origin' => 'nullable|string',
             'is_temporary' => 'boolean',
             'auto_adjust_price' => 'boolean',
+
+            // --- Campos viejos / Nuevos ---
             'is_corporate' => 'nullable|boolean',
+            'is_delegation' => 'nullable|boolean',
+            'type' => 'nullable|string|in:corporativo,delegacion',
             'payment_frequency' => 'nullable|string|max:255',
+            'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
             'agreed_price' => 'nullable|numeric|min:0',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
-            
+
             // =========================================================
             // 🔄 1. PROTECCIÓN Y SWAP DEL TITULAR 
             // =========================================================
@@ -686,7 +722,7 @@ class CheckinController extends Controller
                 $existingOtherGuest = \App\Models\Guest::where('identification_number', $request->identification_number)->first();
                 if ($existingOtherGuest) {
                     $guestIdToUse = $existingOtherGuest->id;
-                    $currentGuest = $existingOtherGuest; 
+                    $currentGuest = $existingOtherGuest;
                 } else {
                     $currentGuest = \App\Models\Guest::create([
                         'full_name' => $request->full_name ? strtoupper($request->full_name) : 'SIN NOMBRE',
@@ -733,13 +769,13 @@ class CheckinController extends Controller
             // 3. ACTUALIZAR ACOMPAÑANTES Y OBTENER SUS IDs
             // =========================================================
             $allCompanionsComplete = true;
-            $totalGuests = 1; 
+            $totalGuests = 1;
             $idsParaSincronizar = [];
 
             if ($request->has('companions') && is_array($request->companions)) {
                 foreach ($request->companions as $compData) {
                     if (empty($compData['full_name'])) continue;
-                    $totalGuests++; 
+                    $totalGuests++;
 
                     $compName = strtoupper($compData['full_name']);
                     $compBirthDate = $compData['birth_date'] ?? null;
@@ -794,24 +830,23 @@ class CheckinController extends Controller
             $roomModelUpdate = \App\Models\Room::with(['price', 'roomType'])->findOrFail($validated['room_id']);
             $isAssigningSalon = str_contains(strtoupper($roomModelUpdate->roomType->name ?? ''), 'SALON');
 
-            // Metemos en una bolsa a todos los que intentan entrar a esta habitación
             $allGuestIdsToCheck = array_merge([$guestIdToUse], array_keys($idsParaSincronizar));
 
             $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType', 'guest', 'companions')
                 ->where('status', 'activo')
-                ->where('is_temporary', false) 
-                ->where('id', '!=', $checkin->id) 
-                ->where(function($q) use ($allGuestIdsToCheck) {
-                    $q->whereIn('guest_id', $allGuestIdsToCheck) 
-                      ->orWhereHas('companions', function($q2) use ($allGuestIdsToCheck) {
-                          $q2->whereIn('guests.id', $allGuestIdsToCheck); 
-                      });
+                ->where('is_temporary', false)
+                ->where('id', '!=', $checkin->id)
+                ->where(function ($q) use ($allGuestIdsToCheck) {
+                    $q->whereIn('guest_id', $allGuestIdsToCheck)
+                        ->orWhereHas('companions', function ($q2) use ($allGuestIdsToCheck) {
+                            $q2->whereIn('guests.id', $allGuestIdsToCheck);
+                        });
                 })
                 ->get();
 
             foreach ($ocupacionesPrevias as $ocupacion) {
                 $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                
+
                 if ($isAssigningSalon === $isPreviousSalon) {
                     $duplicateName = 'Un huésped';
                     if (in_array($ocupacion->guest_id, $allGuestIdsToCheck)) {
@@ -824,8 +859,7 @@ class CheckinController extends Controller
                             }
                         }
                     }
-                    
-                    // 👇 EL MENSAJE UNIFICADO QUE PEDISTE 👇
+
                     throw \Illuminate\Validation\ValidationException::withMessages([
                         'guest_id' => "ALERTA: {$duplicateName} ya se encuentra registrado en el/la " . $ocupacion->room->number,
                     ]);
@@ -839,45 +873,71 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 5. LÓGICA DE GRUPOS ESPECIALES (CORPORATIVO / DELEGACIÓN) Y PRECIO
+            // 🌟 5. LÓGICA DE GRUPOS ESPECIALES (NUEVA ESTRUCTURA)
             // =========================================================
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $basePrice = $roomModelUpdate->price->amount ?? 0;
 
+            // Detectamos la intención actual del formulario
             $isCorporateNow = $request->boolean('is_corporate');
             $isDelegationNow = $request->boolean('is_delegation');
-            $isSpecialGroup = $isCorporateNow || $isDelegationNow;
+            $typeRequest = $request->input('type');
 
-            // 👇 LA MAGIA: Si el recepcionista escribió un precio negociado, lo usamos. Si no, usamos el base.
-            $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : ($checkin->agreed_price ?? $basePrice); 
-            
-            $paymentFrequency = $checkin->payment_frequency;
-            $corporateDays = $checkin->corporate_days;
+            $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || in_array($typeRequest, ['corporativo', 'delegacion']);
+            $tipoTratoNuevo = $typeRequest ?? ($isDelegationNow ? 'delegacion' : 'corporativo');
 
-            if ($checkin->is_corporate == false && $checkin->is_delegation == false && $isSpecialGroup == true) {
-                $paymentFrequency = $request->input('payment_frequency');
-                $corporateDays = 0;
-            } 
-            elseif (($checkin->is_corporate == true || $checkin->is_delegation == true) && $isSpecialGroup == false) {
-                // El Castigo: Pierde su privilegio y vuelve al precio normal
+            $frecuenciaDias = (int) $request->input('corporate_days', 0);
+
+            // Verificamos si este check-in YA tenía un trato especial guardado
+            $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
+
+            // Determinamos el precio actual base de la negociación
+            $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
+            $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : $precioActualGuardado;
+
+            $extraNotes = ""; // Variable para añadir texto a las notas si ocurre "El Castigo"
+
+            if (!$hadSpecialAgreement && $isSpecialGroupNow) {
+                // 5.1 DE NORMAL A ESPECIAL
+                $agreement = \App\Models\SpecialAgreement::create([
+                    'type' => $tipoTratoNuevo,
+                    'agreed_price' => $updatedAgreedPrice,
+                    'payment_frequency_days' => $frecuenciaDias,
+                ]);
+                $checkin->special_agreement_id = $agreement->id;
+            } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
+                // 5.2 DE ESPECIAL A NORMAL ("El Castigo")
                 $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
                 $now = \Carbon\Carbon::now();
-                $corporateDays = max(0, intval($checkInDate->diffInDays($now)));
-                $updatedAgreedPrice = $basePrice; 
-                $paymentFrequency = null; 
-            } 
-            elseif (!$isSpecialGroup) {
+                $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays($now)));
+
+                $updatedAgreedPrice = $basePrice; // Pierde el privilegio, vuelve al precio base
+
+                // Eliminamos el acuerdo antiguo de la base de datos
+                $oldAgreementId = $checkin->special_agreement_id;
+                $checkin->special_agreement_id = null;
+                \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
+
+                // Como ya no existe la columna 'corporate_days', lo guardamos como un historial en las notas
+                $extraNotes = " [SISTEMA: Privilegio corporativo/delegación revocado. Duró {$diasQueFueCorporativo} días.]";
+            } elseif (!$isSpecialGroupNow) {
+                // 5.3 SIGUE SIENDO NORMAL
                 if ($request->boolean('auto_adjust_price')) {
                     $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
                 } else {
                     $updatedAgreedPrice = $basePrice;
                 }
-            } 
-            else {
-                $paymentFrequency = $request->input('payment_frequency');
+            } else {
+                // 5.4 SIGUE SIENDO ESPECIAL (Actualizamos su acuerdo)
+                $checkin->specialAgreement->update([
+                    'type' => $tipoTratoNuevo,
+                    'agreed_price' => $updatedAgreedPrice,
+                    'payment_frequency_days' => $frecuenciaDias,
+                ]);
             }
 
-            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialGroup) ? true : ($totalGuests >= $maxCapacity);
+            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialGroupNow) ? true : ($totalGuests >= $maxCapacity);
+
             // =========================================================
             // 6. EVALUACIÓN FINAL Y GUARDADO
             // =========================================================
@@ -885,16 +945,19 @@ class CheckinController extends Controller
 
             \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
 
+            // Concatenamos las notas que vienen del request, o las antiguas, con las posibles notas extra de "El Castigo"
+            $notasFinales = isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes;
+            $notasFinales .= $extraNotes;
+
             $updateData = [
                 'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
                 'duration_days' => $validated['duration_days'],
-                'notes' => isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes,
+                'notes' => $notasFinales,
                 'origin' => $cleanOrigin,
-                'agreed_price' => $updatedAgreedPrice,
-                'is_corporate' => $isCorporateNow,
-                'payment_frequency' => $paymentFrequency,
-                'corporate_days' => $corporateDays,
+                'special_agreement_id' => $checkin->special_agreement_id, // Conectamos con la llave de la nueva tabla
             ];
+
+            // Ya no mandamos is_corporate, agreed_price, etc. en el updateData
 
             if ($isEverythingComplete) {
                 $updateData['is_temporary'] = false;
@@ -1837,7 +1900,7 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-           // =========================================================
+            // =========================================================
             // 🚀 IMPRESIÓN DEL DESGLOSE CORRECTO EN LA FACTURA
             // =========================================================
             $saldoCobrar = $granTotal - $adelantosPrevios;
@@ -1862,7 +1925,7 @@ class CheckinController extends Controller
             // IMPORTANTE: Se cambia a $saldoCobrar para que el literal coincida con lo que paga el cliente hoy, 
             // o a $granTotal si quieres que el literal sea por el valor total de la factura. 
             // Legalmente (en Bolivia) el texto literal suele ser sobre el TOTAL GENERAL de la factura.
-            $montoLetras = $this->convertirNumeroALetras($granTotal); 
+            $montoLetras = $this->convertirNumeroALetras($granTotal);
             $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
 
             $pdf->Ln(2);
