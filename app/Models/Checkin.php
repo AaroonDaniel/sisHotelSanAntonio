@@ -29,11 +29,7 @@ class Checkin extends Model
         'carried_balance',
         'is_temporary',
         'parent_checkin_id',
-        
-        'agreed_price',
-        'is_corporate',
-        'payment_frequency',
-        'corporate_days',
+        'special_agreement_id'
     ];
 
     protected $uppercaseFields = [
@@ -125,5 +121,9 @@ class Checkin extends Model
     public function parentCheckin()
     {
         return $this->belongsTo(Checkin::class, 'parent_checkin_id');
+    }
+    public function specialAgreement(): BelongsTo
+    {
+        return $this->belongsTo(SpecialAgreement::class);
     }
 }

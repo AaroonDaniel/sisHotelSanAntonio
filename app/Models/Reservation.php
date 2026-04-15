@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Reservation extends Model
 {
@@ -16,6 +17,7 @@ class Reservation extends Model
         'advance_payment',
         'payment_type',
         'status',
+        'special_agreement_id',
 
     ];
 
@@ -29,5 +31,9 @@ class Reservation extends Model
     public function details()
     {
         return $this->hasMany(ReservationDetail::class);
+    }
+    public function specialAgreement(): BelongsTo
+    {
+        return $this->belongsTo(SpecialAgreement::class);
     }
 }
