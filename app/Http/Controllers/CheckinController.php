@@ -245,6 +245,12 @@ class CheckinController extends Controller
             $existingGuest = \App\Models\Guest::find($guestId);
             if ($existingGuest) {
                 $existingGuest->update([
+                    'identification_number' => $request->filled('identification_number') ? strtoupper($request->identification_number) : $existingGuest->identification_number,
+                    'nationality' => $request->filled('nationality') ? strtoupper($request->nationality) : $existingGuest->nationality,
+                    'civil_status' => $request->filled('civil_status') ? strtoupper($request->civil_status) : $existingGuest->civil_status,
+                    'birth_date' => $request->filled('birth_date') ? $request->birth_date : $existingGuest->birth_date,
+                    'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
+                    'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
                     'phone' => $request->phone ?? $existingGuest->phone,
                     'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
                 ]);
@@ -735,20 +741,8 @@ class CheckinController extends Controller
             }
 
             // =========================================================
-            // 2. ACTUALIZAR LOS DATOS DEL TITULAR 
+            // 2. ACTUALIZAR LOS DATOS DEL TITULAR (CORREGIDO)
             // =========================================================
-            if ($currentGuest) {
-                $currentGuest->update([
-                    'full_name' => $request->full_name ? strtoupper($request->full_name) : $currentGuest->full_name,
-                    'identification_number' => $request->identification_number ?? $currentGuest->identification_number,
-                    'nationality' => $request->nationality ? strtoupper($request->nationality) : $currentGuest->nationality,
-                    'profession' => $request->profession ? strtoupper($request->profession) : $currentGuest->profession,
-                    'civil_status' => $request->civil_status ? strtoupper($request->civil_status) : $currentGuest->civil_status,
-                    'birth_date' => $request->birth_date ?? $currentGuest->birth_date,
-                    'issued_in' => $request->issued_in ?? $currentGuest->issued_in,
-                ]);
-            }
-
             $cleanOrigin = null;
             if (!empty($validated['origin'])) {
                 $cleanOrigin = trim($validated['origin']);
@@ -756,17 +750,34 @@ class CheckinController extends Controller
                 $cleanOrigin = strtoupper($cleanOrigin);
             }
 
-            $isTitularComplete = true;
-            if (empty($currentGuest->identification_number) || empty($currentGuest->nationality) || empty($cleanOrigin) || empty($currentGuest->profession) || empty($currentGuest->civil_status) || empty($currentGuest->birth_date)) {
-                $isTitularComplete = false;
-            }
+            if ($currentGuest) {
+                // Evaluamos si el titular tiene todos sus datos antes del update
+                $isTitularComplete = !empty($request->identification_number ?? $currentGuest->identification_number) &&
+                                     !empty($request->nationality ?? $currentGuest->nationality) &&
+                                     !empty($cleanOrigin) &&
+                                     !empty($request->profession ?? $currentGuest->profession) &&
+                                     !empty($request->civil_status ?? $currentGuest->civil_status) &&
+                                     !empty($request->birth_date ?? $currentGuest->birth_date) &&
+                                     !empty($request->issued_in ?? $currentGuest->issued_in) &&
+                                     !empty($request->phone ?? $currentGuest->phone);
 
-            if ($isTitularComplete && $currentGuest) {
-                $currentGuest->update(['profile_status' => 'COMPLETE']);
+                $currentGuest->update([
+                    'full_name' => $request->has('full_name') ? ($request->full_name ? strtoupper($request->full_name) : $currentGuest->full_name) : $currentGuest->full_name,
+                    'identification_number' => $request->has('identification_number') ? ($request->identification_number ? strtoupper($request->identification_number) : null) : $currentGuest->identification_number,
+                    'nationality' => $request->has('nationality') ? ($request->nationality ? strtoupper($request->nationality) : null) : $currentGuest->nationality,
+                    'profession' => $request->has('profession') ? ($request->profession ? strtoupper($request->profession) : null) : $currentGuest->profession,
+                    'civil_status' => $request->has('civil_status') ? ($request->civil_status ? strtoupper($request->civil_status) : null) : $currentGuest->civil_status,
+                    'birth_date' => $request->has('birth_date') ? $request->birth_date : $currentGuest->birth_date,
+                    'issued_in' => $request->has('issued_in') ? ($request->issued_in ? strtoupper($request->issued_in) : null) : $currentGuest->issued_in,
+                    'phone' => $request->has('phone') ? $request->phone : $currentGuest->phone,
+                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
+                ]);
+            } else {
+                 $isTitularComplete = false; // Por si acaso no hay guest
             }
 
             // =========================================================
-            // 3. ACTUALIZAR ACOMPAÑANTES Y OBTENER SUS IDs
+            // 3. ACTUALIZAR ACOMPAÑANTES Y OBTENER SUS IDs (CORREGIDO)
             // =========================================================
             $allCompanionsComplete = true;
             $totalGuests = 1;
@@ -778,10 +789,14 @@ class CheckinController extends Controller
                     $totalGuests++;
 
                     $compName = strtoupper($compData['full_name']);
-                    $compBirthDate = $compData['birth_date'] ?? null;
+                    $compBirthDate = !empty($compData['birth_date']) ? $compData['birth_date'] : null;
                     $compIdNumber = !empty($compData['identification_number']) ? strtoupper($compData['identification_number']) : null;
                     $compNationality = !empty($compData['nationality']) ? strtoupper($compData['nationality']) : 'BOLIVIANA';
+                    $compCivilStatus = !empty($compData['civil_status']) ? strtoupper($compData['civil_status']) : null;
+                    $compProfession = !empty($compData['profession']) ? strtoupper($compData['profession']) : null;
+                    $compPhone = !empty($compData['phone']) ? $compData['phone'] : null;
 
+                    // Un acompañante está completo si tiene carnet y nacionalidad (según tu lógica original)
                     $compIsComplete = !empty($compIdNumber) && !empty($compNationality);
                     if (!$compIsComplete) {
                         $allCompanionsComplete = false;
@@ -796,26 +811,31 @@ class CheckinController extends Controller
                     }
 
                     if (!$companion) {
+                        // Si no existe, lo crea con todos los datos disponibles
                         $companion = \App\Models\Guest::create([
                             'full_name' => $compName,
                             'identification_number' => $compIdNumber,
                             'nationality' => $compNationality,
-                            'civil_status' => !empty($compData['civil_status']) ? strtoupper($compData['civil_status']) : null,
+                            'civil_status' => $compCivilStatus,
                             'birth_date' => $compBirthDate,
-                            'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                            'profession' => $compProfession,
+                            'phone' => $compPhone,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
                     } else {
+                        // Si ya existe, lo actualiza preservando datos viejos si vienen vacíos
                         $companion->update([
-                            'identification_number' => $compIdNumber ?? $companion->identification_number,
-                            'birth_date' => $compBirthDate ?? $companion->birth_date,
-                            'nationality' => $compNationality,
-                            'civil_status' => !empty($compData['civil_status']) ? strtoupper($compData['civil_status']) : $companion->civil_status,
-                            'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : $companion->profession,
+                            'identification_number' => array_key_exists('identification_number', $compData) ? ($compData['identification_number'] ? strtoupper($compData['identification_number']) : null) : $companion->identification_number,
+                            'birth_date' => array_key_exists('birth_date', $compData) ? $compData['birth_date'] : $companion->birth_date,
+                            'nationality' => $compNationality, // Siempre actualizamos a la que llegue
+                            'civil_status' => array_key_exists('civil_status', $compData) ? ($compData['civil_status'] ? strtoupper($compData['civil_status']) : null) : $companion->civil_status,
+                            'profession' => array_key_exists('profession', $compData) ? ($compData['profession'] ? strtoupper($compData['profession']) : null) : $companion->profession,
+                            'phone' => array_key_exists('phone', $compData) ? $compData['phone'] : $companion->phone,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
                     }
 
+                    // Sincronizamos con el origen específico de cada acompañante
                     if ($companion->id !== $guestIdToUse) {
                         $idsParaSincronizar[$companion->id] = [
                             'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null
@@ -823,7 +843,6 @@ class CheckinController extends Controller
                     }
                 }
             }
-
             // =========================================================
             // 🛑 4. BARRERA OMNISCIENTE (TITULAR Y ACOMPAÑANTES)
             // =========================================================

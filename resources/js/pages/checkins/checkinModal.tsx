@@ -402,7 +402,7 @@ export default function CheckinModal({
             profession: '',
             phone: '',
             companions: [],
-            payment_method: 'EFECTIVO',
+            payment_method: '',
             qr_bank: '',
             is_temporary: false,
             auto_adjust_price: false,
