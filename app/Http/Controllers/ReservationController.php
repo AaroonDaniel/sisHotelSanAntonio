@@ -55,8 +55,14 @@ class ReservationController extends Controller
                 'advance_payment' => 'nullable|numeric|min:0',
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
+
+                // --- NUEVOS CAMPOS (y mantenemos los viejos por compatibilidad con React por ahora) ---
                 'is_corporate' => 'boolean|nullable',
                 'is_delegation' => 'boolean|nullable',
+                'type' => 'nullable|string|in:estandar,corporativo,delegacion',
+                'agreed_price' => 'nullable|numeric|min:0',
+                'corporate_days' => 'nullable|integer',
+
                 'details' => 'required|array|min:1',
                 'details.*.room_id' => 'nullable',
                 'details.*.requested_room_type_id' => 'nullable',
@@ -83,6 +89,32 @@ class ReservationController extends Controller
                     $guestId = $newGuest->id;
                 }
 
+                // =========================================================
+                // 🆕 LÓGICA DE ACUERDO ESPECIAL (SPECIAL AGREEMENT)
+                // =========================================================
+                $typeRequest = $request->input('type');
+                $isSpecialDeal = $request->is_corporate || $request->is_delegation || in_array($typeRequest, ['corporativo', 'delegacion']);
+
+                $specialAgreementId = null;
+
+                if ($isSpecialDeal) {
+                    $tipoTrato = $typeRequest ?? ($request->is_delegation ? 'delegacion' : 'corporativo');
+                    // Si el front manda el precio total del acuerdo, lo usamos; si no, asumimos el del primer detalle o 0.
+                    $agreedPrice = $request->input('agreed_price', $request->details[0]['price'] ?? 0);
+                    $corporateDays = (int) $request->input('corporate_days', 0);
+
+                    $agreement = \App\Models\SpecialAgreement::create([
+                        'type' => $tipoTrato,
+                        'agreed_price' => $agreedPrice,
+                        'payment_frequency_days' => $corporateDays,
+                    ]);
+
+                    $specialAgreementId = $agreement->id;
+                }
+
+                // =========================================================
+                // CREACIÓN DE RESERVA
+                // =========================================================
                 $reservation = Reservation::create([
                     'user_id' => Auth::id(),
                     'guest_id' => $guestId,
@@ -92,8 +124,10 @@ class ReservationController extends Controller
                     'duration_days' => $request->duration_days,
                     'advance_payment' => $request->advance_payment ?? 0,
                     'payment_type' => $request->payment_type,
-                    'is_corporate' => $request->is_corporate ?? false,
-                    'is_delegation' => $request->is_delegation ?? false,
+
+                    // Conectamos el acuerdo en lugar de usar los booleanos
+                    'special_agreement_id' => $specialAgreementId,
+
                     'status' => 'pendiente',
                 ]);
 
@@ -156,21 +190,23 @@ class ReservationController extends Controller
                         }
                     }
                 }
+
                 // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
                     $reservation->update(['status' => 'confirmada']);
                     $primerCheckinId = null;
                     Log::info("✅ Reserva confirmada. Creando check-ins para cada habitación asignada... #{$reservation->id}");
+
                     foreach ($reservation->details as $index => $detail) {
                         if (!$detail->room_id) continue;
 
-                        // Guardamos el nombre del titular original en la nota para que el frontend lo lea
                         $notaAsignacion = 'RESERVA #' . $reservation->id . ' - RESERVADO POR: ' . $reservation->guest->full_name;
 
                         if ($index > 0) {
                             $notaAsignacion .= ' (HABITACIÓN ADICIONAL)';
                         }
 
+                        // ⚠️ CAMBIO CRUCIAL: El checkin hereda el special_agreement_id de la reserva
                         $checkin = Checkin::create([
                             'guest_id' => $reservation->guest_id,
                             'room_id'  => $detail->room_id,
@@ -183,9 +219,12 @@ class ReservationController extends Controller
                             'status' => 'activo',
                             'is_temporary' => true,
                             'notes' => $notaAsignacion,
-                            'agreed_price' => $detail->price ?? 0
+
+                            // Enlazar el acuerdo financiero y omitir la columna vieja 'agreed_price'
+                            'special_agreement_id' => $reservation->special_agreement_id,
                         ]);
-                        Log::info("Check-in Temporal creado (ID: {$checkin->id}) para la Habitación ID: {$detail->room_id}. Faltan datos de origen/acompañantes.");
+
+                        Log::info("Check-in Temporal creado (ID: {$checkin->id}) para la Habitación ID: {$detail->room_id}.");
                         $checkinIds[] = $checkin->id;
                         if ($index === 0) {
                             $primerCheckinId = $checkin->id;
@@ -209,9 +248,41 @@ class ReservationController extends Controller
                         Log::info("Adelanto de pagos transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
                 }
+
                 // --- 3. SI SOLO ESTÁN EDITANDO DATOS DE LA RESERVA (FASE 1) ---
                 else {
-                    // Actualizamos los datos base
+                    // Evaluamos los cambios en el trato especial
+                    $typeRequest = $request->input('type');
+                    $isSpecialGroupNow = $request->boolean('is_corporate') || $request->boolean('is_delegation') || in_array($typeRequest, ['corporativo', 'delegacion']);
+                    $tipoTratoNuevo = $typeRequest ?? ($request->boolean('is_delegation') ? 'delegacion' : 'corporativo');
+                    $frecuenciaDias = (int) $request->input('corporate_days', 0);
+                    $agreedPrice = $request->input('agreed_price', 0);
+
+                    $hadSpecialAgreement = !is_null($reservation->special_agreement_id);
+
+                    if (!$hadSpecialAgreement && $isSpecialGroupNow) {
+                        // De Estandar a Especial
+                        $agreement = \App\Models\SpecialAgreement::create([
+                            'type' => $tipoTratoNuevo,
+                            'agreed_price' => $agreedPrice,
+                            'payment_frequency_days' => $frecuenciaDias,
+                        ]);
+                        $reservation->special_agreement_id = $agreement->id;
+                    } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
+                        // De Especial a Estandar (Pierde el privilegio)
+                        $oldAgreementId = $reservation->special_agreement_id;
+                        $reservation->special_agreement_id = null;
+                        \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
+                    } elseif ($hadSpecialAgreement && $isSpecialGroupNow) {
+                        // Sigue siendo Especial, actualizamos datos por si cambiaron el precio en la edicion
+                        $reservation->specialAgreement->update([
+                            'type' => $tipoTratoNuevo,
+                            'agreed_price' => $agreedPrice,
+                            'payment_frequency_days' => $frecuenciaDias,
+                        ]);
+                    }
+
+                    // Actualizamos los datos base de la reserva omitiendo is_corporate/is_delegation
                     $reservation->update([
                         'arrival_date' => $request->arrival_date ?? $reservation->arrival_date,
                         'arrival_time' => $request->arrival_time ?? $reservation->arrival_time,
@@ -219,8 +290,7 @@ class ReservationController extends Controller
                         'guest_count' => $request->guest_count ?? $reservation->guest_count,
                         'advance_payment' => $request->advance_payment ?? $reservation->advance_payment,
                         'payment_type' => $request->payment_type ?? $reservation->payment_type,
-                        'is_corporate' => $request->has('is_corporate') ? $request->is_corporate : $reservation->is_corporate,
-                        'is_delegation' => $request->has('is_delegation') ? $request->is_delegation : $reservation->is_delegation,
+                        'special_agreement_id' => $reservation->special_agreement_id,
                         'status' => 'pendiente' // Forzamos pendiente porque se acaba de editar
                     ]);
 
@@ -267,7 +337,6 @@ class ReservationController extends Controller
 
                         foreach ($detailsToDelete as $det) {
                             if ($det->room_id) {
-                                // Liberar la habitación física antes de borrar el detalle
                                 Room::where('id', $det->room_id)->update(['status' => 'LIBRE']);
                             }
                             $det->delete();

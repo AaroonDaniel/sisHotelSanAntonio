@@ -177,9 +177,12 @@ export interface CheckinData {
     qr_bank?: string | null;
     is_temporary?: boolean;
     auto_adjust_price?: boolean;
-    is_corporate?: boolean;
-    payment_frequency?: string | number;
-    corporate_days: number;
+    special_agreement?: {
+        id: number;
+        type: 'corporativo' | 'delegacion';
+        agreed_price: number;
+        payment_frequency_days: number;
+    } | null;
     payments?: any[];
 }
 
@@ -258,11 +261,9 @@ interface CheckinFormData {
     auto_adjust_price: boolean;
     monto_efectivo?: number | string;
     monto_qr?: number | string;
-    is_corporate: boolean;
-    payment_frequency: string | number;
+    type: 'estandar' | 'corporativo' | 'delegacion';
     corporate_days: number;
-    is_delegation: boolean;
-    agreed_price: number;
+    agreed_price: number | string;
 }
 
 export default function CheckinModal({
@@ -400,18 +401,17 @@ export default function CheckinModal({
             birth_date: '',
             profession: '',
             phone: '',
-            companions: [], // <--- ESTE ES EL CAMBIO CLAVE (Array vacío inicial)
-            payment_method: 'EFECTIVO', // Por defecto efectivo
-            qr_bank: '', // Vacío al inicio
+            companions: [],
+            payment_method: 'EFECTIVO',
+            qr_bank: '',
             is_temporary: false,
             auto_adjust_price: false,
             monto_efectivo: '',
             monto_qr: '',
-            is_corporate: false,
-            payment_frequency: '',
-            corporate_days: 0,
-            is_delegation: false,
+
+            type: 'estandar',
             agreed_price: 0,
+            corporate_days: 0,
         });
 
     // =========================================================================
@@ -660,13 +660,13 @@ export default function CheckinModal({
                     auto_adjust_price: isPriceAdjusted,
                     is_temporary: !!checkinToEdit.is_temporary,
 
-                    agreed_price: checkinToEdit.agreed_price
-                        ? Number(checkinToEdit.agreed_price)
-                        : Number(originalRoomPrice),
-                    is_delegation: !!checkinToEdit.is_delegation,
-                    is_corporate: !!checkinToEdit.is_corporate,
-                    payment_frequency: checkinToEdit.payment_frequency || '',
-                    corporate_days: checkinToEdit.corporate_days || 0,
+                    type: checkinToEdit.special_agreement?.type || 'estandar', // <--- CORREGIDO
+                    agreed_price:
+                        checkinToEdit.special_agreement?.agreed_price ||
+                        Number(originalRoomPrice),
+                    corporate_days:
+                        checkinToEdit.special_agreement
+                            ?.payment_frequency_days || 0,
 
                     full_name: isSecondaryRoom
                         ? ''
@@ -713,13 +713,17 @@ export default function CheckinModal({
                 }));
 
                 // 🌟 LÓGICA PARA MOSTRAR LA CAJA "OTRO" SI TENÍA UN NÚMERO PERSONALIZADO
-                if (checkinToEdit.is_corporate) {
-                    const frec = String(checkinToEdit.payment_frequency);
+                if (checkinToEdit.special_agreement?.type === 'corporativo') {
+                    const frec = String(
+                        checkinToEdit.special_agreement.payment_frequency_days,
+                    );
                     if (frec && !['1', '7', '15', '30'].includes(frec)) {
                         setIsCustomFrequency(true);
                     } else {
                         setIsCustomFrequency(false);
                     }
+                } else {
+                    setIsCustomFrequency(false);
                 }
             } else {
                 // ===============================================
@@ -748,12 +752,10 @@ export default function CheckinModal({
                     qr_bank: '',
                     auto_adjust_price: false,
                     is_temporary: false,
+                    type: 'estandar',
                     agreed_price: originalRoomPriceForNew
                         ? Number(originalRoomPriceForNew)
                         : 0,
-                    is_delegation: false,
-                    is_corporate: false,
-                    payment_frequency: '',
                     corporate_days: 0,
                 }));
 
@@ -1073,7 +1075,7 @@ export default function CheckinModal({
         // =========================================================
         // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
         // =========================================================
-        if (data.is_corporate) {
+        if (data.type === 'corporativo') {
             const montoAdelanto = Number(data.advance_payment);
 
             if (!montoAdelanto || montoAdelanto <= 0) {
@@ -2324,19 +2326,16 @@ export default function CheckinModal({
                                                     <input
                                                         id="auto_adjust_price"
                                                         type="checkbox"
-                                                        checked={
-                                                            data.auto_adjust_price
-                                                        }
+                                                        checked={data.auto_adjust_price}
                                                         onChange={(e) =>
                                                             setData(
                                                                 'auto_adjust_price',
-                                                                e.target
-                                                                    .checked,
+                                                                e.target.checked,
                                                             )
                                                         }
                                                         disabled={
                                                             isReadOnly ||
-                                                            data.is_corporate
+                                                            data.type === 'corporativo'
                                                         }
                                                         className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                                                     />
@@ -2347,10 +2346,10 @@ export default function CheckinModal({
                                             {/* Línea divisoria sutil entre ambos botones */}
                                             <div className="h-5 w-px bg-gray-300"></div>
 
-                                            {/* DERECHA: Asig. CORP (w-[60%]) ORIGINAL RESTAURADO */}
+                                            {/* DERECHA: Asig. CORP (w-[60%]) DISEÑO ORIGINAL MANTENIDO */}
                                             <div
                                                 className={`flex w-[60%] items-center justify-center rounded-lg p-1 transition-all ${
-                                                    data.is_corporate
+                                                    data.type === 'corporativo'
                                                         ? 'border border-indigo-100 bg-indigo-50 shadow-sm'
                                                         : 'hover:bg-gray-200/50'
                                                 }`}
@@ -2358,7 +2357,7 @@ export default function CheckinModal({
                                                 <label
                                                     htmlFor="is_corporate_rec"
                                                     className={`flex cursor-pointer items-center justify-center gap-1.5 text-xs font-bold transition-all select-none ${
-                                                        data.is_corporate
+                                                        data.type === 'corporativo'
                                                             ? 'text-indigo-800'
                                                             : 'text-gray-500'
                                                     }`}
@@ -2366,62 +2365,32 @@ export default function CheckinModal({
                                                     <input
                                                         id="is_corporate_rec"
                                                         type="checkbox"
-                                                        checked={
-                                                            data.is_corporate
-                                                        }
+                                                        checked={data.type === 'corporativo'}
                                                         onChange={(e) => {
-                                                            const isChecked =
-                                                                e.target
-                                                                    .checked;
-
-                                                            // Buscamos el precio original de la habitación
-                                                            const selectedRoom =
-                                                                rooms.find(
-                                                                    (r) =>
-                                                                        r.id ===
-                                                                            Number(
-                                                                                data.room_id,
-                                                                            ) ||
-                                                                        r.id ===
-                                                                            initialRoomId,
-                                                                );
-                                                            const origPrice =
-                                                                selectedRoom
-                                                                    ?.price
-                                                                    ?.amount ||
-                                                                0;
+                                                            const isChecked = e.target.checked;
+                                                            const selectedRoom = rooms.find(
+                                                                (r) => r.id === Number(data.room_id) || r.id === initialRoomId,
+                                                            );
+                                                            const origPrice = selectedRoom?.price?.amount || 0;
 
                                                             if (!isChecked) {
                                                                 // Si lo APAGA, limpiamos todo y restauramos el precio normal
-                                                                setData(
-                                                                    (prev) => ({
-                                                                        ...prev,
-                                                                        is_corporate: false,
-                                                                        payment_frequency:
-                                                                            '',
-                                                                        agreed_price:
-                                                                            origPrice,
-                                                                    }),
-                                                                );
-                                                                setIsCustomFrequency(
-                                                                    false,
-                                                                );
+                                                                setData((prev) => ({
+                                                                    ...prev,
+                                                                    type: 'estandar',
+                                                                    corporate_days: 0,
+                                                                    agreed_price: origPrice,
+                                                                }));
+                                                                setIsCustomFrequency(false);
                                                             } else {
                                                                 // Si lo ENCIENDE, aplicamos el descuento base de -20 Bs
-                                                                setData(
-                                                                    (prev) => ({
-                                                                        ...prev,
-                                                                        is_corporate: true,
-                                                                        auto_adjust_price: false,
-                                                                        // Aplicamos -20, pero aseguramos que no baje de 0
-                                                                        agreed_price:
-                                                                            Math.max(
-                                                                                0,
-                                                                                origPrice -
-                                                                                    20,
-                                                                            ),
-                                                                    }),
-                                                                );
+                                                                setData((prev) => ({
+                                                                    ...prev,
+                                                                    type: 'corporativo',
+                                                                    auto_adjust_price: false,
+                                                                    agreed_price: Math.max(0, origPrice - 20),
+                                                                    corporate_days: 7, // Por defecto Semanal
+                                                                }));
                                                             }
                                                         }}
                                                         disabled={isReadOnly}
@@ -2431,67 +2400,29 @@ export default function CheckinModal({
                                                 </label>
 
                                                 {/* Controles de Frecuencia que aparecen AL LADO (Diseño Compacto Original) */}
-                                                {data.is_corporate && (
+                                                {data.type === 'corporativo' && (
                                                     <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
                                                         <select
                                                             className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
-                                                            value={
-                                                                isCustomFrequency
-                                                                    ? 'OTRO'
-                                                                    : data.payment_frequency
-                                                            }
+                                                            value={isCustomFrequency ? 'OTRO' : String(data.corporate_days)}
                                                             onChange={(e) => {
-                                                                if (
-                                                                    e.target
-                                                                        .value ===
-                                                                    'OTRO'
-                                                                ) {
-                                                                    setIsCustomFrequency(
-                                                                        true,
-                                                                    );
-                                                                    setData(
-                                                                        'payment_frequency',
-                                                                        '',
-                                                                    );
+                                                                if (e.target.value === 'OTRO') {
+                                                                    setIsCustomFrequency(true);
+                                                                    setData('corporate_days', 0);
                                                                 } else {
-                                                                    setIsCustomFrequency(
-                                                                        false,
-                                                                    );
-                                                                    setData(
-                                                                        'payment_frequency',
-                                                                        e.target
-                                                                            .value,
-                                                                    );
+                                                                    setIsCustomFrequency(false);
+                                                                    setData('corporate_days', Number(e.target.value));
                                                                 }
                                                             }}
-                                                            disabled={
-                                                                isReadOnly
-                                                            }
-                                                            required={
-                                                                data.is_corporate
-                                                            }
+                                                            disabled={isReadOnly}
+                                                            required={data.type === 'corporativo'}
                                                         >
-                                                            <option
-                                                                value=""
-                                                                disabled
-                                                            >
-                                                                Días...
-                                                            </option>
-                                                            <option value="1">
-                                                                1 día
-                                                            </option>
-                                                            <option value="7">
-                                                                7 días
-                                                            </option>
-                                                            <option value="15">
-                                                                15 días
-                                                            </option>
-                                                            <option value="30">
-                                                                30 días
-                                                            </option>
-                                                            <option value="OTRO">
-                                                                Otro
-                                                            </option>
+                                                            <option value="0" disabled>Días...</option>
+                                                            <option value="1">1 día</option>
+                                                            <option value="7">7 días</option>
+                                                            <option value="15">15 días</option>
+                                                            <option value="30">30 días</option>
+                                                            <option value="OTRO">Otro</option>
                                                         </select>
 
                                                         {isCustomFrequency && (
@@ -2500,22 +2431,10 @@ export default function CheckinModal({
                                                                 min="2"
                                                                 className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm text-black focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                 placeholder="Nº"
-                                                                value={
-                                                                    data.payment_frequency
-                                                                }
-                                                                onChange={(e) =>
-                                                                    setData(
-                                                                        'payment_frequency',
-                                                                        e.target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    isReadOnly
-                                                                }
-                                                                required={
-                                                                    isCustomFrequency
-                                                                }
+                                                                value={data.corporate_days === 0 ? '' : data.corporate_days}
+                                                                onChange={(e) => setData('corporate_days', Number(e.target.value))}
+                                                                disabled={isReadOnly}
+                                                                required={isCustomFrequency}
                                                             />
                                                         )}
                                                     </div>
@@ -2523,7 +2442,6 @@ export default function CheckinModal({
                                             </div>
                                         </div>
                                     </div>
-
                                     {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
                                     <div className="rounded-xl border border-green-200 bg-green-50 p-1 shadow-sm transition-all">
                                         {(() => {
@@ -2543,22 +2461,18 @@ export default function CheckinModal({
                                             // ==========================================
                                             // 🧠 LÓGICA DE PRECIO FINAL
                                             // ==========================================
-                                            // Si es Corporativo o Delegación, mandan el campo editable
-                                            if (
-                                                data.is_corporate ||
-                                                data.is_delegation
-                                            ) {
+                                            if (data.type !== 'estandar') {
                                                 finalPrice =
                                                     Number(data.agreed_price) ||
                                                     0;
-                                            }
-                                            // Si no, pero estamos editando un checkin que ya tenía un precio especial
-                                            else if (
+                                            } else if (
                                                 checkinToEdit &&
-                                                checkinToEdit.agreed_price
+                                                checkinToEdit.special_agreement
                                             ) {
                                                 finalPrice = Number(
-                                                    checkinToEdit.agreed_price,
+                                                    checkinToEdit
+                                                        .special_agreement
+                                                        .agreed_price,
                                                 );
                                             }
 
@@ -2575,13 +2489,10 @@ export default function CheckinModal({
                                                 : 'Total sugerido';
 
                                             // Si es un grupo especial, el total sugerido a cobrar AHORA MISMO es en base a su frecuencia
-                                            if (
-                                                data.is_corporate ||
-                                                data.is_delegation
-                                            ) {
+                                            if (data.type !== 'estandar') {
                                                 noches =
                                                     Number(
-                                                        data.payment_frequency,
+                                                        data.corporate_days,
                                                     ) || 1;
                                                 tituloTotal = `Cobro (cada ${noches} días)`;
                                             }
@@ -2640,7 +2551,7 @@ export default function CheckinModal({
                                                         </span>
 
                                                         {/* 🌟 AQUÍ ESTÁ EL CAMBIO: Input si es corporativo, Texto si es normal 🌟 */}
-                                                        {data.is_corporate ? (
+                                                        {data.type !== 'estandar' ? (
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <input
                                                                     type="number"
@@ -2704,10 +2615,9 @@ export default function CheckinModal({
                                                                     2,
                                                                 )}{' '}
                                                                 x {noches}{' '}
-                                                                {data.is_corporate ||
-                                                                data.is_delegation
-                                                                    ? 'días'
-                                                                    : 'noches'}
+                                                                {data.type !== 'estandar'
+                                                            ? 'días'
+                                                            : 'noches'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -2968,10 +2878,10 @@ export default function CheckinModal({
                                                         }
                                                         disabled={!isTitular}
                                                         required={
-                                                            data.is_corporate
+                                                            data.type === 'corporativo'
                                                         }
-                                                        className={`block w-full [appearance:textfield] rounded-xl border py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-                                                            data.is_corporate &&
+                                                       className={`block w-full [appearance:textfield] rounded-xl border py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+                                                            data.type === 'corporativo' &&
                                                             (!data.advance_payment ||
                                                                 data.advance_payment <=
                                                                     0)

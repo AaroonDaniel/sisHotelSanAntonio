@@ -271,7 +271,7 @@ class CheckinController extends Controller
 
             // --- Campos viejos / Nuevos que envía React ---
             'is_corporate' => 'nullable|boolean', // Asumo que React aún manda esto
-            'type' => 'nullable|string|in:corporativo,delegacion', // Por si ya actualizaste React para mandar el tipo
+            'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'payment_frequency' => 'nullable|string|max:255',
             'corporate_days' => 'nullable|integer',
         ]);
@@ -348,8 +348,8 @@ class CheckinController extends Controller
                 'origin' => $cleanOrigin,
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-
-                // Ya no guardamos precio acordado ni los otros 3 campos aquí, ahora usamos la relación:
+                
+                'agreed_price' => $agreedPrice, // <--- 🌟 ¡AGREGAR ESTA LÍNEA!
                 'special_agreement_id' => $specialAgreementId,
 
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
@@ -704,7 +704,7 @@ class CheckinController extends Controller
             // --- Campos viejos / Nuevos ---
             'is_corporate' => 'nullable|boolean',
             'is_delegation' => 'nullable|boolean',
-            'type' => 'nullable|string|in:corporativo,delegacion',
+            'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'payment_frequency' => 'nullable|string|max:255',
             'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
             'agreed_price' => 'nullable|numeric|min:0',
@@ -954,6 +954,7 @@ class CheckinController extends Controller
                 'duration_days' => $validated['duration_days'],
                 'notes' => $notasFinales,
                 'origin' => $cleanOrigin,
+                'agreed_price' => $updatedAgreedPrice,
                 'special_agreement_id' => $checkin->special_agreement_id, // Conectamos con la llave de la nueva tabla
             ];
 
