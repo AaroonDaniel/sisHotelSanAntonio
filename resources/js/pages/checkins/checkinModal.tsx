@@ -782,36 +782,57 @@ export default function CheckinModal({
     }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules, rooms]);
 
     // =========================================================================
-    // 🚀 EFECTO PARA CALCULAR EL PRECIO EN VIVO (CON LOGS DE DEBUG)
+    // 🚀 EFECTO PARA BUSCAR LA TARIFA EXACTA POR TIPO DE BAÑO Y CAPACIDAD
     // =========================================================================
     useEffect(() => {
         if (show && data.type === 'estandar') {
-            const currentRoom = rooms?.find((r: any) => r.id === Number(data.room_id) || r.id === initialRoomId);
-            const originalPrice = currentRoom?.price?.amount || 0;
-            const maxCapacity = currentRoom?.room_type?.capacity || 1;
+            const currentRoom = rooms?.find((r: any) => String(r.id) === String(data.room_id) || String(r.id) === String(initialRoomId));
+            
+            const originalPrice = Number(currentRoom?.price?.amount || 0);
+            // 👇 CORRECCIÓN 2: Usamos estrictamente room_type
+            const maxCapacity = Number(currentRoom?.room_type?.capacity || 1);
+            const bathroomType = currentRoom?.price?.bathroom_type;
             const totalP = 1 + (data.companions?.length || 0);
 
-            // 🛑 SEGURO VITAL: Si estamos editando y el botón está apagado, 
-            // NO recalculamos el precio al abrir el modal. Respetamos Laravel.
+            // 🛑 SEGURO: Respetar datos de BD en modo edición si no se toca el botón
             if (checkinToEdit && !data.auto_adjust_price) {
                  return; 
             }
             
             console.log("=========================================");
-            console.log("💰 [AUTO-AJUSTE MATEMÁTICO]...");
-            
+            console.log("💰 [BÚSQUEDA DE TARIFA OFICIAL]...");
+            console.log(`-> Hab original: Capacidad ${maxCapacity}, Baño: ${bathroomType}`);
+            console.log(`-> Ocupantes reales: ${totalP}`);
+
             if (data.auto_adjust_price) {
-                const pricePerPerson = originalPrice / maxCapacity;
-                const calculatedPrice = Math.min(originalPrice, pricePerPerson * totalP);
-                
-                console.log("-> 🧮 Calculando:", pricePerPerson, "x", totalP, "=", calculatedPrice);
-                
-                if (data.agreed_price !== calculatedPrice) {
-                    setData('agreed_price', calculatedPrice);
+                let newCalculatedPrice = originalPrice;
+
+                // 🌟 LÓGICA DE BÚSQUEDA HOTELERA
+                if (totalP < maxCapacity && bathroomType) {
+                    // Buscamos otra habitación en el mapa que tenga la capacidad exacta de los ocupantes Y el mismo tipo de baño
+                    const matchedRoom = rooms?.find((r: any) => {
+                        // 👇 CORRECCIÓN 2: Usamos estrictamente room_type
+                        const rCap = Number(r?.room_type?.capacity);
+                        const rBath = r?.price?.bathroom_type;
+                        return rCap === totalP && rBath === bathroomType;
+                    });
+
+                    if (matchedRoom) {
+                        // 👇 CORRECCIÓN 1: Agregamos ?. y un fallback a || 0 por seguridad
+                        newCalculatedPrice = Number(matchedRoom?.price?.amount || 0);
+                        console.log(`-> 🎯 Tarifa encontrada! Se aplicó precio de habitación de ${totalP} persona(s) con baño ${bathroomType}: ${newCalculatedPrice} Bs`);
+                    } else {
+                        console.log(`-> ⚠️ No hay tarifa registrada para ${totalP} persona(s) con baño ${bathroomType}. Se mantiene: ${newCalculatedPrice} Bs`);
+                    }
                 }
+
+                if (Number(data.agreed_price) !== newCalculatedPrice) {
+                    setData('agreed_price', newCalculatedPrice);
+                }
+
             } else {
-                if (originalPrice > 0 && data.agreed_price !== originalPrice) {
-                    console.log("-> 🔄 Restaurando precio original:", originalPrice);
+                console.log("-> 🛑 Ajuste Apagado. Restaurando precio original:", originalPrice, "Bs");
+                if (originalPrice > 0 && Number(data.agreed_price) !== originalPrice) {
                     setData('agreed_price', originalPrice);
                 }
             }
@@ -2681,27 +2702,16 @@ export default function CheckinModal({
                                                     r.id === initialRoomId,
                                             );
 
-                                            const originalPrice =
-                                                selectedRoom?.price?.amount ||
-                                                0;
+                                            const originalPrice = Number(selectedRoom?.price?.amount || 0);
                                             let finalPrice = originalPrice;
 
                                             // ==========================================
-                                            // 🧠 LÓGICA DE PRECIO FINAL
+                                            // 🧠 LÓGICA DE PRECIO FINAL (CORREGIDA)
                                             // ==========================================
-                                            if (data.type !== 'estandar') {
-                                                finalPrice =
-                                                    Number(data.agreed_price) ||
-                                                    0;
-                                            } else if (
-                                                checkinToEdit &&
-                                                checkinToEdit.special_agreement
-                                            ) {
-                                                finalPrice = Number(
-                                                    checkinToEdit
-                                                        .special_agreement
-                                                        .agreed_price,
-                                                );
+                                            // El useEffect ya calculó la tarifa oficial y la guardó en data.agreed_price.
+                                            // Solo le decimos a la vista que la muestre.
+                                            if (Number(data.agreed_price) > 0) {
+                                                finalPrice = Number(data.agreed_price);
                                             }
 
                                             const isAutoAdjusted =
@@ -2751,12 +2761,10 @@ export default function CheckinModal({
                                                                         ).toFixed(
                                                                             2,
                                                                         )}{' '}
-                                                                        Bs /
-                                                                        noche
+                                                                        Bs / noche
                                                                     </span>
                                                                     <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-amber-700 uppercase shadow-sm">
-                                                                        Tarifa
-                                                                        Ajustada
+                                                                        Tarifa Ajustada
                                                                     </span>
                                                                 </>
                                                             ) : (
@@ -2787,39 +2795,23 @@ export default function CheckinModal({
                                                                     step="0.10"
                                                                     min="0"
                                                                     value={
-                                                                        total >
-                                                                        0
-                                                                            ? Number(
-                                                                                  total.toFixed(
-                                                                                      2,
-                                                                                  ),
-                                                                              )
+                                                                        total > 0
+                                                                            ? Number(total.toFixed(2))
                                                                             : ''
                                                                     }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) => {
-                                                                        const newTotal =
-                                                                            Number(
-                                                                                e
-                                                                                    .target
-                                                                                    .value,
-                                                                            );
+                                                                    onChange={(e) => {
+                                                                        const newTotal = Number(e.target.value);
                                                                         // Matemática inversa: Total dividido entre días = precio base
                                                                         const dailyRate =
-                                                                            noches >
-                                                                            0
-                                                                                ? newTotal /
-                                                                                  noches
+                                                                            noches > 0
+                                                                                ? newTotal / noches
                                                                                 : newTotal;
                                                                         setData(
                                                                             'agreed_price',
                                                                             dailyRate,
                                                                         );
                                                                     }}
-                                                                    disabled={
-                                                                        isReadOnly
-                                                                    }
+                                                                    disabled={isReadOnly}
                                                                     className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                     placeholder="0.00"
                                                                 />
@@ -2829,23 +2821,14 @@ export default function CheckinModal({
                                                             </div>
                                                         ) : (
                                                             <span className="text-2xl leading-none font-black text-gray-900">
-                                                                {total.toFixed(
-                                                                    2,
-                                                                )}{' '}
-                                                                Bs
+                                                                {total.toFixed(2)} Bs
                                                             </span>
                                                         )}
 
                                                         {noches > 1 && (
                                                             <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                {Number(
-                                                                    finalPrice,
-                                                                ).toFixed(
-                                                                    2,
-                                                                )}{' '}
-                                                                x {noches}{' '}
-                                                                {data.type !==
-                                                                'estandar'
+                                                                {Number(finalPrice).toFixed(2)} x {noches}{' '}
+                                                                {data.type !== 'estandar'
                                                                     ? 'días'
                                                                     : 'noches'}
                                                             </span>

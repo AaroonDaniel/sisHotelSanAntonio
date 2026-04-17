@@ -43,22 +43,34 @@ class CheckinController extends Controller
     }
 
     // Funcion Calculo de precio acordado segun ocupacion y capacidad
+    // Funcion Calculo de precio acordado segun ocupacion y capacidad
     public function calculateAgreedPrice($roomId, $totalGuests)
     {
         $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
 
+        // Datos por defecto de la habitación original
         $originalPrice = $room->price->amount ?? 0;
+        $bathroomType = $room->price->bathroom_type ?? null;
         $roomCapacity = $room->roomType->capacity ?? 1;
-        
-        // Evitar divisiones por cero por seguridad
-        if ($roomCapacity <= 0) $roomCapacity = 1;
 
-        // 🌟 LÓGICA MATEMÁTICA PROPORCIONAL
-        $pricePerPerson = $originalPrice / $roomCapacity;
-        $agreedPrice = $pricePerPerson * $totalGuests;
+        $agreedPrice = $originalPrice;
 
-        // Aseguramos no cobrar más del precio base en caso de exceder la capacidad
-        return min($originalPrice, $agreedPrice);
+        // Si la cantidad de personas es menor a la capacidad máxima y hay un tipo de baño definido
+        if ($totalGuests < $roomCapacity && $bathroomType) {
+            // Buscamos un precio activo que coincida con el tipo de baño y la cantidad de huéspedes actual
+            $adjustedPrice = \App\Models\Price::where('is_active', true)
+                ->where('bathroom_type', $bathroomType)
+                ->whereHas('roomType', function ($query) use ($totalGuests) {
+                    $query->where('capacity', $totalGuests);
+                })
+                ->first();
+
+            if ($adjustedPrice) {
+                $agreedPrice = $adjustedPrice->amount;
+            }
+        }
+
+        return $agreedPrice;
     }
 
     public function store(Request $request)
