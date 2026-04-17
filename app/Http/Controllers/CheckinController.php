@@ -270,7 +270,7 @@ class CheckinController extends Controller
             'companions' => 'nullable|array',
             'selected_services' => 'nullable|array',
             'advance_payment' => 'nullable|numeric|min:0',
-            'payment_method' => 'required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'payment_method' => 'nullable|required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
             'discount' => 'nullable|numeric|min:0',
