@@ -629,7 +629,9 @@ export default function CheckinModal({
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
 
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
-                const isPriceAdjusted = String(checkinToEdit.special_agreement?.type) === 'AJUSTE DE PRECIO';
+                const isPriceAdjusted = 
+    (checkinToEdit.special_agreement && String(checkinToEdit.special_agreement.type) === 'AJUSTE DE PRECIO') ||
+    (Number(checkinToEdit.agreed_price) > 0 && Number(checkinToEdit.agreed_price) < Number(originalRoomPrice));
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
@@ -778,6 +780,44 @@ export default function CheckinModal({
         }
         // 🛑 IMPORTANTE: Agregamos 'rooms' al arreglo de dependencias al final
     }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules, rooms]);
+
+    // =========================================================================
+    // 🚀 EFECTO PARA CALCULAR EL PRECIO EN VIVO (CON LOGS DE DEBUG)
+    // =========================================================================
+    useEffect(() => {
+        if (show && data.type === 'estandar') {
+            const currentRoom = rooms?.find((r: any) => r.id === Number(data.room_id) || r.id === initialRoomId);
+            const originalPrice = currentRoom?.price?.amount || 0;
+            const maxCapacity = currentRoom?.room_type?.capacity || 1;
+            const totalP = 1 + (data.companions?.length || 0);
+
+            // 🛑 SEGURO VITAL: Si estamos editando y el botón está apagado, 
+            // NO recalculamos el precio al abrir el modal. Respetamos Laravel.
+            if (checkinToEdit && !data.auto_adjust_price) {
+                 return; 
+            }
+            
+            console.log("=========================================");
+            console.log("💰 [AUTO-AJUSTE MATEMÁTICO]...");
+            
+            if (data.auto_adjust_price) {
+                const pricePerPerson = originalPrice / maxCapacity;
+                const calculatedPrice = Math.min(originalPrice, pricePerPerson * totalP);
+                
+                console.log("-> 🧮 Calculando:", pricePerPerson, "x", totalP, "=", calculatedPrice);
+                
+                if (data.agreed_price !== calculatedPrice) {
+                    setData('agreed_price', calculatedPrice);
+                }
+            } else {
+                if (originalPrice > 0 && data.agreed_price !== originalPrice) {
+                    console.log("-> 🔄 Restaurando precio original:", originalPrice);
+                    setData('agreed_price', originalPrice);
+                }
+            }
+            console.log("=========================================");
+        }
+    }, [data.auto_adjust_price, data.companions?.length, data.room_id, data.type, show]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -1034,18 +1074,19 @@ export default function CheckinModal({
     // A. NUEVA FUNCIÓN: Se encarga ÚNICAMENTE de hablar con el Backend (Laravel)
     // Hemos movido aquí tu código original intacto.
     const executeSubmit = () => {
-        // Camino de Éxito (onSuccess): Se ejecuta SOLAMENTE si el backend (Laravel) guarda todo correctamente.
+        // 🚀 ESPÍA: Vemos exactamente qué viaja hacia Laravel
+        console.log('🚀 [SUBMIT] PAQUETE ENVIADO A LARAVEL:', data);
+
+        // Camino de Éxito (onSuccess)
         const onSuccess = (page: any) => {
             console.log('✅ RESPUESTA EXITOSA DEL SERVIDOR:', page);
             reset(); // Limpia los campos del formulario.
             onClose(true); // Cierra la ventana modal y actualiza la vista.
         };
 
-        // Camino de Error (onError): Atrapa rechazos (ej. Asignación Única o errores de validación)
+        // Camino de Error (onError)
         const onError = (errors: any) => {
-            console.error('❌ EL SERVIDOR RECHAZÓ LOS DATOS:', errors);
-
-            // CONTROL DE DUPLICADOS: Alerta si el huésped ya está ocupando otra habitación
+            console.error('❌ EL SERVIDOR RECHAZÓ LOS DATOS. RAZONES:', errors);
             if (errors.guest_id) {
                 setGuestConflictError(errors.guest_id);
                 setTimeout(() => {
@@ -1054,18 +1095,18 @@ export default function CheckinModal({
             }
         };
 
-        // Lógica de Envío (Routing): Decide si actualiza o crea
+        // Lógica de Envío
         if (checkinToEdit) {
-            // MODO EDICIÓN (PUT): Para habitaciones Naranjas
             console.log('-> Método: PUT (Actualizar)');
+            // 👇 VOLVIMOS A TU RUTA ORIGINAL: /checks
             put(`/checks/${checkinToEdit.id}`, {
                 onSuccess,
                 onError,
                 onFinish: () => console.log('🏁 Petición PUT terminada.'),
             });
         } else {
-            // MODO CREACIÓN (POST): Para habitaciones Verdes
             console.log('-> Método: POST (Nuevo Registro)');
+            // 👇 VOLVIMOS A TU RUTA ORIGINAL: /checks
             post('/checks', {
                 onSuccess,
                 onError,
@@ -1077,6 +1118,17 @@ export default function CheckinModal({
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
+        // 🚀 1. ESPÍAS: VEMOS QUÉ ESTAMOS INTENTANDO GUARDAR
+        console.log('🚀 =========================================');
+        console.log('🚀 [SUBMIT] VALIDANDO ANTES DE ENVIAR');
+        console.log('-> 📦 Paquete de datos actual:', data);
+        console.log(
+            '-> 💸 Auto-Ajuste MARCADO:',
+            data.auto_adjust_price,
+            '| Precio:',
+            data.agreed_price,
+        );
+
         // =========================================================
         // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
         // =========================================================
@@ -1084,19 +1136,94 @@ export default function CheckinModal({
             const montoAdelanto = Number(data.advance_payment);
 
             if (!montoAdelanto || montoAdelanto <= 0) {
+                console.log(
+                    '-> 🛑 BLOQUEADO: Intento de guardar Corporativo sin adelanto.',
+                );
                 // 1. Alerta en pantalla
                 alert(
                     "⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.",
                 );
-
-                // 2. Pintamos el error usando el sistema de Inertia que ya tienes
-                // (Opcional, pero ayuda a que se vea en rojo abajo del input)
-                return; // 🛑 EL CANDADO SE CIERRA: No ejecutamos executeSubmit()
+                return; // 🛑 EL CANDADO SE CIERRA
             }
         }
         // =========================================================
 
+        console.log('-> ✅ CANDADOS SUPERADOS. Ejecutando executeSubmit()...');
         executeSubmit();
+    };
+
+    // =========================================================================
+    // 🚀 FUNCIÓN PARA ENVIAR EL FORMULARIO A LARAVEL (CON ESPÍAS DE CONSOLA)
+    // =========================================================================
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        console.log('🚀 =========================================');
+        console.log('🚀 [SUBMIT] INTENTANDO GUARDAR LA ASIGNACIÓN');
+        console.log('-> 📦 Paquete de datos que se enviará a Laravel:', data);
+
+        // Verificaciones manuales en consola antes de enviar:
+        const isTitularComplete =
+            !!data.identification_number && !!data.nationality && !!data.origin;
+        console.log(
+            '-> 👤 ¿Titular está completo (Carnet, Nacionalidad, Procedencia)?:',
+            isTitularComplete,
+        );
+
+        if (data.auto_adjust_price) {
+            console.log(
+                '-> 💸 Auto-Ajuste está MARCADO. Precio acordado enviado:',
+                data.agreed_price,
+            );
+        }
+
+        // Limpieza básica antes de enviar (Opcional, pero recomendado)
+        if (data.origin) data.origin = data.origin.trim().toUpperCase();
+
+        if (checkinToEdit) {
+            console.log(
+                `-> 🔄 MODO EDICIÓN: Enviando petición PUT a /checkins/${checkinToEdit.id} ...`,
+            );
+            // 👇 Usamos la ruta escrita a mano sin Ziggy
+            put(`/checks/${checkinToEdit.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    console.log(
+                        '-> ✅ PUT Exitoso. Guardado correctamente en BD.',
+                    );
+                    onClose();
+                    reset();
+                },
+                onError: (errors) => {
+                    console.log(
+                        '-> ❌ LARAVEL RECHAZÓ EL FORMULARIO (PUT). Razones:',
+                        errors,
+                    );
+                    // Aquí Laravel te dirá exactamente QUÉ campo falta llenar
+                },
+            });
+        } else {
+            console.log(
+                '-> ➕ MODO NUEVO: Enviando petición POST a /checks ...',
+            );
+            // 👇 Usamos la ruta escrita a mano sin Ziggy
+            post('/checkas', {
+                preserveScroll: true,
+                onSuccess: () => {
+                    console.log(
+                        '-> ✅ POST Exitoso. Creado correctamente en BD.',
+                    );
+                    onClose();
+                    reset();
+                },
+                onError: (errors) => {
+                    console.log(
+                        '-> ❌ LARAVEL RECHAZÓ EL FORMULARIO (POST). Razones:',
+                        errors,
+                    );
+                },
+            });
+        }
     };
     // ===============================
     // AUTOCOMPLETE EXPEDIDO (BD)

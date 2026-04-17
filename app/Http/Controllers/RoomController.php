@@ -29,7 +29,8 @@ class RoomController
             'checkins.services',
             'checkins.payments',
             'checkins.guest',
-            'checkins.companions'
+            'checkins.companions',
+            'checkins.specialAgreement'
         ])
             // 1. Obtenemos los registros primero (quitamos el orderBy de SQL)
             ->get()

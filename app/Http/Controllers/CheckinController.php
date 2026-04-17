@@ -18,6 +18,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin juntos
 use App\Models\SpecialAgreement;
+use Illuminate\Support\Facades\Log;
 
 class CheckinController extends Controller
 {
@@ -41,34 +42,23 @@ class CheckinController extends Controller
         ]);
     }
 
-    // Funcion Caluclo de precio acordado segun ocupacion y capacidad
+    // Funcion Calculo de precio acordado segun ocupacion y capacidad
     public function calculateAgreedPrice($roomId, $totalGuests)
     {
         $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
 
-        // Datos por defecto de la habitación original
         $originalPrice = $room->price->amount ?? 0;
-        $bathroomType = $room->price->bathroom_type ?? null;
         $roomCapacity = $room->roomType->capacity ?? 1;
+        
+        // Evitar divisiones por cero por seguridad
+        if ($roomCapacity <= 0) $roomCapacity = 1;
 
-        $agreedPrice = $originalPrice;
+        // 🌟 LÓGICA MATEMÁTICA PROPORCIONAL
+        $pricePerPerson = $originalPrice / $roomCapacity;
+        $agreedPrice = $pricePerPerson * $totalGuests;
 
-        // Si la cantidad de personas es menor a la capacidad máxima y hay un tipo de baño definido
-        if ($totalGuests < $roomCapacity && $bathroomType) {
-            // Buscamos un precio activo que coincida con el tipo de baño y la cantidad de huéspedes actual
-            $adjustedPrice = \App\Models\Price::where('is_active', true)
-                ->where('bathroom_type', $bathroomType)
-                ->whereHas('roomType', function ($query) use ($totalGuests) {
-                    $query->where('capacity', $totalGuests);
-                })
-                ->first();
-
-            if ($adjustedPrice) {
-                $agreedPrice = $adjustedPrice->amount;
-            }
-        }
-
-        return $agreedPrice;
+        // Aseguramos no cobrar más del precio base en caso de exceder la capacidad
+        return min($originalPrice, $agreedPrice);
     }
 
     public function store(Request $request)
@@ -322,15 +312,15 @@ class CheckinController extends Controller
             // =========================================================
             // 🆕 PASO NUEVO: CREAR SPECIAL AGREEMENT SI CORRESPONDE
             // =========================================================
-            $specialAgreementId = null;
+           $specialAgreementId = null;
+            $isAutoAdjust = $request->boolean('auto_adjust_price');
 
-            if ($isSpecialDeal) {
-                // Determinamos el tipo. Si manda 'is_corporate', asumimos 'corporativo'. Si manda 'type', usamos ese.
-                $tipoTrato = $request->input('type') ?? 'corporativo';
-
-                // Calculamos los días numéricos de pago. Si manda 'corporate_days' lo usamos.
-                // Si tu React aún manda strings como "Semanal" en 'payment_frequency', podríamos mapearlo aquí, pero asumo que envía un número.
-                $frecuenciaDias = (int) $request->input('corporate_days', 0);
+            // 🌟 AHORA SÍ INCLUYE EL AUTO AJUSTE PARA CREAR EL CONVENIO
+            if ($isSpecialDeal || $isAutoAdjust) {
+                
+                // Si es Auto Ajuste forzamos los valores, de lo contrario usamos los del request corporativo
+                $tipoTrato = $isAutoAdjust ? 'AJUSTE DE PRECIO' : ($request->input('type') ?? 'corporativo');
+                $frecuenciaDias = $isAutoAdjust ? 0 : (int) $request->input('corporate_days', 0);
 
                 $agreement = \App\Models\SpecialAgreement::create([
                     'type' => $tipoTrato,
@@ -453,6 +443,16 @@ class CheckinController extends Controller
 
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
+            // =================================================================
+            // 🛑 ESPÍAS DE CONSOLA PARA LARAVEL (NUEVO REGISTRO)
+            // =================================================================
+           Log::info("🚀 [BACKEND - STORE] NUEVO CHECKIN - HABITACIÓN: " . $validatedCheckin['room_id']);
+            Log::info("-> 👤 ¿Titular Completo?: " . ($isTitularComplete ? 'SÍ' : 'NO') . " (Falta: " . ($missingField ?? 'Nada') . ")");
+            Log::info("-> 🧮 Capacidad Máx: " . $maxCapacity . " | Personas reales registradas: " . $totalGuest);
+            Log::info("-> 💸 ¿Auto-Ajuste Activo?: " . ($request->boolean('auto_adjust_price') ? 'SÍ' : 'NO') . " | Precio Final a guardar: " . $agreedPrice . " Bs");
+            Log::info("-> 🚦 ¿Capacidad se considera llena?: " . ($isCapacityFull ? 'SÍ' : 'NO'));
+            Log::info("-> 🏁 ¿TODO COMPLETO?: " . ($isEverythingComplete ? 'SÍ (Pasará a Rojo)' : 'NO (Se quedará Naranja)'));
+            Log::info("=================================================================");
             \App\Models\Room::where('id', $validatedCheckin['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
@@ -894,63 +894,68 @@ class CheckinController extends Controller
                 $checkin->companions()->detach();
             }
 
-            // =========================================================
-            // 🌟 5. LÓGICA DE GRUPOS ESPECIALES (NUEVA ESTRUCTURA)
+           // =========================================================
+            // 🌟 5. LÓGICA DE GRUPOS ESPECIALES Y AJUSTE DE PRECIO
             // =========================================================
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $basePrice = $roomModelUpdate->price->amount ?? 0;
 
-            // Detectamos la intención actual del formulario
             $isCorporateNow = $request->boolean('is_corporate');
             $isDelegationNow = $request->boolean('is_delegation');
+            $isAutoAdjustNow = $request->boolean('auto_adjust_price');
             $typeRequest = $request->input('type');
 
-            $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || in_array($typeRequest, ['corporativo', 'delegacion']);
-            $tipoTratoNuevo = $typeRequest ?? ($isDelegationNow ? 'delegacion' : 'corporativo');
+            // 🌟 Consideramos el Auto Ajuste como un Grupo Especial
+            $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
+            
+            if ($isAutoAdjustNow) {
+                $tipoTratoNuevo = 'AJUSTE DE PRECIO';
+                $frecuenciaDias = 0;
+            } else {
+                $tipoTratoNuevo = $typeRequest ?? ($isDelegationNow ? 'delegacion' : 'corporativo');
+                $frecuenciaDias = (int) $request->input('corporate_days', 0);
+            }
 
-            $frecuenciaDias = (int) $request->input('corporate_days', 0);
-
-            // Verificamos si este check-in YA tenía un trato especial guardado
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
-
-            // Determinamos el precio actual base de la negociación
             $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
-            $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : $precioActualGuardado;
+            
+            // 🌟 Recalculamos matemáticamente en caso de que agreguen/quiten personas al editar
+            if ($isAutoAdjustNow) {
+                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            } else {
+                $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : $precioActualGuardado;
+            }
 
-            $extraNotes = ""; // Variable para añadir texto a las notas si ocurre "El Castigo"
+            $extraNotes = ""; 
 
             if (!$hadSpecialAgreement && $isSpecialGroupNow) {
-                // 5.1 DE NORMAL A ESPECIAL
+                // 5.1 DE NORMAL A ESPECIAL / AUTO AJUSTE
                 $agreement = \App\Models\SpecialAgreement::create([
                     'type' => $tipoTratoNuevo,
                     'agreed_price' => $updatedAgreedPrice,
                     'payment_frequency_days' => $frecuenciaDias,
                 ]);
                 $checkin->special_agreement_id = $agreement->id;
+
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
                 // 5.2 DE ESPECIAL A NORMAL ("El Castigo")
                 $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
                 $now = \Carbon\Carbon::now();
                 $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays($now)));
 
-                $updatedAgreedPrice = $basePrice; // Pierde el privilegio, vuelve al precio base
+                $updatedAgreedPrice = $basePrice; 
 
-                // Eliminamos el acuerdo antiguo de la base de datos
                 $oldAgreementId = $checkin->special_agreement_id;
                 $checkin->special_agreement_id = null;
                 \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
 
-                // Como ya no existe la columna 'corporate_days', lo guardamos como un historial en las notas
-                $extraNotes = " [SISTEMA: Privilegio corporativo/delegación revocado. Duró {$diasQueFueCorporativo} días.]";
+                $extraNotes = " [SISTEMA: Privilegio o Ajuste revocado. Duró {$diasQueFueCorporativo} días.]";
+
             } elseif (!$isSpecialGroupNow) {
                 // 5.3 SIGUE SIENDO NORMAL
-                if ($request->boolean('auto_adjust_price')) {
-                    $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
-                } else {
-                    $updatedAgreedPrice = $basePrice;
-                }
+                $updatedAgreedPrice = $basePrice;
             } else {
-                // 5.4 SIGUE SIENDO ESPECIAL (Actualizamos su acuerdo)
+                // 5.4 SIGUE SIENDO ESPECIAL (Actualizamos precio y tipo)
                 $checkin->specialAgreement->update([
                     'type' => $tipoTratoNuevo,
                     'agreed_price' => $updatedAgreedPrice,
@@ -958,13 +963,23 @@ class CheckinController extends Controller
                 ]);
             }
 
-            $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialGroupNow) ? true : ($totalGuests >= $maxCapacity);
-
+            // 🌟 Si es Auto Ajuste, consideramos la capacidad como llena
+            $isCapacityFull = $isSpecialGroupNow ? true : ($totalGuests >= $maxCapacity);
             // =========================================================
             // 6. EVALUACIÓN FINAL Y GUARDADO
             // =========================================================
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
-
+            // =================================================================
+            // 🛑 ESPÍAS DE CONSOLA PARA LARAVEL (MODO EDICIÓN)
+            // =================================================================
+          Log::info("🚀 [BACKEND - UPDATE] ACTUALIZANDO CHECKIN ID: " . $checkin->id);
+            Log::info("-> 👤 ¿Titular Completo?: " . ($isTitularComplete ? 'SÍ' : 'NO'));
+            Log::info("-> 👨‍👩‍👧‍👦 ¿Acompañantes Completos?: " . ($allCompanionsComplete ? 'SÍ' : 'NO'));
+            Log::info("-> 🧮 Capacidad Máx: " . $maxCapacity . " | Personas reales registradas: " . $totalGuests);
+            Log::info("-> 💸 ¿Auto-Ajuste Activo?: " . ($request->boolean('auto_adjust_price') ? 'SÍ' : 'NO') . " | Precio Final a guardar: " . $updatedAgreedPrice . " Bs");
+            Log::info("-> 🚦 ¿Capacidad se considera llena?: " . ($isCapacityFull ? 'SÍ' : 'NO'));
+            Log::info("-> 🏁 ¿TODO COMPLETO?: " . ($isEverythingComplete ? 'SÍ (Pasará a Rojo)' : 'NO (Se quedará Naranja)'));
+            Log::info("=================================================================");
             \App\Models\Room::where('id', $validated['room_id'])->update(['status' => 'OCUPADO']);
 
             // Concatenamos las notas que vienen del request, o las antiguas, con las posibles notas extra de "El Castigo"
