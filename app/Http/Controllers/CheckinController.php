@@ -354,7 +354,7 @@ class CheckinController extends Controller
                 'origin' => $cleanOrigin,
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
                 'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
-                
+
                 'agreed_price' => $agreedPrice, // <--- 🌟 ¡AGREGAR ESTA LÍNEA!
                 'special_agreement_id' => $specialAgreementId,
 
@@ -519,8 +519,8 @@ class CheckinController extends Controller
 
                     $checkin->update([
                         'room_id' => $newRoomId,
-                        // 🌟 HERENCIA: Si es corpo, mantiene su precio intocable
-                        'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $nuevoAgreedPrice,
+                        // 🌟 MAGIA 1: Mantiene el precio si era corporativo o si tenía un Ajuste de Precio (Convenio Especial)
+                        'agreed_price' => ($checkin->is_corporate || !is_null($checkin->special_agreement_id)) ? $checkin->agreed_price : $nuevoAgreedPrice,
                         'notes' => $checkin->notes . " TRANSFERENCIA"
                     ]);
                     return redirect()->back()->with('success', 'Cambio rápido realizado. La habitación anterior pasó a LIMPIEZA.');
@@ -551,21 +551,23 @@ class CheckinController extends Controller
                         'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                         'room_id' => $newRoomId,
                         'check_in_date' => $ahora,
-                        // 🌟 MAGIA 1: Salvamos la fecha original del 8 de abril
                         'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
                         'schedule_id' => $checkin->schedule_id,
                         'origin' => $checkin->origin,
                         'duration_days' => 0,
                         'advance_payment' => 0,
-                        // 🌟 MAGIA 2: Herencia de Precio
-                        'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $nuevoAgreedPrice,
+
+                        // 🌟 MAGIA 2: Clonamos el precio original ajustado
+                        'agreed_price' => ($checkin->is_corporate || !is_null($checkin->special_agreement_id)) ? $checkin->agreed_price : $nuevoAgreedPrice,
+
+                        // 🌟 MAGIA 3: Clonamos el ID del Convenio para que no pierda la etiqueta "AJUSTE DE PRECIO"
+                        'special_agreement_id' => $checkin->special_agreement_id,
+
                         'parent_checkin_id' => $checkin->id,
                         'carried_balance' => $deudaHospedajeAnterior,
                         'is_temporary' => $checkin->is_temporary,
                         'status' => 'activo',
                         'notes' => "Transferencia. Deuda Anterior: {$deudaHospedajeAnterior} Bs.",
-
-                        // 🌟 MAGIA 3: Clonamos el trato corporativo
                         'is_corporate' => $checkin->is_corporate,
                         'payment_frequency' => $checkin->payment_frequency,
                         'corporate_days' => $checkin->corporate_days,
@@ -621,26 +623,27 @@ class CheckinController extends Controller
                     'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
                     'room_id' => $newRoomId,
                     'check_in_date' => $ahora,
-                    // 🌟 MAGIA 1: Salvamos la fecha original
                     'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
                     'advance_payment' => 0,
-                    // 🌟 MAGIA 2: Herencia de precio si era corporativo
-                    'agreed_price' => $checkin->is_corporate ? $checkin->agreed_price : $precioNuevaHabitacion,
+
+                    // 🌟 MAGIA 4: Clonamos el precio ajustado a la nueva habitación dividida
+                    'agreed_price' => ($checkin->is_corporate || !is_null($checkin->special_agreement_id)) ? $checkin->agreed_price : $precioNuevaHabitacion,
+
+                    // 🌟 MAGIA 5: También le pasamos el Convenio a los que se separan
+                    'special_agreement_id' => $checkin->special_agreement_id,
+
                     'parent_checkin_id' => $checkin->id,
                     'carried_balance' => 0,
                     'is_temporary' => $checkin->is_temporary,
                     'status' => 'activo',
                     'notes' => "Transferencia Parcial (División) desde Hab. " . $checkin->room->number,
-
-                    // 🌟 MAGIA 3: Clonamos el trato
                     'is_corporate' => $checkin->is_corporate,
                     'payment_frequency' => $checkin->payment_frequency,
                     'corporate_days' => $checkin->corporate_days,
                 ]);
-
                 if (!empty($newNewCompanions)) {
                     $nuevoCheckin->companions()->sync($newNewCompanions);
                 }
@@ -753,13 +756,13 @@ class CheckinController extends Controller
             if ($currentGuest) {
                 // Evaluamos si el titular tiene todos sus datos antes del update
                 $isTitularComplete = !empty($request->identification_number ?? $currentGuest->identification_number) &&
-                                     !empty($request->nationality ?? $currentGuest->nationality) &&
-                                     !empty($cleanOrigin) &&
-                                     !empty($request->profession ?? $currentGuest->profession) &&
-                                     !empty($request->civil_status ?? $currentGuest->civil_status) &&
-                                     !empty($request->birth_date ?? $currentGuest->birth_date) &&
-                                     !empty($request->issued_in ?? $currentGuest->issued_in) &&
-                                     !empty($request->phone ?? $currentGuest->phone);
+                    !empty($request->nationality ?? $currentGuest->nationality) &&
+                    !empty($cleanOrigin) &&
+                    !empty($request->profession ?? $currentGuest->profession) &&
+                    !empty($request->civil_status ?? $currentGuest->civil_status) &&
+                    !empty($request->birth_date ?? $currentGuest->birth_date) &&
+                    !empty($request->issued_in ?? $currentGuest->issued_in) &&
+                    !empty($request->phone ?? $currentGuest->phone);
 
                 $currentGuest->update([
                     'full_name' => $request->has('full_name') ? ($request->full_name ? strtoupper($request->full_name) : $currentGuest->full_name) : $currentGuest->full_name,
@@ -773,7 +776,7 @@ class CheckinController extends Controller
                     'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
                 ]);
             } else {
-                 $isTitularComplete = false; // Por si acaso no hay guest
+                $isTitularComplete = false; // Por si acaso no hay guest
             }
 
             // =========================================================

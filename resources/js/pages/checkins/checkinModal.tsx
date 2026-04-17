@@ -628,12 +628,8 @@ export default function CheckinModal({
                 );
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
 
-                // 2. Comparamos el precio que está pagando vs el precio normal
-                const isPriceAdjusted =
-                    originalRoomPrice > 0 &&
-                    Number(checkinToEdit.agreed_price) <
-                        Number(originalRoomPrice);
-
+                // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
+                const isPriceAdjusted = String(checkinToEdit.special_agreement?.type) === 'AJUSTE DE PRECIO';
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
