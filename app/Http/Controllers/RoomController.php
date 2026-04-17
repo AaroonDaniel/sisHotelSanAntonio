@@ -173,7 +173,8 @@ class RoomController
                             $query->orderBy('created_at', 'asc');
                         },
                         'room.price',
-                        'room.roomType'
+                        'room.roomType',
+                        'specialAgreement' // 🚀 LUGAR 1: Agregar esto (Alimenta las tarjetas visuales)
                     ]);
             }
         ])->orderBy('number')->get()->map(function ($room) {
@@ -184,15 +185,14 @@ class RoomController
                     $query->whereIn('status', ['pendiente']) // Solo pendientes o confirmadas
                         ->whereDate('arrival_date', '>=', now()->toDateString());
                 })
-                
                 ->with(['reservation.guest'])
                 ->get()
                 ->map(function ($detail) {
                     return [
-                        'id' => $detail->reservation->id, 
+                        'id' => $detail->reservation->id,
                         'date' => $detail->reservation->arrival_date,
                         'guest' => $detail->reservation->guest->full_name ?? 'Huésped',
-                        'raw_reservation' => $detail->reservation 
+                        'raw_reservation' => $detail->reservation
                     ];
                 })
                 ->sortBy('date')
@@ -213,6 +213,7 @@ class RoomController
             'room.price',
             'room.roomType',
             'services',
+            'specialAgreement', // 🚀 LUGAR 2: Agregar esto (Alimenta los modales de salida/detalles)
             'payments' => function ($query) {
                 $query->orderBy('created_at', 'asc');
             }

@@ -1058,7 +1058,7 @@ export default function RoomsStatus({
 
                 {/* GRILLA DE HABITACIONES */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {filteredRooms.map((room) => {
+                   {filteredRooms.map((room) => {
                         const config = getStatusConfig(room);
                         const displayStatus = getDisplayStatus(room);
                         const isActionable = displayStatus === 'incomplete';
@@ -1075,14 +1075,20 @@ export default function RoomsStatus({
 
                         // 🌟 SEMÁFORO FINANCIERO (CORPORATIVO / DELEGACIÓN) 🌟
 
-                        // 1. Leemos el convenio desde la relación (usamos "as any" para que TypeScript no moleste si no has actualizado la interfaz)
+                        // 1. Leemos el convenio desde la relación (usamos "as any" para que TypeScript no moleste)
                         const convenio = (activeCheckin as any)?.special_agreement;
 
                         // 2. Verificamos el tipo directamente en el convenio
                         const isSpecialGroup =
                             convenio?.type === 'corporativo' ||
                             convenio?.type === 'delegacion';
-                            
+
+                        // 🚀 ESTA ES LA PRUEBA EN CONSOLA (Para ver si Laravel manda el convenio)
+                        if (activeCheckin) {
+                            console.log(`[PRUEBA] Habitación ${room.number} | Grupo Especial: ${isSpecialGroup}`);
+                            console.log(`➡️ Datos del Convenio:`, convenio);
+                        }
+
                         let corpState: any = null;
 
                         if (isSpecialGroup && activeCheckin) {
@@ -1119,6 +1125,7 @@ export default function RoomsStatus({
                             const limitDate = new Date(realDateString);
                             limitDate.setHours(0, 0, 0, 0);
                             limitDate.setDate(limitDate.getDate() + daysPaid);
+                            
                             // 5. Comparamos con HOY
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
@@ -1176,6 +1183,8 @@ export default function RoomsStatus({
                                 // 🚨 Tarjeta SIN overflow-hidden para que el hover no se corte
                                 className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
+                               
+                                
                                 {/* 🚦 CONTROLES SUPERIOR DERECHA */}
                                 <div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
                                     {sortedReservations.length > 0 && (
