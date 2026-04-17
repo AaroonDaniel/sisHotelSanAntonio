@@ -1075,9 +1075,14 @@ export default function RoomsStatus({
 
                         // 🌟 SEMÁFORO FINANCIERO (CORPORATIVO / DELEGACIÓN) 🌟
 
+                        // 1. Leemos el convenio desde la relación (usamos "as any" para que TypeScript no moleste si no has actualizado la interfaz)
+                        const convenio = (activeCheckin as any)?.special_agreement;
+
+                        // 2. Verificamos el tipo directamente en el convenio
                         const isSpecialGroup =
-                            activeCheckin?.is_corporate ||
-                            activeCheckin?.is_delegation;
+                            convenio?.type === 'corporativo' ||
+                            convenio?.type === 'delegacion';
+                            
                         let corpState: any = null;
 
                         if (isSpecialGroup && activeCheckin) {
@@ -1095,7 +1100,7 @@ export default function RoomsStatus({
                                 ) ||
                                 0;
 
-                            // 2. Precio acordado por noche
+                            // 2. Precio acordado por noche (El backend ya lo sincroniza en el checkin)
                             const agreedPrice =
                                 parseFloat(
                                     String(activeCheckin.agreed_price),
@@ -1114,7 +1119,6 @@ export default function RoomsStatus({
                             const limitDate = new Date(realDateString);
                             limitDate.setHours(0, 0, 0, 0);
                             limitDate.setDate(limitDate.getDate() + daysPaid);
-
                             // 5. Comparamos con HOY
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);

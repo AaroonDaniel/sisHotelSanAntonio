@@ -324,16 +324,25 @@ class CheckinController extends Controller
             // =========================================================
             // 🆕 PASO NUEVO: CREAR SPECIAL AGREEMENT SI CORRESPONDE
             // =========================================================
-           $specialAgreementId = null;
+            $specialAgreementId = null;
             $isAutoAdjust = $request->boolean('auto_adjust_price');
 
-            // 🌟 AHORA SÍ INCLUYE EL AUTO AJUSTE PARA CREAR EL CONVENIO
+            // 🌟 AHORA SÍ INCLUYE EL AUTO AJUSTE Y EL CORPORATIVO DE MANERA CORRECTA
             if ($isSpecialDeal || $isAutoAdjust) {
                 
-                // Si es Auto Ajuste forzamos los valores, de lo contrario usamos los del request corporativo
-                $tipoTrato = $isAutoAdjust ? 'AJUSTE DE PRECIO' : ($request->input('type') ?? 'corporativo');
+                // Determinar el tipo exacto que va a la base de datos
+                if ($isAutoAdjust) {
+                    $tipoTrato = 'AJUSTE DE PRECIO';
+                } else {
+                    // Si viene vacío por alguna razón, forzamos a que sea 'corporativo'
+                    $tipoTrato = $request->input('type') ?? 'corporativo'; 
+                }
+
+                // Determinamos los días de frecuencia (Solo para corporativos)
+                // Si es Auto-Ajuste, no tiene frecuencia de días
                 $frecuenciaDias = $isAutoAdjust ? 0 : (int) $request->input('corporate_days', 0);
 
+                // Creamos el convenio en su propia tabla
                 $agreement = \App\Models\SpecialAgreement::create([
                     'type' => $tipoTrato,
                     'agreed_price' => $agreedPrice,
@@ -342,7 +351,6 @@ class CheckinController extends Controller
 
                 $specialAgreementId = $agreement->id;
             }
-
             // =========================================================
             // 6. GUARDAR EL CHECKIN 
             // =========================================================
@@ -864,14 +872,6 @@ class CheckinController extends Controller
             // 🌟 Consideramos el Auto Ajuste como un Grupo Especial
             $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
             
-            if ($isAutoAdjustNow) {
-                $tipoTratoNuevo = 'AJUSTE DE PRECIO';
-                $frecuenciaDias = 0;
-            } else {
-                $tipoTratoNuevo = $typeRequest ?? ($isDelegationNow ? 'delegacion' : 'corporativo');
-                $frecuenciaDias = (int) $request->input('corporate_days', 0);
-            }
-
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
             $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
             
@@ -884,13 +884,22 @@ class CheckinController extends Controller
 
             $extraNotes = ""; 
 
-            if (!$hadSpecialAgreement && $isSpecialGroupNow) {
-                // 5.1 DE NORMAL A ESPECIAL / AUTO AJUSTE
-                $agreement = \App\Models\SpecialAgreement::create([
-                    'type' => $tipoTratoNuevo,
-                    'agreed_price' => $updatedAgreedPrice,
-                    'payment_frequency_days' => $frecuenciaDias,
-                ]);
+            if ($isSpecialGroupNow) {
+                // 5.1 ES UN GRUPO ESPECIAL O AUTO-AJUSTE (Crear o Actualizar)
+                $tipoTratoNuevo = $isAutoAdjustNow ? 'AJUSTE DE PRECIO' : ($typeRequest ?? 'corporativo');
+                $frecuenciaDias = $isAutoAdjustNow ? 0 : (int) $request->input('corporate_days', 0);
+
+                // Usamos updateOrCreate para que cree uno nuevo si no tenía, o actualice el que ya tiene
+                $agreement = \App\Models\SpecialAgreement::updateOrCreate(
+                    ['id' => $checkin->special_agreement_id], // Busca si ya existe
+                    [
+                        'type' => $tipoTratoNuevo,
+                        'agreed_price' => $updatedAgreedPrice,
+                        'payment_frequency_days' => $frecuenciaDias,
+                    ]
+                );
+                
+                // Aseguramos que el checkin tenga el ID correcto
                 $checkin->special_agreement_id = $agreement->id;
 
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
@@ -902,24 +911,17 @@ class CheckinController extends Controller
                 $updatedAgreedPrice = $basePrice; 
 
                 $oldAgreementId = $checkin->special_agreement_id;
-                $checkin->special_agreement_id = null;
+                $checkin->special_agreement_id = null; // 🌟 Desconectamos el convenio
                 \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
 
-                $extraNotes = " [SISTEMA: Privilegio o Ajuste revocado. Duró {$diasQueFueCorporativo} días.]";
+                $extraNotes = " [SISTEMA: Convenio revocado. Duró {$diasQueFueCorporativo} días.]";
 
-            } elseif (!$isSpecialGroupNow) {
+            } else {
                 // 5.3 SIGUE SIENDO NORMAL
                 $updatedAgreedPrice = $basePrice;
-            } else {
-                // 5.4 SIGUE SIENDO ESPECIAL (Actualizamos precio y tipo)
-                $checkin->specialAgreement->update([
-                    'type' => $tipoTratoNuevo,
-                    'agreed_price' => $updatedAgreedPrice,
-                    'payment_frequency_days' => $frecuenciaDias,
-                ]);
             }
 
-            // 🌟 Si es Auto Ajuste, consideramos la capacidad como llena
+            // 🌟 Si es Auto Ajuste o Especial, consideramos la capacidad como llena
             $isCapacityFull = $isSpecialGroupNow ? true : ($totalGuests >= $maxCapacity);
             // =========================================================
             // 6. EVALUACIÓN FINAL Y GUARDADO
