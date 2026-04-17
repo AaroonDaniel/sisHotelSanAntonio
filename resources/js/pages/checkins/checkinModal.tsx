@@ -177,6 +177,7 @@ export interface CheckinData {
     qr_bank?: string | null;
     is_temporary?: boolean;
     auto_adjust_price?: boolean;
+    is_corporate?: boolean | number;
     special_agreement?: {
         id: number;
         type: 'corporativo' | 'delegacion';
@@ -629,9 +630,13 @@ export default function CheckinModal({
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
 
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
-                const isPriceAdjusted = 
-    (checkinToEdit.special_agreement && String(checkinToEdit.special_agreement.type) === 'AJUSTE DE PRECIO') ||
-    (Number(checkinToEdit.agreed_price) > 0 && Number(checkinToEdit.agreed_price) < Number(originalRoomPrice));
+                let isPriceAdjusted = false;
+                
+                if (checkinToEdit.special_agreement?.type !== 'corporativo') {
+                    isPriceAdjusted = 
+                        (checkinToEdit.special_agreement && String(checkinToEdit.special_agreement.type) === 'AJUSTE DE PRECIO') ||
+                        (Number(checkinToEdit.agreed_price) > 0 && Number(checkinToEdit.agreed_price) < Number(originalRoomPrice));
+                }
                 // Cargamos todo al formulario
                 setData((prev) => ({
                     ...prev,
