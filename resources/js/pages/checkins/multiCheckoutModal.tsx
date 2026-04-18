@@ -610,7 +610,7 @@ export default function MultiCheckoutModal({
                                             onClick={() =>
                                                 setTipoDocumento('factura')
                                             }
-                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                            className={`hidden flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             <div
                                                 className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-500' : 'border-gray-300'}`}
