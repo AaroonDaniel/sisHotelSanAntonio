@@ -1,3 +1,6 @@
+import ActionModal from '@/components/actionModal';
+import CleanConfirmModal from '@/components/cleanConfirmModal';
+import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
@@ -29,9 +32,6 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-import CleanConfirmModal from '@/components/cleanConfirmModal';
-import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
@@ -115,6 +115,10 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
+    // Reservas donde la fecha aun no llego
+    const [isActionModalOpen, setIsActionModalOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
+
     // Campo para el salon
     const [isEventCheckinModalOpen, setIsEventCheckinModalOpen] =
         useState(false);
@@ -1058,7 +1062,7 @@ export default function RoomsStatus({
 
                 {/* GRILLA DE HABITACIONES */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                   {filteredRooms.map((room) => {
+                    {filteredRooms.map((room) => {
                         const config = getStatusConfig(room);
                         const displayStatus = getDisplayStatus(room);
                         const isActionable = displayStatus === 'incomplete';
@@ -1076,7 +1080,8 @@ export default function RoomsStatus({
                         // 🌟 SEMÁFORO FINANCIERO (CORPORATIVO / DELEGACIÓN) 🌟
 
                         // 1. Leemos el convenio desde la relación (usamos "as any" para que TypeScript no moleste)
-                        const convenio = (activeCheckin as any)?.special_agreement;
+                        const convenio = (activeCheckin as any)
+                            ?.special_agreement;
 
                         // 2. Verificamos el tipo directamente en el convenio
                         const isSpecialGroup =
@@ -1085,7 +1090,9 @@ export default function RoomsStatus({
 
                         // 🚀 ESTA ES LA PRUEBA EN CONSOLA (Para ver si Laravel manda el convenio)
                         if (activeCheckin) {
-                            console.log(`[PRUEBA] Habitación ${room.number} | Grupo Especial: ${isSpecialGroup}`);
+                            console.log(
+                                `[PRUEBA] Habitación ${room.number} | Grupo Especial: ${isSpecialGroup}`,
+                            );
                             console.log(`➡️ Datos del Convenio:`, convenio);
                         }
 
@@ -1125,7 +1132,7 @@ export default function RoomsStatus({
                             const limitDate = new Date(realDateString);
                             limitDate.setHours(0, 0, 0, 0);
                             limitDate.setDate(limitDate.getDate() + daysPaid);
-                            
+
                             // 5. Comparamos con HOY
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
@@ -1183,8 +1190,6 @@ export default function RoomsStatus({
                                 // 🚨 Tarjeta SIN overflow-hidden para que el hover no se corte
                                 className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
-                               
-                                
                                 {/* 🚦 CONTROLES SUPERIOR DERECHA */}
                                 <div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
                                     {sortedReservations.length > 0 && (
@@ -1202,7 +1207,6 @@ export default function RoomsStatus({
                                                         firstRes.id,
                                                     );
                                                     if (isToday) {
-                                                        // ✅ AQUÍ ESTÁ LA CLAVE: Le pasamos el ID de Fiorela al modal
                                                         setPreselectedReservationId(
                                                             firstRes.id,
                                                         );
@@ -1210,8 +1214,11 @@ export default function RoomsStatus({
                                                             true,
                                                         );
                                                     } else {
-                                                        alert(
-                                                            `Reserva de ${firstRes.guest} para el ${firstRes.date}. Solo asignable ese día.`,
+                                                        setSelectedItem(
+                                                            firstRes,
+                                                        );
+                                                        setIsActionModalOpen(
+                                                            true,
                                                         );
                                                     }
                                                 }}
@@ -1510,6 +1517,13 @@ export default function RoomsStatus({
                 roomTypes={RoomTypes}
             />
 
+            {/* MODAL DE ALERTA FALTA DE TODAVIA NO SE PUEDE ASIGNAR LA RESERVA*/}
+            <ActionModal
+                    show={isActionModalOpen}
+                    onClose={() => setIsActionModalOpen(false)}
+                    item={selectedItem}
+                />
+
             {/* MODAL DE RESERVAS PENDIENTES*/}
             <PendingReservationsModal
                 show={isPendingModalOpen}
@@ -1585,6 +1599,11 @@ export default function RoomsStatus({
                 rooms={Rooms || []}
                 initialRoomId={selectedRoomId}
                 checkinToEdit={checkinToEdit} // 🚀 AÑADIDO: Le mandamos los datos
+            />
+            <ActionModal
+                show={isActionModalOpen}
+                onClose={() => setIsActionModalOpen(false)}
+                item={selectedItem}
             />
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">

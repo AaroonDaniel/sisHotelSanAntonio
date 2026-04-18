@@ -250,8 +250,8 @@ export default function EventCheckinModal({
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
-            <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+       <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
+            <div className="flex max-h-[83vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 {/* Cabecera dinámica */}
                 <div className="flex items-center justify-between border-b border-gray-200 bg-emerald-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-lg font-black text-emerald-900">

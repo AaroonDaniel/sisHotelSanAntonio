@@ -163,7 +163,7 @@ export interface CheckinData {
     duration_days: number;
     advance_payment: number;
     agreed_price: number;
-    is_delegation: boolean;
+    is_delegation?: boolean;
     discount?: number;
     notes?: string;
     services?: string[];
