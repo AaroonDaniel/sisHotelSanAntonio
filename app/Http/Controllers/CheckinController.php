@@ -425,6 +425,7 @@ class CheckinController extends Controller
                             'civil_status' => $compData['civil_status'] ?? null,
                             'birth_date' => $compBirthDate,
                             'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
+                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
                             'phone' => $compData['phone'] ?? null,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
@@ -432,6 +433,7 @@ class CheckinController extends Controller
                         $companion->update([
                             'identification_number' => $compIdNumber ?? $companion->identification_number,
                             'birth_date' => $compBirthDate ?? $companion->birth_date,
+                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : $companion->issued_in,
                             'phone' => $compData['phone'] ?? $companion->phone,
                         ]);
                     }
@@ -780,7 +782,7 @@ class CheckinController extends Controller
                         $companion = \App\Models\Guest::where('full_name', $compName)->first();
                     }
 
-                    if (!$companion) {
+                  if (!$companion) {
                         // Si no existe, lo crea con todos los datos disponibles
                         $companion = \App\Models\Guest::create([
                             'full_name' => $compName,
@@ -789,6 +791,7 @@ class CheckinController extends Controller
                             'civil_status' => $compCivilStatus,
                             'birth_date' => $compBirthDate,
                             'profession' => $compProfession,
+                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
                             'phone' => $compPhone,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
@@ -800,6 +803,10 @@ class CheckinController extends Controller
                             'nationality' => $compNationality, // Siempre actualizamos a la que llegue
                             'civil_status' => array_key_exists('civil_status', $compData) ? ($compData['civil_status'] ? strtoupper($compData['civil_status']) : null) : $companion->civil_status,
                             'profession' => array_key_exists('profession', $compData) ? ($compData['profession'] ? strtoupper($compData['profession']) : null) : $companion->profession,
+                            
+                            // 👈 LÍNEA AGREGADA PARA GUARDAR EXPEDIDO EN LA EDICIÓN
+                            'issued_in' => array_key_exists('issued_in', $compData) ? ($compData['issued_in'] ? strtoupper($compData['issued_in']) : null) : $companion->issued_in, 
+                            
                             'phone' => array_key_exists('phone', $compData) ? $compData['phone'] : $companion->phone,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
