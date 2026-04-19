@@ -123,20 +123,13 @@ const calculateAge = (dateString: string) => {
 // Esta función prepara la fecha para el input datetime-local
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
-
-    // 1. Creamos un objeto Fecha real a partir del dato del servidor
-    // Esto maneja automáticamente si viene como "2026-02-08T17:25:00Z" (UTC)
-    const date = new Date(dateString);
-
-    // 2. Calculamos la diferencia horaria (en milisegundos)
-    // Para Bolivia (GMT-4), offset será 240 minutos (4 horas)
-    const offset = date.getTimezoneOffset() * 60000;
-
-    // 3. Restamos el desfase para obtener la hora local exacta
-    const localDate = new Date(date.getTime() - offset);
-
-    // 4. Devolvemos el formato ISO limpio (YYYY-MM-DDTHH:mm) que exige el input
-    return localDate.toISOString().slice(0, 16);
+    
+    // Si Laravel envía "2026-03-15 14:30:00" o "2026-03-15T14:30:00.000000Z"
+    // Simplemente estandarizamos el separador a "T" y cortamos hasta los minutos (16 caracteres).
+    // Esto evita que JavaScript intente sumar o restar horas de zonas horarias.
+    const cleanString = dateString.replace(' ', 'T').substring(0, 16);
+    
+    return cleanString;
 };
 
 // --- INTERFACES ---
@@ -1178,79 +1171,6 @@ export default function CheckinModal({
         executeSubmit();
     };
 
-    // =========================================================================
-    // 🚀 FUNCIÓN PARA ENVIAR EL FORMULARIO A LARAVEL (CON ESPÍAS DE CONSOLA)
-    // =========================================================================
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-
-        console.log('🚀 =========================================');
-        console.log('🚀 [SUBMIT] INTENTANDO GUARDAR LA ASIGNACIÓN');
-        console.log('-> 📦 Paquete de datos que se enviará a Laravel:', data);
-
-        // Verificaciones manuales en consola antes de enviar:
-        const isTitularComplete =
-            !!data.identification_number && !!data.nationality && !!data.origin;
-        console.log(
-            '-> 👤 ¿Titular está completo (Carnet, Nacionalidad, Procedencia)?:',
-            isTitularComplete,
-        );
-
-        if (data.auto_adjust_price) {
-            console.log(
-                '-> 💸 Auto-Ajuste está MARCADO. Precio acordado enviado:',
-                data.agreed_price,
-            );
-        }
-
-        // Limpieza básica antes de enviar (Opcional, pero recomendado)
-        if (data.origin) data.origin = data.origin.trim().toUpperCase();
-
-        if (checkinToEdit) {
-            console.log(
-                `-> 🔄 MODO EDICIÓN: Enviando petición PUT a /checkins/${checkinToEdit.id} ...`,
-            );
-            // 👇 Usamos la ruta escrita a mano sin Ziggy
-            put(`/checks/${checkinToEdit.id}`, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    console.log(
-                        '-> ✅ PUT Exitoso. Guardado correctamente en BD.',
-                    );
-                    onClose();
-                    reset();
-                },
-                onError: (errors) => {
-                    console.log(
-                        '-> ❌ LARAVEL RECHAZÓ EL FORMULARIO (PUT). Razones:',
-                        errors,
-                    );
-                    // Aquí Laravel te dirá exactamente QUÉ campo falta llenar
-                },
-            });
-        } else {
-            console.log(
-                '-> ➕ MODO NUEVO: Enviando petición POST a /checks ...',
-            );
-            // 👇 Usamos la ruta escrita a mano sin Ziggy
-            post('/checkas', {
-                preserveScroll: true,
-                onSuccess: () => {
-                    console.log(
-                        '-> ✅ POST Exitoso. Creado correctamente en BD.',
-                    );
-                    onClose();
-                    reset();
-                },
-                onError: (errors) => {
-                    console.log(
-                        '-> ❌ LARAVEL RECHAZÓ EL FORMULARIO (POST). Razones:',
-                        errors,
-                    );
-                },
-            });
-        }
-    };
     // ===============================
     // AUTOCOMPLETE EXPEDIDO (BD)
     // ===============================
@@ -3030,7 +2950,7 @@ export default function CheckinModal({
                                                 </label>
                                                 <button
                                                     type="button"
-                                                    disabled={!isTitular}
+                                                    disabled={!isTitular || !!checkinToEdit}
                                                     onClick={() =>
                                                         setData((prev) => ({
                                                             ...prev,
@@ -3094,7 +3014,7 @@ export default function CheckinModal({
                                                         onFocus={(e) =>
                                                             e.target.select()
                                                         }
-                                                        disabled={!isTitular}
+                                                        disabled={!isTitular || !!checkinToEdit}
                                                         required={
                                                             data.type ===
                                                             'corporativo'
@@ -3141,7 +3061,7 @@ export default function CheckinModal({
                                                             key={banco}
                                                             type="button"
                                                             disabled={
-                                                                !isTitular
+                                                                !isTitular || !!checkinToEdit
                                                             }
                                                             onClick={() =>
                                                                 setData(
