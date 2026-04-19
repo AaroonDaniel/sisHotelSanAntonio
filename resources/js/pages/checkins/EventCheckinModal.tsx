@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { CalendarDays, MonitorPlay, Presentation, Save, User, X } from 'lucide-react';
+import { CalendarDays, Presentation, Save, User, X } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
 export interface Guest {
@@ -45,8 +45,6 @@ export default function EventCheckinModal({
     const [eventData, setEventData] = useState({
         chairs: 0,
         tables: 0,
-        whiteboards: 0,
-        projector: false,
         startDateTime: now, 
         endDateTime: '',    
         extraDetails: '',
@@ -69,11 +67,13 @@ export default function EventCheckinModal({
         full_name: '',
         identification_number: '',
         phone: '',
-        nationality: 'BOLIVIANA',
-        profession: 'S/D',
-        civil_status: 'SOLTERO', 
-        birth_date: '1990-01-01',
-        issued_in: 'PT', 
+        // 👇 Los enviamos como null para que Laravel NO intente sobrescribir 
+        // el perfil de los clientes antiguos
+        nationality: null,
+        profession: null,
+        civil_status: null, 
+        birth_date: null,
+        issued_in: null, 
     });
 
     useEffect(() => {
@@ -85,8 +85,6 @@ export default function EventCheckinModal({
                 let extracted = {
                     chairs: 0,
                     tables: 0,
-                    whiteboards: 0,
-                    projector: false,
                     startDateTime: now,
                     endDateTime: '',
                     extraDetails: '',
@@ -111,10 +109,6 @@ export default function EventCheckinModal({
                         extracted.chairs = parseInt(part.split(':')[1]) || 0;
                     if (part.includes('Mesas:'))
                         extracted.tables = parseInt(part.split(':')[1]) || 0;
-                    if (part.includes('Pizarras:'))
-                        extracted.whiteboards = parseInt(part.split(':')[1]) || 0;
-                    if (part.includes('Proyector:'))
-                        extracted.projector = part.includes('SÍ');
                     if (part.includes('Detalle:'))
                         extracted.extraDetails = part.substring(part.indexOf('Detalle:') + 8).trim();
                 });
@@ -140,8 +134,6 @@ export default function EventCheckinModal({
                 setEventData({
                     chairs: 0,
                     tables: 0,
-                    whiteboards: 0,
-                    projector: false,
                     startDateTime: now,
                     endDateTime: '',
                     extraDetails: '',
@@ -212,8 +204,8 @@ export default function EventCheckinModal({
             }
         }
 
-        const proyectorTexto = eventData.projector ? 'SÍ' : 'NO';
-        const notasCompiladas = `[EVENTO] Inicio: ${eventData.startDateTime || 'S/D'} | Fin: ${eventData.endDateTime || 'S/D'} | Sillas: ${eventData.chairs} | Mesas: ${eventData.tables} | Pizarras: ${eventData.whiteboards} | Proyector: ${proyectorTexto} | Detalle: ${eventData.extraDetails}`;
+        // Ya no enviamos Proyector ni Pizarras en la nota
+        const notasCompiladas = `[EVENTO] Inicio: ${eventData.startDateTime || 'S/D'} | Fin: ${eventData.endDateTime || 'S/D'} | Sillas: ${eventData.chairs} | Mesas: ${eventData.tables} | Detalle: ${eventData.extraDetails}`;
 
         const checkInFormatted = eventData.startDateTime ? eventData.startDateTime.replace('T', ' ') : now.replace('T', ' ');
 
@@ -350,8 +342,7 @@ export default function EventCheckinModal({
                                     type="text"
                                     className="w-full rounded-xl border-2 border-slate-400 bg-slate-100 p-2.5 text-base font-bold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
                                     value={data.identification_number}
-                                    readOnly // Hacemos de solo lectura para evitar alteraciones
-                                   
+                                    readOnly 
                                 />
                             </div>
                             <div>
@@ -362,8 +353,7 @@ export default function EventCheckinModal({
                                     type="text"
                                     className="w-full rounded-xl border-2 border-slate-400 bg-slate-100 p-2.5 text-base font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-emerald-600"
                                     value={data.phone}
-                                    readOnly // Hacemos de solo lectura para evitar alteraciones
-                                   
+                                    readOnly 
                                 />
                             </div>
                         </div>
@@ -454,7 +444,8 @@ export default function EventCheckinModal({
                             </div>
                         </div>
 
-                        <div className="mb-6 grid grid-cols-3 gap-4">
+                        {/* Aquí reducimos a 2 columnas (Sillas y Mesas) */}
+                        <div className="mb-6 grid grid-cols-2 gap-4">
                             <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-3 text-center shadow-sm">
                                 <label className="mb-2 block text-xs font-extrabold text-slate-700 uppercase">
                                     Sillas
@@ -491,52 +482,15 @@ export default function EventCheckinModal({
                                     placeholder="0"
                                 />
                             </div>
-                            <div className="rounded-xl border-2 border-slate-300 bg-slate-100 p-3 text-center shadow-sm">
-                                <label className="mb-2 block text-xs font-extrabold text-slate-700 uppercase">
-                                    Pizarras
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={eventData.whiteboards === 0 ? '' : eventData.whiteboards}
-                                    onChange={(e) =>
-                                        setEventData({
-                                            ...eventData,
-                                            whiteboards: Number(e.target.value),
-                                        })
-                                    }
-                                    className="w-full rounded-lg border-2 border-slate-400 bg-white p-2 text-center text-xl font-black text-gray-900 shadow-inner focus:border-emerald-600 focus:ring-emerald-600"
-                                    placeholder="0"
-                                />
-                            </div>
                         </div>
 
-                        <div
-                            className="mb-6 flex cursor-pointer items-center justify-between rounded-xl border-2 border-slate-300 bg-white p-4 shadow-sm transition-colors hover:bg-slate-50"
-                            onClick={() =>
-                                setEventData({
-                                    ...eventData,
-                                    projector: !eventData.projector,
-                                })
-                            }
-                        >
-                            <div className="flex items-center gap-3">
-                                <MonitorPlay className={`h-6 w-6 ${eventData.projector ? 'text-emerald-600' : 'text-slate-400'}`} />
-                                <span className="text-sm font-black text-slate-800 uppercase">
-                                    Incluye Proyector
-                                </span>
-                            </div>
-                            <div className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${eventData.projector ? 'bg-emerald-600' : 'bg-slate-300'}`}>
-                                <div className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${eventData.projector ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                            </div>
-                        </div>
-
+                        {/* Detalles adicionales con más filas */}
                         <div>
                             <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase">
                                 Detalles Adicionales
                             </label>
                             <textarea
-                                rows={3}
+                                rows={5}
                                 value={eventData.extraDetails}
                                 onChange={(e) =>
                                     setEventData({
@@ -544,6 +498,7 @@ export default function EventCheckinModal({
                                         extraDetails: e.target.value.toUpperCase(),
                                     })
                                 }
+                                
                                 className="w-full rounded-xl border-2 border-slate-400 bg-white p-3 text-base font-semibold text-gray-900 shadow-sm uppercase focus:border-emerald-600 focus:ring-emerald-600"
                                 
                             ></textarea>

@@ -708,6 +708,8 @@ class CheckinController extends Controller
             'agreed_price' => 'nullable|numeric|min:0',
         ]);
 
+        $validated['room_id'] = $checkin->room_id;
+
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $validated) {
 
             // =========================================================
