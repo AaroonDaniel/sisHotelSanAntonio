@@ -67,8 +67,7 @@ export default function EventCheckinModal({
         full_name: '',
         identification_number: '',
         phone: '',
-        // 👇 Los enviamos como null para que Laravel NO intente sobrescribir 
-        // el perfil de los clientes antiguos
+        
         nationality: null,
         profession: null,
         civil_status: null, 

@@ -1709,7 +1709,7 @@ export default function CheckinModal({
                                                 e.target.value.toUpperCase(),
                                             )
                                         }
-                                        placeholder="123456"
+                                        
                                     />
                                 </div>
                                 <div
@@ -1726,7 +1726,7 @@ export default function CheckinModal({
                                                 currentPerson.issued_in || ''
                                             }
                                             disabled={isReadOnly}
-                                            placeholder="EJ: LP, SC, CB"
+                                            
                                             autoComplete="off"
                                             onChange={(e) =>
                                                 handleIssuedInInput(
@@ -1939,7 +1939,7 @@ export default function CheckinModal({
                                                     : ''
                                             }
                                             disabled={isReadOnly}
-                                            placeholder="EJ: 1990"
+                                            
                                             onChange={(e) => {
                                                 // Extraer solo hasta 4 números
                                                 const year = e.target.value
@@ -2005,7 +2005,7 @@ export default function CheckinModal({
                                                     ''
                                                 }
                                                 disabled={isReadOnly}
-                                                placeholder="EJ: INGENIERO"
+                                                
                                                 autoComplete="off"
                                                 onChange={(e) =>
                                                     handleProfessionInput(
@@ -2089,7 +2089,7 @@ export default function CheckinModal({
                                             type="text"
                                             value={currentPerson.origin || ''} // <-- AHORA LEE DE CURRENTPERSON (Muestra el correcto en el carrusel)
                                             disabled={isReadOnly}
-                                            placeholder="EJ: COCHABAMBA"
+                                            
                                             autoComplete="off"
                                             onChange={(e) =>
                                                 handleOriginInput(
@@ -2166,7 +2166,7 @@ export default function CheckinModal({
                                                 )
                                             }
                                             className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black"
-                                            placeholder="#### ####"
+                                            
                                         />
                                     </div>
                                 </div>
