@@ -1,24 +1,25 @@
+import CancelModal from '@/components/cancelModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
-import { 
-    BedDouble, 
-    Calendar, 
-    CheckCircle2, 
-    Clock, 
-    Plus, 
-    Search, 
-    UserCheck, 
+import {
     AlertCircle,
-    ArrowRight,
-    ChevronLeft,
     ArrowLeft,
+    ArrowRight,
+    BedDouble,
+    Calendar,
+    CalendarDays, // Añadido un nuevo icono para la fecha
+    CheckCircle2,
+    ChevronLeft,
+    Clock,
     Pencil,
-    XCircle
+    Plus,
+    Search,
+    UserCheck,
+    XCircle,
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import AssignRoomsModal from './AssignRoomsModal';
 import ReservationModal from './reservationModal';
-import AssignRoomsModal from './AssignRoomsModal'; 
-import CancelModal from '@/components/cancelModal'; // Importamos tu CancelModal
 
 interface Props {
     auth: { user: User };
@@ -27,113 +28,186 @@ interface Props {
     rooms: any[];
 }
 
-export default function ViewReservationModal({ auth, reservations, guests, rooms }: Props) {
+export default function ViewReservationModal({
+    auth,
+    reservations,
+    guests,
+    rooms,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [assigningReservation, setAssigningReservation] = useState<any>(null);
     const [confirmingStayRes, setConfirmingStayRes] = useState<any>(null);
-    const [editingReservation, setEditingReservation] = useState<any>(null); 
-    
+    const [editingReservation, setEditingReservation] = useState<any>(null);
+
     // Estados para tu CancelModal
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-    const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
+    const [cancelingReservationId, setCancelingReservationId] = useState<
+        number | null
+    >(null);
 
     const filteredReservations = useMemo(() => {
-        return reservations.filter(res => 
-            res.guest?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            res.guest?.identification_number?.includes(searchTerm)
+        return reservations.filter(
+            (res) =>
+                res.guest?.full_name
+                    ?.toLowerCase()
+                    .includes(searchTerm.toLowerCase()) ||
+                res.guest?.identification_number?.includes(searchTerm),
         );
     }, [reservations, searchTerm]);
 
-    const pendingAssignment = useMemo(() => 
-        filteredReservations.filter(res => res.details.some((d: any) => d.room_id === null) && res.status === 'pendiente'),
-    [filteredReservations]);
+    const pendingAssignment = useMemo(
+        () =>
+            filteredReservations.filter(
+                (res) =>
+                    res.details.some((d: any) => d.room_id === null) &&
+                    res.status === 'pendiente',
+            ),
+        [filteredReservations],
+    );
 
-    const readyForCheckin = useMemo(() => 
-        filteredReservations.filter(res => res.details.every((d: any) => d.room_id !== null) && res.status === 'pendiente'),
-    [filteredReservations]);
+    const readyForCheckin = useMemo(
+        () =>
+            filteredReservations.filter(
+                (res) =>
+                    res.details.every((d: any) => d.room_id !== null) &&
+                    res.status === 'pendiente',
+            ),
+        [filteredReservations],
+    );
 
     // VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
     if (confirmingStayRes) {
         return (
             <AuthenticatedLayout user={auth.user}>
                 <Head title="Confirmar Estancia" />
-                <div className="min-h-screen p-8 pt-2 lg:pt-2 animate-in fade-in slide-in-from-right-10 duration-500">
-                    <button 
+                <div className="min-h-screen animate-in p-8 pt-2 duration-500 slide-in-from-right-10 fade-in lg:pt-2">
+                    <button
                         onClick={() => setConfirmingStayRes(null)}
-                        className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+                        className="mb-6 flex items-center gap-2 text-gray-400 transition-colors hover:text-white"
                     >
-                        <ChevronLeft className="w-5 h-5" /> Volver al listado
+                        <ChevronLeft className="h-5 w-5" /> Volver al listado
                     </button>
 
-                    <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-1 space-y-6">
-                            <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                                <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-4">
-                                    <UserCheck className="w-8 h-8" />
+                    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-3">
+                        <div className="space-y-6 lg:col-span-1">
+                            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-xl">
+                                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 text-green-600">
+                                    <UserCheck className="h-8 w-8" />
                                 </div>
-                                <h2 className="text-2xl font-black text-gray-900 uppercase leading-tight">
+                                <h2 className="text-2xl leading-tight font-black text-gray-900 uppercase">
                                     {confirmingStayRes.guest?.full_name}
                                 </h2>
-                                <p className="text-gray-400 font-bold text-sm">CI: {confirmingStayRes.guest?.identification_number}</p>
-                                
+                                <p className="text-sm font-bold text-gray-400">
+                                    CI:{' '}
+                                    {
+                                        confirmingStayRes.guest
+                                            ?.identification_number
+                                    }
+                                </p>
+
                                 <div className="mt-8 space-y-4 border-t pt-6">
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400 text-sm">Llegada</span>
-                                        <span className="font-bold text-gray-800">{confirmingStayRes.arrival_date}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Llegada
+                                        </span>
+                                        <span className="font-bold text-gray-800">
+                                            {confirmingStayRes.arrival_date}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400 text-sm">Noches</span>
-                                        <span className="font-bold text-gray-800">{confirmingStayRes.duration_days}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Noches
+                                        </span>
+                                        <span className="font-bold text-gray-800">
+                                            {confirmingStayRes.duration_days}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400 text-sm">Personas</span>
-                                        <span className="font-bold text-gray-800">{confirmingStayRes.guest_count}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Personas
+                                        </span>
+                                        <span className="font-bold text-gray-800">
+                                            {confirmingStayRes.guest_count}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-indigo-900 p-6 rounded-3xl shadow-lg text-white">
-                                <h3 className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-2">Finanzas</h3>
-                                <div className="text-3xl font-black">{confirmingStayRes.advance_payment} Bs</div>
-                                <p className="text-indigo-300 text-xs mt-1">Adelanto recibido ({confirmingStayRes.payment_type})</p>
+                            <div className="rounded-3xl bg-indigo-900 p-6 text-white shadow-lg">
+                                <h3 className="mb-2 text-xs font-bold tracking-widest text-indigo-200 uppercase">
+                                    Finanzas
+                                </h3>
+                                <div className="text-3xl font-black">
+                                    {confirmingStayRes.advance_payment} Bs
+                                </div>
+                                <p className="mt-1 text-xs text-indigo-300">
+                                    Adelanto recibido (
+                                    {confirmingStayRes.payment_type})
+                                </p>
                             </div>
                         </div>
 
-                        <div className="lg:col-span-2 space-y-6">
-                            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
-                                <h3 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2">
-                                    <BedDouble className="w-6 h-6 text-green-500" /> Habitaciones Preparadas
+                        <div className="space-y-6 lg:col-span-2">
+                            <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl">
+                                <h3 className="mb-6 flex items-center gap-2 text-xl font-black text-gray-800">
+                                    <BedDouble className="h-6 w-6 text-green-500" />{' '}
+                                    Habitaciones Preparadas
                                 </h3>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {confirmingStayRes.details.map((det: any, i: number) => (
-                                        <div key={i} className="flex items-center justify-between p-4 rounded-2xl border-2 border-green-50 bg-green-50/30">
-                                            <div>
-                                                <div className="text-xs font-black text-green-700 uppercase">Habitación {det.room?.number}</div>
-                                                <div className="text-lg font-bold text-gray-800">{det.room_type?.name}</div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    {confirmingStayRes.details.map(
+                                        (det: any, i: number) => (
+                                            <div
+                                                key={i}
+                                                className="flex items-center justify-between rounded-2xl border-2 border-green-50 bg-green-50/30 p-4"
+                                            >
+                                                <div>
+                                                    <div className="text-xs font-black text-green-700 uppercase">
+                                                        Habitación{' '}
+                                                        {det.room?.number}
+                                                    </div>
+                                                    <div className="text-lg font-bold text-gray-800">
+                                                        {det.room_type?.name}
+                                                    </div>
+                                                </div>
+                                                <CheckCircle2 className="h-6 w-6 text-green-500" />
                                             </div>
-                                            <CheckCircle2 className="w-6 h-6 text-green-500" />
-                                        </div>
-                                    ))}
+                                        ),
+                                    )}
                                 </div>
 
-                                <div className="mt-12 p-8 border-2 border-dashed border-gray-200 rounded-3xl text-center">
-                                    <p className="text-gray-500 mb-6 max-w-sm mx-auto font-medium">
-                                        Al confirmar, las habitaciones pasarán a estado "Ocupadas" y se generará el registro oficial de Check-in.
+                                <div className="mt-12 rounded-3xl border-2 border-dashed border-gray-200 p-8 text-center">
+                                    <p className="mx-auto mb-6 max-w-sm font-medium text-gray-500">
+                                        Al confirmar, las habitaciones pasarán a
+                                        estado "Ocupadas" y se generará el
+                                        registro oficial de Check-in.
                                     </p>
-                                    <form onSubmit={(e) => {
-                                        e.preventDefault();
-                                        // Usamos Inertia Form/Router para hacer el PUT
-                                        import('@inertiajs/react').then(({ router }) => {
-                                            router.put(`/reservas/${confirmingStayRes.id}`, { status: 'confirmada' }, {
-                                                onSuccess: () => setConfirmingStayRes(null)
-                                            });
-                                        });
-                                    }}>
-                                        <button 
+                                    <form
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            // Usamos Inertia Form/Router para hacer el PUT
+                                            import('@inertiajs/react').then(
+                                                ({ router }) => {
+                                                    router.put(
+                                                        `/reservas/${confirmingStayRes.id}`,
+                                                        {
+                                                            status: 'confirmada',
+                                                        },
+                                                        {
+                                                            onSuccess: () =>
+                                                                setConfirmingStayRes(
+                                                                    null,
+                                                                ),
+                                                        },
+                                                    );
+                                                },
+                                            );
+                                        }}
+                                    >
+                                        <button
                                             type="submit"
-                                            className="w-full py-5 bg-black text-white rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl shadow-gray-200 active:scale-95"
+                                            className="w-full rounded-2xl bg-black py-5 text-lg font-black tracking-widest text-white uppercase shadow-xl shadow-gray-200 transition-all hover:bg-gray-800 active:scale-95"
                                         >
                                             ✓ Confirmar Entrada del Huésped
                                         </button>
@@ -152,7 +226,7 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Reservas" />
 
-            <div className="p-4 pt-2 lg:p-2 lg:pt-0.5 space-y-4 max-w-[1400px] mx-auto">
+            <div className="mx-auto max-w-[1400px] space-y-4 p-4 pt-2 lg:p-2 lg:pt-0.5">
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-1 text-base font-medium text-gray-400 transition-colors hover:text-white"
@@ -162,103 +236,158 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                     </div>
                     <span>Volver</span>
                 </button>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                     <div>
-                        <h1 className="text-3xl font-black text-white flex items-center gap-3">
-                            <Calendar className="w-8 h-8 text-green-500" /> Reservas del Hotel
+                        <h1 className="flex items-center gap-3 text-3xl font-black text-white">
+                            <Calendar className="h-8 w-8 text-green-500" />{' '}
+                            Reservas del Hotel
                         </h1>
-                        <p className="text-gray-300 font-medium mt-1">Organiza la llegada de tus huéspedes y asigna sus espacios.</p>
+                        <p className="mt-1 font-medium text-gray-300">
+                            Organiza la llegada de tus huéspedes y asigna sus
+                            espacios.
+                        </p>
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <div className="relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-green-500 transition-colors" />
-                            <input 
-                                type="text" 
-                                placeholder="Buscar huésped o CI..." 
+                        <div className="group relative">
+                            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-green-500" />
+                            <input
+                                type="text"
+                                placeholder="Buscar huésped o CI..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 pr-4 py-3 rounded-2xl border-gray-700 bg-gray-800 text-white placeholder-gray-400 w-64 lg:w-80 focus:ring-green-500 focus:border-green-500 transition-all shadow-lg"
+                                className="w-64 rounded-2xl border-gray-700 bg-gray-800 py-3 pr-4 pl-10 text-white placeholder-gray-400 shadow-lg transition-all focus:border-green-500 focus:ring-green-500 lg:w-80"
                             />
                         </div>
-                        <button 
+                        <button
                             onClick={() => setIsCreateModalOpen(true)}
-                            className="bg-green-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-green-500 transition-all shadow-lg active:scale-95"
+                            className="flex items-center gap-2 rounded-2xl bg-green-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-green-500 active:scale-95"
                         >
-                            <Plus className="w-5 h-5" /> Nueva Reserva
+                            <Plus className="h-5 w-5" /> Nueva Reserva
                         </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
-                    
+                <div className="grid grid-cols-1 gap-6 lg:gap-8 xl:grid-cols-5">
                     {/* TABLA 1: PENDIENTES DE HABITACIÓN */}
-                    <section className="flex flex-col h-full">
-                        <div className="bg-white rounded-[2rem] border border-gray-200 shadow-xl overflow-hidden flex flex-col h-full min-h-[450px]">
-                            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gray-50/80">
-                                <h2 className="text-sm font-black uppercase tracking-widest text-orange-500 flex items-center gap-2">
-                                    <Clock className="w-5 h-5" /> 1. Pendientes de Habitación ({pendingAssignment.length})
+                    <section className="flex h-full flex-col xl:col-span-2">
+                        <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
+                            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
+                                <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-orange-500 uppercase">
+                                    <Clock className="h-5 w-5" /> 1. Pendientes
+                                    de Habitación ({pendingAssignment.length})
                                 </h2>
                             </div>
-                            
+
                             <div className="flex-1 overflow-y-auto bg-white">
                                 {pendingAssignment.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-20 text-gray-400">
-                                        <CheckCircle2 className="w-12 h-12 mb-4 opacity-20" />
-                                        <p className="font-bold text-sm uppercase tracking-wider">No hay pendientes de cupo</p>
+                                    <div className="flex h-full flex-col items-center justify-center p-20 text-gray-400">
+                                        <CheckCircle2 className="mb-4 h-12 w-12 opacity-20" />
+                                        <p className="text-sm font-bold tracking-wider uppercase">
+                                            No hay pendientes de cupo
+                                        </p>
                                     </div>
                                 ) : (
                                     <table className="w-full text-left">
                                         <thead>
-                                            <tr className="bg-white border-b border-gray-100">
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Huésped</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-center">Req.</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acciones</th>
+                                            <tr className="border-b border-gray-100 bg-white">
+                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
+                                                    Huésped / Llegada
+                                                </th>
+                                                <th className="px-6 py-3 text-center text-[10px] font-black text-gray-400 uppercase">
+                                                    Req.
+                                                </th>
+                                                <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
+                                                    Acciones
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
-                                            {pendingAssignment.map(res => {
-                                                const assignedCount = res.details.filter((d: any) => d.room_id).length;
-                                                const buttonText = assignedCount > 0 ? 'Asignar / Editar' : 'Asignar';
+                                            {pendingAssignment.map((res) => {
+                                                const assignedCount =
+                                                    res.details.filter(
+                                                        (d: any) => d.room_id,
+                                                    ).length;
+                                                const buttonText =
+                                                    assignedCount > 0
+                                                        ? 'Asignar / Editar'
+                                                        : 'Asignar';
 
                                                 return (
-                                                    <tr key={res.id} className="hover:bg-orange-50/30 transition-colors group">
+                                                    <tr
+                                                        key={res.id}
+                                                        className="group transition-colors hover:bg-orange-50/30"
+                                                    >
                                                         <td className="px-6 py-4">
-                                                            <div className="font-black text-gray-800 uppercase text-sm">{res.guest?.full_name}</div>
-                                                            <div className="text-[10px] font-bold text-gray-400">CI: {res.guest?.identification_number}</div>
+                                                            <div className="text-sm font-black text-gray-800 uppercase">
+                                                                {
+                                                                    res.guest
+                                                                        ?.full_name
+                                                                }
+                                                            </div>
+                                                            {/* 👇 CAMBIO APLICADO: FECHA DE RESERVA RESALTADA 👇 */}
+                                                            <div className="mt-1 flex w-fit items-center gap-1.5 rounded-md border border-orange-100 bg-orange-50 px-2 py-0.5 text-orange-600">
+                                                                <CalendarDays className="h-3.5 w-3.5" />
+                                                                <span className="text-xs font-bold tracking-wide">
+                                                                    {
+                                                                        res.arrival_date
+                                                                    }
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-center">
-                                                            <span className="bg-orange-100 text-orange-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-orange-200">
-                                                                {res.details.length} Hab.
+                                                            <span className="rounded-full border border-orange-200 bg-orange-100 px-2.5 py-1 text-[10px] font-black text-orange-700">
+                                                                {
+                                                                    res.details
+                                                                        .length
+                                                                }{' '}
+                                                                Hab.
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex items-center justify-end gap-2">
                                                                 {/* Lápiz para editar reserva general */}
-                                                                <button 
-                                                                    onClick={() => setEditingReservation(res)}
-                                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                <button
+                                                                    onClick={() =>
+                                                                        setEditingReservation(
+                                                                            res,
+                                                                        )
+                                                                    }
+                                                                    className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
                                                                     title="Editar Datos de Reserva"
                                                                 >
-                                                                    <Pencil className="w-4 h-4" />
+                                                                    <Pencil className="h-4 w-4" />
                                                                 </button>
-                                                                
+
                                                                 {/* BOTÓN CANCELAR -> Dispara cancelModal */}
-                                                                {res.status !== 'cancelado' && (
-                                                                    <button 
-                                                                        onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
+                                                                {res.status !==
+                                                                    'cancelado' && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setCancelingReservationId(
+                                                                                res.id,
+                                                                            );
+                                                                            setIsCancelModalOpen(
+                                                                                true,
+                                                                            );
+                                                                        }}
                                                                         className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
                                                                         title="Cancelar"
                                                                     >
                                                                         <XCircle className="h-4 w-4" />
                                                                     </button>
                                                                 )}
-                                                                
-                                                                <button 
-                                                                    onClick={() => setAssigningReservation(res)}
-                                                                    className="inline-flex items-center gap-1.5 bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-orange-700 transition-all shadow-md active:scale-95 ml-2"
+
+                                                                <button
+                                                                    onClick={() =>
+                                                                        setAssigningReservation(
+                                                                            res,
+                                                                        )
+                                                                    }
+                                                                    className="ml-2 inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
                                                                 >
-                                                                    {buttonText} <ArrowRight className="w-3.5 h-3.5" />
+                                                                    {buttonText}{' '}
+                                                                    <ArrowRight className="h-3.5 w-3.5" />
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -273,75 +402,128 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                     </section>
 
                     {/* TABLA 2: LISTAS PARA CONFIRMAR */}
-                    <section className="flex flex-col h-full">
-                        <div className="bg-white rounded-[2rem] border border-gray-200 shadow-xl overflow-hidden flex flex-col h-full min-h-[450px]">
-                            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gray-50/80">
-                                <h2 className="text-sm font-black uppercase tracking-widest text-green-600 flex items-center gap-2">
-                                    <UserCheck className="w-5 h-5" /> 2. Listas para Confirmar ({readyForCheckin.length})
+                    <section className="flex h-full flex-col xl:col-span-3">
+                        <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
+                            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
+                                <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-green-600 uppercase">
+                                    <UserCheck className="h-5 w-5" /> 2. Listas
+                                    para Confirmar ({readyForCheckin.length})
                                 </h2>
                             </div>
 
                             <div className="flex-1 overflow-y-auto bg-white">
                                 {readyForCheckin.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-20 text-gray-400 text-center">
-                                        <AlertCircle className="w-12 h-12 mb-4 opacity-20" />
-                                        <p className="font-bold text-sm uppercase tracking-wider">Sin reservas para confirmar llegada</p>
+                                    <div className="flex h-full flex-col items-center justify-center p-20 text-center text-gray-400">
+                                        <AlertCircle className="mb-4 h-12 w-12 opacity-20" />
+                                        <p className="text-sm font-bold tracking-wider uppercase">
+                                            Sin reservas para confirmar llegada
+                                        </p>
                                     </div>
                                 ) : (
                                     <table className="w-full text-left">
                                         <thead>
-                                            <tr className="bg-white border-b border-gray-100">
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Huésped</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400">Habitaciones</th>
-                                                <th className="px-6 py-3 text-[10px] font-black uppercase text-gray-400 text-right">Acciones</th>
+                                            <tr className="border-b border-gray-100 bg-white">
+                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
+                                                    Huésped / Llegada
+                                                </th>
+                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
+                                                    Habitaciones
+                                                </th>
+                                                <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
+                                                    Acciones
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
-                                            {readyForCheckin.map(res => (
-                                                <tr key={res.id} className="hover:bg-green-50/30 transition-colors">
+                                            {readyForCheckin.map((res) => (
+                                                <tr
+                                                    key={res.id}
+                                                    className="transition-colors hover:bg-green-50/30"
+                                                >
                                                     <td className="px-6 py-4">
-                                                        <div className="font-black text-gray-800 uppercase text-sm">{res.guest?.full_name}</div>
-                                                        <div className="text-[10px] font-bold text-gray-400">CI: {res.guest?.identification_number}</div>
+                                                        <div className="text-sm font-black text-gray-800 uppercase">
+                                                            {
+                                                                res.guest
+                                                                    ?.full_name
+                                                            }
+                                                        </div>
+                                                        {/* 👇 CAMBIO APLICADO: FECHA DE RESERVA RESALTADA 👇 */}
+                                                        <div className="mt-1 flex w-fit items-center gap-1.5 rounded-md border border-green-200 bg-green-100 px-2 py-0.5 text-green-700">
+                                                            <CalendarDays className="h-3.5 w-3.5" />
+                                                            <span className="text-xs font-bold tracking-wide">
+                                                                {
+                                                                    res.arrival_date
+                                                                }
+                                                            </span>
+                                                        </div>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex flex-wrap gap-1">
-                                                            {res.details.map((d: any, idx: number) => (
-                                                                <span key={idx} className="bg-green-100 text-green-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-green-200">
-                                                                    {d.room?.number}
-                                                                </span>
-                                                            ))}
+                                                            {res.details.map(
+                                                                (
+                                                                    d: any,
+                                                                    idx: number,
+                                                                ) => (
+                                                                    <span
+                                                                        key={
+                                                                            idx
+                                                                        }
+                                                                        className="rounded border border-green-200 bg-green-100 px-1.5 py-0.5 text-[15px] font-black text-green-700"
+                                                                    >
+                                                                        {
+                                                                            d
+                                                                                .room
+                                                                                ?.number
+                                                                        }
+                                                                    </span>
+                                                                ),
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center justify-end gap-2">
-                                                            
                                                             {/* BOTÓN PARA RE-ASIGNAR O CAMBIAR HABITACIONES */}
-                                                            <button 
-                                                                onClick={() => setAssigningReservation(res)}
-                                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            <button
+                                                                onClick={() =>
+                                                                    setAssigningReservation(
+                                                                        res,
+                                                                    )
+                                                                }
+                                                                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
                                                                 title="Cambiar Habitaciones Asignadas"
                                                             >
-                                                                <BedDouble className="w-4 h-4" />
+                                                                <BedDouble className="h-4 w-4" />
                                                             </button>
 
                                                             {/* BOTÓN CANCELAR -> Dispara cancelModal */}
-                                                            {res.status !== 'cancelado' && (
-                                                                <button 
-                                                                    onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
+                                                            {res.status !==
+                                                                'cancelado' && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setCancelingReservationId(
+                                                                            res.id,
+                                                                        );
+                                                                        setIsCancelModalOpen(
+                                                                            true,
+                                                                        );
+                                                                    }}
                                                                     className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
                                                                     title="Cancelar"
                                                                 >
-                                                                    <XCircle className="w-4 h-4" />
+                                                                    <XCircle className="h-4 w-4" />
                                                                 </button>
                                                             )}
 
-                                                            <button 
-                                                                onClick={() => setConfirmingStayRes(res)}
-                                                                className="bg-green-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase hover:bg-green-700 transition-all shadow-md active:scale-95 ml-2"
+                                                            <button
+                                                                onClick={() =>
+                                                                    setConfirmingStayRes(
+                                                                        res,
+                                                                    )
+                                                                }
+                                                                className="ml-2 rounded-xl bg-green-600 px-5 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
                                                             >
                                                                 Confirmar
                                                             </button>
-                                                            
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -362,35 +544,40 @@ export default function ViewReservationModal({ auth, reservations, guests, rooms
                     setIsCancelModalOpen(false);
                     setCancelingReservationId(null);
                 }}
-                actionUrl={cancelingReservationId ? `/reservas/${cancelingReservationId}` : null}
+                actionUrl={
+                    cancelingReservationId
+                        ? `/reservas/${cancelingReservationId}`
+                        : null
+                }
             />
 
             {/* Modal para NUEVA reserva */}
-            <ReservationModal 
-                show={isCreateModalOpen} 
-                onClose={() => setIsCreateModalOpen(false)} 
-                guests={guests} 
-                rooms={rooms} 
+            <ReservationModal
+                show={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                guests={guests}
+                rooms={rooms}
             />
 
             {/* Modal para EDITAR reserva */}
-            <ReservationModal 
-                show={!!editingReservation} 
-                onClose={() => setEditingReservation(null)} 
-                reservationToEdit={editingReservation} 
-                guests={guests} 
-                rooms={rooms} 
+            <ReservationModal
+                show={!!editingReservation}
+                onClose={() => setEditingReservation(null)}
+                reservationToEdit={editingReservation}
+                guests={guests}
+                rooms={rooms}
             />
 
             {/* Modal para ASIGNAR / REASIGNAR HABITACIONES */}
             {assigningReservation && (
-                <AssignRoomsModal 
-                    show={!!assigningReservation} 
+                <AssignRoomsModal
+                    show={!!assigningReservation}
                     onClose={() => setAssigningReservation(null)}
                     reservation={assigningReservation}
-                    availableRooms={(rooms || []).filter(r => 
-                        r.status?.toUpperCase() !== 'MANTENIMIENTO' && 
-                        r.status?.toUpperCase() !== 'INHABILITADO'
+                    availableRooms={(rooms || []).filter(
+                        (r) =>
+                            r.status?.toUpperCase() !== 'MANTENIMIENTO' &&
+                            r.status?.toUpperCase() !== 'INHABILITADO',
                     )}
                 />
             )}

@@ -1098,7 +1098,8 @@ export default function RoomsStatus({
 
                         let corpState: any = null;
 
-                        if (isSpecialGroup && activeCheckin) {
+                        // 👇 CAMBIO AQUÍ: Ahora solo evalúa si es ESTRICTAMENTE CORPORATIVO 👇
+                        if (activeCheckin && activeCheckin.is_corporate) {
                             // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
                             let totalPaid =
                                 activeCheckin.payments?.reduce(
