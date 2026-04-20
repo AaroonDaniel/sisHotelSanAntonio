@@ -28,7 +28,6 @@ class ReportController extends Controller
         $guestsList = collect();
 
         // 🚨 VALIDADOR ESTRICTO DE DATOS
-        // Detecta nulls, espacios vacíos ("   "), guiones ("-"), "S/N", "N/A", etc.
         $isDataMissing = function($value) {
             if (is_null($value)) return true;
             $cleanValue = trim((string) $value);
@@ -50,7 +49,6 @@ class ReportController extends Controller
             $formatGuest = function ($person, $role) use ($checkin, $isDataMissing) {
                 if (!$person) return null;
 
-                // 1. Verificamos estrictamente cada campo
                 $missingFields = [];
                 if ($isDataMissing($person->full_name)) $missingFields[] = 'Nombre Completo';
                 if ($isDataMissing($person->birth_date)) $missingFields[] = 'Fecha de Nacimiento (Edad)';
@@ -61,7 +59,6 @@ class ReportController extends Controller
                 if ($isDataMissing($person->issued_in)) $missingFields[] = 'Expedido en';
                 if ($isDataMissing($checkin->origin)) $missingFields[] = 'Procedencia';
 
-                // 2. Si falta AL MENOS UN DATO, se reporta y SE ELIMINA de la lista
                 if (count($missingFields) > 0) {
                     $nombreParaLog = $person->full_name && trim($person->full_name) !== '' 
                                         ? trim($person->full_name) 
@@ -72,10 +69,9 @@ class ReportController extends Controller
                         'Faltan' => $missingFields
                     ]);
                     
-                    return null; // 🚫 RECHAZADO
+                    return null;
                 }
 
-                // 3. Si llega aquí, sus datos están 100% completos
                 $age = Carbon::parse($person->birth_date)->age;
                 
                 return [
@@ -93,7 +89,6 @@ class ReportController extends Controller
                 ];
             };
 
-            // Procesar Titular
             if ($checkin->guest) {
                 $formattedTitular = $formatGuest($checkin->guest, 'Titular');
                 if ($formattedTitular !== null) {
@@ -101,7 +96,6 @@ class ReportController extends Controller
                 }
             }
 
-            // Procesar Acompañantes
             if ($checkin->companions && $checkin->companions->count() > 0) {
                 foreach ($checkin->companions as $companion) {
                     $formattedCompanion = $formatGuest($companion, 'Acompañante');
@@ -112,24 +106,19 @@ class ReportController extends Controller
             }
         }
 
-        Log::info('=== DEBUG REPORTES: LISTA FINAL DE HUÉSPEDES (DATOS 100% COMPLETOS) ===', [
-            'total_personas_completas' => $guestsList->count(),
-            'nombres' => $guestsList->pluck('full_name')->toArray()
-        ]);
-
         return Inertia::render('reports/index', [
             'Guests' => $guestsList->values()->all() 
         ]);
     }
 
+    // --- GENERAR PDF ---
     // --- GENERAR PDF CON TU LÓGICA Y DISEÑO ---
     public function generateGuestsReportPdf(Request $request)
     {
         $ids = explode(',', $request->query('ids', ''));
         $guests = Guest::whereIn('id', $ids)->get();
 
-        Log::info('=== DEBUG PDF: GENERANDO PARA IDS ===', ['ids' => $ids]);
-
+        // 1. Enriquecer Activos
         foreach ($guests as $guest) {
             $checkin = Checkin::where('guest_id', $guest->id)
                 ->whereRaw('LOWER(status) = ?', ['activo'])
@@ -137,7 +126,7 @@ class ReportController extends Controller
                 ->first();
 
             if ($checkin) {
-                $guest->room_number = $checkin->room->number;
+                $guest->room_number = $checkin->room ? $checkin->room->number : '-';
                 $guest->origin = $checkin->origin;
             } else {
                 $checkinAcomp = Checkin::whereRaw('LOWER(status) = ?', ['activo'])
@@ -147,19 +136,67 @@ class ReportController extends Controller
                     ->with('room')
                     ->first();
                     
-                $guest->room_number = $checkinAcomp ? $checkinAcomp->room->number : '-';
+                $guest->room_number = $checkinAcomp && $checkinAcomp->room ? $checkinAcomp->room->number : '-';
                 $guest->origin = $checkinAcomp ? $checkinAcomp->origin : '-';
             }
         }
-
         $guests = $guests->sortBy('room_number');
 
-        $pdf = new \FPDF('P', 'mm', 'Letter');
+        // 2. BUSCAR SALIENTES DEL DÍA DE HOY
+        $salientes = collect();
+        $checkinsFinalizadosHoy = Checkin::with(['guest', 'companions', 'room'])
+            ->whereRaw('LOWER(status) = ?', ['finalizado'])
+            ->whereDate('updated_at', now()->toDateString()) // Solo los que hicieron checkout HOY
+            ->get();
+
+        foreach ($checkinsFinalizadosHoy as $cf) {
+            if ($cf->guest) {
+                $g = $cf->guest;
+                $g->room_number = $cf->room ? $cf->room->number : '-';
+                $g->origin = $cf->origin;
+                $salientes->push($g);
+            }
+            if ($cf->companions && $cf->companions->count() > 0) {
+                foreach ($cf->companions as $comp) {
+                    $comp->room_number = $cf->room ? $cf->room->number : '-';
+                    $comp->origin = $cf->origin;
+                    $salientes->push($comp);
+                }
+            }
+        }
+        $salientes = $salientes->sortBy('room_number');
+
+        // 3. CONFIGURACIÓN DEL PDF CON FOOTER PARA TODAS LAS HOJAS
+        Carbon::setLocale('es');
+        $fechaStr = strtoupper(now()->translatedFormat('d \D\E F \D\E Y'));
+
+        // Usamos una clase anónima que hereda de FPDF para poner el pie de página en cada hoja
+        $pdf = new class('P', 'mm', 'Letter') extends \FPDF {
+            public $fechaStr = '';
+
+            public function Footer()
+            {
+                // Posicionarnos a 35 mm del final de la hoja (deja el espacio vacío arriba para firmar)
+                $this->SetY(-35);
+                $this->SetFont('Arial', 'B', 10);
+                
+                // FILA 1: Fecha (Izquierda) | Nombre del Hotel (Derecha)
+                $this->Cell(90, 5, utf8_decode($this->fechaStr), 0, 0, 'C');
+                $this->Cell(95, 5, 'HOTEL "SAN ANTONIO"', 0, 1, 'C');
+                
+                // FILA 2: Potosí (Izquierda) | Administrador (Derecha)
+                $this->Cell(90, 5, 'POTOSI', 0, 0, 'C');
+                $this->Cell(95, 5, 'ADMINISTRADOR', 0, 1, 'C');
+            }
+        };
+
+        $pdf->fechaStr = $fechaStr; // Le pasamos la fecha al PDF
         $pdf->SetMargins(20, 10, 10);
-        $pdf->SetAutoPageBreak(true, 10);
+        // Margen inferior de 40mm para que la tabla nunca escriba encima de las firmas
+        $pdf->SetAutoPageBreak(true, 40); 
         $pdf->AddPage();
 
-        $logoPath = public_path('images/logocaramahotelera.png');
+        $logoPath = public_path('images/logo_camara.png');
         if (file_exists($logoPath)) {
             $pdf->Image($logoPath, 20, 10, 20);
         }
@@ -181,15 +218,11 @@ class ReportController extends Controller
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(0, 5, utf8_decode('Parte de Pasajeros HOTEL  "SAN ANTONIO"'), 0, 1, 'C');
 
-        // CÁLCULO DEL CORRELATIVO: Base 006608 el 18 de Abril de 2026
-        $fechaBase = \Carbon\Carbon::create(2026, 4, 18)->startOfDay();
+        // CÁLCULO DEL CORRELATIVO AUTOMÁTICO
+        $fechaBase = Carbon::create(2026, 4, 18)->startOfDay();
         $hoy = now()->startOfDay();
-        
         $diferenciaDias = $fechaBase->diffInDays($hoy, false);
-        $numeroBase = 6608;
-        $numeroCalculado = $numeroBase + $diferenciaDias;
-        
-        // str_pad rellena con '0' a la izquierda hasta tener 6 dígitos
+        $numeroCalculado = 6608 + $diferenciaDias;
         $numeroSerie = str_pad($numeroCalculado, 6, '0', STR_PAD_LEFT);
 
         $pdf->SetFont('Arial', 'B', 12);
@@ -213,11 +246,9 @@ class ReportController extends Controller
         }
         $pdf->Ln();
 
-        $pdf->SetFont('Arial', '', 6.5);
-
-        foreach ($guests as $persona) {
-            $edad = $persona->birth_date ? \Carbon\Carbon::parse($persona->birth_date)->age : '-';
-
+        // 4. FUNCIÓN AUXILIAR PARA IMPRIMIR FILAS
+        $imprimirFila = function($persona) use ($pdf, $w) {
+            $edad = $persona->birth_date ? Carbon::parse($persona->birth_date)->age : '-';
             $estadoCivilFull = $persona->civil_status ?? '-';
             $letra = strtoupper(substr($estadoCivilFull, 0, 1));
             $textoEstado = '-';
@@ -231,22 +262,40 @@ class ReportController extends Controller
             $pdf->SetX(20);
             $h = 5;
 
-            $pdf->Cell($w[0], $h, utf8_decode(substr($persona->full_name, 0, 28)), 1, 0, 'L');
-            $pdf->Cell($w[1], $h, $edad, 1, 0, 'L');
-            $pdf->Cell($w[2], $h, utf8_decode(substr($persona->nationality ?? '', 0, 11)), 1, 0, 'L');
-            $pdf->Cell($w[3], $h, utf8_decode(substr($persona->profession ?? '', 0, 13)), 1, 0, 'L');
+            $pdf->Cell($w[0], $h, utf8_decode(substr(trim($persona->full_name), 0, 28)), 1, 0, 'L');
+            $pdf->Cell($w[1], $h, $edad, 1, 0, 'C');
+            $pdf->Cell($w[2], $h, utf8_decode(substr(trim($persona->nationality ?? ''), 0, 11)), 1, 0, 'L');
+            $pdf->Cell($w[3], $h, utf8_decode(substr(trim($persona->profession ?? ''), 0, 13)), 1, 0, 'L');
             $pdf->Cell($w[4], $h, utf8_decode($textoEstado), 1, 0, 'C');
-            $pdf->Cell($w[5], $h, utf8_decode(substr($persona->origin ?? '', 0, 11)), 1, 0, 'L');
-            $pdf->Cell($w[6], $h, substr($persona->identification_number ?? '', 0, 10), 1, 0, 'C');
-            $pdf->Cell($w[7], $h, utf8_decode(substr($persona->issued_in ?? '', 0, 14)), 1, 0, 'C');
+            $pdf->Cell($w[5], $h, utf8_decode(substr(trim($persona->origin ?? ''), 0, 11)), 1, 0, 'L');
+            $pdf->Cell($w[6], $h, substr(trim($persona->identification_number ?? ''), 0, 10), 1, 0, 'C');
+            $pdf->Cell($w[7], $h, utf8_decode(substr(trim($persona->issued_in ?? ''), 0, 14)), 1, 0, 'C');
             $pdf->Cell($w[8], $h, $persona->room_number, 1, 0, 'C'); 
-
             $pdf->Ln();
+        };
+
+        // 5. IMPRIMIR ACTIVOS
+        $pdf->SetFont('Arial', '', 6.5);
+        foreach ($guests as $persona) {
+            $imprimirFila($persona);
+        }
+
+        // 6. IMPRIMIR SALIENTES (Si existen hoy)
+        if ($salientes->isNotEmpty()) {
+            $pdf->SetX(20);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->SetFillColor(210, 210, 210);
+            $pdf->Cell(array_sum($w), 6, 'SALIENTES:', 1, 1, 'L', true);
+            
+            $pdf->SetFont('Arial', '', 6.5);
+            foreach ($salientes as $persona) {
+                $imprimirFila($persona);
+            }
         }
 
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="reporte-seleccionados-' . now()->format('Ymd') . '.pdf"');
+            ->header('Content-Disposition', 'inline; filename="reporte-camara-hotelera-' . now()->format('Ymd') . '.pdf"');
     }
 
     public function checkDailyBookStatus()
@@ -255,7 +304,7 @@ class ReportController extends Controller
     }
     
     // =========================================================
-    // 1. VISTA: CIERRE DE CAJA (FRONTEND)
+    // VISTAS Y REPORTES DE CAJA FINANCIERA (Intacto)
     // =========================================================
     public function financialIndex(Request $request)
     {
@@ -291,9 +340,6 @@ class ReportController extends Controller
         ]);
     }
 
-    // =========================================================
-    // GENERADOR PDF: CIERRE DE CAJA
-    // =========================================================
     public function generateFinancialReportPdf(Request $request)
     {
         $startDate = $request->query('start_date', now()->toDateString());
