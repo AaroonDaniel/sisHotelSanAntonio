@@ -200,32 +200,26 @@ export default function ReservationModal({
     
 
     // Función Inteligente para Delegaciones Rápidas
+    // Función Inteligente para Delegaciones Rápidas (Con Lógica 50/50)
     const handleAutoAssign = () => {
         let remaining = unassignedGuests;
         if (remaining <= 0) return;
 
-        // 🚀 SOLUCIÓN 3: El escape táctico de TypeScript
-        // Usamos 'as any[]' únicamente en esta copia temporal. Así el form no colapsa,
-        // pero el código compila perfectamente porque evadimos la validación estricta solo aquí.
         const newDetails = [...data.details] as any[];
         
         // ⏱️ Calculamos las fechas en milisegundos
         const formStart = new Date(data.arrival_date).getTime();
         const formEnd = formStart + (data.duration_days * 24 * 60 * 60 * 1000);
         
-        // 1. Filtrar habitaciones disponibles
-        let availableRooms = rooms.filter(room => {
+        // 1. Filtrar TODAS las habitaciones disponibles sin importar el baño todavía
+        let allAvailableRooms = rooms.filter(room => {
             if (newDetails.some(d => d.room_id === String(room.id))) return false;
             if (['MANTENIMIENTO', 'INHABILITADO'].includes(room.status.toUpperCase())) return false;
 
-            const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
-            if (autoAssignFilter === 'private' && isShared) return false;
-            if (autoAssignFilter === 'shared' && !isShared) return false;
-
-            // ⚡ TRUCO: Convertimos a any solo temporalmente para leer la BD sin que TS moleste
+            // ⚡ Convertimos a any temporalmente
             const rAny = room as any;
 
-            // 🔍 2. VERIFICACIÓN DE DISPONIBILIDAD
+            // 🔍 VERIFICACIÓN DE DISPONIBILIDAD (Cruces de fechas)
             const hasConflict = rAny.reservation_details?.some((rd: any) => {
                 const res = rd.reservation;
                 if (!res || ['CANCELADO', 'COMPLETADO'].includes(res.status?.toUpperCase())) return false;
@@ -247,8 +241,41 @@ export default function ReservationModal({
             return !hasConflict;
         });
 
-        // 3. Proceso de asignación
-        for (const room of availableRooms) {
+        // 2. APLICAR EL FILTRO Y LA LÓGICA DE 50/50 (Cremallera)
+        let roomsToAssign: any[] = [];
+
+        if (autoAssignFilter === 'private') {
+            roomsToAssign = allAvailableRooms.filter(room => {
+                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+                return !isShared;
+            });
+        } else if (autoAssignFilter === 'shared') {
+            roomsToAssign = allAvailableRooms.filter(room => {
+                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+                return isShared;
+            });
+        } else {
+            // ✨ MODO AMBOS: Separamos y entrelazamos para asegurar mitad y mitad
+            const privateRooms = allAvailableRooms.filter(room => {
+                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+                return !isShared;
+            });
+            const sharedRooms = allAvailableRooms.filter(room => {
+                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+                return isShared;
+            });
+
+            // Entrelazamos: 1 privado, 1 compartido, 1 privado...
+            let pIndex = 0, sIndex = 0;
+            while (pIndex < privateRooms.length || sIndex < sharedRooms.length) {
+                if (pIndex < privateRooms.length) roomsToAssign.push(privateRooms[pIndex++]);
+                if (sIndex < sharedRooms.length) roomsToAssign.push(sharedRooms[sIndex++]);
+            }
+            
+        }
+
+        // 3. Proceso de asignación final usando la lista ordenada
+        for (const room of roomsToAssign) {
             if (remaining <= 0) break;
 
             const rType = room.room_type;
@@ -257,7 +284,6 @@ export default function ReservationModal({
             const cap = getRoomCapacity(rType) || 1;
             const physicalBath = (room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido') ? 'shared' : 'private';
 
-            // Usamos la función de recálculo (puedes ignorar este error de linter si tienes uno aquí, JS lo correrá bien)
             const priceCalc = recalculatePrice(
                 String(rType.id),
                 physicalBath,
@@ -284,6 +310,7 @@ export default function ReservationModal({
         
         setData('details', newDetails);
     };
+    
     const validGuestCount =
         typeof data.guest_count === 'number' ? data.guest_count : 0;
 
@@ -335,7 +362,7 @@ export default function ReservationModal({
         }
     }, [show, data.arrival_date]);
 
-    // Cargar datos al Editar
+    // Cargar datos al Editar o Crear
     useEffect(() => {
         if (show && reservationToEdit) {
             setData((prev) => {
@@ -410,6 +437,20 @@ export default function ReservationModal({
                 );
             }
             setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
+        } else if (show && !reservationToEdit) {
+            // 👇 NUEVA CONDICIÓN: Si se abre para NUEVA reserva, forzamos la fecha de HOY
+            const today = new Date();
+            // Formateo manual para evitar saltos de zona horaria (UTC a Bolivia GMT-4)
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const localToday = `${yyyy}-${mm}-${dd}`;
+
+            setData(prev => ({
+                ...prev,
+                arrival_date: localToday
+            }));
+            
         } else if (!show) {
             reset();
             clearErrors();
@@ -417,7 +458,7 @@ export default function ReservationModal({
             setIsCorporateToggle(false);
         }
     }, [show, reservationToEdit]);
-
+    
     // LÓGICA DE PRECIOS OFICIAL
     const recalculatePrice = (
         typeId: string,

@@ -219,7 +219,7 @@ class ReservationController extends Controller
                             'status' => 'activo',
                             'is_temporary' => true,
                             'notes' => $notaAsignacion,
-
+                            'agreed_price' => $detail->price ?? 0,
                             // Enlazar el acuerdo financiero y omitir la columna vieja 'agreed_price'
                             'special_agreement_id' => $reservation->special_agreement_id,
                         ]);

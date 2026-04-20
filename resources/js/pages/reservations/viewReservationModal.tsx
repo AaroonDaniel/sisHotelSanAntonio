@@ -5,6 +5,7 @@ import {
     AlertCircle,
     ArrowLeft,
     ArrowRight,
+    Banknote,
     BedDouble,
     Calendar,
     CalendarDays, // Añadido un nuevo icono para la fecha
@@ -155,27 +156,36 @@ export default function ViewReservationModal({
                                     Habitaciones Preparadas
                                 </h3>
 
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                    {confirmingStayRes.details.map(
-                                        (det: any, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="flex items-center justify-between rounded-2xl border-2 border-green-50 bg-green-50/30 p-4"
-                                            >
-                                                <div>
-                                                    <div className="text-xs font-black text-green-700 uppercase">
-                                                        Habitación{' '}
-                                                        {det.room?.number}
-                                                    </div>
-                                                    <div className="text-lg font-bold text-gray-800">
-                                                        {det.room_type?.name}
-                                                    </div>
-                                                </div>
-                                                <CheckCircle2 className="h-6 w-6 text-green-500" />
-                                            </div>
-                                        ),
-                                    )}
-                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {confirmingStayRes.details.map((det: any, i: number) => (
+        <div key={i} className="flex items-center justify-between p-4 rounded-2xl border-2 border-green-50 bg-green-50/30">
+            <div>
+                <div className="flex items-center gap-2">
+                    <div className="text-xs font-black text-green-700 uppercase">Habitación {det.room?.number}</div>
+                    {/* Badge del tipo de baño para Delegaciones */}
+                    {confirmingStayRes.is_delegation && (
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
+                            det.requested_bathroom === 'private' 
+                            ? 'bg-blue-100 text-blue-700 border-blue-200' 
+                            : 'bg-orange-100 text-orange-700 border-orange-200'
+                        }`}>
+                            {det.requested_bathroom === 'private' ? '🚿 PRIVADO' : 
+                             det.requested_bathroom === 'compartido_sindesayuno' ? '🚽 COMP. S/D' : '🚽 COMP. C/D'}
+                        </span>
+                    )}
+                </div>
+                <div className="text-lg font-bold text-gray-800">{det.room_type?.name}</div>
+                
+                {/* Visualización del precio acordado por esta habitación */}
+                <div className="mt-1 text-sm font-black text-indigo-600 flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5" />
+                    {det.price} Bs.
+                </div>
+            </div>
+            <CheckCircle2 className="w-6 h-6 text-green-500" />
+        </div>
+    ))}
+</div>
 
                                 <div className="mt-12 rounded-3xl border-2 border-dashed border-gray-200 p-8 text-center">
                                     <p className="mx-auto mb-6 max-w-sm font-medium text-gray-500">
