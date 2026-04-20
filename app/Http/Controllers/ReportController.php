@@ -294,12 +294,13 @@ class ReportController extends Controller
         $w = [48, 8, 20, 20, 18, 24, 28, 20, 10];
         $headers = ['NOMBRES Y APELLIDOS', 'EDAD', 'NACIONALIDAD', 'PROFESION', 'ESTADO', 'PROCEDENCIA', 'C.I./PASAPORTE', 'OTORGADO', 'HAB'];
 
-        $pdf->SetX(10);
+       $pdf->SetX(10);
         for ($i = 0; $i < count($headers); $i++) {
             $pdf->Cell($w[$i], 6, utf8_decode($headers[$i]), 1, 0, 'C');
         }
         $pdf->Ln();
 
+        // 1. FUNCIÓN PARA IMPRIMIR TÍTULO DE SECCIÓN (¡Esta era la que faltaba!)
         $imprimirCabeceraSeccion = function($titulo) use ($pdf, $w) {
             $pdf->SetX(10);
             $pdf->SetFont('Courier', 'B', 9);
@@ -310,6 +311,18 @@ class ReportController extends Controller
             $pdf->Ln();
         };
 
+        // 2. FUNCIÓN PARA IMPRIMIR FILA CON PUNTOS
+        $imprimirFilaVacia = function() use ($pdf, $w) {
+            $pdf->SetX(10);
+            $pdf->SetFont('Courier', '', 7);
+            $pdf->Cell($w[0], 5, '.......................', 'LR', 0, 'L');
+            for ($i = 1; $i < count($w); $i++) {
+                $pdf->Cell($w[$i], 5, '', 'LR', 0, 'C');
+            }
+            $pdf->Ln();
+        };
+
+        // 3. FUNCIÓN PARA IMPRIMIR HUÉSPEDES
         $imprimirFila = function($persona) use ($pdf, $w) {
             $edad = $persona->birth_date ? Carbon::parse($persona->birth_date)->age : '-';
             $estadoCivilFull = $persona->civil_status ?? '-';
@@ -342,21 +355,35 @@ class ReportController extends Controller
             $pdf->Ln();
         };
 
+        // ==========================================
+        // 5. IMPRIMIR SECCIONES (AHORA SIEMPRE VISIBLES)
+        // ==========================================
+
+        // ENTRANTES
+        $imprimirCabeceraSeccion(' ENTRANTES');
         if ($entrantes->isNotEmpty()) {
-            $imprimirCabeceraSeccion(' ENTRANTES');
             foreach ($entrantes as $persona) $imprimirFila($persona);
+        } else {
+            $imprimirFilaVacia();
         }
 
+        // QUEDANTES
+        $imprimirCabeceraSeccion(' QUEDANTES');
         if ($quedantes->isNotEmpty()) {
-            $imprimirCabeceraSeccion(' QUEDANTES');
             foreach ($quedantes as $persona) $imprimirFila($persona);
+        } else {
+            $imprimirFilaVacia();
         }
 
+        // SALIENTES
+        $imprimirCabeceraSeccion(' SALIENTES');
         if ($salientes->isNotEmpty()) {
-            $imprimirCabeceraSeccion(' SALIENTES');
             foreach ($salientes as $persona) $imprimirFila($persona);
+        } else {
+            $imprimirFilaVacia();
         }
 
+        // 6. CERRAR LA TABLA POR DEBAJO
         $pdf->SetX(10);
         $pdf->Cell(array_sum($w), 0, '', 'T', 1);
 

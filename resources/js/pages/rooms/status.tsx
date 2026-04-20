@@ -1089,12 +1089,12 @@ export default function RoomsStatus({
                             convenio?.type === 'delegacion';
 
                         // 🚀 ESTA ES LA PRUEBA EN CONSOLA (Para ver si Laravel manda el convenio)
-                        if (activeCheckin) {
+                        /*if (activeCheckin) {
                             console.log(
                                 `[PRUEBA] Habitación ${room.number} | Grupo Especial: ${isSpecialGroup}`,
                             );
                             console.log(`➡️ Datos del Convenio:`, convenio);
-                        }
+                        }*/
 
                         let corpState: any = null;
 
