@@ -51,6 +51,21 @@ export default function ReportsIndex({ auth, Guests }: Props) {
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+    // CÁLCULO DEL CORRELATIVO: Base 006608 el 18 de Abril de 2026
+    const baseDate = new Date(2026, 3, 18); // En JavaScript, los meses van de 0 a 11 (3 = Abril)
+    baseDate.setHours(0, 0, 0, 0); // Ignorar la hora, solo nos importa el día
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Calculamos la diferencia en días
+    const diffDays = Math.floor((today.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Sumamos los días al número base y rellenamos con ceros (ej. 006609)
+    const baseNumber = 6608;
+    const currentNumber = baseNumber + diffDays;
+    const numeroSerie = currentNumber.toString().padStart(6, '0');
+    
     // Filtro para la tabla izquierda (Búsqueda)
     const filteredGuests = Guests.filter(
         (guest) =>
@@ -117,10 +132,15 @@ export default function ReportsIndex({ auth, Guests }: Props) {
                     <span>Volver</span>
                 </button>
 
-                <div className="mb-6">
+                <div className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                     <h2 className="text-3xl font-bold text-white">
                         Generador de Parte Diario
                     </h2>
+                    <div className="flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1.5 shadow-sm">
+                        <span className="text-sm font-black tracking-widest text-emerald-300">
+                            Nº {numeroSerie}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="py-6">
