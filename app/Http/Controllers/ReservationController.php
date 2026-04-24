@@ -52,7 +52,7 @@ class ReservationController extends Controller
                 'guest_count' => 'required|integer|min:1',
                 'arrival_date' => 'required|date',
                 'duration_days' => 'required|integer|min:1',
-                
+
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
                 'advance_payment' => 'nullable|numeric|min:0', // Aseguramos la validación del adelanto
@@ -123,7 +123,7 @@ class ReservationController extends Controller
                     'arrival_date' => $request->arrival_date,
                     'arrival_time' => $request->arrival_time ?? '14:00:00', // Formato de 24 horas mantenido
                     'duration_days' => $request->duration_days,
-                    
+
                     'payment_type' => $request->payment_type,
 
                     // Conectamos el acuerdo en lugar de usar los booleanos
@@ -157,8 +157,8 @@ class ReservationController extends Controller
                 if ($request->advance_payment > 0) {
                     // 1. Buscar la caja abierta del usuario activo
                     $cajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
-                                               ->where('status', 'ABIERTA')
-                                               ->first();
+                        ->where('status', 'ABIERTA')
+                        ->first();
 
                     // 2. Guardar el pago relacionándolo con la caja y la reserva
                     \App\Models\Payment::create([
@@ -195,7 +195,10 @@ class ReservationController extends Controller
 
                 // --- 1. SI CANCELAN LA RESERVA ---
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
-                    $reservation->update(['status' => 'cancelada']);
+                    $reservation->update([
+                        'status' => 'cancelada',
+                        'cancellation_date' => now() // ✅ MÓDULO 2: Registra la fecha y hora exacta
+                    ]);
                     foreach ($reservation->details as $detail) {
                         if ($detail->room_id) {
                             Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);

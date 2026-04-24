@@ -18,7 +18,7 @@ class Reservation extends Model
         'payment_type',
         'status',
         'special_agreement_id',
-
+        'cancellation_date'
     ];
 
     // Relación: Una reserva pertenece a un Huésped
