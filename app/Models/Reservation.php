@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Reservation extends Model
 {
+    protected $appends = ['advance_payment'];
     protected $fillable = [
         'user_id',
         'guest_id',
@@ -14,7 +15,6 @@ class Reservation extends Model
         'arrival_date',
         'arrival_time',
         'duration_days',
-        'advance_payment',
         'payment_type',
         'status',
         'special_agreement_id',
@@ -35,5 +35,14 @@ class Reservation extends Model
     public function specialAgreement(): BelongsTo
     {
         return $this->belongsTo(SpecialAgreement::class);
+    }
+    public function getAdvancePaymentAttribute()
+    {
+        return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 }

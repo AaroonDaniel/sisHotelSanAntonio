@@ -108,7 +108,6 @@ class CheckinController extends Controller
 
         // =========================================================
         // 🚀 2. VALIDACIÓN TEMPRANA (El candado principal)
-        // Atrapa errores antes de procesar o bloquear la Base de Datos
         // =========================================================
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
@@ -117,17 +116,17 @@ class CheckinController extends Controller
             'schedule_id' => 'nullable|exists:schedules,id',
             'duration_days' => 'nullable|integer|min:0',
             'notes' => 'nullable|string',
-            
+
             // Validaciones estructurales del Titular
             'full_name' => 'required_without:guest_id|string|max:150',
             'identification_number' => 'nullable|string|max:50',
             'phone' => 'nullable|string|max:20',
-            
+
             // Validaciones estructurales de los Acompañantes
             'companions' => 'nullable|array',
             'companions.*.full_name' => 'nullable|string|max:150',
             'companions.*.identification_number' => 'nullable|string|max:50',
-            
+
             // Pagos y Convenios
             'selected_services' => 'nullable|array',
             'advance_payment' => 'nullable|numeric|min:0',
@@ -342,7 +341,6 @@ class CheckinController extends Controller
 
         // =========================================================
         // 5. INICIO DE TRANSACCIÓN EN BASE DE DATOS
-        // Al estar validados los datos arriba, esto correrá fluido.
         // =========================================================
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isSpecialDeal, $totalGuest, $isAssigningSalon) {
 
@@ -372,7 +370,7 @@ class CheckinController extends Controller
                 'schedule_id' => $validatedCheckin['schedule_id'] ?? null,
                 'origin' => $cleanOrigin,
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
-                'advance_payment' => $validatedCheckin['advance_payment'] ?? 0,
+
                 'agreed_price' => $agreedPrice,
                 'special_agreement_id' => $specialAgreementId,
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
@@ -380,18 +378,28 @@ class CheckinController extends Controller
                 'is_temporary' => $request->boolean('is_temporary'),
             ]);
 
-            // --- PAGOS ---
+            // =========================================================
+            // --- PAGOS (MODIFICADO PARA MÓDULO 1) ---
+            // =========================================================
             $montoInicial = $validatedCheckin['advance_payment'] ?? 0;
             if ($montoInicial > 0) {
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
+
+                // 1. Buscar la caja abierta del usuario activo
+                $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+                    ->where('status', 'ABIERTA')
+                    ->first();
+
+                // 2. Guardar el pago relacionándolo con la caja y registrando la fecha
                 \App\Models\Payment::create([
                     'checkin_id' => $checkin->id,
                     'user_id' => $userId,
+                    'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null, // Conexión a caja
                     'amount' => $montoInicial,
                     'method' => $request->payment_method,
                     'bank_name' => $banco,
-                    'description' => 'PAGO INICIAL (CHECK-IN) / GARANTÍA',
-                    'type' => 'PAGO'
+                    'type' => 'ADELANTO', // Cambiado de 'PAGO' a 'ADELANTO'
+                    'payment_date' => now(), // Fecha exacta requerida en auditoría
                 ]);
             }
 
@@ -421,9 +429,9 @@ class CheckinController extends Controller
                     if (!empty($compData['id'])) {
                         $companion = \App\Models\Guest::find($compData['id']);
                         if ($companion) {
-                            $esDiferente = ($compName !== strtoupper($companion->full_name)) && 
-                                           ($compIdNumber && !empty($companion->identification_number) && $compIdNumber !== strtoupper($companion->identification_number));
-                                           
+                            $esDiferente = ($compName !== strtoupper($companion->full_name)) &&
+                                ($compIdNumber && !empty($companion->identification_number) && $compIdNumber !== strtoupper($companion->identification_number));
+
                             if ($esDiferente) {
                                 $companion = null; // Rompemos vínculo para obligar a crearlo.
                             }
@@ -433,7 +441,7 @@ class CheckinController extends Controller
                     if (!$companion && !empty($compIdNumber)) {
                         $companion = \App\Models\Guest::where('identification_number', $compIdNumber)->first();
                     }
-                    
+
                     if (!$companion) {
                         $compQuery = \App\Models\Guest::where('full_name', $compName);
                         if (!empty($compBirthDate)) {
@@ -450,7 +458,7 @@ class CheckinController extends Controller
                             'civil_status' => $compData['civil_status'] ?? null,
                             'birth_date' => $compBirthDate,
                             'profession' => !empty($compData['profession']) ? strtoupper($compData['profession']) : null,
-                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null, // 👈 Se arregló aquí también
+                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : null,
                             'phone' => $compData['phone'] ?? null,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
@@ -458,7 +466,7 @@ class CheckinController extends Controller
                         $companion->update([
                             'identification_number' => $compIdNumber ?? $companion->identification_number,
                             'birth_date' => $compBirthDate ?? $companion->birth_date,
-                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : $companion->issued_in, // 👈 Se arregló aquí también
+                            'issued_in' => !empty($compData['issued_in']) ? strtoupper($compData['issued_in']) : $companion->issued_in,
                             'phone' => $compData['phone'] ?? $companion->phone,
                         ]);
                     }
@@ -487,14 +495,14 @@ class CheckinController extends Controller
             $isCapacityFull = ($request->boolean('auto_adjust_price') || $isSpecialDeal || $isAssigningSalon) ? true : ($totalGuest >= $maxCapacity);
             $isEverythingComplete = $isTitularComplete && $allCompanionsComplete && $isCapacityFull;
 
-            Log::info("🚀 [BACKEND - STORE] NUEVO CHECKIN - HABITACIÓN: " . $validatedCheckin['room_id']);
-            Log::info("-> 👤 ¿Titular Completo?: " . ($isTitularComplete ? 'SÍ' : 'NO') . " (Falta: " . ($missingField ?? 'Nada') . ")");
-            Log::info("-> 🧮 Capacidad Máx: " . $maxCapacity . " | Personas reales registradas: " . $totalGuest);
-            Log::info("-> 💸 ¿Auto-Ajuste Activo?: " . ($request->boolean('auto_adjust_price') ? 'SÍ' : 'NO') . " | Precio Final a guardar: " . $agreedPrice . " Bs");
-            Log::info("-> 🚦 ¿Capacidad se considera llena?: " . ($isCapacityFull ? 'SÍ' : 'NO'));
-            Log::info("-> 🏁 ¿TODO COMPLETO?: " . ($isEverythingComplete ? 'SÍ (Pasará a Rojo)' : 'NO (Se quedará Naranja)'));
-            Log::info("=================================================================");
-            
+            \Illuminate\Support\Facades\Log::info("🚀 [BACKEND - STORE] NUEVO CHECKIN - HABITACIÓN: " . $validatedCheckin['room_id']);
+            \Illuminate\Support\Facades\Log::info("-> 👤 ¿Titular Completo?: " . ($isTitularComplete ? 'SÍ' : 'NO') . " (Falta: " . ($missingField ?? 'Nada') . ")");
+            \Illuminate\Support\Facades\Log::info("-> 🧮 Capacidad Máx: " . $maxCapacity . " | Personas reales registradas: " . $totalGuest);
+            \Illuminate\Support\Facades\Log::info("-> 💸 ¿Auto-Ajuste Activo?: " . ($request->boolean('auto_adjust_price') ? 'SÍ' : 'NO') . " | Precio Final a guardar: " . $agreedPrice . " Bs");
+            \Illuminate\Support\Facades\Log::info("-> 🚦 ¿Capacidad se considera llena?: " . ($isCapacityFull ? 'SÍ' : 'NO'));
+            \Illuminate\Support\Facades\Log::info("-> 🏁 ¿TODO COMPLETO?: " . ($isEverythingComplete ? 'SÍ (Pasará a Rojo)' : 'NO (Se quedará Naranja)'));
+            \Illuminate\Support\Facades\Log::info("=================================================================");
+
             \App\Models\Room::where('id', $validatedCheckin['room_id'])->update(['status' => 'OCUPADO']);
 
             if ($isEverythingComplete) {
@@ -519,130 +527,130 @@ class CheckinController extends Controller
     }
 
     public function transfer(Request $request, Checkin $checkin)
-{
-    $request->validate([
-        'new_room_id' => 'required|exists:rooms,id|different:room_id',
-        'selected_guests' => 'required|array|min:1',
-        'selected_guests.*' => 'integer',
-        'auto_adjust_price' => 'nullable|boolean',
-    ]);
+    {
+        $request->validate([
+            'new_room_id' => 'required|exists:rooms,id|different:room_id',
+            'selected_guests' => 'required|array|min:1',
+            'selected_guests.*' => 'integer',
+            'auto_adjust_price' => 'nullable|boolean',
+        ]);
 
-    return DB::transaction(function () use ($request, $checkin) {
-        $newRoomId = $request->new_room_id;
-        $ahora = now();
+        return DB::transaction(function () use ($request, $checkin) {
+            $newRoomId = $request->new_room_id;
+            $ahora = now();
 
-        $titularId = $checkin->guest_id;
-        $companionIds = $checkin->companions->pluck('id')->toArray();
-        $allGuestIds = array_merge([$titularId], $companionIds);
+            $titularId = $checkin->guest_id;
+            $companionIds = $checkin->companions->pluck('id')->toArray();
+            $allGuestIds = array_merge([$titularId], $companionIds);
 
-        $selectedGuests = $request->selected_guests;
-        $isFullTransfer = count($selectedGuests) === count($allGuestIds);
+            $selectedGuests = $request->selected_guests;
+            $isFullTransfer = count($selectedGuests) === count($allGuestIds);
 
-        $newRoom = \App\Models\Room::find($newRoomId);
+            $newRoom = \App\Models\Room::find($newRoomId);
 
-        // 🚀 CORRECCIÓN 1: Identificar si tiene convenio con la nueva tabla
-        $hasSpecialAgreement = !is_null($checkin->special_agreement_id);
+            // 🚀 CORRECCIÓN 1: Identificar si tiene convenio con la nueva tabla
+            $hasSpecialAgreement = !is_null($checkin->special_agreement_id);
 
-        // =========================================================
-        // CASE A: FULL TRANSFER (Everyone moves together)
-        // =========================================================
-        if ($isFullTransfer) {
-            $totalGuests = count($allGuestIds);
-            $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
-            $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
-            $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
+            // =========================================================
+            // CASE A: FULL TRANSFER (Everyone moves together)
+            // =========================================================
+            if ($isFullTransfer) {
+                $totalGuests = count($allGuestIds);
+                $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
+                $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
 
-            \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
-            $newRoom->update(['status' => 'OCUPADO']);
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
+                $newRoom->update(['status' => 'OCUPADO']);
 
-            $noteAddition = $deudaHastaAhora > 0 
-                ? " | TRANSFER TO ROOM {$newRoom->number}. Previous balance owed: {$deudaHastaAhora} Bs" 
-                : " | TRANSFER TO ROOM {$newRoom->number}";
+                $noteAddition = $deudaHastaAhora > 0
+                    ? " | TRANSFER TO ROOM {$newRoom->number}. Previous balance owed: {$deudaHastaAhora} Bs"
+                    : " | TRANSFER TO ROOM {$newRoom->number}";
 
-            $checkin->update([
-                'room_id' => $newRoomId,
-                // 🚀 CORRECCIÓN 2: Usar la nueva variable $hasSpecialAgreement
-                'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $nuevoAgreedPrice,
-                // 🚀 CORRECCIÓN 3: MANTENER el convenio, NO ponerlo en null
-                'special_agreement_id' => $checkin->special_agreement_id,
-                'notes' => $checkin->notes . $noteAddition
-            ]);
+                $checkin->update([
+                    'room_id' => $newRoomId,
+                    // 🚀 CORRECCIÓN 2: Usar la nueva variable $hasSpecialAgreement
+                    'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $nuevoAgreedPrice,
+                    // 🚀 CORRECCIÓN 3: MANTENER el convenio, NO ponerlo en null
+                    'special_agreement_id' => $checkin->special_agreement_id,
+                    'notes' => $checkin->notes . $noteAddition
+                ]);
 
-            return redirect()->back()->with('success', 'Transferencia hecha.' );
-        }
-        // =========================================================
-        // CASE B: PARTIAL TRANSFER (Split into 2 rooms)
-        // =========================================================
-        else {
-            $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
-            $leavingIds = array_values($selectedGuests);
-
-            $newOldTitularId = $stayingIds[0];
-            $newOldCompanions = array_slice($stayingIds, 1);
-
-            $newNewTitularId = $leavingIds[0];
-            $newNewCompanions = array_slice($leavingIds, 1);
-
-            $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
-            $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
-
-            $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
-            $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
-
-            // 1. Actualizamos a los que se QUEDAN
-            $noteAdditionStay = $deudaHastaAhora > 0 
-                ? " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}. Balance before split: {$deudaHastaAhora} Bs" 
-                : " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}";
-
-            $checkin->update([
-                'guest_id' => $newOldTitularId,
-                // 🚀 CORRECCIÓN 4: Usar $hasSpecialAgreement
-                'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioViejaHabitacion,
-                // 🚀 CORRECCIÓN 5: Mantener su convenio original
-                'special_agreement_id' => $checkin->special_agreement_id,
-                'notes' => $checkin->notes . $noteAdditionStay
-            ]);
-            $checkin->companions()->sync($newOldCompanions);
-            \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']);
-
-            // 2. Creamos la cuenta a los que se VAN
-            $nuevoCheckin = Checkin::create([
-                'guest_id' => $newNewTitularId,
-                'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
-                'room_id' => $newRoomId,
-                'check_in_date' => $checkin->check_in_date,
-                'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
-                'schedule_id' => $checkin->schedule_id,
-                'origin' => $checkin->origin,
-                'duration_days' => 0,
-                'advance_payment' => 0,
-
-                // 🚀 CORRECCIÓN 6: Usar $hasSpecialAgreement
-                'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
-                
-                // Los que se van a una nueva habitación en un Split pierden el convenio por defecto. 
-                // Si quieres que también lo tengan, cámbialo a: $checkin->special_agreement_id
-                'special_agreement_id' => null,
-
-                'parent_checkin_id' => null, 
-                'carried_balance' => 0,
-                'is_temporary' => true,
-                'status' => 'activo',
-                'notes' => "SPLIT FROM ROOM " . $checkin->room->number,
-                
-                // 🚀 CORRECCIÓN 7: Se eliminaron las 3 columnas obsoletas (is_corporate, payment_frequency, corporate_days) que hacían crash.
-            ]);
-
-            if (!empty($newNewCompanions)) {
-                $nuevoCheckin->companions()->sync($newNewCompanions);
+                return redirect()->back()->with('success', 'Transferencia hecha.');
             }
+            // =========================================================
+            // CASE B: PARTIAL TRANSFER (Split into 2 rooms)
+            // =========================================================
+            else {
+                $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
+                $leavingIds = array_values($selectedGuests);
 
-            $newRoom->update(['status' => 'OCUPADO']);
+                $newOldTitularId = $stayingIds[0];
+                $newOldCompanions = array_slice($stayingIds, 1);
 
-            return redirect()->back()->with('success', 'División completada.');
-        }
-    });
-}
+                $newNewTitularId = $leavingIds[0];
+                $newNewCompanions = array_slice($leavingIds, 1);
+
+                $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
+                $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
+
+                $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
+                $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
+
+                // 1. Actualizamos a los que se QUEDAN
+                $noteAdditionStay = $deudaHastaAhora > 0
+                    ? " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}. Balance before split: {$deudaHastaAhora} Bs"
+                    : " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}";
+
+                $checkin->update([
+                    'guest_id' => $newOldTitularId,
+                    // 🚀 CORRECCIÓN 4: Usar $hasSpecialAgreement
+                    'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioViejaHabitacion,
+                    // 🚀 CORRECCIÓN 5: Mantener su convenio original
+                    'special_agreement_id' => $checkin->special_agreement_id,
+                    'notes' => $checkin->notes . $noteAdditionStay
+                ]);
+                $checkin->companions()->sync($newOldCompanions);
+                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']);
+
+                // 2. Creamos la cuenta a los que se VAN
+                $nuevoCheckin = Checkin::create([
+                    'guest_id' => $newNewTitularId,
+                    'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                    'room_id' => $newRoomId,
+                    'check_in_date' => $checkin->check_in_date,
+                    'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
+                    'schedule_id' => $checkin->schedule_id,
+                    'origin' => $checkin->origin,
+                    'duration_days' => 0,
+                    'advance_payment' => 0,
+
+                    // 🚀 CORRECCIÓN 6: Usar $hasSpecialAgreement
+                    'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
+
+                    // Los que se van a una nueva habitación en un Split pierden el convenio por defecto. 
+                    // Si quieres que también lo tengan, cámbialo a: $checkin->special_agreement_id
+                    'special_agreement_id' => null,
+
+                    'parent_checkin_id' => null,
+                    'carried_balance' => 0,
+                    'is_temporary' => true,
+                    'status' => 'activo',
+                    'notes' => "SPLIT FROM ROOM " . $checkin->room->number,
+
+                    // 🚀 CORRECCIÓN 7: Se eliminaron las 3 columnas obsoletas (is_corporate, payment_frequency, corporate_days) que hacían crash.
+                ]);
+
+                if (!empty($newNewCompanions)) {
+                    $nuevoCheckin->companions()->sync($newNewCompanions);
+                }
+
+                $newRoom->update(['status' => 'OCUPADO']);
+
+                return redirect()->back()->with('success', 'División completada.');
+            }
+        });
+    }
     /**
      * Registra un pago adicional (amortización) a una estadía existente.
      */
@@ -804,7 +812,7 @@ class CheckinController extends Controller
                         $companion = \App\Models\Guest::where('full_name', $compName)->first();
                     }
 
-                  if (!$companion) {
+                    if (!$companion) {
                         // Si no existe, lo crea con todos los datos disponibles
                         $companion = \App\Models\Guest::create([
                             'full_name' => $compName,
@@ -825,10 +833,10 @@ class CheckinController extends Controller
                             'nationality' => $compNationality, // Siempre actualizamos a la que llegue
                             'civil_status' => array_key_exists('civil_status', $compData) ? ($compData['civil_status'] ? strtoupper($compData['civil_status']) : null) : $companion->civil_status,
                             'profession' => array_key_exists('profession', $compData) ? ($compData['profession'] ? strtoupper($compData['profession']) : null) : $companion->profession,
-                            
+
                             // 👈 LÍNEA AGREGADA PARA GUARDAR EXPEDIDO EN LA EDICIÓN
-                            'issued_in' => array_key_exists('issued_in', $compData) ? ($compData['issued_in'] ? strtoupper($compData['issued_in']) : null) : $companion->issued_in, 
-                            
+                            'issued_in' => array_key_exists('issued_in', $compData) ? ($compData['issued_in'] ? strtoupper($compData['issued_in']) : null) : $companion->issued_in,
+
                             'phone' => array_key_exists('phone', $compData) ? $compData['phone'] : $companion->phone,
                             'profile_status' => $compIsComplete ? 'COMPLETE' : 'INCOMPLETE'
                         ]);
@@ -890,7 +898,7 @@ class CheckinController extends Controller
                 $checkin->companions()->detach();
             }
 
-           // =========================================================
+            // =========================================================
             // 🌟 5. LÓGICA DE GRUPOS ESPECIALES Y AJUSTE DE PRECIO
             // =========================================================
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
@@ -903,10 +911,10 @@ class CheckinController extends Controller
 
             // 🌟 Consideramos el Auto Ajuste como un Grupo Especial
             $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
-            
+
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
             $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
-            
+
             // 🌟 Recalculamos matemáticamente en caso de que agreguen/quiten personas al editar
             if ($isAutoAdjustNow) {
                 $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
@@ -914,7 +922,7 @@ class CheckinController extends Controller
                 $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : $precioActualGuardado;
             }
 
-            $extraNotes = ""; 
+            $extraNotes = "";
 
             if ($isSpecialGroupNow) {
                 // 5.1 ES UN GRUPO ESPECIAL O AUTO-AJUSTE (Crear o Actualizar)
@@ -930,24 +938,22 @@ class CheckinController extends Controller
                         'payment_frequency_days' => $frecuenciaDias,
                     ]
                 );
-                
+
                 // Aseguramos que el checkin tenga el ID correcto
                 $checkin->special_agreement_id = $agreement->id;
-
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
                 // 5.2 DE ESPECIAL A NORMAL ("El Castigo")
                 $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
                 $now = \Carbon\Carbon::now();
                 $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays($now)));
 
-                $updatedAgreedPrice = $basePrice; 
+                $updatedAgreedPrice = $basePrice;
 
                 $oldAgreementId = $checkin->special_agreement_id;
                 $checkin->special_agreement_id = null; // 🌟 Desconectamos el convenio
                 \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
 
                 $extraNotes = " [SISTEMA: Convenio revocado. Duró {$diasQueFueCorporativo} días.]";
-
             } else {
                 // 5.3 SIGUE SIENDO NORMAL
                 $updatedAgreedPrice = $basePrice;
@@ -962,7 +968,7 @@ class CheckinController extends Controller
             // =================================================================
             // 🛑 ESPÍAS DE CONSOLA PARA LARAVEL (MODO EDICIÓN)
             // =================================================================
-          Log::info("🚀 [BACKEND - UPDATE] ACTUALIZANDO CHECKIN ID: " . $checkin->id);
+            Log::info("🚀 [BACKEND - UPDATE] ACTUALIZANDO CHECKIN ID: " . $checkin->id);
             Log::info("-> 👤 ¿Titular Completo?: " . ($isTitularComplete ? 'SÍ' : 'NO'));
             Log::info("-> 👨‍👩‍👧‍👦 ¿Acompañantes Completos?: " . ($allCompanionsComplete ? 'SÍ' : 'NO'));
             Log::info("-> 🧮 Capacidad Máx: " . $maxCapacity . " | Personas reales registradas: " . $totalGuests);

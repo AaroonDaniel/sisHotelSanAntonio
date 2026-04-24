@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Checkin extends Model
 {
     use AutoUpperCase;
+    protected $appends = ['advance_payment'];
 
     protected $fillable = [
         'room_id',
@@ -21,7 +22,6 @@ class Checkin extends Model
         'duration_days',
         'check_out_date',
         'notes',
-        'advance_payment',
         'status',
         'schedule_id',
         'origin',
@@ -127,4 +127,9 @@ class Checkin extends Model
     {
         return $this->belongsTo(SpecialAgreement::class);
     }
+    public function getAdvancePaymentAttribute()
+    {
+        return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
+    }
+
 }

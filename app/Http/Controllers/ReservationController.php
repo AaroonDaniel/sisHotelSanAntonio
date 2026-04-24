@@ -42,7 +42,7 @@ class ReservationController extends Controller
 
     public function store(Request $request)
     {
-        Log::info('=== INICIANDO CREACIÓN DE RESERVA ===');
+        \Illuminate\Support\Facades\Log::info('=== INICIANDO CREACIÓN DE RESERVA ===');
 
         try {
             $validatedData = $request->validate([
@@ -52,9 +52,10 @@ class ReservationController extends Controller
                 'guest_count' => 'required|integer|min:1',
                 'arrival_date' => 'required|date',
                 'duration_days' => 'required|integer|min:1',
-                'advance_payment' => 'nullable|numeric|min:0',
+                
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
+                'advance_payment' => 'nullable|numeric|min:0', // Aseguramos la validación del adelanto
 
                 // --- NUEVOS CAMPOS (y mantenemos los viejos por compatibilidad con React por ahora) ---
                 'is_corporate' => 'boolean|nullable',
@@ -71,19 +72,19 @@ class ReservationController extends Controller
                 'details.*.price' => 'nullable|numeric',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('❌ Falló validación:', $e->errors());
+            \Illuminate\Support\Facades\Log::error('❌ Falló validación:', $e->errors());
             return redirect()->back()->withErrors($e->errors());
         }
 
         try {
-            DB::transaction(function () use ($request) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
                 $guestId = $request->guest_id;
 
                 if ($request->is_new_guest) {
-                    $newGuest = Guest::create([
+                    $newGuest = \App\Models\Guest::create([
                         'full_name' => strtoupper($request->new_guest_name),
                         'identification_number' => $request->new_guest_ci ?? null,
-                        'nationality' => 'BOLIVIA',
+                        'nationality' => 'BOLIVIA', // Adaptado a mayúsculas como en el resto de tu sistema
                         'profile_status' => 'INCOMPLETE',
                     ]);
                     $guestId = $newGuest->id;
@@ -115,14 +116,14 @@ class ReservationController extends Controller
                 // =========================================================
                 // CREACIÓN DE RESERVA
                 // =========================================================
-                $reservation = Reservation::create([
-                    'user_id' => Auth::id(),
+                $reservation = \App\Models\Reservation::create([
+                    'user_id' => \Illuminate\Support\Facades\Auth::id(),
                     'guest_id' => $guestId,
                     'guest_count' => $request->guest_count,
                     'arrival_date' => $request->arrival_date,
-                    'arrival_time' => $request->arrival_time ?? '14:00:00',
+                    'arrival_time' => $request->arrival_time ?? '14:00:00', // Formato de 24 horas mantenido
                     'duration_days' => $request->duration_days,
-                    'advance_payment' => $request->advance_payment ?? 0,
+                    
                     'payment_type' => $request->payment_type,
 
                     // Conectamos el acuerdo en lugar de usar los booleanos
@@ -135,7 +136,7 @@ class ReservationController extends Controller
                     foreach ($request->details as $detail) {
                         $roomId = $detail['room_id'] ?? null;
 
-                        ReservationDetail::create([
+                        \App\Models\ReservationDetail::create([
                             'reservation_id' => $reservation->id,
                             'room_id' => $roomId,
                             'requested_room_type_id' => $detail['requested_room_type_id'] ?? null,
@@ -145,27 +146,38 @@ class ReservationController extends Controller
                         ]);
 
                         if ($roomId) {
-                            Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
+                            \App\Models\Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
                         }
                     }
                 }
 
+                // =========================================================
+                // --- PAGOS (MODIFICADO PARA MÓDULO 1) ---
+                // =========================================================
                 if ($request->advance_payment > 0) {
-                    Payment::create([
+                    // 1. Buscar la caja abierta del usuario activo
+                    $cajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
+                                               ->where('status', 'ABIERTA')
+                                               ->first();
+
+                    // 2. Guardar el pago relacionándolo con la caja y la reserva
+                    \App\Models\Payment::create([
                         'reservation_id' => $reservation->id,
-                        'user_id' => Auth::id(),
+                        'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                        'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null, // Conexión a la caja para auditoría
                         'amount' => $request->advance_payment,
                         'method' => $request->payment_type,
                         'bank_name' => ($request->payment_type === 'EFECTIVO') ? null : $request->qr_bank,
-                        'type' => 'INGRESO',
-                        'description' => 'ADELANTO RESERVA #' . $reservation->id
+                        'type' => 'ADELANTO', // Estandarizado a 'ADELANTO' según Módulo 1
+                        'payment_date' => now(), // Fecha real exigida
+                        // 'description' => 'ADELANTO RESERVA #' . $reservation->id // (Opcional si lo añadiste al modelo Payment)
                     ]);
                 }
             });
 
             return redirect()->back()->with('success', 'Reserva registrada correctamente');
         } catch (\Exception $e) {
-            Log::error("❌ Error en BD: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("❌ Error en BD: " . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Error al guardar: ' . $e->getMessage()]);
         }
     }
