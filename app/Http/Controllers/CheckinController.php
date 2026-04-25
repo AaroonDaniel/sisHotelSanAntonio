@@ -528,16 +528,19 @@ class CheckinController extends Controller
 
     public function transfer(Request $request, Checkin $checkin)
     {
+        // 🚀 MÓDULO 3: Agregamos 'reason' como campo obligatorio para la auditoría
         $request->validate([
             'new_room_id' => 'required|exists:rooms,id|different:room_id',
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
             'auto_adjust_price' => 'nullable|boolean',
+            'reason' => 'required|string|max:255', // El motivo exigido por recepción
         ]);
 
-        return DB::transaction(function () use ($request, $checkin) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
             $newRoomId = $request->new_room_id;
             $ahora = now();
+            $oldRoomId = $checkin->room_id; // 🚀 Guardamos la habitación original antes de cambiarla
 
             $titularId = $checkin->guest_id;
             $companionIds = $checkin->companions->pluck('id')->toArray();
@@ -547,8 +550,8 @@ class CheckinController extends Controller
             $isFullTransfer = count($selectedGuests) === count($allGuestIds);
 
             $newRoom = \App\Models\Room::find($newRoomId);
+            $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-            // 🚀 CORRECCIÓN 1: Identificar si tiene convenio con la nueva tabla
             $hasSpecialAgreement = !is_null($checkin->special_agreement_id);
 
             // =========================================================
@@ -560,7 +563,17 @@ class CheckinController extends Controller
                 $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
                 $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
 
-                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
+                // 🚀 MÓDULO 3: REGISTRO HISTÓRICO DE TRASLADO INBORRABLE
+                \App\Models\RoomTransfer::create([
+                    'checkin_id' => $checkin->id,
+                    'from_room_id' => $oldRoomId,
+                    'to_room_id' => $newRoomId,
+                    'user_id' => $userId,
+                    'transfer_date' => $ahora,
+                    'reason' => strtoupper(trim($request->reason)),
+                ]);
+
+                \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
                 $newRoom->update(['status' => 'OCUPADO']);
 
                 $noteAddition = $deudaHastaAhora > 0
@@ -569,14 +582,12 @@ class CheckinController extends Controller
 
                 $checkin->update([
                     'room_id' => $newRoomId,
-                    // 🚀 CORRECCIÓN 2: Usar la nueva variable $hasSpecialAgreement
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $nuevoAgreedPrice,
-                    // 🚀 CORRECCIÓN 3: MANTENER el convenio, NO ponerlo en null
                     'special_agreement_id' => $checkin->special_agreement_id,
                     'notes' => $checkin->notes . $noteAddition
                 ]);
 
-                return redirect()->back()->with('success', 'Transferencia hecha.');
+                return redirect()->back()->with('success', 'Transferencia registrada y auditada correctamente.');
             }
             // =========================================================
             // CASE B: PARTIAL TRANSFER (Split into 2 rooms)
@@ -604,19 +615,17 @@ class CheckinController extends Controller
 
                 $checkin->update([
                     'guest_id' => $newOldTitularId,
-                    // 🚀 CORRECCIÓN 4: Usar $hasSpecialAgreement
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioViejaHabitacion,
-                    // 🚀 CORRECCIÓN 5: Mantener su convenio original
                     'special_agreement_id' => $checkin->special_agreement_id,
                     'notes' => $checkin->notes . $noteAdditionStay
                 ]);
                 $checkin->companions()->sync($newOldCompanions);
-                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']);
+                \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'OCUPADO']);
 
                 // 2. Creamos la cuenta a los que se VAN
-                $nuevoCheckin = Checkin::create([
+                $nuevoCheckin = \App\Models\Checkin::create([
                     'guest_id' => $newNewTitularId,
-                    'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                    'user_id' => $userId,
                     'room_id' => $newRoomId,
                     'check_in_date' => $checkin->check_in_date,
                     'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
@@ -624,30 +633,56 @@ class CheckinController extends Controller
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
                     'advance_payment' => 0,
-
-                    // 🚀 CORRECCIÓN 6: Usar $hasSpecialAgreement
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
-
-                    // Los que se van a una nueva habitación en un Split pierden el convenio por defecto. 
-                    // Si quieres que también lo tengan, cámbialo a: $checkin->special_agreement_id
                     'special_agreement_id' => null,
-
                     'parent_checkin_id' => null,
                     'carried_balance' => 0,
+                    // 🚀 CORRECCIÓN CLAVE PARA REACT:
+                    // Iniciamos como true por precaución, pero lo validaremos justo abajo
                     'is_temporary' => true,
                     'status' => 'activo',
                     'notes' => "SPLIT FROM ROOM " . $checkin->room->number,
-
-                    // 🚀 CORRECCIÓN 7: Se eliminaron las 3 columnas obsoletas (is_corporate, payment_frequency, corporate_days) que hacían crash.
                 ]);
 
                 if (!empty($newNewCompanions)) {
                     $nuevoCheckin->companions()->sync($newNewCompanions);
                 }
 
+                // 🚀 MÓDULO 3: REGISTRO HISTÓRICO PARA LOS QUE SE DIVIDIERON
+                \App\Models\RoomTransfer::create([
+                    'checkin_id' => $nuevoCheckin->id,
+                    'from_room_id' => $oldRoomId,
+                    'to_room_id' => $newRoomId,
+                    'user_id' => $userId,
+                    'transfer_date' => $ahora,
+                    'reason' => 'DIVISIÓN DE GRUPO - ' . strtoupper(trim($request->reason)),
+                ]);
+
                 $newRoom->update(['status' => 'OCUPADO']);
 
-                return redirect()->back()->with('success', 'División completada.');
+                // =================================================================
+                // 🚀 REPARACIÓN DEL "CRASH" (Recálculo de la bandera is_temporary)
+                // =================================================================
+                $targetRoomModel = \App\Models\Room::with('roomType')->find($newRoomId);
+                $maxCapacity = $targetRoomModel->roomType->capacity ?? 1;
+                $totalGuestsMoved = 1 + count($newNewCompanions); // Titular (1) + Acompañantes
+
+                // 1. ¿Tienen sus datos completos? (Las barreras que usas en el store)
+                // Para una fusión/división asumimos que si ya estaban hospedados, sus datos están completos.
+                $isDataComplete = true; // Podrías iterar sobre los profiles si quisieras ser muy estricto
+
+                // 2. ¿Llenaron la habitación?
+                $isCapacityFull = $totalGuestsMoved >= $maxCapacity;
+
+                // 3. ¿Tienen el origin lleno? (El causante de tus problemas)
+                $hasOrigin = !empty($nuevoCheckin->origin);
+
+                // Si cumplen, les apagamos la alarma roja para que se abra el OccupiedModal
+                if ($isDataComplete && $isCapacityFull && $hasOrigin) {
+                    $nuevoCheckin->update(['is_temporary' => false]);
+                }
+
+                return redirect()->back()->with('success', 'División completada y auditada correctamente.');
             }
         });
     }
@@ -2182,10 +2217,11 @@ class CheckinController extends Controller
             'target_room_id' => 'required|exists:rooms,id',
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
+            'reason' => 'required|string|max:255', // 🚀 MÓDULO 3: El motivo es obligatorio para la auditoría
         ]);
 
-        return DB::transaction(function () use ($request, $checkin) {
-            $targetCheckin = Checkin::with('companions')
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
+            $targetCheckin = \App\Models\Checkin::with('companions')
                 ->where('room_id', $request->target_room_id)
                 ->where('status', 'activo')
                 ->first();
@@ -2201,31 +2237,35 @@ class CheckinController extends Controller
             // Verificamos si se están llevando a TODOS o solo a algunos
             $isFullTransfer = count($selectedGuests) === count($allGuestIds);
 
+            // Guardamos el room viejo para la auditoría
+            $oldRoomId = $checkin->room_id;
+            $ahora = now();
+            $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
+
             // =======================================================
             // 🛑 FASE 1: DESVINCULAR Y MOVER DEUDAS PRIMERO
             // =======================================================
             if ($isFullTransfer) {
                 // FUSIÓN COMPLETA: Cierra la vieja y traslada toda la cuenta
-                // Añadimos 'true' para no duplicar el cobro de la noche actual al fusionar
-                $diasACobrar = $this->calculateBillableDays($checkin, now(), true);
+                $diasACobrar = $this->calculateBillableDays($checkin, $ahora, true);
                 $precioVieja = $checkin->agreed_price ?? $checkin->room->price->amount ?? 0;
                 $deudaAnterior = $diasACobrar * $precioVieja;
 
                 $checkin->update([
                     'status' => 'transferido', // 'transferido' evita descuadrar reportes
-                    'check_out_date' => now(),
+                    'check_out_date' => $ahora,
                     'duration_days' => $diasACobrar,
                     'notes' => $checkin->notes . " | FUSIONADO (Todos pasaron a Hab. " . $targetCheckin->room->number . ")"
                 ]);
 
                 // LIBERAMOS A LOS ACOMPAÑANTES para no chocar con la base de datos
                 $checkin->companions()->detach();
-                \App\Models\Room::where('id', $checkin->room_id)->update(['status' => 'LIMPIEZA']);
+                \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
 
                 // TRASLADAMOS LA DEUDA Y LOS CONSUMOS AL TITULAR DE LA NUEVA HABITACIÓN
                 $targetCheckin->increment('carried_balance', $deudaAnterior);
-                DB::table('checkin_details')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
-                DB::table('payments')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
+                \Illuminate\Support\Facades\DB::table('checkin_details')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
+                \Illuminate\Support\Facades\DB::table('payments')->where('checkin_id', $checkin->id)->update(['checkin_id' => $targetCheckin->id]);
             } else {
                 // FUSIÓN PARCIAL: Se divide la cuenta, los que se quedan asumen la deuda original
                 $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
@@ -2254,16 +2294,39 @@ class CheckinController extends Controller
             // Sincronizamos la nueva familia gigante en la habitación destino
             $targetCheckin->companions()->sync($targetCompanionIds);
 
-            // Recalculamos la tarifa de la habitación que los recibió
+            // 🚀 MÓDULO 3: REGISTRO HISTÓRICO (La auditoría exige saber de dónde salieron)
+            \App\Models\RoomTransfer::create([
+                'checkin_id' => $targetCheckin->id,
+                'from_room_id' => $oldRoomId,
+                'to_room_id' => $targetCheckin->room_id,
+                'user_id' => $userId,
+                'transfer_date' => $ahora,
+                'reason' => 'FUSIÓN DE CUENTAS - ' . strtoupper(trim($request->reason)),
+            ]);
+
+            // =================================================================
+            // 🚀 REPARACIÓN DEL CRASH: Recalcular la capacidad y apagar la alarma is_temporary
+            // =================================================================
+            $targetRoomModel = \App\Models\Room::with('roomType')->find($targetCheckin->room_id);
+            $maxCapacity = $targetRoomModel->roomType->capacity ?? 1;
+            $totalGuestsNow = 1 + count($targetCompanionIds); // 1 Titular + acompañantes
+
+            $hasOrigin = !empty($targetCheckin->origin);
+            $isCapacityFull = $totalGuestsNow >= $maxCapacity;
+
+            // Evaluamos: Si ya se llenó y tiene origen, apagamos el "is_temporary"
+            $isTemporaryNewState = !($isCapacityFull && $hasOrigin);
+
+            // Recalculamos la tarifa y aplicamos el nuevo estado is_temporary
             $targetCheckin->update([
-                'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, 1 + count($targetCompanionIds)),
-                'notes' => ltrim($targetCheckin->notes . " | Recibió huéspedes de Hab. " . $checkin->room->number, " | ")
+                'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, $totalGuestsNow),
+                'notes' => ltrim($targetCheckin->notes . " | Recibió huéspedes de Hab. " . \App\Models\Room::find($oldRoomId)->number, " | "),
+                'is_temporary' => $isTemporaryNewState // 👈 ¡ESTO ES LO QUE ARREGLA EL ERROR!
             ]);
 
             return redirect()->back()->with('success', $isFullTransfer ? 'Fusión exitosa. Los huéspedes y sus deudas se unieron a la nueva habitación, la original pasó a LIMPIEZA.' : 'Fusión parcial exitosa.');
         });
     }
-
     /*Fucion a futuro* */
     // Ejemplo lógico (no copres esto todavía, es para que entiendas el flujo)
 

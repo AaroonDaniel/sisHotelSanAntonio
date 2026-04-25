@@ -132,4 +132,9 @@ class Checkin extends Model
         return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
     }
 
+    public function transfers()
+    {
+        return $this->hasMany(RoomTransfer::class);
+    }
+
 }

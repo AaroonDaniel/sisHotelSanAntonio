@@ -9,7 +9,8 @@ import {
     Search,
     Tag,
     Users,
-    X
+    X,
+    FileText
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useState } from 'react';
 
@@ -43,10 +44,11 @@ export default function TransferModal({
 
     const [showConfirm, setShowConfirm] = useState(false);
 
-    const { data, setData, processing, reset, clearErrors, post } = useForm({
+    // 🚀 CORRECCIÓN: La variable se llama 'reason' para coincidir con el backend
+    const { data, setData, processing, reset, clearErrors, post, errors } = useForm({
         new_room_id: '',
         target_room_id: '',
-        transfer_reason: '',
+        reason: '', // <--- El motivo exigido por auditoría
         selected_guests: [] as number[],
     });
 
@@ -54,7 +56,6 @@ export default function TransferModal({
         if(show && checkin) {
             resetFilters();
             setShowConfirm(false);
-            
             setData('selected_guests', []);
         } else if (!show) {
             resetFilters();
@@ -62,24 +63,6 @@ export default function TransferModal({
         }
     }, [show, checkin]);
 
-    // ==========================================
-    // 🐞 MODO DEBUG: RASTREADOR DE HABITACIONES
-    // ==========================================
-    useEffect(() => {
-        if (show) {
-            console.group("🔍 DETALLES DEL MODAL DE TRANSFERENCIA");
-            console.log("1. Modo actual:", mode);
-            console.log("2. Habitación del huésped actual (ID):", checkin?.room_id);
-            console.log("3. Habitaciones Libres recibidas (availableRooms):", availableRooms);
-            console.log("4. Habitaciones Ocupadas recibidas (occupiedRooms):", occupiedRooms);
-            console.log("5. Filtros activos:", { searchQuery, selectedBlock, selectedRoomType, selectedBathroom });
-            console.log("6. RESULTADO FINAL MOSTRADO (filteredRooms):", filteredRooms);
-            console.groupEnd();
-        }
-    }, [mode, availableRooms, occupiedRooms, show]);
-    // ==========================================
-
-    // 🚀 RESTAURADO: Función para cambiar el modo
     const handleModeChange = (newMode: 'individual' | 'group') => {
         setMode(newMode);
         resetFilters();
@@ -127,43 +110,32 @@ export default function TransferModal({
     };
 
     // --- LÓGICA DE FILTRADO ---
-    // --- LÓGICA DE FILTRADO ---
     const baseList = mode === 'individual' ? availableRooms : occupiedRooms;
 
     const filteredRooms = baseList.filter(room => {
-        // 1. Excluir habitación actual (No puedes fusionarte contigo mismo)
         if (room.id === checkin.room_id) return false;
 
-        // 2. Buscador por texto
         if (searchQuery) {
             const query = searchQuery.toLowerCase().trim();
             const roomNumber = String(room.number).toLowerCase();
             if (!roomNumber.includes(query)) return false;
         }
 
-        // 3. Filtros Exactos
         if (selectedBlock && String(room.block_id) !== selectedBlock) return false;
         if (selectedRoomType && String(room.room_type_id) !== selectedRoomType) return false;
         if (selectedBathroom && room.price?.bathroom_type !== selectedBathroom) return false;
 
-        // 🚀 4. RESTRICCIÓN DE CAPACIDAD (Aplica solo en modo "Fusión")
         if (mode === 'group') {
-            const activeCheckin = room.checkins?.[0]; // Tomamos el checkin activo de ese cuarto
+            const activeCheckin = room.checkins?.[0];
             if (activeCheckin) {
-                // Sumamos al Titular (1) + la cantidad de acompañantes actuales
                 const currentOccupants = 1 + (activeCheckin.companions?.length || 0);
-                // Leemos la capacidad máxima permitida para ese tipo de habitación
                 const maxCapacity = room.room_type?.capacity || 1;
-                // Vemos cuántas personas seleccionó el recepcionista para transferir
                 const incomingGuests = data.selected_guests.length;
 
-                // REGLA A: Si la habitación ya está llena (o excedida), NO aparece.
                 if (currentOccupants >= maxCapacity) {
                     return false;
                 }
 
-                // REGLA B: Si hay espacio, pero NO EL SUFICIENTE para los que se quieren mover, NO aparece.
-                // (Ej: Sobra 1 cama, pero quieren meter a 2 personas).
                 if (currentOccupants + incomingGuests > maxCapacity) {
                     return false;
                 }
@@ -187,21 +159,18 @@ export default function TransferModal({
         const room = [...availableRooms, ...occupiedRooms].find(r => String(r.id) === String(currentSelectedId));
         return room ? room.number : '???';
     };
+
     const getSelectedGuestNames = () => {
         if (!checkin || data.selected_guests.length === 0) return '';
-
-        // Juntamos al titular y a los acompañantes en una sola lista
         const allGuests = [
             checkin.guest,
             ...(checkin.companions || [])
         ].filter(Boolean);
 
-        // Filtramos solo los que están seleccionados y sacamos sus nombres
         const names = allGuests
             .filter(g => data.selected_guests.includes(g.id))
             .map(g => g.full_name);
 
-        // Los unimos con comas (Ej: "Juan Perez, Maria Lopez")
         return names.join(' - ');
     };
 
@@ -234,7 +203,7 @@ export default function TransferModal({
                         
                         <div className="space-y-6">
                             
-                            {/* NUEVO BLOQUE: Selección interactiva de huéspedes con PARPADEO */}
+                            {/* BLOQUE DE HUÉSPEDES */}
                             <div className={`rounded-xl p-1 transition-all duration-300 ${
                                 data.selected_guests.length === 0 
                                 ? 'animate-pulse ring-2 ring-green-400 ring-offset-1 bg-green-50/50' 
@@ -262,7 +231,6 @@ export default function TransferModal({
                                             <span className="text-xs font-bold text-gray-800 uppercase">
                                                 {checkin.guest?.full_name}
                                             </span>
-                                            
                                         </div>
                                         <input
                                             type="checkbox"
@@ -282,7 +250,6 @@ export default function TransferModal({
                                                 <span className="text-xs font-bold text-gray-800 uppercase">
                                                     {comp.full_name}
                                                 </span>
-                                                
                                             </div>
                                             <input
                                                 type="checkbox"
@@ -294,6 +261,7 @@ export default function TransferModal({
                                     ))}
                                 </div>
                             </div>
+
                             {/* Selector de Modo */}
                             <div>
                                 <label className="mb-2 block text-xs font-bold text-gray-500 uppercase">
@@ -323,26 +291,31 @@ export default function TransferModal({
                                 </div>
                             </div>
 
-                            {/* Info */}
-                            <div className={`rounded-xl border p-4 text-xs ${mode === 'individual' ? 'border-blue-100 bg-blue-50 text-blue-800' : 'border-orange-100 bg-orange-50 text-orange-800'}`}>
-                                {mode === 'individual' ? (
-                                    <div className="flex gap-2">
-                                        <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                        <div>
-                                            <p className="font-bold uppercase">CAMBIO SIMPLE</p>
-                                            <p className="mt-1 opacity-80 leading-tight">Mueve a los seleccionados a una habitación vacía.</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex gap-2">
-                                        <AlertTriangle className="h-4 w-4 shrink-0" />
-                                        <div>
-                                            <p className="font-bold uppercase">UNIR A GRUPO</p>
-                                            <p className="mt-1 opacity-80 leading-tight">Mueve a los seleccionados para unirlos a una habitación que ya está ocupada.</p>
-                                        </div>
-                                    </div>
+                            {/* 🚀 MÓDULO 3: CAMPO OBLIGATORIO DE MOTIVO */}
+                            <div>
+                                <label className="mb-2 block text-xs font-bold text-gray-800 uppercase">
+                                    Motivo del Traslado <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <FileText className="absolute left-3 top-3 h-4 w-4 text-gray-800" />
+                                    <textarea
+                                        value={data.reason}
+                                        onChange={(e) => setData('reason', e.target.value)}
+                                        placeholder="Motivo..."
+                                        className={`w-full resize-none rounded-xl border p-3 pl-9 text-base text-gray-800 shadow-base focus:ring-green-500 ${
+                                            errors.reason ? 'border-red-300 focus:border-red-500 bg-red-50/30' : 'border-gray-800 focus:border-green-500'
+                                        }`}
+                                        rows={3}
+                                        required
+                                    />
+                                </div>
+                                {errors.reason && (
+                                    <p className="mt-1 text-[10px] font-bold text-red-500 uppercase">{errors.reason}</p>
                                 )}
                             </div>
+
+                            
+
                         </div>
                     </div>
 
@@ -353,7 +326,7 @@ export default function TransferModal({
                         <div className="border-b border-gray-200 bg-white px-4 py-3 shadow-sm z-10">
                             <div className="flex flex-wrap items-center gap-2">
                                 
-                                {/* 1. BUSCADOR (Primero, ocupa el espacio sobrante) */}
+                                {/* 1. BUSCADOR */}
                                 <div className="relative flex-1 min-w-[140px]">
                                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                         <Search className="h-3.5 w-3.5 text-gray-400" />
@@ -416,7 +389,7 @@ export default function TransferModal({
                             </div>
                         </div>
 
-                        {/* --- GRILLA DE HABITACIONES (ESTILO RESERVA) --- */}
+                        {/* --- GRILLA DE HABITACIONES --- */}
                         <div className="flex-1 overflow-y-auto p-5">
                             {filteredRooms.length === 0 ? (
                                 <div className="flex h-full flex-col items-center justify-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300 py-12 shadow-sm">
@@ -467,7 +440,6 @@ export default function TransferModal({
                                                     )}
                                                 </div>
 
-                                                {/* SI ES MODO GRUPAL, SE MUESTRA EL NOMBRE DEL OCUPANTE ACTUAL DE ESE CUARTO */}
                                                 {mode === 'group' && room.checkins && room.checkins.length > 0 && (
                                                     <div className="mt-2 w-full truncate rounded bg-cyan-50 px-1.5 py-1 text-[8px] font-bold uppercase text-cyan-700 border border-cyan-100">
                                                         {room.checkins[0]?.guest?.full_name || 'OCUPADO'}
@@ -482,7 +454,7 @@ export default function TransferModal({
                     </div>
                 </div>
 
-                {/* --- FOOTER DEL MODAL (NUEVO Y ALINEADO A LA DERECHA) --- */}
+                {/* --- FOOTER DEL MODAL --- */}
                 <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
                     <button
                         onClick={onClose}
@@ -491,9 +463,10 @@ export default function TransferModal({
                     >
                         Cancelar
                     </button>
+                    {/* 🚀 MÓDULO 3: El botón de confirmar ahora requiere que 'data.reason' NO esté vacío */}
                     <button
                         onClick={handleSubmit}
-                        disabled={processing || !currentSelectedId || data.selected_guests.length === 0}
+                        disabled={processing || !currentSelectedId || data.selected_guests.length === 0 || data.reason.trim().length < 3}
                         className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {processing ? 'Procesando...' : 'Confirmar Cambio'}
@@ -501,7 +474,7 @@ export default function TransferModal({
                 </div>
             </div>
 
-            {/* Modal de Confirmación */}
+            {/* Modal de Confirmación Final */}
             <ConfirmTransferModal 
                 show={showConfirm}
                 onClose={() => setShowConfirm(false)}
