@@ -581,40 +581,8 @@ export default function CheckinModal({
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
                 let calculatedDuration = Math.max(
                     1,
-                    Number(checkinToEdit.duration_days),
+                    Number(checkinToEdit.duration_days)
                 );
-                const schedule = schedules.find(
-                    (s) => String(s.id) === String(checkinToEdit.schedule_id),
-                );
-
-                if (schedule) {
-                    const checkInDate = new Date(checkinToEdit.check_in_date);
-                    const [outH, outM] = schedule.check_out_time
-                        .split(':')
-                        .map(Number);
-                    const exitTolerance =
-                        (schedule as any).exit_tolerance_minutes || 60;
-
-                    let isValidDuration = false;
-                    while (!isValidDuration) {
-                        const targetCheckout = new Date(checkInDate);
-                        targetCheckout.setDate(
-                            targetCheckout.getDate() + calculatedDuration,
-                        );
-                        targetCheckout.setHours(outH, outM, 0, 0);
-
-                        const hardLimit = new Date(
-                            targetCheckout.getTime() + exitTolerance * 60000,
-                        );
-
-                        if (nowObj > hardLimit) {
-                            calculatedDuration++;
-                        } else {
-                            isValidDuration = true;
-                        }
-                        if (calculatedDuration > 365) break;
-                    }
-                }
 
                 // 1. Buscamos la habitación actual en la lista 'rooms' para saber su precio original
                 const currentRoomObj = rooms?.find(
