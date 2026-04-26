@@ -715,6 +715,20 @@ export default function CheckinModal({
                         checkinToEdit.payments.length > 0
                             ? checkinToEdit.payments[0].bank_name || ''
                             : checkinToEdit.qr_bank || '',
+
+                    monto_efectivo:
+                        (checkinToEdit.payments && checkinToEdit.payments.length > 0
+                            ? checkinToEdit.payments[0].method
+                            : checkinToEdit.payment_method || 'EFECTIVO') === 'EFECTIVO'
+                            ? (checkinToEdit.advance_payment || '')
+                            : '',
+
+                    monto_qr:
+                        (checkinToEdit.payments && checkinToEdit.payments.length > 0
+                            ? checkinToEdit.payments[0].method
+                            : checkinToEdit.payment_method || 'EFECTIVO') !== 'EFECTIVO'
+                            ? (checkinToEdit.advance_payment || '')
+                            : '',
                 }));
 
                 // 🌟 LÓGICA PARA MOSTRAR LA CAJA "OTRO" SI TENÍA UN NÚMERO PERSONALIZADO
@@ -1081,11 +1095,84 @@ export default function CheckinModal({
               })
             : [];
 
-    const isProfileIncomplete =
-        isTitular &&
-        !isExistingGuest &&
-        (!data.identification_number || data.identification_number.length < 3);
+    // 1. Verificamos que exista al menos UN teléfono en todo el grupo
+const hasValidPhoneInGroup = () => {
+    const checkPhone = (p?: string | null) => p && p.replace(/[^0-9]/g, '').length > 7;
+    
+    const titularPhone = checkPhone(data.phone);
+    let validCompanionPhone = false;
 
+    if (data.companions && data.companions.length > 0) {
+        validCompanionPhone = data.companions.some((c) => checkPhone(c.phone));
+    }
+    
+    
+    return titularPhone || validCompanionPhone;
+};
+
+// 2. Evaluador estricto de campos con reporte en Consola
+const areAllFieldsFilled = (person: any, roleName: string) => {
+    // Función de seguridad: Convierte a texto y quita espacios en blanco extras
+    const s = (val: any) => String(val || '').trim();
+
+    // Creamos un diccionario de pruebas para ver qué pasa y qué falla
+    const checks = {
+        full_name: s(person.full_name).length > 3,
+        identification_number: s(person.identification_number).length >= 4,
+        issued_in: s(person.issued_in).length > 0,
+        nationality: s(person.nationality).length > 0,
+        civil_status: s(person.civil_status).length > 0,
+        birth_date: s(person.birth_date).length > 0,
+        profession: s(person.profession).length > 1,
+        origin: s(person.origin).length > 1,
+    };
+
+    // Evaluamos si TODAS las pruebas dieron "true"
+    const isComplete = Object.values(checks).every((v) => v === true);
+
+    
+    return isComplete;
+};
+
+// 3. Evaluador maestro del estado de la asignación
+const isProfileIncomplete = (() => {
+    
+
+    // A) REGLA DEL TELÉFONO
+    if (!hasValidPhoneInGroup()) {
+        
+        return true; 
+    }
+
+    // B) VALIDAR AL TITULAR
+    const titular = {
+        full_name: data.full_name,
+        identification_number: data.identification_number,
+        issued_in: data.issued_in,
+        nationality: data.nationality,
+        civil_status: data.civil_status,
+        birth_date: data.birth_date,
+        profession: data.profession,
+        origin: data.origin,
+    };
+
+    if (!areAllFieldsFilled(titular, "TITULAR")) {
+        
+        return true;
+    }
+
+    // C) VALIDAR ACOMPAÑANTES
+    if (data.companions && data.companions.length > 0) {
+        for (let i = 0; i < data.companions.length; i++) {
+            if (!areAllFieldsFilled(data.companions[i], `ACOMPAÑANTE ${i + 1}`)) {
+                
+                return true; 
+            }
+        }
+    }
+
+    return false;
+})();
     // =========================================================
     // 🚀 LÓGICA DE ENVÍO Y ADVERTENCIA DE CAPACIDAD (ACTUALIZADO)
     // =========================================================
