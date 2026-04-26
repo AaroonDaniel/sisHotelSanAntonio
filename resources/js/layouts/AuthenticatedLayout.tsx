@@ -7,7 +7,8 @@ import {
     Menu,
     User as UserIcon,
     X,
-    AlertTriangle
+    AlertTriangle,
+    Users // <-- IMPORTANTE: Importamos el icono Users
 } from 'lucide-react';
 import { PropsWithChildren, useState } from 'react';
 
@@ -35,19 +36,30 @@ export default function AuthenticatedLayout({
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
+    // Función normal de Cerrar Sesión (Exige cerrar caja)
     const handleLogout = (e: React.MouseEvent) => {
         e.preventDefault();
 
-        // Si tiene una caja abierta, bloqueamos la salida y mostramos la alerta
         if (auth.active_register) {
             setShowLogoutWarning(true);
-            setShowUserMenu(false); // Escondemos el menú desplegable
+            setShowUserMenu(false);
         } else {
-            // Si su caja está cerrada, lo dejamos irse
+            // Si el suplente cierra sesión normal, eliminamos el pase libre por seguridad
+            localStorage.removeItem('relay_mode_active');
             router.post('/logout');
         }
     };
 
+    // FUNCIÓN ACTUALIZADA: Cambio de usuario rápido
+    const handleSwitchUser = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setShowUserMenu(false);
+        
+        // ACTIVAMOS EL PASE LIBRE (Modo Relevo)
+        localStorage.setItem('relay_mode_active', 'true');
+        
+        router.post('/logout');
+    };
     return (
         /* CAMBIO AQUÍ: Se reemplazó selection:bg-red-500 por selection:bg-green-600 */
         <div className="min-h-screen bg-gray-900 font-sans text-gray-100 selection:bg-sky-600 selection:text-white">
@@ -129,6 +141,17 @@ export default function AuthenticatedLayout({
 
                         {/* Menú Usuario */}
                         <div className="hidden gap-4 sm:ml-6 sm:flex sm:items-center">
+                            
+                            {/* NUEVO BOTÓN: Cambio de Usuario */}
+                            <button
+                                onClick={handleSwitchUser}
+                                className="flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-base font-bold text-white shadow-md transition-all hover:bg-red-500 hover:shadow-lg active:scale-95"
+                                title="Cambiar de cuenta sin cerrar la caja actual"
+                            >
+                                <Users className="h-4 w-4" />
+                                <span className="hidden md:block">Cambio de usuario</span>
+                            </button>
+
                             <div className="relative ml-3">
                                 <div
                                     onClick={() =>

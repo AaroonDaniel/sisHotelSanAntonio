@@ -1,39 +1,56 @@
-import { router, useForm, usePage } from '@inertiajs/react'; // 1. Importamos 'router' de Inertia
-import { Wallet, X } from 'lucide-react'; // 2. Importamos el ícono 'X'
-import { FormEventHandler } from 'react';
+import { router, useForm, usePage } from '@inertiajs/react';
+import { Wallet, X } from 'lucide-react';
+import { FormEventHandler, useState, useEffect } from 'react';
 
 export default function OpenRegisterModal() {
     const { auth }: any = usePage().props;
+    // Estado que controlará si lo dejamos pasar sin caja
+    const [isAutomaticRelay, setIsAutomaticRelay] = useState(false);
 
     const { data, setData, post, processing, errors } = useForm({
         opening_amount: '',
     });
 
-    if (!auth.user || auth.active_register) {
+    // LÓGICA MÁGICA: Detección automática del Relevo
+    useEffect(() => {
+        if (auth?.user) {
+            const relayMode = localStorage.getItem('relay_mode_active');
+            
+            if (relayMode === 'true') {
+                if (auth.active_register) {
+                    // Si regresó el usuario original (que SÍ tiene su caja abierta)
+                    // destruimos el pase libre porque el relevo terminó.
+                    localStorage.removeItem('relay_mode_active');
+                } else {
+                    // Si entró alguien SIN caja, lo activamos como relevo para que pase de largo
+                    setIsAutomaticRelay(true);
+                }
+            }
+        }
+    }, [auth?.user, auth?.active_register]);
+
+    // Ocultamos el modal si no hay usuario, si TIENE caja abierta, o si ES RELEVO AUTOMÁTICO
+    if (!auth.user || auth.active_register || isAutomaticRelay) {
         return null;
     }
 
-    // Para el formulario manual (si ingresan un monto)
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         post('/cash-registers/open');
     };
 
-    // 3. Función para abrir la caja con 0 Bs cuando tocan la X
     const handleOpenWithZero = () => {
         router.post('/cash-registers/open', { opening_amount: 0 });
     };
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            {/* Se añade 'relative' al contenedor principal para posicionar la X de forma absoluta */}
             <div className="relative w-full max-w-md animate-in rounded-2xl bg-white p-8 shadow-2xl zoom-in-95">
-                {/* 4. Botón X en la esquina superior derecha */}
                 <button
                     onClick={handleOpenWithZero}
                     type="button"
                     className="absolute top-4 right-4 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-                    title="Cerrar"
+                    title="Cerrar y abrir con 0 Bs"
                 >
                     <X className="h-6 w-6" />
                 </button>
@@ -53,7 +70,7 @@ export default function OpenRegisterModal() {
                 </div>
 
                 <form onSubmit={submit}>
-                    <div className="mb-8">
+                    <div className="mb-6">
                         <label className="mb-2 block text-xs font-bold tracking-wider text-gray-800 uppercase">
                             Efectivo Inicial en Caja
                         </label>
