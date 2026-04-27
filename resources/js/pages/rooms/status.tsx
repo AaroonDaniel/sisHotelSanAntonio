@@ -1099,20 +1099,29 @@ export default function RoomsStatus({
                         let corpState: any = null;
 
                         // 👇 CAMBIO AQUÍ: Ahora solo evalúa si es ESTRICTAMENTE CORPORATIVO 👇
-                        if (activeCheckin && activeCheckin.is_corporate) {
+                        if (activeCheckin && isSpecialGroup) {
                             // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
-                            let totalPaid =
-                                activeCheckin.payments?.reduce(
+                            // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
+                            let totalPaid = 0;
+                            if (
+                                activeCheckin.payments &&
+                                activeCheckin.payments.length > 0
+                            ) {
+                                // Si hay un historial en la tabla de pagos, nos fiamos 100% de eso
+                                totalPaid = activeCheckin.payments.reduce(
                                     (acc: number, p: any) =>
                                         p.type === 'DEVOLUCION'
                                             ? acc - (parseFloat(p.amount) || 0)
                                             : acc + (parseFloat(p.amount) || 0),
                                     0,
-                                ) ||
-                                parseFloat(
-                                    String(activeCheckin.advance_payment),
-                                ) ||
-                                0;
+                                );
+                            } else {
+                                // Si la tabla de pagos viene vacía, usamos el adelanto original
+                                totalPaid =
+                                    parseFloat(
+                                        String(activeCheckin.advance_payment),
+                                    ) || 0;
+                            }
 
                             // 2. Precio acordado por noche (El backend ya lo sincroniza en el checkin)
                             const agreedPrice =
@@ -1520,10 +1529,10 @@ export default function RoomsStatus({
 
             {/* MODAL DE ALERTA FALTA DE TODAVIA NO SE PUEDE ASIGNAR LA RESERVA*/}
             <ActionModal
-                    show={isActionModalOpen}
-                    onClose={() => setIsActionModalOpen(false)}
-                    item={selectedItem}
-                />
+                show={isActionModalOpen}
+                onClose={() => setIsActionModalOpen(false)}
+                item={selectedItem}
+            />
 
             {/* MODAL DE RESERVAS PENDIENTES*/}
             <PendingReservationsModal
@@ -2493,7 +2502,7 @@ function CheckoutConfirmationModal({
                                                             'factura',
                                                         )
                                                     }
-                                                    className={`hidden flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-600 bg-blue-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                    className={`flex hidden flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-600 bg-blue-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                 >
                                                     <div
                                                         className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-600' : 'border-gray-300'}`}

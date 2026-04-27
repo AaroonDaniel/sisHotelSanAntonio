@@ -2812,7 +2812,7 @@ export default function CheckinModal({
                                                                     step="0.10"
                                                                     min="0"
                                                                     // El límite máximo es estrictamente el Precio Corporativo (-20Bs) x Noches
-                                                                    max={Number((corporateBasePrice * noches).toFixed(2))}
+                                                                    max={Number((originalPrice * noches).toFixed(2))}
                                                                     value={
                                                                         total > 0
                                                                             ? Number(total.toFixed(2))
@@ -2822,7 +2822,7 @@ export default function CheckinModal({
                                                                         const inputVal = Number(e.target.value);
                                                                         
                                                                         // Definimos el tope máximo estricto (-20 Bs)
-                                                                        const maxTotal = corporateBasePrice * noches;
+                                                                       const maxTotal = originalPrice * noches;
                                                                         
                                                                         // Si intenta cobrar MÁS del tope, lo bloquea en el precio corporativo base (-20)
                                                                         const clampedTotal = inputVal > maxTotal ? maxTotal : inputVal;

@@ -138,6 +138,7 @@ class CheckinController extends Controller
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'payment_frequency' => 'nullable|string|max:255',
             'corporate_days' => 'nullable|integer',
+            'agreed_price' => 'nullable|numeric|min:0',
         ], [
             'payment_method.required_if' => 'Si registra un adelanto, debe elegir un método de pago.',
         ]);
@@ -326,8 +327,13 @@ class CheckinController extends Controller
 
         $isSpecialDeal = $request->boolean('is_corporate') || in_array($request->input('type'), ['corporativo', 'delegacion']);
 
+        // CÓDIGO CORREGIDO
         if ($isSpecialDeal) {
-            $agreedPrice = max(0, $basePrice - 20);
+            // Respeta el precio enviado por React, si no viene nada, usa la regla de los -20 Bs
+            $agreedPrice = $request->filled('agreed_price') 
+                ? floatval($request->input('agreed_price')) 
+                : max(0, $basePrice - 20);
+                
         } elseif ($request->boolean('auto_adjust_price')) {
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
