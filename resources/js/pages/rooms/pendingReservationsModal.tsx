@@ -88,6 +88,7 @@ export default function PendingReservationsModal({
     
     // --- ESTADOS DE MODALES Y CARGA ---
     const [isAssigning, setIsAssigning] = useState(false);
+    const [isConfirming, setIsConfirming] = useState(false);
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
@@ -206,6 +207,32 @@ export default function PendingReservationsModal({
         }
     };
 
+    // 🚀 CONFIRMAR RESERVA DIRECTAMENTE (A prueba de validaciones)
+    const handleConfirmReservation = () => {
+        if (!selectedReservation) return;
+        setIsConfirming(true);
+        
+        // 1. Copiamos TODOS los datos de la reserva y solo sobreescribimos el estado
+        // De esta forma, Laravel recibe el guest_id, fechas, etc., y no se queja.
+        const payload = {
+            ...selectedReservation,
+            status: 'confirmada'
+        };
+
+        // 2. Usamos router.put directamente
+        router.put(`/reservas/${selectedReservation.id}`, payload, {
+            onSuccess: () => {
+                setIsConfirming(false);
+                handleClose(); // Cerramos el modal limpiamente
+            },
+            onError: (errors) => {
+                setIsConfirming(false);
+                // Si Laravel rechaza algo, ahora lo imprimiremos en la consola para saber exactamente qué es
+                console.error("🚨 ERRORES DE VALIDACIÓN DE LARAVEL:", errors);
+                alert("Hubo un error de validación. Abre tu Consola (Clic derecho -> Inspeccionar) para ver qué dato falta.");
+            }
+        });
+    };
     const detailsCount = selectedReservation?.details?.length || 0;
     const currentDetail = selectedReservation && currentStep < detailsCount ? selectedReservation.details[currentStep] : null;
     const isReadyToAssign = selectedReservation && detailsCount > 0 && currentStep === detailsCount - 1 && tempSelectedRoom !== null;
@@ -425,9 +452,15 @@ export default function PendingReservationsModal({
                                 </button>
                             )}
 
+                            {/* CÓDIGO NUEVO PARA EL BOTÓN */}
                             {isFullyAssigned && (
-                                <button onClick={() => setIsConfirmModalOpen(true)} className="px-6 py-2.5 rounded-xl bg-green-600 text-white font-black uppercase hover:bg-green-700 shadow-md active:scale-95 text-[12px] flex items-center gap-2">
-                                    <CheckCircle2 className="w-4 h-4" />Confirmar Reserva
+                                <button 
+                                    onClick={handleConfirmReservation} 
+                                    disabled={isConfirming} 
+                                    className="px-6 py-2.5 rounded-xl bg-green-600 text-white font-black uppercase hover:bg-green-700 shadow-md active:scale-95 text-[12px] flex items-center gap-2"
+                                >
+                                    {isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                    {isConfirming ? 'Confirmando...' : 'Confirmar Reserva'}
                                 </button>
                             )}
                         </div>

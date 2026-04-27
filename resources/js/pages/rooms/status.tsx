@@ -310,54 +310,61 @@ export default function RoomsStatus({
     useEffect(() => {
         const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
         if (queueStr && !isCheckinModalOpen) {
-            let queue: number[] = JSON.parse(queueStr);
-            let openedModal = false;
+            // 👇 ESCUDO PROTECTOR: Atrapa textos a medias o basura en memoria
+            try {
+                let queue: number[] = JSON.parse(queueStr);
+                let openedModal = false;
 
-            // 🚀 BUCLE: Avanza instantáneamente ignorando las habitaciones ya completadas
-            while (queue.length > 0 && !openedModal) {
-                const nextCheckinId = queue[0];
+                // 🚀 BUCLE: Avanza instantáneamente ignorando las habitaciones ya completadas
+                while (queue.length > 0 && !openedModal) {
+                    const nextCheckinId = queue[0];
 
-                const roomWithCheckin = Rooms.find(
-                    (r) =>
-                        r.checkins &&
-                        r.checkins.some((c) => c.id === nextCheckinId),
-                );
-
-                if (roomWithCheckin) {
-                    const checkin = roomWithCheckin.checkins!.find(
-                        (c) => c.id === nextCheckinId,
+                    const roomWithCheckin = Rooms.find(
+                        (r) =>
+                            r.checkins &&
+                            r.checkins.some((c) => c.id === nextCheckinId),
                     );
-                    if (checkin) {
-                        const isTitularIncomplete =
-                            checkin.guest?.profile_status === 'INCOMPLETE';
-                        const isOriginMissing =
-                            !checkin.origin || checkin.origin.trim() === '';
 
-                        if (isTitularIncomplete || isOriginMissing) {
-                            // FALTAN DATOS: Nos detenemos aquí y abrimos el modal
-                            setCheckinToEdit(checkin);
-                            setSelectedRoomId(roomWithCheckin.id);
-                            setIsCheckinModalOpen(true);
-                            openedModal = true;
+                    if (roomWithCheckin) {
+                        const checkin = roomWithCheckin.checkins!.find(
+                            (c) => c.id === nextCheckinId,
+                        );
+                        if (checkin) {
+                            const isTitularIncomplete =
+                                checkin.guest?.profile_status === 'INCOMPLETE';
+                            const isOriginMissing =
+                                !checkin.origin || checkin.origin.trim() === '';
+
+                            if (isTitularIncomplete || isOriginMissing) {
+                                // FALTAN DATOS: Nos detenemos aquí y abrimos el modal
+                                setCheckinToEdit(checkin);
+                                setSelectedRoomId(roomWithCheckin.id);
+                                setIsCheckinModalOpen(true);
+                                openedModal = true;
+                            } else {
+                                // ESTÁ COMPLETA: La sacamos de la lista y el bucle revisa la siguiente al instante
+                                queue.shift();
+                            }
                         } else {
-                            // ESTÁ COMPLETA: La sacamos de la lista y el bucle revisa la siguiente al instante
                             queue.shift();
                         }
                     } else {
                         queue.shift();
                     }
-                } else {
-                    queue.shift();
                 }
-            }
 
-            // Actualizamos la memoria
-            if (queue.length > 0) {
-                sessionStorage.setItem(
-                    'pendingCheckinsQueue',
-                    JSON.stringify(queue),
-                );
-            } else {
+                // Actualizamos la memoria
+                if (queue.length > 0) {
+                    sessionStorage.setItem(
+                        'pendingCheckinsQueue',
+                        JSON.stringify(queue),
+                    );
+                } else {
+                    sessionStorage.removeItem('pendingCheckinsQueue');
+                }
+            } catch (error) {
+                // 🛑 SI ALGO FALLA (Ej: texto cortado), SE DESTRUYE LA MEMORIA CORRUPTA Y NO SE CUELGA
+                console.error("🧹 Basura detectada en la memoria (JSON incompleto), limpiando para evitar cuelgues...");
                 sessionStorage.removeItem('pendingCheckinsQueue');
             }
         }
@@ -1160,11 +1167,6 @@ export default function RoomsStatus({
                             // 6. Diferencia matemática exacta
                             const diffTime = limitDate.getTime() - today.getTime();
                             const daysRemaining = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-                            // 🚨 ESPÍA PARA LA CONSOLA 🚨
-                            console.log(`[CICLO CORP] Plazo: Cada ${corpDays} días | Tarifa: ${cyclePrice} Bs por ciclo.`);
-                            console.log(`[CICLO CORP] Dinero total dejado: ${totalPaid} Bs. | Ciclos completados: ${cyclesFullyPaid}`);
-                            console.log(`[CICLO CORP] Tiene plazo hasta el: ${limitDate.toLocaleDateString()}`);
                             // 7. Colores del Semáforo (ESTRICTO)
                             if (daysRemaining > 1) {
                                 corpState = {

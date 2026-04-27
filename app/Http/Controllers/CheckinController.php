@@ -330,10 +330,9 @@ class CheckinController extends Controller
         // CÓDIGO CORREGIDO
         if ($isSpecialDeal) {
             // Respeta el precio enviado por React, si no viene nada, usa la regla de los -20 Bs
-            $agreedPrice = $request->filled('agreed_price') 
-                ? floatval($request->input('agreed_price')) 
+            $agreedPrice = $request->filled('agreed_price')
+                ? floatval($request->input('agreed_price'))
                 : max(0, $basePrice - 20);
-                
         } elseif ($request->boolean('auto_adjust_price')) {
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
@@ -1036,6 +1035,7 @@ class CheckinController extends Controller
 
             if ($isEverythingComplete) {
                 $updateData['is_temporary'] = false;
+               
                 $checkin->update($updateData);
                 return redirect()->back()->with('success', 'Check-in completado al 100%. Habitación ocupada definitivamente.');
             } else {

@@ -98,11 +98,23 @@ class ReservationController extends Controller
 
                 $specialAgreementId = null;
 
+                // ... dentro del método store, en la lógica de SpecialAgreement ...
                 if ($isSpecialDeal) {
                     $tipoTrato = $typeRequest ?? ($request->is_delegation ? 'delegacion' : 'corporativo');
-                    // Si el front manda el precio total del acuerdo, lo usamos; si no, asumimos el del primer detalle o 0.
-                    $agreedPrice = $request->input('agreed_price', $request->details[0]['price'] ?? 0);
-                    $corporateDays = (int) $request->input('corporate_days', 0);
+
+                    // Obtener precio base del primer detalle
+                    $basePrice = $request->details[0]['price'] ?? 0;
+
+                    // 🌟 LÓGICA DE DESCUENTO AUTOMÁTICO:
+                    // Si es corporativo y no mandaron un precio manual, restamos 20 Bs
+                    $agreedPrice = $request->input('agreed_price');
+                    if ($tipoTrato === 'corporativo' && (!$agreedPrice || $agreedPrice == 0)) {
+                        $agreedPrice = max(0, $basePrice - 20);
+                    } else {
+                        $agreedPrice = $agreedPrice ?? $basePrice;
+                    }
+
+                    $corporateDays = (int) $request->input('corporate_days', 1);
 
                     $agreement = \App\Models\SpecialAgreement::create([
                         'type' => $tipoTrato,
@@ -258,8 +270,6 @@ class ReservationController extends Controller
                         }
 
                         $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
-                        Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
-
                         Log::info("Adelanto de pagos transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
                 }
