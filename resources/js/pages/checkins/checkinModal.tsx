@@ -123,12 +123,12 @@ const calculateAge = (dateString: string) => {
 // Esta función prepara la fecha para el input datetime-local
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
-    
+
     // Si Laravel envía "2026-03-15 14:30:00" o "2026-03-15T14:30:00.000000Z"
     // Simplemente estandarizamos el separador a "T" y cortamos hasta los minutos (16 caracteres).
     // Esto evita que JavaScript intente sumar o restar horas de zonas horarias.
     const cleanString = dateString.replace(' ', 'T').substring(0, 16);
-    
+
     return cleanString;
 };
 
@@ -581,7 +581,7 @@ export default function CheckinModal({
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
                 let calculatedDuration = Math.max(
                     1,
-                    Number(checkinToEdit.duration_days)
+                    Number(checkinToEdit.duration_days),
                 );
 
                 // 1. Buscamos la habitación actual en la lista 'rooms' para saber su precio original
@@ -592,11 +592,15 @@ export default function CheckinModal({
 
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
                 let isPriceAdjusted = false;
-                
+
                 if (checkinToEdit.special_agreement?.type !== 'corporativo') {
-                    isPriceAdjusted = 
-                        (checkinToEdit.special_agreement && String(checkinToEdit.special_agreement.type) === 'AJUSTE DE PRECIO') ||
-                        (Number(checkinToEdit.agreed_price) > 0 && Number(checkinToEdit.agreed_price) < Number(originalRoomPrice));
+                    isPriceAdjusted =
+                        (checkinToEdit.special_agreement &&
+                            String(checkinToEdit.special_agreement.type) ===
+                                'AJUSTE DE PRECIO') ||
+                        (Number(checkinToEdit.agreed_price) > 0 &&
+                            Number(checkinToEdit.agreed_price) <
+                                Number(originalRoomPrice));
                 }
                 // Cargamos todo al formulario
                 setData((prev) => ({
@@ -685,17 +689,21 @@ export default function CheckinModal({
                             : checkinToEdit.qr_bank || '',
 
                     monto_efectivo:
-                        (checkinToEdit.payments && checkinToEdit.payments.length > 0
+                        (checkinToEdit.payments &&
+                        checkinToEdit.payments.length > 0
                             ? checkinToEdit.payments[0].method
-                            : checkinToEdit.payment_method || 'EFECTIVO') === 'EFECTIVO'
-                            ? (checkinToEdit.advance_payment || '')
+                            : checkinToEdit.payment_method || 'EFECTIVO') ===
+                        'EFECTIVO'
+                            ? checkinToEdit.advance_payment || ''
                             : '',
 
                     monto_qr:
-                        (checkinToEdit.payments && checkinToEdit.payments.length > 0
+                        (checkinToEdit.payments &&
+                        checkinToEdit.payments.length > 0
                             ? checkinToEdit.payments[0].method
-                            : checkinToEdit.payment_method || 'EFECTIVO') !== 'EFECTIVO'
-                            ? (checkinToEdit.advance_payment || '')
+                            : checkinToEdit.payment_method || 'EFECTIVO') !==
+                        'EFECTIVO'
+                            ? checkinToEdit.advance_payment || ''
                             : '',
                 }));
 
@@ -766,8 +774,12 @@ export default function CheckinModal({
     // =========================================================================
     useEffect(() => {
         if (show && data.type === 'estandar') {
-            const currentRoom = rooms?.find((r: any) => String(r.id) === String(data.room_id) || String(r.id) === String(initialRoomId));
-            
+            const currentRoom = rooms?.find(
+                (r: any) =>
+                    String(r.id) === String(data.room_id) ||
+                    String(r.id) === String(initialRoomId),
+            );
+
             const originalPrice = Number(currentRoom?.price?.amount || 0);
             // 👇 CORRECCIÓN 2: Usamos estrictamente room_type
             const maxCapacity = Number(currentRoom?.room_type?.capacity || 1);
@@ -776,12 +788,14 @@ export default function CheckinModal({
 
             // 🛑 SEGURO: Respetar datos de BD en modo edición si no se toca el botón
             if (checkinToEdit && !data.auto_adjust_price) {
-                 return; 
+                return;
             }
-            
-            console.log("=========================================");
-            console.log("💰 [BÚSQUEDA DE TARIFA OFICIAL]...");
-            console.log(`-> Hab original: Capacidad ${maxCapacity}, Baño: ${bathroomType}`);
+
+            console.log('=========================================');
+            console.log('💰 [BÚSQUEDA DE TARIFA OFICIAL]...');
+            console.log(
+                `-> Hab original: Capacidad ${maxCapacity}, Baño: ${bathroomType}`,
+            );
             console.log(`-> Ocupantes reales: ${totalP}`);
 
             if (data.auto_adjust_price) {
@@ -799,26 +813,44 @@ export default function CheckinModal({
 
                     if (matchedRoom) {
                         // 👇 CORRECCIÓN 1: Agregamos ?. y un fallback a || 0 por seguridad
-                        newCalculatedPrice = Number(matchedRoom?.price?.amount || 0);
-                        console.log(`-> 🎯 Tarifa encontrada! Se aplicó precio de habitación de ${totalP} persona(s) con baño ${bathroomType}: ${newCalculatedPrice} Bs`);
+                        newCalculatedPrice = Number(
+                            matchedRoom?.price?.amount || 0,
+                        );
+                        console.log(
+                            `-> 🎯 Tarifa encontrada! Se aplicó precio de habitación de ${totalP} persona(s) con baño ${bathroomType}: ${newCalculatedPrice} Bs`,
+                        );
                     } else {
-                        console.log(`-> ⚠️ No hay tarifa registrada para ${totalP} persona(s) con baño ${bathroomType}. Se mantiene: ${newCalculatedPrice} Bs`);
+                        console.log(
+                            `-> ⚠️ No hay tarifa registrada para ${totalP} persona(s) con baño ${bathroomType}. Se mantiene: ${newCalculatedPrice} Bs`,
+                        );
                     }
                 }
 
                 if (Number(data.agreed_price) !== newCalculatedPrice) {
                     setData('agreed_price', newCalculatedPrice);
                 }
-
             } else {
-                console.log("-> 🛑 Ajuste Apagado. Restaurando precio original:", originalPrice, "Bs");
-                if (originalPrice > 0 && Number(data.agreed_price) !== originalPrice) {
+                console.log(
+                    '-> 🛑 Ajuste Apagado. Restaurando precio original:',
+                    originalPrice,
+                    'Bs',
+                );
+                if (
+                    originalPrice > 0 &&
+                    Number(data.agreed_price) !== originalPrice
+                ) {
                     setData('agreed_price', originalPrice);
                 }
             }
-            console.log("=========================================");
+            console.log('=========================================');
         }
-    }, [data.auto_adjust_price, data.companions?.length, data.room_id, data.type, show]);
+    }, [
+        data.auto_adjust_price,
+        data.companions?.length,
+        data.room_id,
+        data.type,
+        show,
+    ]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -1064,83 +1096,84 @@ export default function CheckinModal({
             : [];
 
     // 1. Verificamos que exista al menos UN teléfono en todo el grupo
-const hasValidPhoneInGroup = () => {
-    const checkPhone = (p?: string | null) => p && p.replace(/[^0-9]/g, '').length > 7;
-    
-    const titularPhone = checkPhone(data.phone);
-    let validCompanionPhone = false;
+    const hasValidPhoneInGroup = () => {
+        const checkPhone = (p?: string | null) =>
+            p && p.replace(/[^0-9]/g, '').length > 7;
 
-    if (data.companions && data.companions.length > 0) {
-        validCompanionPhone = data.companions.some((c) => checkPhone(c.phone));
-    }
-    
-    
-    return titularPhone || validCompanionPhone;
-};
+        const titularPhone = checkPhone(data.phone);
+        let validCompanionPhone = false;
 
-// 2. Evaluador estricto de campos con reporte en Consola
-const areAllFieldsFilled = (person: any, roleName: string) => {
-    // Función de seguridad: Convierte a texto y quita espacios en blanco extras
-    const s = (val: any) => String(val || '').trim();
+        if (data.companions && data.companions.length > 0) {
+            validCompanionPhone = data.companions.some((c) =>
+                checkPhone(c.phone),
+            );
+        }
 
-    // Creamos un diccionario de pruebas para ver qué pasa y qué falla
-    const checks = {
-        full_name: s(person.full_name).length > 3,
-        identification_number: s(person.identification_number).length >= 4,
-        issued_in: s(person.issued_in).length > 0,
-        nationality: s(person.nationality).length > 0,
-        civil_status: s(person.civil_status).length > 0,
-        birth_date: s(person.birth_date).length > 0,
-        profession: s(person.profession).length > 1,
-        origin: s(person.origin).length > 1,
+        return titularPhone || validCompanionPhone;
     };
 
-    // Evaluamos si TODAS las pruebas dieron "true"
-    const isComplete = Object.values(checks).every((v) => v === true);
+    // 2. Evaluador estricto de campos con reporte en Consola
+    const areAllFieldsFilled = (person: any, roleName: string) => {
+        // Función de seguridad: Convierte a texto y quita espacios en blanco extras
+        const s = (val: any) => String(val || '').trim();
 
-    
-    return isComplete;
-};
+        // Creamos un diccionario de pruebas para ver qué pasa y qué falla
+        const checks = {
+            full_name: s(person.full_name).length > 3,
+            identification_number: s(person.identification_number).length >= 4,
+            issued_in: s(person.issued_in).length > 0,
+            nationality: s(person.nationality).length > 0,
+            civil_status: s(person.civil_status).length > 0,
+            birth_date: s(person.birth_date).length > 0,
+            profession: s(person.profession).length > 1,
+            origin: s(person.origin).length > 1,
+        };
 
-// 3. Evaluador maestro del estado de la asignación
-const isProfileIncomplete = (() => {
-    
+        // Evaluamos si TODAS las pruebas dieron "true"
+        const isComplete = Object.values(checks).every((v) => v === true);
 
-    // A) REGLA DEL TELÉFONO
-    if (!hasValidPhoneInGroup()) {
-        
-        return true; 
-    }
-
-    // B) VALIDAR AL TITULAR
-    const titular = {
-        full_name: data.full_name,
-        identification_number: data.identification_number,
-        issued_in: data.issued_in,
-        nationality: data.nationality,
-        civil_status: data.civil_status,
-        birth_date: data.birth_date,
-        profession: data.profession,
-        origin: data.origin,
+        return isComplete;
     };
 
-    if (!areAllFieldsFilled(titular, "TITULAR")) {
-        
-        return true;
-    }
+    // 3. Evaluador maestro del estado de la asignación
+    const isProfileIncomplete = (() => {
+        // A) REGLA DEL TELÉFONO
+        if (!hasValidPhoneInGroup()) {
+            return true;
+        }
 
-    // C) VALIDAR ACOMPAÑANTES
-    if (data.companions && data.companions.length > 0) {
-        for (let i = 0; i < data.companions.length; i++) {
-            if (!areAllFieldsFilled(data.companions[i], `ACOMPAÑANTE ${i + 1}`)) {
-                
-                return true; 
+        // B) VALIDAR AL TITULAR
+        const titular = {
+            full_name: data.full_name,
+            identification_number: data.identification_number,
+            issued_in: data.issued_in,
+            nationality: data.nationality,
+            civil_status: data.civil_status,
+            birth_date: data.birth_date,
+            profession: data.profession,
+            origin: data.origin,
+        };
+
+        if (!areAllFieldsFilled(titular, 'TITULAR')) {
+            return true;
+        }
+
+        // C) VALIDAR ACOMPAÑANTES
+        if (data.companions && data.companions.length > 0) {
+            for (let i = 0; i < data.companions.length; i++) {
+                if (
+                    !areAllFieldsFilled(
+                        data.companions[i],
+                        `ACOMPAÑANTE ${i + 1}`,
+                    )
+                ) {
+                    return true;
+                }
             }
         }
-    }
 
-    return false;
-})();
+        return false;
+    })();
     // =========================================================
     // 🚀 LÓGICA DE ENVÍO Y ADVERTENCIA DE CAPACIDAD (ACTUALIZADO)
     // =========================================================
@@ -1578,9 +1611,14 @@ const isProfileIncomplete = (() => {
                             {/* ========================================================= */}
                             {/* ALERTA DE DATOS FALTANTES (Incrustada en la columna)      */}
                             {/* ========================================================= */}
-                            {isTitular &&
+                            {!checkinToEdit &&
+                                isTitular &&
                                 isProfileIncomplete &&
-                                data.full_name.length > 3 && (
+                                data.full_name.length > 3 &&
+                                // AGREGAMOS ESTA LÓGICA: Solo mostrar si NO hay más datos aún
+                                !data.identification_number &&
+                                !data.birth_date &&
+                                !data.phone && (
                                     <div className="absolute -top-2 left-0 z-50 w-full px-5 pt-2">
                                         <div className="flex animate-in items-center justify-between rounded-lg border border-amber-200 bg-amber-50/95 px-4 py-0.5 shadow-md backdrop-blur-sm duration-300 slide-in-from-top-2">
                                             <span className="flex items-center gap-2 text-[12px] font-bold text-amber-700">
@@ -1764,7 +1802,6 @@ const isProfileIncomplete = (() => {
                                                 e.target.value.toUpperCase(),
                                             )
                                         }
-                                        
                                     />
                                 </div>
                                 <div
@@ -1781,7 +1818,6 @@ const isProfileIncomplete = (() => {
                                                 currentPerson.issued_in || ''
                                             }
                                             disabled={isReadOnly}
-                                            
                                             autoComplete="off"
                                             onChange={(e) =>
                                                 handleIssuedInInput(
@@ -1994,7 +2030,6 @@ const isProfileIncomplete = (() => {
                                                     : ''
                                             }
                                             disabled={isReadOnly}
-                                            
                                             onChange={(e) => {
                                                 // Extraer solo hasta 4 números
                                                 const year = e.target.value
@@ -2060,7 +2095,6 @@ const isProfileIncomplete = (() => {
                                                     ''
                                                 }
                                                 disabled={isReadOnly}
-                                                
                                                 autoComplete="off"
                                                 onChange={(e) =>
                                                     handleProfessionInput(
@@ -2144,7 +2178,6 @@ const isProfileIncomplete = (() => {
                                             type="text"
                                             value={currentPerson.origin || ''} // <-- AHORA LEE DE CURRENTPERSON (Muestra el correcto en el carrusel)
                                             disabled={isReadOnly}
-                                            
                                             autoComplete="off"
                                             onChange={(e) =>
                                                 handleOriginInput(
@@ -2221,7 +2254,6 @@ const isProfileIncomplete = (() => {
                                                 )
                                             }
                                             className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm text-black"
-                                            
                                         />
                                     </div>
                                 </div>
@@ -2554,8 +2586,13 @@ const isProfileIncomplete = (() => {
                                                                                 origPrice -
                                                                                     20,
                                                                             ),
-                                                                        corporate_days: 7, // Por defecto Semanal
+                                                                        // 👇 CAMBIO AQUÍ: Ponemos 0 para que obligue a seleccionar
+                                                                        corporate_days: 0,
                                                                     }),
+                                                                );
+                                                                // 👇 CAMBIO AQUÍ: Aseguramos que la caja de "OTRO" esté oculta inicialmente
+                                                                setIsCustomFrequency(
+                                                                    false,
                                                                 );
                                                             }
                                                         }}
@@ -2683,14 +2720,18 @@ const isProfileIncomplete = (() => {
                                             );
 
                                             const originalPrice = Number(selectedRoom?.price?.amount || 0);
+                                            // 🔥 NUEVO: Calculamos la base corporativa estricta (Precio normal menos 20 Bs)
+                                            const corporateBasePrice = Math.max(0, originalPrice - 20);
+                                            
                                             let finalPrice = originalPrice;
 
                                             // ==========================================
                                             // 🧠 LÓGICA DE PRECIO FINAL (CORREGIDA)
                                             // ==========================================
-                                            // El useEffect ya calculó la tarifa oficial y la guardó en data.agreed_price.
-                                            // Solo le decimos a la vista que la muestre.
-                                            if (Number(data.agreed_price) > 0) {
+                                            if (data.type !== 'estandar') {
+                                                // Permitimos que sea 0 al borrar la caja para que no salte el precio
+                                                finalPrice = data.agreed_price !== '' ? Number(data.agreed_price) : 0;
+                                            } else if (Number(data.agreed_price) > 0) {
                                                 finalPrice = Number(data.agreed_price);
                                             }
 
@@ -2708,10 +2749,7 @@ const isProfileIncomplete = (() => {
 
                                             // Si es un grupo especial, el total sugerido a cobrar AHORA MISMO es en base a su frecuencia
                                             if (data.type !== 'estandar') {
-                                                noches =
-                                                    Number(
-                                                        data.corporate_days,
-                                                    ) || 1;
+                                                noches = Number(data.corporate_days) || 1;
                                                 tituloTotal = `Cobro (cada ${noches} días)`;
                                             }
 
@@ -2766,30 +2804,33 @@ const isProfileIncomplete = (() => {
                                                             {tituloTotal}
                                                         </span>
 
-                                                        {/* 🌟 AQUÍ ESTÁ EL CAMBIO: Input si es corporativo, Texto si es normal 🌟 */}
-                                                        {data.type !==
-                                                        'estandar' ? (
+                                                        {/* 🌟 AQUÍ ESTÁ EL CAMBIO: LÍMITE STRICTO MENOS 20 BS 🌟 */}
+                                                        {data.type !== 'estandar' ? (
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <input
                                                                     type="number"
                                                                     step="0.10"
                                                                     min="0"
+                                                                    // El límite máximo es estrictamente el Precio Corporativo (-20Bs) x Noches
+                                                                    max={Number((corporateBasePrice * noches).toFixed(2))}
                                                                     value={
                                                                         total > 0
                                                                             ? Number(total.toFixed(2))
                                                                             : ''
                                                                     }
                                                                     onChange={(e) => {
-                                                                        const newTotal = Number(e.target.value);
+                                                                        const inputVal = Number(e.target.value);
+                                                                        
+                                                                        // Definimos el tope máximo estricto (-20 Bs)
+                                                                        const maxTotal = corporateBasePrice * noches;
+                                                                        
+                                                                        // Si intenta cobrar MÁS del tope, lo bloquea en el precio corporativo base (-20)
+                                                                        const clampedTotal = inputVal > maxTotal ? maxTotal : inputVal;
+
                                                                         // Matemática inversa: Total dividido entre días = precio base
-                                                                        const dailyRate =
-                                                                            noches > 0
-                                                                                ? newTotal / noches
-                                                                                : newTotal;
-                                                                        setData(
-                                                                            'agreed_price',
-                                                                            dailyRate,
-                                                                        );
+                                                                        const dailyRate = noches > 0 ? clampedTotal / noches : clampedTotal;
+                                                                        
+                                                                        setData('agreed_price', dailyRate);
                                                                     }}
                                                                     disabled={isReadOnly}
                                                                     className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -2808,9 +2849,7 @@ const isProfileIncomplete = (() => {
                                                         {noches > 1 && (
                                                             <span className="mt-0.5 text-[10px] font-medium text-gray-500">
                                                                 {Number(finalPrice).toFixed(2)} x {noches}{' '}
-                                                                {data.type !== 'estandar'
-                                                                    ? 'días'
-                                                                    : 'noches'}
+                                                                {data.type !== 'estandar' ? 'días' : 'noches'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -3005,7 +3044,10 @@ const isProfileIncomplete = (() => {
                                                 </label>
                                                 <button
                                                     type="button"
-                                                    disabled={!isTitular || !!checkinToEdit}
+                                                    disabled={
+                                                        !isTitular ||
+                                                        !!checkinToEdit
+                                                    }
                                                     onClick={() =>
                                                         setData((prev) => ({
                                                             ...prev,
@@ -3069,7 +3111,10 @@ const isProfileIncomplete = (() => {
                                                         onFocus={(e) =>
                                                             e.target.select()
                                                         }
-                                                        disabled={!isTitular || !!checkinToEdit}
+                                                        disabled={
+                                                            !isTitular ||
+                                                            !!checkinToEdit
+                                                        }
                                                         required={
                                                             data.type ===
                                                             'corporativo'
@@ -3116,7 +3161,8 @@ const isProfileIncomplete = (() => {
                                                             key={banco}
                                                             type="button"
                                                             disabled={
-                                                                !isTitular || !!checkinToEdit
+                                                                !isTitular ||
+                                                                !!checkinToEdit
                                                             }
                                                             onClick={() =>
                                                                 setData(
