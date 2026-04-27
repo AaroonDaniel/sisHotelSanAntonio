@@ -49,7 +49,6 @@ export default function OccupiedRoomModal({
             for (const room of props.Rooms) {
                 // Si la relación se llama active_checkin
                 if (room.active_checkin?.id === checkin.id) {
-                    
                     return room.active_checkin;
                 }
                 // Si la relación es un array de checkins
@@ -58,7 +57,6 @@ export default function OccupiedRoomModal({
                         (c: any) => c.id === checkin.id,
                     );
                     if (found) {
-                        
                         return found;
                     }
                 }
@@ -69,12 +67,10 @@ export default function OccupiedRoomModal({
         if (props.checkins) {
             const found = props.checkins.find((c: any) => c.id === checkin.id);
             if (found) {
-               
                 return found;
             }
         }
 
-       
         return checkin;
     }, [checkin, props]);
 
@@ -136,50 +132,63 @@ export default function OccupiedRoomModal({
         }).format(amount);
 
     // En occupiedRoomModal.tsx
-const calculateRealNights = () => {
-    // Usamos check_in_date porque es la fecha de inicio de cobro que tú manejas/modificas
-    if (!liveCheckin.check_in_date) return 1;
+    const calculateRealNights = () => {
+        // Usamos check_in_date porque es la fecha de inicio de cobro que tú manejas/modificas
+        if (!liveCheckin.check_in_date) return 1;
 
-    // 1. Convertimos la fecha de inicio de cobro a objeto Date
-    const checkInDate = new Date(liveCheckin.check_in_date); 
-    const now = new Date();
+        // 1. Convertimos la fecha de inicio de cobro a objeto Date
+        const checkInDate = new Date(liveCheckin.check_in_date);
+        const now = new Date();
 
-    // 2. Obtenemos la hora de salida del horario (Schedule) para el corte
-    const checkoutTimeStr = liveCheckin.schedule?.check_out_time || '13:00:00';
-    const [checkoutHour, checkoutMinute] = checkoutTimeStr.split(':').map(Number);
+        // 2. Obtenemos la hora de salida del horario (Schedule) para el corte
+        const checkoutTimeStr =
+            liveCheckin.schedule?.check_out_time || '13:00:00';
+        const [checkoutHour, checkoutMinute] = checkoutTimeStr
+            .split(':')
+            .map(Number);
 
-    // 3. Calculamos la diferencia en días naturales (sin importar la hora exacta todavía)
-    const startDay = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
-    const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    // Diferencia de días
-    let days = Math.floor((currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24));
+        // 3. Calculamos la diferencia en días naturales (sin importar la hora exacta todavía)
+        const startDay = new Date(
+            checkInDate.getFullYear(),
+            checkInDate.getMonth(),
+            checkInDate.getDate(),
+        );
+        const currentDay = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+        );
 
-    // 4. Reglas de negocio:
-    if (days < 0) return 0; // Por si la fecha es futura
-    if (days === 0) return 1; // Si es el mismo día, se cobra al menos 1 noche
+        // Diferencia de días
+        let days = Math.floor(
+            (currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24),
+        );
 
-    // 5. Verificamos si hoy ya pasó la hora de salida (Check-out)
-    const limitToday = new Date();
-    limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
+        // 4. Reglas de negocio:
+        if (days < 0) return 0; // Por si la fecha es futura
+        if (days === 0) return 1; // Si es el mismo día, se cobra al menos 1 noche
 
-    // Si la hora actual ya pasó el límite de salida, se cuenta como una noche más
-    if (now.getTime() > limitToday.getTime()) {
-        days += 1;
-    }
+        // 5. Verificamos si hoy ya pasó la hora de salida (Check-out)
+        const limitToday = new Date();
+        limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
 
-    return days;
-};
+        // Si la hora actual ya pasó el límite de salida, se cuenta como una noche más
+        if (now.getTime() > limitToday.getTime()) {
+            days += 1;
+        }
+
+        return days;
+    };
 
     const days = calculateRealNights();
-    
+
     // 2. Costos financieros
     const oldDebt = parseFloat(liveCheckin.carried_balance || 0);
     const pricePerNight =
         parseFloat(liveCheckin.agreed_price) ||
         parseFloat(liveCheckin.room?.price?.amount) ||
         0;
-        
+
     const currentRoomCost = days * pricePerNight;
     const servicesCost =
         liveCheckin.services?.reduce((acc: number, s: any) => {
@@ -190,6 +199,9 @@ const calculateRealNights = () => {
 
     const grandTotal = oldDebt + currentRoomCost + servicesCost;
     const balanceDue = grandTotal - totalPaid;
+    const isSpecialGroup =
+        liveCheckin?.special_agreement?.type === 'corporativo' ||
+        liveCheckin?.special_agreement?.type === 'delegacion';
 
     // --- MANEJADORES DE PAGO ---
     const handlePreSubmit = (e: React.FormEvent) => {
@@ -208,7 +220,6 @@ const calculateRealNights = () => {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
-               
                 resetPayment();
                 setShowPaymentForm(false);
                 setShowConfirmModal(false);
@@ -290,7 +301,6 @@ const calculateRealNights = () => {
                         <div className="grid gap-6 lg:grid-cols-2">
                             {/* COLUMNA IZQUIERDA: HUÉSPEDES */}
                             <div className="space-y-4">
-                            
                                 {!hasCompanions ? (
                                     <StaticGuestCard
                                         guest={liveCheckin.guest}
@@ -318,7 +328,11 @@ const calculateRealNights = () => {
                                                     key={comp.id}
                                                     guest={comp}
                                                     isTitular={false}
-                                                    origin={comp.pivot?.origin || comp.origin || 'SIN REGISTRO'}
+                                                    origin={
+                                                        comp.pivot?.origin ||
+                                                        comp.origin ||
+                                                        'SIN REGISTRO'
+                                                    }
                                                     isExpanded={
                                                         expandedGuestId ===
                                                         comp.id
@@ -414,9 +428,9 @@ const calculateRealNights = () => {
                                                     {formatCurrency(totalPaid)}
                                                 </span>
                                             </div>
-                                            
+
                                             {/* 👇 MAGIA: Ocultamos esta parte si es corporativo 👇 */}
-                                            {!liveCheckin.is_corporate && (
+                                            {!isSpecialGroup && (
                                                 <>
                                                     <div className="mx-2 h-8 w-px bg-gray-200"></div>
                                                     <div className="flex flex-col items-end">
@@ -426,17 +440,19 @@ const calculateRealNights = () => {
                                                         <span
                                                             className={`text-lg font-black ${balanceDue > 0 ? 'text-red-500' : 'text-blue-500'}`}
                                                         >
-                                                            {formatCurrency(balanceDue)}
+                                                            {formatCurrency(
+                                                                balanceDue,
+                                                            )}
                                                         </span>
                                                     </div>
                                                 </>
                                             )}
 
                                             {/* 👇 OPCIONAL: Para que no quede vacío, ponemos un letrerito 👇 */}
-                                            {liveCheckin.is_corporate && (
+                                            {isSpecialGroup && (
                                                 <div className="flex flex-col items-end">
                                                     <span className="rounded bg-indigo-100 px-2 py-1 text-[9px] font-black tracking-widest text-indigo-700 uppercase">
-                                                        Corporativo
+                                                        Corporativo 
                                                     </span>
                                                 </div>
                                             )}

@@ -178,6 +178,7 @@ export interface CheckinData {
         payment_frequency_days: number;
     } | null;
     payments?: any[];
+    corporate_days?: number;
 }
 
 export interface Room {
@@ -405,7 +406,7 @@ export default function CheckinModal({
 
             type: 'estandar',
             agreed_price: 0,
-            corporate_days: 0,
+            corporate_days: 1,
         });
 
     // =========================================================================
@@ -2587,7 +2588,7 @@ export default function CheckinModal({
                                                                                     20,
                                                                             ),
                                                                         // 👇 CAMBIO AQUÍ: Ponemos 0 para que obligue a seleccionar
-                                                                        corporate_days: 0,
+                                                                        corporate_days: 1,
                                                                     }),
                                                                 );
                                                                 // 👇 CAMBIO AQUÍ: Aseguramos que la caja de "OTRO" esté oculta inicialmente
@@ -2602,107 +2603,41 @@ export default function CheckinModal({
                                                     ASIG. CORP
                                                 </label>
 
-                                                {/* Controles de Frecuencia que aparecen AL LADO (Diseño Compacto Original) */}
-                                                {data.type ===
-                                                    'corporativo' && (
+                                                {/* Controles de Frecuencia que aparecen AL LADO */}
+                                                {data.type === 'corporativo' && (
                                                     <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
+                                                        {/* 1. SELECTOR RÁPIDO */}
                                                         <select
                                                             className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
-                                                            value={
-                                                                isCustomFrequency
-                                                                    ? 'OTRO'
-                                                                    : String(
-                                                                          data.corporate_days,
-                                                                      )
-                                                            }
+                                                            // Si el número en la caja es 1, 7, 15 o 30, el select lo muestra. Si escriben otro número a mano, el select muestra "OTRO"
+                                                            value={[1, 7, 15, 30].includes(Number(data.corporate_days)) ? String(data.corporate_days) : 'OTRO'}
                                                             onChange={(e) => {
-                                                                if (
-                                                                    e.target
-                                                                        .value ===
-                                                                    'OTRO'
-                                                                ) {
-                                                                    setIsCustomFrequency(
-                                                                        true,
-                                                                    );
-                                                                    setData(
-                                                                        'corporate_days',
-                                                                        0,
-                                                                    );
-                                                                } else {
-                                                                    setIsCustomFrequency(
-                                                                        false,
-                                                                    );
-                                                                    setData(
-                                                                        'corporate_days',
-                                                                        Number(
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                        ),
-                                                                    );
+                                                                if (e.target.value !== 'OTRO') {
+                                                                    setData('corporate_days', Number(e.target.value));
                                                                 }
                                                             }}
-                                                            disabled={
-                                                                isReadOnly
-                                                            }
-                                                            required={
-                                                                data.type ===
-                                                                'corporativo'
-                                                            }
+                                                            disabled={isReadOnly}
                                                         >
-                                                            <option
-                                                                value="0"
-                                                                disabled
-                                                            >
-                                                                Días...
-                                                            </option>
-                                                            <option value="1">
-                                                                1 día
-                                                            </option>
-                                                            <option value="7">
-                                                                7 días
-                                                            </option>
-                                                            <option value="15">
-                                                                15 días
-                                                            </option>
-                                                            <option value="30">
-                                                                30 días
-                                                            </option>
-                                                            <option value="OTRO">
-                                                                Otro
-                                                            </option>
+                                                            <option value="1">1 día</option>
+                                                            <option value="7">7 días</option>
+                                                            <option value="15">15 días</option>
+                                                            <option value="30">30 días</option>
+                                                            <option value="OTRO">Otro</option>
                                                         </select>
 
-                                                        {isCustomFrequency && (
-                                                            <input
-                                                                type="number"
-                                                                min="2"
-                                                                className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm text-black focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                placeholder="Nº"
-                                                                value={
-                                                                    data.corporate_days ===
-                                                                    0
-                                                                        ? ''
-                                                                        : data.corporate_days
-                                                                }
-                                                                onChange={(e) =>
-                                                                    setData(
-                                                                        'corporate_days',
-                                                                        Number(
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                        ),
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    isReadOnly
-                                                                }
-                                                                required={
-                                                                    isCustomFrequency
-                                                                }
-                                                            />
-                                                        )}
+                                                        {/* 2. CAJA DE TEXTO (SIEMPRE VISIBLE) */}
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm font-black text-black shadow-inner focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                            placeholder="Días"
+                                                            value={data.corporate_days === 0 ? '' : data.corporate_days}
+                                                            onChange={(e) =>
+                                                                setData('corporate_days', Number(e.target.value))
+                                                            }
+                                                            disabled={isReadOnly}
+                                                            required={data.type === 'corporativo'}
+                                                        />
                                                     </div>
                                                 )}
                                             </div>

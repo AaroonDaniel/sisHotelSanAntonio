@@ -1129,29 +1129,43 @@ export default function RoomsStatus({
                                     String(activeCheckin.agreed_price),
                                 ) || 0;
 
-                            // 3. ¿Para cuántos días le alcanza el dinero que dio?
-                            const daysPaid =
-                                agreedPrice > 0
-                                    ? Math.floor(totalPaid / agreedPrice)
-                                    : 0;
+                            // 3. 🔄 LÓGICA DE CICLOS DE PAGO
+                            // 👇 CORRECCIÓN 1: Leemos los días desde la nueva relación del convenio (special_agreement)
+                            const corpDays = Number(activeCheckin.special_agreement?.payment_frequency_days) 
+                                          || Number(activeCheckin.corporate_days) 
+                                          || 1;
+                            
+                            // ¿Cuánto cuesta el ciclo completo? 
+                            const cyclePrice = agreedPrice * corpDays;
+                            
+                            // ¿Cuántos ciclos ha pagado POR COMPLETO? 
+                            const cyclesFullyPaid = cyclePrice > 0 ? Math.floor(totalPaid / cyclePrice) : 0;
+                            
+                            // Los días de vida que le damos son: El ciclo actual en el que está
+                            const daysGranted = (cyclesFullyPaid + 1) * corpDays;
 
-                            // 4. Calculamos la fecha límite estricta (Fecha de Check-in + Días Pagados)
-                            const realDateString =
-                                activeCheckin.actual_arrival_date ||
-                                activeCheckin.check_in_date;
-                            const limitDate = new Date(realDateString);
-                            limitDate.setHours(0, 0, 0, 0);
-                            limitDate.setDate(limitDate.getDate() + daysPaid);
-
-                            // 5. Comparamos con HOY
+                            // 4. Calculamos la fecha límite estricta (Basada en su Plazo)
+                            // 👇 CORRECCIÓN 2: Obligamos al sistema a usar la fecha exacta que escribiste en el formulario
+                            const realDateString = activeCheckin.check_in_date; 
+                            
+                            const dateOnly = realDateString.split('T')[0].split(' ')[0]; 
+                            
+                            const limitDate = new Date(dateOnly + "T00:00:00");
+                            // Le sumamos el Plazo Fijo del ciclo
+                            limitDate.setDate(limitDate.getDate() + daysGranted);
+                            // 5. Comparamos con HOY a la medianoche
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            const daysRemaining = Math.ceil(
-                                (limitDate.getTime() - today.getTime()) /
-                                    (1000 * 60 * 60 * 24),
-                            );
 
-                            // 6. Colores del Semáforo
+                            // 6. Diferencia matemática exacta
+                            const diffTime = limitDate.getTime() - today.getTime();
+                            const daysRemaining = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                            // 🚨 ESPÍA PARA LA CONSOLA 🚨
+                            console.log(`[CICLO CORP] Plazo: Cada ${corpDays} días | Tarifa: ${cyclePrice} Bs por ciclo.`);
+                            console.log(`[CICLO CORP] Dinero total dejado: ${totalPaid} Bs. | Ciclos completados: ${cyclesFullyPaid}`);
+                            console.log(`[CICLO CORP] Tiene plazo hasta el: ${limitDate.toLocaleDateString()}`);
+                            // 7. Colores del Semáforo (ESTRICTO)
                             if (daysRemaining > 1) {
                                 corpState = {
                                     badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
@@ -1162,14 +1176,10 @@ export default function RoomsStatus({
                                     badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
                                     text: `COBRAR MAÑANA`,
                                 };
-                            } else if (daysRemaining === 0) {
-                                corpState = {
-                                    badge: 'bg-orange-500 text-white animate-pulse shadow-md border border-orange-600',
-                                    text: `COBRAR HOY`,
-                                };
                             } else {
+                                // Directo a MOROSO si llega a 0 (hoy) o menos (-1, -2...)
                                 corpState = {
-                                    badge: 'bg-red-600 text-white animate-bounce shadow-lg border-2 border-red-800 font-black tracking-widest',
+                                    badge: 'bg-red-600 text-white animate-pulse shadow-lg border-2 border-red-800 font-black tracking-widest',
                                     text: `MOROSO (${Math.abs(daysRemaining)}d)`,
                                 };
                             }
