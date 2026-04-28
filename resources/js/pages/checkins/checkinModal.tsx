@@ -792,13 +792,13 @@ export default function CheckinModal({
                 return;
             }
 
-            console.log('=========================================');
+            /*console.log('=========================================');
             console.log('💰 [BÚSQUEDA DE TARIFA OFICIAL]...');
             console.log(
                 `-> Hab original: Capacidad ${maxCapacity}, Baño: ${bathroomType}`,
             );
             console.log(`-> Ocupantes reales: ${totalP}`);
-
+            */
             if (data.auto_adjust_price) {
                 let newCalculatedPrice = originalPrice;
 
@@ -817,13 +817,13 @@ export default function CheckinModal({
                         newCalculatedPrice = Number(
                             matchedRoom?.price?.amount || 0,
                         );
-                        console.log(
+                        /*console.log(
                             `-> 🎯 Tarifa encontrada! Se aplicó precio de habitación de ${totalP} persona(s) con baño ${bathroomType}: ${newCalculatedPrice} Bs`,
-                        );
+                        );*/
                     } else {
-                        console.log(
+                        /*console.log(
                             `-> ⚠️ No hay tarifa registrada para ${totalP} persona(s) con baño ${bathroomType}. Se mantiene: ${newCalculatedPrice} Bs`,
-                        );
+                        );*/
                     }
                 }
 
@@ -831,11 +831,11 @@ export default function CheckinModal({
                     setData('agreed_price', newCalculatedPrice);
                 }
             } else {
-                console.log(
+                /*console.log(
                     '-> 🛑 Ajuste Apagado. Restaurando precio original:',
                     originalPrice,
                     'Bs',
-                );
+                );*/
                 if (
                     originalPrice > 0 &&
                     Number(data.agreed_price) !== originalPrice
@@ -843,7 +843,7 @@ export default function CheckinModal({
                     setData('agreed_price', originalPrice);
                 }
             }
-            console.log('=========================================');
+            /*console.log('=========================================');*/
         }
     }, [
         data.auto_adjust_price,

@@ -451,9 +451,9 @@ export default function RoomsStatus({
         const status = getDisplayStatus(room);
         const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
-        console.log(
+        /*console.log(
             `[Interacción] Clic en Habitación ${room.number}. Estado actual: ${status}`,
-        );
+        );*/
         if (isMultiCheckoutMode) {
             if (status === 'occupied') {
                 setSelectedRoomsForCheckout((prev) =>
