@@ -18,6 +18,7 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\OnlineBookingController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -200,4 +201,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 });
 
+Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
+
+// Endpoints para procesar los pasos (pueden ser peticiones POST/Inertia)
+Route::post('/reservar/buscar', [OnlineBookingController::class, 'searchRooms'])->name('booking.search');
+Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.store');
 require __DIR__ . '/settings.php';
