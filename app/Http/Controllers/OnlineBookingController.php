@@ -19,79 +19,118 @@ class OnlineBookingController extends Controller
      */
     public function index()
     {
-        // Solo renderizamos la vista de Inertia.
-        // Asumimos que crearás la carpeta Booking y el archivo Index.tsx
-        return Inertia::render('booking/index');
+        // Usamos tus relaciones reales para traer las habitaciones
+        $rooms = Room::with(['roomType', 'price'])
+            ->where('status', '!=', 'MANTENIMIENTO') // Opcional: ocultar las que están en mantenimiento
+            ->get()
+            ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE)
+            ->map(function ($room) {
+                return [
+                    'id'       => $room->id,
+                    'name'     => 'Habitación ' . $room->number,
+                    
+                    // Extraemos el nombre del tipo de habitación usando tu relación 'roomType'
+                    'type'     => $room->roomType ? $room->roomType->name : 'Estándar', 
+                    
+                    // Asegúrate de que 'capacity' exista en tu tabla room_types, si no, pon un default
+                    'capacity' => $room->roomType ? $room->roomType->capacity : 2, 
+                    
+                    // Extraemos el precio usando tu relación 'price' (ajusta 'amount' al nombre de tu columna)
+                    'price'    => $room->price ? $room->price->price : 0, 
+                    
+                    // Si tienes el tipo de baño en la BD, ponlo aquí. Si no, lo forzamos a 'Privado' por ahora
+                    'bath'     => 'Privado', 
+                    
+                    // Puedes agregar una URL de imagen real si tienes en la base de datos
+                    'image'    => 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=300&auto=format&fit=crop',
+                ];
+            })->values(); // Re-indexamos para que llegue como un array limpio a React
+
+        // Renderizamos el componente Index que creamos en React
+        return Inertia::render('booking/index', [
+            'initialRooms' => $rooms
+        ]);
     }
 
     /**
      * Busca habitaciones disponibles según fechas y capacidad.
      */
     public function searchRooms(Request $request)
-    {
-        // 1. Validación de los datos de entrada
-        $request->validate([
-            'checkin_date'  => 'required|date|after_or_equal:today',
-            'checkout_date' => 'required|date|after:checkin_date',
-            'guests_count'  => 'required|integer|min:1',
-        ]);
+{
+    // 1. Validación de los datos que envía React
+    $request->validate([
+        'checkIn'  => 'required|date|after_or_equal:today',
+        'checkOut' => 'required|date|after:checkIn',
+    ]);
 
-        $checkinDate = Carbon::parse($request->checkin_date)->startOfDay();
-        $checkoutDate = Carbon::parse($request->checkout_date)->endOfDay();
-        $guestsCount = (int) $request->guests_count;
+    $checkinDate = Carbon::parse($request->checkIn)->startOfDay();
+    $checkoutDate = Carbon::parse($request->checkOut)->endOfDay();
 
-        // 2. Consulta de Habitaciones
-        // Buscamos habitaciones (y traemos su tipo y precios)
-        $rooms = Room::with(['roomType', 'prices' => function($query) {
-                // Opcional: Si quieres traer un precio específico activo
-                $query->where('is_active', true);
-            }])
-            // Filtrar por capacidad (basado en el tipo de habitación)
-            ->whereHas('roomType', function ($query) use ($guestsCount) {
-                $query->where('capacity', '>=', $guestsCount);
-            })
-            // 3. LA MAGIA: Excluir las habitaciones ocupadas en esas fechas
-            ->whereDoesntHave('reservations', function ($query) use ($checkinDate, $checkoutDate) {
-                $query->where(function ($q) use ($checkinDate, $checkoutDate) {
-                    // Condición de cruce de fechas para reservas
-                    $q->where('check_in_date', '<', $checkoutDate)
-                      ->where('check_out_date', '>', $checkinDate)
-                      ->whereIn('status', ['Pendiente', 'Confirmada']); // Asegúrate de usar los estados correctos de tu sistema
-                });
-            })
-            ->whereDoesntHave('checkins', function ($query) use ($checkinDate, $checkoutDate) {
-                $query->where(function ($q) use ($checkinDate, $checkoutDate) {
-                    // Condición de cruce de fechas para checkins activos
-                    $q->where('checkin_date', '<', $checkoutDate)
-                      ->where('checkout_date', '>', $checkinDate)
-                      ->where('status', 'Activo'); // Asegúrate de usar el estado correcto
-                });
-            })
-            ->get();
+    // 2. Consulta Mágica: Traer habitaciones libres
+    $rooms = Room::with(['roomType', 'price'])
+        ->where('status', '!=', 'MANTENIMIENTO') // Ignorar mantenimiento
+        
+        // 3. EXCLUIR RESERVAS CRUZADAS (Usando los detalles de reserva)
+        ->whereDoesntHave('reservationDetails', function ($query) use ($checkinDate, $checkoutDate) {
+            $query->whereHas('reservation', function ($q) use ($checkinDate, $checkoutDate) {
+                // Si la reserva entra ANTES de que yo salga, y sale DESPUÉS de que yo entre = CHOQUE
+                $q->where('arrival_date', '<', $checkoutDate) // Asegúrate de que tu columna se llame arrival_date
+                  ->where('departure_date', '>', $checkinDate) // Asegúrate de que tu columna se llame departure_date
+                  ->whereIn('status', ['Pendiente', 'Confirmada']); 
+            });
+        })
+        
+        // 4. EXCLUIR CHECKINS ACTIVOS CRUZADOS (Ocupados físicamente)
+        ->whereDoesntHave('checkins', function ($query) use ($checkinDate, $checkoutDate) {
+            // Asumiendo que un checkin 'Activo' bloquea la habitación
+            $query->where('status', 'Activo'); 
+        })
+        ->get();
 
-        // 4. Formatear la respuesta (Opcional, pero recomendado para APIs de React)
-        // Podrías mapear los datos para enviar solo lo necesario al frontend
-        $availableRooms = $rooms->map(function ($room) {
+    // 5. Formatear la respuesta EXACTAMENTE como lo espera la tarjeta de React
+    $availableRooms = $rooms->map(function ($room) {
+        return [
+            'id'       => $room->id,
+            'name'     => 'Habitación ' . $room->number,
+            'type'     => $room->roomType->name ?? 'Estándar',
+            'capacity' => $room->roomType->capacity ?? 2,
             
-            // Asumiendo que el modelo Price tiene un campo 'price'
-            // Si tienes lógica corporativa aquí, deberás manejarla. Por ahora, precio base.
-            $basePrice = $room->prices->first() ? $room->prices->first()->price : 0;
+            // Usamos tu relación 'price' real. Si el campo numérico se llama distinto a 'price', cámbialo.
+            'price'    => $room->price ? $room->price->price : 0, 
+            
+            // Dato visual para la tarjeta
+            'bath'     => 'Privado', 
+            'image'    => 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=300&auto=format&fit=crop',
+        ];
+    })->values();
 
-            return [
-                'id' => $room->id,
-                'number' => $room->number,
-                'type' => $room->roomType->name,
-                'capacity' => $room->roomType->capacity,
-                'description' => $room->roomType->description ?? 'Sin descripción',
-                'price_per_night' => $basePrice,
-                // Puedes agregar imágenes si las tienes en tu modelo
-            ];
-        });
+    // 6. Devolver el array directo (Axios en React leerá esto como response.data)
+    return response()->json($availableRooms);
+}
 
-        // 5. Devolver la respuesta en formato JSON
-        return response()->json([
-            'success' => true,
-            'rooms' => $availableRooms
-        ]);
-    }
+    public function checkAvailability(Request $request)
+{
+    $checkIn = $request->checkIn;   // Ej: '2026-05-02'
+    $checkOut = $request->checkOut; // Ej: '2026-05-05'
+
+    // Buscamos todas las habitaciones ACTIVAS que NO tengan conflictos
+    $availableRooms = Room::where('is_active', true) // Asumiendo que tienes un campo is_active
+        ->whereDoesntHave('reservationDetails', function ($query) use ($checkIn, $checkOut) {
+            // Filtramos las reservas cruzando la tabla reservation_details con reservations
+            $query->whereHas('reservation', function ($resQuery) use ($checkIn, $checkOut) {
+                $resQuery->where('check_in_date', '<', $checkOut)
+                         ->where('check_out_date', '>', $checkIn)
+                         ->whereIn('status', ['Confirmada', 'Pendiente']); // Omitir las Canceladas
+            });
+        })
+        // También filtramos las que están OCUPADAS actualmente por un Check-in sin salida definida
+        ->whereDoesntHave('checkinDetails', function ($query) {
+            $query->whereHas('checkin', function ($chkQuery) {
+                $chkQuery->where('status', 'Ocupado'); 
+            });
+        })
+        ->get();
+
+    return response()->json($availableRooms);
+}
 }
