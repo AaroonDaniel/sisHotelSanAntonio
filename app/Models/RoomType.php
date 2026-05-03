@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Traits\AutoUpperCase;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RoomType extends Model
 {
@@ -27,5 +28,11 @@ class RoomType extends Model
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class);
+    }
+
+    public function rooms(): HasMany
+    {
+        // Un Tipo de Habitación tiene muchas Habitaciones
+        return $this->hasMany(Room::class);
     }
 }

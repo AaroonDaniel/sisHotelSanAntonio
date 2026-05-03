@@ -206,4 +206,5 @@ Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('bookin
 // Endpoints para procesar los pasos (pueden ser peticiones POST/Inertia)
 Route::post('/reservar/buscar', [OnlineBookingController::class, 'searchRooms'])->name('booking.search');
 Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.store');
+Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('reservar.index');
 require __DIR__ . '/settings.php';

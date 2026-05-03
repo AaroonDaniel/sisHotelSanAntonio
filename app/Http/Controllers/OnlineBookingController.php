@@ -17,38 +17,56 @@ class OnlineBookingController extends Controller
     /**
      * Muestra la vista principal de la SPA pública de reservas.
      */
-    public function index()
+    public function index(Request $request)
     {
-        // Usamos tus relaciones reales para traer las habitaciones
-        $rooms = Room::with(['roomType', 'price'])
-            ->where('status', '!=', 'MANTENIMIENTO') // Opcional: ocultar las que están en mantenimiento
-            ->get()
-            ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE)
-            ->map(function ($room) {
-                return [
-                    'id'       => $room->id,
-                    'name'     => 'Habitación ' . $room->number,
-                    
-                    // Extraemos el nombre del tipo de habitación usando tu relación 'roomType'
-                    'type'     => $room->roomType ? $room->roomType->name : 'Estándar', 
-                    
-                    // Asegúrate de que 'capacity' exista en tu tabla room_types, si no, pon un default
-                    'capacity' => $room->roomType ? $room->roomType->capacity : 2, 
-                    
-                    // Extraemos el precio usando tu relación 'price' (ajusta 'amount' al nombre de tu columna)
-                    'price'    => $room->price ? $room->price->price : 0, 
-                    
-                    // Si tienes el tipo de baño en la BD, ponlo aquí. Si no, lo forzamos a 'Privado' por ahora
-                    'bath'     => 'Privado', 
-                    
-                    // Puedes agregar una URL de imagen real si tienes en la base de datos
-                    'image'    => 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=300&auto=format&fit=crop',
-                ];
-            })->values(); // Re-indexamos para que llegue como un array limpio a React
+        // 1. Validar los datos de entrada
+        $validated = $request->validate([
+            'check_in' => 'nullable|date|after_or_equal:today',
+            'check_out' => 'nullable|date|after:check_in',
+            'guests' => 'nullable|integer|min:1|max:10',
+        ]);
 
-        // Renderizamos el componente Index que creamos en React
+        $checkin = $validated['check_in'] ?? null;
+        $checkout = $validated['check_out'] ?? null;
+        $guests = $validated['guests'] ?? 1;
+
+        $availableRoomTypes = [];
+
+        // 2. Si hay fechas, el motor busca disponibilidad basada en el cruce de reservas
+        if ($checkin && $checkout) {
+            $availableRoomTypes = RoomType::where('is_active', true)
+                ->whereHas('rooms', function ($query) use ($checkin, $checkout) {
+                    // Quitamos el filtro de 'status' actual. Solo verificamos que no haya 
+                    // reservas aprobadas que choquen en ese rango de fechas.
+                    $query->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
+                        $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
+                            $resQ->where('arrival_date', '<', $checkout)
+                                 ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
+                                 ->whereNotIn('status', ['CANCELADA', 'FINALIZADA']); 
+                        });
+                    });
+                })
+                ->with(['rooms' => function ($query) use ($checkin, $checkout) {
+                    // Hacemos lo mismo al traer las habitaciones para la tarjeta
+                    $query->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
+                        $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
+                            $resQ->where('arrival_date', '<', $checkout)
+                                 ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
+                                 ->whereNotIn('status', ['CANCELADA', 'FINALIZADA']);
+                        });
+                    });
+                }])
+                ->get();
+        } 
+
+        // 3. Enviamos a la vista de React
         return Inertia::render('booking/index', [
-            'initialRooms' => $rooms
+            'availableRoomTypes' => $availableRoomTypes,
+            'filters' => [
+                'check_in' => $checkin,
+                'check_out' => $checkout,
+                'guests' => $guests,
+            ]
         ]);
     }
 
@@ -118,8 +136,8 @@ class OnlineBookingController extends Controller
         ->whereDoesntHave('reservationDetails', function ($query) use ($checkIn, $checkOut) {
             // Filtramos las reservas cruzando la tabla reservation_details con reservations
             $query->whereHas('reservation', function ($resQuery) use ($checkIn, $checkOut) {
-                $resQuery->where('check_in_date', '<', $checkOut)
-                         ->where('check_out_date', '>', $checkIn)
+                $resQuery->where('arrival_date', '<', $checkOut)
+                         ->where('departure_date', '>', $checkIn)
                          ->whereIn('status', ['Confirmada', 'Pendiente']); // Omitir las Canceladas
             });
         })

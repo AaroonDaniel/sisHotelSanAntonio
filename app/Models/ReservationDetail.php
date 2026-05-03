@@ -32,4 +32,5 @@ class ReservationDetail extends Model
     {
         return $this->belongsTo(Reservation::class);
     }
+    
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { router } from '@inertiajs/react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -38,15 +39,29 @@ export default function SearchForm({ bookingData, setBookingData, onNext }: any)
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!bookingData.checkIn || !bookingData.checkOut) {
-            alert("Por favor, selecciona las fechas.");
-            return;
-        }
-        if (nights <= 0) {
-            alert("La fecha de salida debe ser posterior a la de ingreso.");
-            return;
-        }
-        onNext();
+        
+        // Hacemos la consulta a Laravel enviando las fechas y huéspedes
+        router.get('/reservar', { 
+            check_in: bookingData.checkIn,
+            check_out: bookingData.checkOut, 
+            guests: bookingData.guests 
+        }, {
+            preserveState: true, // Súper importante para que no se reinicie el Stepper
+            preserveScroll: true,
+            onSuccess: (page: any) => {
+                // Obtenemos los datos agrupados EXACTAMENTE como vienen de Laravel
+                const roomsFromLaravel = page.props.availableRoomTypes || page.props.initialRooms || [];
+                
+                // Guardamos la data original en el estado global (bookingData) sin modificarla
+                setBookingData((prevData: any) => ({
+                    ...prevData,
+                    availableRooms: roomsFromLaravel // <--- ESTO ES LO QUE NECESITA EL PASO 2 AHORA
+                }));
+                
+                // Recién ahora, cuando ya tenemos los datos, avanzamos al Paso 2
+                onNext();
+            }
+        });
     };
 
     return (

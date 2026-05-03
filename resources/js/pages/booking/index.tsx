@@ -9,17 +9,18 @@ import RoomSelection from './partials/roomSelection';
 import GuestDetailsForm from './partials/guestDetailsForm';
 import PaymentSummary from './partials/paymentSummary';
 
-// CORRECCIÓN: Agregamos { initialRooms } a los parámetros para recibir los datos de Laravel
-export default function BookingIndex({ initialRooms }: any) {
+// CORRECCIÓN: Recibimos los datos limpios que envía el OnlineBookingController
+export default function BookingIndex({ availableRoomTypes = [], filters = {} }: any) {
     // Estado del Stepper
     const [currentStep, setCurrentStep] = useState(1);
     
     // Estado global de la reserva
     const [bookingData, setBookingData] = useState({
-        checkIn: '',
-        checkOut: '',
-        guests: 1,
-        selectedRooms: [], // CORRECCIÓN: Cambiado a arreglo para soportar múltiples habitaciones
+        // Inicializamos con los filtros que vienen del backend (si existen)
+        checkIn: filters.check_in || '',
+        checkOut: filters.check_out || '',
+        guests: filters.guests || 1,
+        selectedRooms: [], // Arreglo para soportar múltiples habitaciones
         guestDetails: [],
     });
 
@@ -160,7 +161,7 @@ export default function BookingIndex({ initialRooms }: any) {
                                     setBookingData={setBookingData} 
                                     onNext={nextStep} 
                                     onBack={prevStep} 
-                                    dbRooms={initialRooms} // Aquí le pasamos los datos de Laravel
+                                    availableRoomTypes={availableRoomTypes} // Pasamos la data de disponibilidad al paso 2
                                 />
                             )}
 
