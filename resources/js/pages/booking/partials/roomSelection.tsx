@@ -8,13 +8,7 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
     
     const pageProps = usePage().props as any;
     
-    const rawAvailableRoomTypes = pageProps.bookingData?.availableRooms 
-                               || pageProps.availableRoomTypes 
-                               || [];
-
-    const totalGuests = Number(bookingData.guests) || Number(pageProps.bookingData?.guests) || 1;
-
-    // 🛡️ FUNCIÓN SALVA-VIDAS: Convierte cualquier cosa que mande Laravel en un Array real
+    // Función para garantizar que siempre tengamos un Array de habitaciones
     const getRoomsArray = (roomsData: any) => {
         if (!roomsData) return [];
         if (Array.isArray(roomsData)) return roomsData;
@@ -22,50 +16,87 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
         return Object.values(roomsData);
     };
 
-    // FILTRO BASE: Excluir Salones y Familiares
-    const availableRoomTypes = rawAvailableRoomTypes.filter((type: any) => {
-        if (!type || !type.name) return false;
-        const typeName = type.name.toLowerCase();
-        return !typeName.includes('salón') && !typeName.includes('salon') && !typeName.includes('familiar');
-    });
+    const rawAvailableRoomTypes = pageProps.bookingData?.availableRooms || pageProps.availableRoomTypes || [];
+    const totalGuests = Number(bookingData.guests) || Number(pageProps.bookingData?.guests) || 1;
 
+    // Estados
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('Todos');
     const [filtroBano, setFiltroBano] = useState('Todos');
     const [cart, setCart] = useState<any[]>(bookingData.selectedRooms || []);
 
-    const assignedGuests = cart.reduce((total, room) => {
-        return total + (Number(room.capacity) || Number(room.capacidad) || 0);
-    }, 0);
-    
+    // Matemáticas del Carrito
+    const assignedGuests = cart.reduce((total, room) => total + (Number(room.capacity) || Number(room.capacidad) || 0), 0);
     const pendingGuests = Math.max(0, totalGuests - assignedGuests);
     const isCompleted = pendingGuests === 0;
 
     // ==========================================
-    // FILTRO PARA LOS BOTONES LATERALES
+    // 🧠 EL NUEVO SÚPER MOTOR DE FILTRADO
     // ==========================================
-    const sidebarRoomTypes = availableRoomTypes.filter((type: any) => {
-        const roomsList = getRoomsArray(type.rooms);
-        const sampleRoom = roomsList[0] || {};
-        const roomCapacity = Number(sampleRoom.capacity) || Number(sampleRoom.capacidad) || 99;
+    // Filtramos las habitaciones "por dentro" de cada categoría dependiendo del baño elegido
+    const availableRoomTypes = rawAvailableRoomTypes.map((type: any) => {
+        const typeCopy = { ...type };
+        let roomsList = getRoomsArray(typeCopy.rooms);
+
+        // Si el usuario eligió un baño específico, borramos de la lista interna las que no coincidan
+        if (filtroBano !== 'Todos') {
+            roomsList = roomsList.filter((room: any) => {
+                const rawBath = String(room.bath || room.bathroom_type || '').toLowerCase();
+                const isShared = rawBath === 'shared' || rawBath === 'compartido';
+                const normalizedBath = isShared ? 'compartido' : 'privado';
+                
+                return normalizedBath === filtroBano.toLowerCase();
+            });
+        }
         
+        typeCopy.rooms = roomsList;
+        return typeCopy;
+    }).filter((type: any) => {
+        // Excluimos Salones y Familiares
+        if (!type || !type.name) return false;
+        const typeName = type.name.toLowerCase();
+        if (typeName.includes('salón') || typeName.includes('salon') || typeName.includes('familiar')) return false;
+
+        // Si después de aplicar el filtro de baño la categoría se quedó sin cuartos, la ocultamos
+        if (type.rooms.length === 0) return false;
+
+        return true;
+    });
+
+    // Filtro para los botones laterales
+    const sidebarRoomTypes = availableRoomTypes.filter((type: any) => {
+        const sampleRoom = type.rooms[0] || {};
+        const roomCapacity = Number(sampleRoom.capacity) || Number(type.capacity) || 99;
         return roomCapacity <= pendingGuests;
     });
 
+    // Filtro para la columna central
+    const filteredTypes = availableRoomTypes.filter((type: any) => {
+        if (isCompleted) return false; 
+        
+        const sampleRoom = type.rooms[0] || {};
+        const roomCapacity = Number(sampleRoom.capacity) || Number(type.capacity) || 99; 
+        
+        const cumpleCapacidad = roomCapacity <= pendingGuests;
+        const cumpleTipo = selectedTypeFilter === 'Todos' || type.name === selectedTypeFilter;
+
+        return cumpleCapacidad && cumpleTipo;
+    });
+
     // ==========================================
-    // FUNCIONES DE CARRITO
+    // FUNCIONES DEL CARRITO
     // ==========================================
     const handleAddType = (type: any) => {
-        const roomsList = getRoomsArray(type.rooms);
-        const sampleRoom = roomsList[0] || {};
-        const capacity = Number(sampleRoom.capacity) || 99;
+        const sampleRoom = type.rooms[0] || {};
+        const capacity = Number(sampleRoom.capacity) || Number(type.capacity) || 99;
         
         if (isCompleted || capacity > pendingGuests) return;
 
         const typeRoomsInCart = cart.filter(r => r.room_type_id === type.id);
-        if (typeRoomsInCart.length < roomsList.length) {
-            const roomToAdd = roomsList.find((r: any) => !cart.some((cr: any) => cr.id === r.id));
+        if (typeRoomsInCart.length < type.rooms.length) {
+            // Buscamos una habitación disponible que no esté en el carrito
+            const roomToAdd = type.rooms.find((r: any) => !cart.some((cr: any) => cr.id === r.id));
             if (roomToAdd) {
-                const priceValue = Number(roomToAdd.price) || 0;
+                const priceValue = Number(roomToAdd.price) || Number(roomToAdd.precio) || 0;
                 setCart([...cart, { ...roomToAdd, typeName: type.name, capacity: capacity, price: priceValue }]);
             }
         }
@@ -90,28 +121,6 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
         setBookingData({ ...bookingData, selectedRooms: cart });
         onNext();
     };
-
-    // ==========================================
-    // MOTOR DE FILTRADO (COLUMNA CENTRAL)
-    // ==========================================
-    const filteredTypes = availableRoomTypes.filter((type: any) => {
-        if (isCompleted) return false; 
-
-        const roomsList = getRoomsArray(type.rooms);
-        const sampleRoom = roomsList[0] || {};
-        
-        const roomCapacity = Number(sampleRoom.capacity) || 99; 
-        const rawBath = String(sampleRoom.bath || '').toLowerCase();
-        
-        // Convertimos el "private" o "shared" que viene de la BD a la palabra del botón
-        const normalizedBath = (rawBath === 'shared' || rawBath === 'compartido') ? 'compartido' : 'privado';
-
-        const cumpleCapacidad = roomCapacity <= pendingGuests;
-        const cumpleTipo = selectedTypeFilter === 'Todos' || type.name === selectedTypeFilter;
-        const cumpleBano = filtroBano === 'Todos' || normalizedBath === filtroBano.toLowerCase();
-
-        return cumpleCapacidad && cumpleTipo && cumpleBano;
-    });
 
     return (
         <div className="w-full">
@@ -192,12 +201,12 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                         </div>
                     ) : (
                         filteredTypes.map((type: any) => {
-                            const roomsList = getRoomsArray(type.rooms);
                             const qtyInCart = cart.filter(r => r.room_type_id === type.id).length;
-                            const availableCount = roomsList.length;
+                            const availableCount = type.rooms.length;
                             
-                            const sampleRoom = roomsList[0] || {}; 
-                            const roomCapacity = Number(sampleRoom.capacity) || 1;
+                            // Los datos representativos ahora son de la lista YA FILTRADA
+                            const sampleRoom = type.rooms[0] || {}; 
+                            const roomCapacity = Number(sampleRoom.capacity) || Number(type.capacity) || 1;
                             const roomPrice = Number(sampleRoom.price) || 0;
                             
                             const rawBath = String(sampleRoom.bath || '').toLowerCase();

@@ -83,27 +83,34 @@ class OnlineBookingController extends Controller
                     'name' => $type->name,
                     'image' => null,
                     
-                    // 👇 AÑADIMOS ->toArray() AQUÍ 👇
                     'rooms' => $type->rooms->map(function ($room) use ($type) {
+                        
+                        // Extraemos el objeto precio
                         $precioObj = $room->price;
+                        
+                        // 👇 BUSCAMOS EL BAÑO PRIMERO EN EL PRECIO (private/shared)
                         $tipoBano = $precioObj->bathroom_type ?? $precioObj->bath ?? $room->bathroom_type ?? $type->bathroom_type ?? 'private';
+                        
+                        // Extraemos el valor del precio
                         $montoPrecio = $precioObj ? ($precioObj->price ?? $precioObj->amount ?? $precioObj->monto ?? 0) : 0;
 
                         return [
                             'id' => $room->id,
                             'name' => 'Habitación ' . ($room->number ?? $room->id),
                             'capacity' => $type->capacity ?? $room->capacity ?? 2,
-                            'bath' => $tipoBano,
+                            'bath' => $tipoBano, // 👈 ESTO ES LO QUE HACE FUNCIONAR EL FILTRO EN REACT
                             'price' => $montoPrecio,
                             'price_id' => $precioObj ? $precioObj->id : null,
                             'room_type_id' => $type->id
                         ];
-                    })->values()->toArray()
+                    })->values()->toArray() // 👈 IMPORTANTE: ->toArray() para evitar problemas en React
                 ];
             })->filter(function ($type) {
+                // Filtro de seguridad: Quitar tipos de habitación que terminaron con 0 cuartos
                 return count($type['rooms']) > 0;
-            // 👇 Y AÑADIMOS ->toArray() AQUÍ 👇
-            })->values()->toArray();
+            })->values()->toArray(); // 👈 IMPORTANTE: ->toArray() aquí también
+
+            Log::info("Se encontraron " . count($availableRoomTypes) . " tipos de habitaciones válidas.");
 
             
         }
