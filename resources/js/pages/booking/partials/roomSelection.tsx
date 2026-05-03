@@ -1,61 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Wifi, Tv, Flame, Bath, Trash2, Users, CheckCircle2, Plus, Minus } from 'lucide-react';
+import { usePage } from '@inertiajs/react'; 
 
 export default function RoomSelection({ bookingData, setBookingData, onNext, onBack }: any) {
     
-    const totalGuests = bookingData.guests || 1;
+    const pageProps = usePage().props as any;
+    
+    const rawAvailableRoomTypes = pageProps.bookingData?.availableRooms 
+                               || pageProps.availableRoomTypes 
+                               || [];
 
-    // ==========================================
-    // 1. FILTRADO INTELIGENTE DESDE LA BASE
-    // ==========================================
-    const rawAvailableRoomTypes = bookingData.availableRooms || [];
+    const totalGuests = Number(bookingData.guests) || Number(pageProps.bookingData?.guests) || 1;
 
+    // 🛡️ FUNCIÓN SALVA-VIDAS: Convierte cualquier cosa que mande Laravel en un Array real
+    const getRoomsArray = (roomsData: any) => {
+        if (!roomsData) return [];
+        if (Array.isArray(roomsData)) return roomsData;
+        if (roomsData['Illuminate\\Support\\Collection']) return roomsData['Illuminate\\Support\\Collection'];
+        return Object.values(roomsData);
+    };
+
+    // FILTRO BASE: Excluir Salones y Familiares
     const availableRoomTypes = rawAvailableRoomTypes.filter((type: any) => {
+        if (!type || !type.name) return false;
         const typeName = type.name.toLowerCase();
-        
-        // Regla A: Ocultar Salones y Habitaciones Familiares
-        if (typeName.includes('salón') || typeName.includes('salon') || typeName.includes('familiar')) {
-            return false;
-        }
-
-        // Regla B: Ocultar habitaciones cuya capacidad supere la cantidad total de huéspedes
-        // (Ej: Si busco 2 huéspedes, ocultar habitaciones con capacidad de 3 o más)
-        const sampleRoom = type.rooms && type.rooms.length > 0 ? type.rooms[0] : {};
-        const roomCapacity = sampleRoom.capacity || 0;
-        
-        if (roomCapacity > totalGuests) {
-            return false;
-        }
-
-        return true;
+        return !typeName.includes('salón') && !typeName.includes('salon') && !typeName.includes('familiar');
     });
 
-    // Estados
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('Todos');
+    const [filtroBano, setFiltroBano] = useState('Todos');
     const [cart, setCart] = useState<any[]>(bookingData.selectedRooms || []);
 
-    // ==========================================
-    // 2. LÓGICA DE ASIGNACIÓN (CARRITO)
-    // ==========================================
-    const assignedGuests = cart.reduce((total, room) => total + (room.capacity || 0), 0);
-    // Usamos Math.max para que nunca muestre números negativos si se pasa un poco por la capacidad de las camas
+    const assignedGuests = cart.reduce((total, room) => {
+        return total + (Number(room.capacity) || Number(room.capacidad) || 0);
+    }, 0);
+    
     const pendingGuests = Math.max(0, totalGuests - assignedGuests);
+    const isCompleted = pendingGuests === 0;
 
-    // Función para AGREGAR (+)
-    const handleAddType = (type: any) => {
-        const typeRoomsInCart = cart.filter(r => r.room_type_id === type.id);
+    // ==========================================
+    // FILTRO PARA LOS BOTONES LATERALES
+    // ==========================================
+    const sidebarRoomTypes = availableRoomTypes.filter((type: any) => {
+        const roomsList = getRoomsArray(type.rooms);
+        const sampleRoom = roomsList[0] || {};
+        const roomCapacity = Number(sampleRoom.capacity) || Number(sampleRoom.capacidad) || 99;
         
-        if (typeRoomsInCart.length < type.rooms.length) {
-            const roomToAdd = type.rooms.find((r: any) => !cart.some((cr: any) => cr.id === r.id));
+        return roomCapacity <= pendingGuests;
+    });
+
+    // ==========================================
+    // FUNCIONES DE CARRITO
+    // ==========================================
+    const handleAddType = (type: any) => {
+        const roomsList = getRoomsArray(type.rooms);
+        const sampleRoom = roomsList[0] || {};
+        const capacity = Number(sampleRoom.capacity) || 99;
+        
+        if (isCompleted || capacity > pendingGuests) return;
+
+        const typeRoomsInCart = cart.filter(r => r.room_type_id === type.id);
+        if (typeRoomsInCart.length < roomsList.length) {
+            const roomToAdd = roomsList.find((r: any) => !cart.some((cr: any) => cr.id === r.id));
             if (roomToAdd) {
-                setCart([...cart, { ...roomToAdd, typeName: type.name }]);
+                const priceValue = Number(roomToAdd.price) || 0;
+                setCart([...cart, { ...roomToAdd, typeName: type.name, capacity: capacity, price: priceValue }]);
             }
         }
     };
 
-    // Función para QUITAR (-)
     const handleRemoveType = (type: any) => {
         const reversedIndex = [...cart].reverse().findIndex(r => r.room_type_id === type.id);
         if (reversedIndex !== -1) {
@@ -66,24 +81,36 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
         }
     };
 
-    // Función para quitar desde el tacho de basura
     const handleRemoveFromCart = (indexToRemove: number) => {
         setCart(cart.filter((_, index) => index !== indexToRemove));
     };
 
-    // Avanzar al paso 3
     const handleNext = () => {
-        if (pendingGuests > 0) {
-            alert(`Aún te falta asignar habitación para ${pendingGuests} huésped(es)`);
-            return;
-        }
+        if (pendingGuests > 0) return alert(`Aún te falta asignar habitación para ${pendingGuests} huésped(es)`);
         setBookingData({ ...bookingData, selectedRooms: cart });
         onNext();
     };
 
-    // Filtro visual de los botones de la izquierda
+    // ==========================================
+    // MOTOR DE FILTRADO (COLUMNA CENTRAL)
+    // ==========================================
     const filteredTypes = availableRoomTypes.filter((type: any) => {
-        return selectedTypeFilter === 'Todos' || type.name === selectedTypeFilter;
+        if (isCompleted) return false; 
+
+        const roomsList = getRoomsArray(type.rooms);
+        const sampleRoom = roomsList[0] || {};
+        
+        const roomCapacity = Number(sampleRoom.capacity) || 99; 
+        const rawBath = String(sampleRoom.bath || '').toLowerCase();
+        
+        // Convertimos el "private" o "shared" que viene de la BD a la palabra del botón
+        const normalizedBath = (rawBath === 'shared' || rawBath === 'compartido') ? 'compartido' : 'privado';
+
+        const cumpleCapacidad = roomCapacity <= pendingGuests;
+        const cumpleTipo = selectedTypeFilter === 'Todos' || type.name === selectedTypeFilter;
+        const cumpleBano = filtroBano === 'Todos' || normalizedBath === filtroBano.toLowerCase();
+
+        return cumpleCapacidad && cumpleTipo && cumpleBano;
     });
 
     return (
@@ -103,30 +130,45 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                         <CardContent className="p-5">
                             
                             <div className="mb-6">
-                                <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wider">Filtro de Opciones</h3>
+                                <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wider">Tipo de Habitación</h3>
                                 <div className="space-y-1.5">
                                     <button
                                         onClick={() => setSelectedTypeFilter('Todos')}
                                         className={`w-full text-left px-3 py-2 rounded-sm text-sm transition-colors ${
-                                            selectedTypeFilter === 'Todos' 
-                                            ? 'bg-red-50 text-[#b3282d] font-medium border-l-2 border-[#b3282d]' 
-                                            : 'text-gray-600 hover:bg-gray-50 border-l-2 border-transparent'
+                                            selectedTypeFilter === 'Todos' ? 'bg-red-50 text-[#b3282d] font-medium border-l-2 border-[#b3282d]' : 'text-gray-600 hover:bg-gray-50 border-l-2 border-transparent'
                                         }`}
                                     >
                                         Ver Todas
                                     </button>
                                     
-                                    {availableRoomTypes.map((type: any) => (
+                                    {sidebarRoomTypes.map((type: any) => (
                                         <button
                                             key={type.id}
                                             onClick={() => setSelectedTypeFilter(type.name)}
                                             className={`w-full text-left px-3 py-2 rounded-sm text-sm transition-colors ${
-                                                selectedTypeFilter === type.name 
-                                                ? 'bg-red-50 text-[#b3282d] font-medium border-l-2 border-[#b3282d]' 
-                                                : 'text-gray-600 hover:bg-gray-50 border-l-2 border-transparent'
+                                                selectedTypeFilter === type.name ? 'bg-red-50 text-[#b3282d] font-medium border-l-2 border-[#b3282d]' : 'text-gray-600 hover:bg-gray-50 border-l-2 border-transparent'
                                             }`}
                                         >
                                             {type.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="mb-6 border-t border-gray-100 pt-4">
+                                <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+                                    <Bath className="w-4 h-4 mr-2" /> Tipo de Baño
+                                </h3>
+                                <div className="space-y-1.5">
+                                    {['Todos', 'Privado', 'Compartido'].map((opcion) => (
+                                        <button
+                                            key={opcion}
+                                            onClick={() => setFiltroBano(opcion)}
+                                            className={`w-full text-left px-3 py-2 rounded-sm text-sm transition-colors ${
+                                                filtroBano === opcion ? 'bg-blue-50 text-[#1e3a5f] font-medium border-l-2 border-[#1e3a5f]' : 'text-gray-600 hover:bg-gray-50 border-l-2 border-transparent'
+                                            }`}
+                                        >
+                                            {opcion}
                                         </button>
                                     ))}
                                 </div>
@@ -136,21 +178,33 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                     </Card>
                 </div>
 
-                {/* COLUMNA 2: LISTA DE HABITACIONES */}
+                {/* COLUMNA 2: LISTA CENTRAL */}
                 <div className="lg:col-span-2 space-y-4">
-                    {filteredTypes.length === 0 ? (
-                        <div className="bg-white border border-gray-200 rounded-sm p-8 text-center text-gray-500">
-                            No se encontraron habitaciones para la cantidad de huéspedes solicitada.
+                    {isCompleted ? (
+                        <div className="bg-green-50 border border-green-200 rounded-sm p-8 text-center text-green-700 font-medium flex flex-col items-center shadow-sm">
+                            <CheckCircle2 className="w-12 h-12 mb-3 text-green-500" />
+                            <p className="text-lg">¡Excelente!</p>
+                            <p className="text-sm mt-1">Todos los huéspedes ({totalGuests}) han sido asignados.<br/>Puedes continuar con tu reserva en el panel derecho.</p>
+                        </div>
+                    ) : filteredTypes.length === 0 ? (
+                        <div className="bg-white border border-gray-200 rounded-sm p-8 text-center text-gray-500 shadow-sm">
+                            No se encontraron habitaciones con los filtros actuales.
                         </div>
                     ) : (
                         filteredTypes.map((type: any) => {
+                            const roomsList = getRoomsArray(type.rooms);
                             const qtyInCart = cart.filter(r => r.room_type_id === type.id).length;
-                            const availableCount = type.rooms.length;
-                            const sampleRoom = type.rooms[0] || {}; 
+                            const availableCount = roomsList.length;
+                            
+                            const sampleRoom = roomsList[0] || {}; 
+                            const roomCapacity = Number(sampleRoom.capacity) || 1;
+                            const roomPrice = Number(sampleRoom.price) || 0;
+                            
+                            const rawBath = String(sampleRoom.bath || '').toLowerCase();
+                            const isShared = rawBath === 'shared' || rawBath === 'compartido';
 
                             return (
                                 <Card key={type.id} className={`border ${qtyInCart > 0 ? 'border-[#b3282d]' : 'border-gray-200'} shadow-sm rounded-sm overflow-hidden flex flex-col sm:flex-row transition-colors`}>
-                                    
                                     <div className="w-full sm:w-2/5 h-48 sm:h-auto bg-gray-200 relative">
                                         {type.image || sampleRoom.image ? (
                                             <img src={type.image || sampleRoom.image} alt={type.name} className="w-full h-full object-cover" />
@@ -164,18 +218,13 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                                         )}
                                     </div>
                                     
-                                    <div className="p-5 flex-1 flex flex-col justify-between">
+                                    <div className="p-5 flex-1 flex flex-col justify-between bg-white">
                                         <div>
                                             <div className="flex justify-between items-start">
                                                 <h3 className="text-xl font-bold text-[#1e3a5f] uppercase tracking-wide">{type.name}</h3>
-                                                <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-sm font-bold">
-                                                    Quedan {availableCount}
-                                                </span>
+                                                <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-sm font-bold">Quedan {availableCount}</span>
                                             </div>
-                                            
-                                            <p className="text-sm text-gray-500 mt-2 flex items-center">
-                                                <Users className="w-4 h-4 mr-1.5" /> Capacidad: {sampleRoom.capacity || '?'} persona(s)
-                                            </p>
+                                            <p className="text-sm text-gray-500 mt-2 flex items-center"><Users className="w-4 h-4 mr-1.5" /> Capacidad: {roomCapacity} persona(s)</p>
 
                                             <div className="mt-4 flex flex-wrap gap-3">
                                                 <span className="flex items-center text-xs text-gray-600">
@@ -184,9 +233,13 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                                                 <span className="flex items-center text-xs text-gray-600">
                                                     <Tv className="w-3.5 h-3.5 mr-1 text-[#1e3a5f]" /> TV Cable
                                                 </span>
-                                                {sampleRoom.bath === 'Privado' && (
+                                                {!isShared ? (
                                                     <span className="flex items-center text-xs text-gray-600">
-                                                        <Flame className="w-3.5 h-3.5 mr-1 text-orange-500" /> Calefacción
+                                                        <Bath className="w-3.5 h-3.5 mr-1 text-blue-500" /> Baño Privado
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center text-xs text-gray-600">
+                                                        <Users className="w-3.5 h-3.5 mr-1 text-orange-500" /> Baño Compartido
                                                     </span>
                                                 )}
                                             </div>
@@ -194,34 +247,21 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
 
                                         <div className="mt-6 flex justify-between items-end border-t border-gray-100 pt-4">
                                             <div>
-                                                <p className="text-2xl font-bold text-[#b3282d]">Bs. {sampleRoom.price || '0.00'}</p>
+                                                <p className="text-2xl font-bold text-[#b3282d]">Bs. {roomPrice.toFixed(2)}</p>
                                                 <p className="text-xs text-gray-400">por noche</p>
                                             </div>
                                             
-                                            {/* REGLA C: CONTROL DE CANTIDAD CON RESTRICCIÓN DE EXCESO */}
-                                            <div className="flex items-center border border-gray-300 rounded-sm h-10 overflow-hidden">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleRemoveType(type)} 
-                                                    disabled={qtyInCart === 0} 
-                                                    className="w-10 h-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 border-r border-gray-300 text-gray-600 flex items-center justify-center transition-colors"
-                                                >
+                                            <div className="flex items-center border border-gray-300 rounded-sm h-10 overflow-hidden shadow-sm">
+                                                <button onClick={() => handleRemoveType(type)} disabled={qtyInCart === 0} className="w-10 h-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 border-r border-gray-300 text-gray-600 flex items-center justify-center transition-colors">
                                                     <Minus className="w-4 h-4" />
                                                 </button>
                                                 <div className="w-10 text-center text-sm text-gray-800 bg-white font-bold h-full flex items-center justify-center">
                                                     {qtyInCart}
                                                 </div>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleAddType(type)} 
-                                                    // EL BOTÓN "+" SE BLOQUEA SI: 1) Ya eligió todas las de ese tipo o 2) Ya asignó a todos los huéspedes
-                                                    disabled={qtyInCart >= availableCount || pendingGuests === 0} 
-                                                    className="w-10 h-full bg-[#1e3a5f] hover:bg-[#152a46] disabled:bg-gray-300 text-white disabled:text-gray-500 flex items-center justify-center transition-colors"
-                                                >
+                                                <button onClick={() => handleAddType(type)} disabled={qtyInCart >= availableCount || isCompleted || roomCapacity > pendingGuests} className="w-10 h-full bg-[#1e3a5f] hover:bg-[#152a46] disabled:bg-gray-300 text-white flex items-center justify-center transition-colors">
                                                     <Plus className="w-4 h-4" />
                                                 </button>
                                             </div>
-
                                         </div>
                                     </div>
                                 </Card>
@@ -234,54 +274,45 @@ export default function RoomSelection({ bookingData, setBookingData, onNext, onB
                 <div className="lg:col-span-1">
                     <Card className="border border-gray-300 shadow-md rounded-sm sticky top-24 bg-gray-50/50">
                         <CardContent className="p-5">
-                            <h3 className="font-bold text-[#1e3a5f] mb-4 flex items-center border-b border-gray-200 pb-3">
-                                <CheckCircle2 className="w-5 h-5 mr-2 text-[#b3282d]" /> Resumen Asignación
-                            </h3>
+                            <h3 className="font-bold text-[#1e3a5f] mb-4 flex items-center border-b border-gray-200 pb-3"><CheckCircle2 className="w-5 h-5 mr-2 text-[#b3282d]" /> Resumen Asignación</h3>
                             
-                            <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-sm border border-gray-200">
-                                <span className="text-sm font-medium text-gray-600">Huéspedes:</span>
+                            <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-sm border border-gray-200 shadow-sm">
+                                <span className="text-sm font-medium text-gray-600">Total Huéspedes:</span>
                                 <span className="font-bold text-gray-800">{totalGuests}</span>
                             </div>
 
-                            {/* REGLA C: EL CONTADOR CAMBIA A VERDE Y BLOQUEA EXCESOS */}
-                            <div className={`flex justify-between items-center mb-6 p-3 rounded-sm border transition-colors ${pendingGuests === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                <span className="text-sm font-medium">{pendingGuests === 0 ? '¡Completado!' : 'Por asignar:'}</span>
-                                <span className="font-bold">{pendingGuests === 0 ? '0' : pendingGuests}</span>
+                            <div className={`flex justify-between items-center mb-6 p-3 rounded-sm border shadow-sm ${isCompleted ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                <span className="text-sm font-medium">{isCompleted ? '¡Completado!' : 'Faltan ubicar:'}</span>
+                                <span className="font-bold text-lg">{isCompleted ? '0' : pendingGuests}</span>
                             </div>
 
                             <div className="space-y-3 mb-6 min-h-[100px]">
                                 {cart.length === 0 ? (
                                     <p className="text-sm text-gray-400 text-center italic py-4">Aún no has agregado habitaciones.</p>
                                 ) : (
-                                    cart.map((selectedRoom, index) => (
-                                        <div key={`cart-${index}`} className="flex justify-between items-center bg-white p-3 border border-gray-200 rounded-sm shadow-sm border-l-4 border-l-[#b3282d]">
-                                            <div>
-                                                <p className="text-sm font-semibold text-gray-700">{selectedRoom.typeName || 'Habitación'}</p>
-                                                <p className="text-xs text-gray-500">Cap. {selectedRoom.capacity || 0} pax</p>
+                                    cart.map((selectedRoom, index) => {
+                                        const c = Number(selectedRoom.capacity) || 0;
+                                        const p = Number(selectedRoom.price) || 0;
+                                        
+                                        return (
+                                            <div key={`cart-${index}`} className="flex justify-between items-center bg-white p-3 border border-gray-200 rounded-sm shadow-sm border-l-4 border-l-[#b3282d]">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-700">{selectedRoom.typeName || 'Habitación'}</p>
+                                                    <p className="text-xs text-gray-500">Cap. {c} pax | Bs. {p.toFixed(2)}</p>
+                                                </div>
+                                                <button onClick={() => handleRemoveFromCart(index)} className="text-gray-400 hover:text-red-600 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
                                             </div>
-                                            <button 
-                                                type="button" 
-                                                onClick={() => handleRemoveFromCart(index)} 
-                                                className="text-gray-400 hover:text-red-600 transition-colors p-1"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
 
-                            <Button 
-                                onClick={handleNext}
-                                disabled={pendingGuests > 0}
-                                className="w-full bg-[#b3282d] hover:bg-[#921f24] text-white rounded-sm h-11 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                            >
-                                {pendingGuests > 0 ? 'Faltan huéspedes' : 'Continuar al registro'}
+                            <Button onClick={handleNext} disabled={!isCompleted} className="w-full bg-[#b3282d] hover:bg-[#921f24] text-white rounded-sm h-11 disabled:opacity-50 transition-all shadow-sm">
+                                {isCompleted ? 'Continuar al registro' : 'Asigna todas las camas'}
                             </Button>
                         </CardContent>
                     </Card>
                 </div>
-
             </div>
         </div>
     );

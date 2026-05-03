@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Room;
 use App\Models\RoomType;
-use App\Models\Price;
 use App\Models\Reservation;
-use App\Models\Checkin;
 use App\Models\Guest;
+use App\Models\ReservationDetail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class OnlineBookingController extends Controller
 {
@@ -29,126 +30,181 @@ class OnlineBookingController extends Controller
         $checkin = $validated['check_in'] ?? null;
         $checkout = $validated['check_out'] ?? null;
         $guests = $validated['guests'] ?? 1;
-
-        $availableRoomTypes = [];
-
-        // 2. Si hay fechas, el motor busca disponibilidad basada en el cruce de reservas
+        
+        // Calculamos los días de duración automáticamente para mandarlos a React
+        $durationDays = 1;
         if ($checkin && $checkout) {
-            $availableRoomTypes = RoomType::where('is_active', true)
-                ->whereHas('rooms', function ($query) use ($checkin, $checkout) {
-                    // Quitamos el filtro de 'status' actual. Solo verificamos que no haya 
-                    // reservas aprobadas que choquen en ese rango de fechas.
-                    $query->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
-                        $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
-                            $resQ->where('arrival_date', '<', $checkout)
-                                 ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
-                                 ->whereNotIn('status', ['CANCELADA', 'FINALIZADA']); 
-                        });
-                    });
-                })
-                ->with(['rooms' => function ($query) use ($checkin, $checkout) {
-                    // Hacemos lo mismo al traer las habitaciones para la tarjeta
-                    $query->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
-                        $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
-                            $resQ->where('arrival_date', '<', $checkout)
-                                 ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
-                                 ->whereNotIn('status', ['CANCELADA', 'FINALIZADA']);
-                        });
-                    });
-                }])
-                ->get();
-        } 
+            $durationDays = Carbon::parse($checkin)->diffInDays(Carbon::parse($checkout));
+            if ($durationDays === 0) $durationDays = 1; // Mínimo 1 noche
+        }
 
-        // 3. Enviamos a la vista de React
+        $availableRoomTypes = collect();
+
+        // 2. Si hay fechas, el motor busca disponibilidad agrupada por Tipo de Habitación
+        if ($checkin && $checkout) {
+
+            Log::info("Buscando disponibilidad Online: CheckIn: {$checkin} | CheckOut: {$checkout} | Huéspedes: {$guests}");
+
+            // Buscamos TODOS los Tipos de Habitación activos
+            $availableRoomTypes = RoomType::where('is_active', true)
+                ->with(['rooms' => function ($query) use ($checkin, $checkout) {
+
+                    // Solo traemos las habitaciones físicas que NO estén ocupadas ni en mantenimiento
+                    $query->where('status', '!=', 'MANTENIMIENTO')
+
+                        // Excluimos las que tienen reservas cruzadas (Sintaxis PostgreSQL)
+                        ->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
+                            $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
+                                $resQ->where('arrival_date', '<', $checkout)
+                                    ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
+                                    ->whereIn('status', ['Pendiente', 'Confirmada']);
+                            });
+                        })
+                        // Traemos el precio relacionado
+                        ->with('price');
+                }])
+                // Filtramos Tipos de Habitación que tengan al menos UNA habitación libre
+                ->whereHas('rooms', function ($query) use ($checkin, $checkout) {
+                    $query->where('status', '!=', 'MANTENIMIENTO')
+                        ->whereDoesntHave('reservationDetails', function ($q) use ($checkin, $checkout) {
+                            $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
+                                $resQ->where('arrival_date', '<', $checkout)
+                                    ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
+                                    ->whereIn('status', ['Pendiente', 'Confirmada']);
+                            });
+                        });
+                })
+                ->get();
+
+            // 3. FORMATEO ANTI-ERRORES PARA REACT
+            $availableRoomTypes = $availableRoomTypes->map(function ($type) {
+                return [
+                    'id' => $type->id,
+                    'name' => $type->name,
+                    'image' => null,
+                    
+                    // 👇 AÑADIMOS ->toArray() AQUÍ 👇
+                    'rooms' => $type->rooms->map(function ($room) use ($type) {
+                        $precioObj = $room->price;
+                        $tipoBano = $precioObj->bathroom_type ?? $precioObj->bath ?? $room->bathroom_type ?? $type->bathroom_type ?? 'private';
+                        $montoPrecio = $precioObj ? ($precioObj->price ?? $precioObj->amount ?? $precioObj->monto ?? 0) : 0;
+
+                        return [
+                            'id' => $room->id,
+                            'name' => 'Habitación ' . ($room->number ?? $room->id),
+                            'capacity' => $type->capacity ?? $room->capacity ?? 2,
+                            'bath' => $tipoBano,
+                            'price' => $montoPrecio,
+                            'price_id' => $precioObj ? $precioObj->id : null,
+                            'room_type_id' => $type->id
+                        ];
+                    })->values()->toArray()
+                ];
+            })->filter(function ($type) {
+                return count($type['rooms']) > 0;
+            // 👇 Y AÑADIMOS ->toArray() AQUÍ 👇
+            })->values()->toArray();
+
+            
+        }
+
+        // 4. Enviamos a la vista de React
         return Inertia::render('booking/index', [
-            'availableRoomTypes' => $availableRoomTypes,
-            'filters' => [
-                'check_in' => $checkin,
-                'check_out' => $checkout,
-                'guests' => $guests,
-            ]
-        ]);
+        'availableRoomTypes' => $availableRoomTypes, // Lo enviamos directo a la raíz
+        'filters' => [
+            'check_in' => $checkin,
+            'check_out' => $checkout,
+            'duration_days' => $durationDays,
+            'guests' => (int) $guests,
+        ]
+    ]);
     }
 
     /**
-     * Busca habitaciones disponibles según fechas y capacidad.
+     * Procesa y guarda la reserva que viene de la web (React)
      */
-    public function searchRooms(Request $request)
-{
-    // 1. Validación de los datos que envía React
-    $request->validate([
-        'checkIn'  => 'required|date|after_or_equal:today',
-        'checkOut' => 'required|date|after:checkIn',
-    ]);
+    public function store(Request $request)
+    {
+        Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE ===');
 
-    $checkinDate = Carbon::parse($request->checkIn)->startOfDay();
-    $checkoutDate = Carbon::parse($request->checkOut)->endOfDay();
+        // 1. Validamos lo que viene de React
+        $validated = $request->validate([
+            'guest_name' => 'required|string|max:255',
+            'guest_ci' => 'required|string|max:50',
+            'check_in' => 'required|date',
+            'duration_days' => 'required|integer|min:1',
+            'guests' => 'required|integer|min:1',
+            'selectedRooms' => 'required|array|min:1',
+            'selectedRooms.*.id' => 'required|exists:rooms,id',
+            'selectedRooms.*.capacity' => 'required|integer',
+            'selectedRooms.*.price' => 'required|numeric',
+            'selectedRooms.*.price_id' => 'nullable|exists:prices,id',
+            'selectedRooms.*.room_type_id' => 'nullable|exists:room_types,id',
+        ]);
 
-    // 2. Consulta Mágica: Traer habitaciones libres
-    $rooms = Room::with(['roomType', 'price'])
-        ->where('status', '!=', 'MANTENIMIENTO') // Ignorar mantenimiento
-        
-        // 3. EXCLUIR RESERVAS CRUZADAS (Usando los detalles de reserva)
-        ->whereDoesntHave('reservationDetails', function ($query) use ($checkinDate, $checkoutDate) {
-            $query->whereHas('reservation', function ($q) use ($checkinDate, $checkoutDate) {
-                // Si la reserva entra ANTES de que yo salga, y sale DESPUÉS de que yo entre = CHOQUE
-                $q->where('arrival_date', '<', $checkoutDate) // Asegúrate de que tu columna se llame arrival_date
-                  ->where('departure_date', '>', $checkinDate) // Asegúrate de que tu columna se llame departure_date
-                  ->whereIn('status', ['Pendiente', 'Confirmada']); 
+        // =========================================================
+        // 🛡️ REGLA ESTRICTA DE CONSOLA: VALIDACIÓN DE CAPACIDAD
+        // =========================================================
+        $capacidadTotalCarrito = 0;
+        foreach ($validated['selectedRooms'] as $room) {
+            $capacidadTotalCarrito += $room['capacity'];
+        }
+
+        if ($capacidadTotalCarrito < $validated['guests']) {
+            Log::warning("Intento de reserva bloqueado: Capacidad ({$capacidadTotalCarrito}) insuficiente para Huéspedes ({$validated['guests']})");
+            return back()->withErrors([
+                'error' => 'La capacidad total de las habitaciones seleccionadas no es suficiente para todos los huéspedes.'
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($validated) {
+
+                // 2. Gestión del Huésped
+                $guest = Guest::firstOrCreate(
+                    ['identification_number' => $validated['guest_ci']],
+                    [
+                        'full_name' => strtoupper($validated['guest_name']),
+                        'nationality' => 'BOLIVIA', 
+                        'profile_status' => 'INCOMPLETE'
+                    ]
+                );
+
+                // 3. Crear la Reserva (Cabecera)
+                $reservation = Reservation::create([
+                    'user_id' => null, 
+                    'guest_id' => $guest->id,
+                    'guest_count' => $validated['guests'],
+                    'arrival_date' => $validated['check_in'],
+                    'arrival_time' => '14:00:00', 
+                    'duration_days' => $validated['duration_days'],
+                    'status' => 'pendiente', 
+                    'payment_type' => 'EFECTIVO', 
+                ]);
+
+                // 4. Crear los Detalles (Las habitaciones asignadas)
+                foreach ($validated['selectedRooms'] as $roomData) {
+                    ReservationDetail::create([
+                        'reservation_id' => $reservation->id,
+                        'room_id' => $roomData['id'],
+                        'price_id' => $roomData['price_id'] ?? null,
+                        'price' => $roomData['price'],
+                        'requested_room_type_id' => $roomData['room_type_id'] ?? null,
+                    ]);
+
+                    // Bloqueamos físicamente la habitación
+                    Room::where('id', $roomData['id'])->update(['status' => 'RESERVADO']);
+                }
+
+                Log::info("✅ Reserva Web exitosa. ID Reserva: {$reservation->id}");
             });
-        })
-        
-        // 4. EXCLUIR CHECKINS ACTIVOS CRUZADOS (Ocupados físicamente)
-        ->whereDoesntHave('checkins', function ($query) use ($checkinDate, $checkoutDate) {
-            // Asumiendo que un checkin 'Activo' bloquea la habitación
-            $query->where('status', 'Activo'); 
-        })
-        ->get();
 
-    // 5. Formatear la respuesta EXACTAMENTE como lo espera la tarjeta de React
-    $availableRooms = $rooms->map(function ($room) {
-        return [
-            'id'       => $room->id,
-            'name'     => 'Habitación ' . $room->number,
-            'type'     => $room->roomType->name ?? 'Estándar',
-            'capacity' => $room->roomType->capacity ?? 2,
-            
-            // Usamos tu relación 'price' real. Si el campo numérico se llama distinto a 'price', cámbialo.
-            'price'    => $room->price ? $room->price->price : 0, 
-            
-            // Dato visual para la tarjeta
-            'bath'     => 'Privado', 
-            'image'    => 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=300&auto=format&fit=crop',
-        ];
-    })->values();
+            // Redirección SIN ZIGGY usando redirect() directo a la URL
+            return redirect('/reservar/exito')->with('success', '¡Tu reserva ha sido registrada con éxito!');
 
-    // 6. Devolver el array directo (Axios en React leerá esto como response.data)
-    return response()->json($availableRooms);
-}
-
-    public function checkAvailability(Request $request)
-{
-    $checkIn = $request->checkIn;   // Ej: '2026-05-02'
-    $checkOut = $request->checkOut; // Ej: '2026-05-05'
-
-    // Buscamos todas las habitaciones ACTIVAS que NO tengan conflictos
-    $availableRooms = Room::where('is_active', true) // Asumiendo que tienes un campo is_active
-        ->whereDoesntHave('reservationDetails', function ($query) use ($checkIn, $checkOut) {
-            // Filtramos las reservas cruzando la tabla reservation_details con reservations
-            $query->whereHas('reservation', function ($resQuery) use ($checkIn, $checkOut) {
-                $resQuery->where('arrival_date', '<', $checkOut)
-                         ->where('departure_date', '>', $checkIn)
-                         ->whereIn('status', ['Confirmada', 'Pendiente']); // Omitir las Canceladas
-            });
-        })
-        // También filtramos las que están OCUPADAS actualmente por un Check-in sin salida definida
-        ->whereDoesntHave('checkinDetails', function ($query) {
-            $query->whereHas('checkin', function ($chkQuery) {
-                $chkQuery->where('status', 'Ocupado'); 
-            });
-        })
-        ->get();
-
-    return response()->json($availableRooms);
-}
+        } catch (\Exception $e) {
+            Log::error("❌ Error al guardar reserva web: " . $e->getMessage());
+            return back()->withErrors(['error' => 'Ocurrió un error inesperado al procesar tu reserva. Por favor, intenta de nuevo.']);
+        }
+    }
 }

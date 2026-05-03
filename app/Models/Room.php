@@ -69,4 +69,8 @@ class Room extends Model
     {
         return $this->hasMany(ReservationDetail::class);
     }
+    public function checkinDetails(): HasMany
+    {
+        return $this->hasMany(CheckinDetail::class); // Asegúrate de que el modelo se llame CheckinDetail
+    }
 }
