@@ -134,19 +134,31 @@ class OnlineBookingController extends Controller
     {
         Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE ===');
 
-        // 1. Validamos lo que viene de React
+        // 1. Validamos lo que viene de React (ACTUALIZADO CON LOS NUEVOS CAMPOS)
         $validated = $request->validate([
-            'guest_name' => 'required|string|max:255',
-            'guest_ci' => 'required|string|max:50',
-            'check_in' => 'required|date',
-            'duration_days' => 'required|integer|min:1',
-            'guests' => 'required|integer|min:1',
-            'selectedRooms' => 'required|array|min:1',
-            'selectedRooms.*.id' => 'required|exists:rooms,id',
-            'selectedRooms.*.capacity' => 'required|integer',
-            'selectedRooms.*.price' => 'required|numeric',
-            'selectedRooms.*.price_id' => 'nullable|exists:prices,id',
-            'selectedRooms.*.room_type_id' => 'nullable|exists:room_types,id',
+            // Datos físicos del Huésped (Guest)
+            'guest_name'         => 'required|string|max:255',
+            'guest_ci'           => 'required|string|max:50',
+            'guest_nationality'  => 'nullable|string|max:100',
+            'guest_civil_status' => 'nullable|string|max:50',
+            'guest_profession'   => 'nullable|string|max:100',
+            'guest_phone'        => 'required|string|max:20', 
+            
+            // Dato exclusivo de contacto online (ReservationGuest)
+            'guest_email'        => 'required|email|max:255',
+            
+            // Datos de la Reserva
+            'check_in'           => 'required|date',
+            'duration_days'      => 'required|integer|min:1',
+            'guests'             => 'required|integer|min:1',
+            
+            // Datos del carrito de habitaciones
+            'selectedRooms'                  => 'required|array|min:1',
+            'selectedRooms.*.id'             => 'required|exists:rooms,id',
+            'selectedRooms.*.capacity'       => 'required|integer',
+            'selectedRooms.*.price'          => 'required|numeric',
+            'selectedRooms.*.price_id'       => 'nullable|exists:prices,id',
+            'selectedRooms.*.room_type_id'   => 'nullable|exists:room_types,id',
         ]);
 
         // =========================================================
@@ -167,35 +179,46 @@ class OnlineBookingController extends Controller
         try {
             DB::transaction(function () use ($validated) {
 
-                // 2. Gestión del Huésped
-                $guest = Guest::firstOrCreate(
+                // 2. Gestión del Huésped (ACTUALIZADO PARA GUARDAR TELÉFONO Y DATOS COMPLETOS)
+                // Usamos updateOrCreate para no duplicar clientes si ya existen por su CI
+                $guest = Guest::updateOrCreate(
                     ['identification_number' => $validated['guest_ci']],
                     [
-                        'full_name' => strtoupper($validated['guest_name']),
-                        'nationality' => 'BOLIVIA', 
+                        'full_name'    => strtoupper($validated['guest_name']),
+                        'nationality'  => strtoupper($validated['guest_nationality'] ?? 'BOLIVIA'),
+                        'civil_status' => strtoupper($validated['guest_civil_status'] ?? 'SOLTERO'),
+                        'profession'   => strtoupper($validated['guest_profession'] ?? 'NO ESPECIFICADO'),
+                        'phone'        => $validated['guest_phone'],
                         'profile_status' => 'INCOMPLETE'
                     ]
                 );
 
                 // 3. Crear la Reserva (Cabecera)
                 $reservation = Reservation::create([
-                    'user_id' => null, 
-                    'guest_id' => $guest->id,
-                    'guest_count' => $validated['guests'],
-                    'arrival_date' => $validated['check_in'],
-                    'arrival_time' => '14:00:00', 
+                    'user_id'       => null, 
+                    'guest_id'      => $guest->id,
+                    'guest_count'   => $validated['guests'],
+                    'arrival_date'  => $validated['check_in'],
+                    'arrival_time'  => '14:00:00', 
                     'duration_days' => $validated['duration_days'],
-                    'status' => 'pendiente', 
-                    'payment_type' => 'EFECTIVO', 
+                    'status'        => 'pendiente', 
+                    'payment_type'  => 'EFECTIVO', 
                 ]);
 
-                // 4. Crear los Detalles (Las habitaciones asignadas)
+                // 👇 4. NUEVO: GUARDAR EL CORREO EN LA TABLA PIVOTE 👇
+                \App\Models\ReservationGuest::create([
+                    'reservation_id' => $reservation->id,
+                    'guest_id'       => $guest->id,
+                    'email'          => $validated['guest_email'],
+                ]);
+
+                // 5. Crear los Detalles (Las habitaciones asignadas)
                 foreach ($validated['selectedRooms'] as $roomData) {
                     ReservationDetail::create([
-                        'reservation_id' => $reservation->id,
-                        'room_id' => $roomData['id'],
-                        'price_id' => $roomData['price_id'] ?? null,
-                        'price' => $roomData['price'],
+                        'reservation_id'         => $reservation->id,
+                        'room_id'                => $roomData['id'],
+                        'price_id'               => $roomData['price_id'] ?? null,
+                        'price'                  => $roomData['price'],
                         'requested_room_type_id' => $roomData['room_type_id'] ?? null,
                     ]);
 
@@ -203,7 +226,7 @@ class OnlineBookingController extends Controller
                     Room::where('id', $roomData['id'])->update(['status' => 'RESERVADO']);
                 }
 
-                Log::info("✅ Reserva Web exitosa. ID Reserva: {$reservation->id}");
+                Log::info("✅ Reserva Web exitosa. ID Reserva: {$reservation->id} | Email: {$validated['guest_email']}");
             });
 
             // Redirección SIN ZIGGY usando redirect() directo a la URL
