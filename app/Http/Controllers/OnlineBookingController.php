@@ -30,7 +30,7 @@ class OnlineBookingController extends Controller
         $checkin = $validated['check_in'] ?? null;
         $checkout = $validated['check_out'] ?? null;
         $guests = $validated['guests'] ?? 1;
-        
+
         // Calculamos los días de duración automáticamente para mandarlos a React
         $durationDays = 1;
         if ($checkin && $checkout) {
@@ -82,15 +82,15 @@ class OnlineBookingController extends Controller
                     'id' => $type->id,
                     'name' => $type->name,
                     'image' => null,
-                    
+
                     'rooms' => $type->rooms->map(function ($room) use ($type) {
-                        
+
                         // Extraemos el objeto precio
                         $precioObj = $room->price;
-                        
+
                         // 👇 BUSCAMOS EL BAÑO PRIMERO EN EL PRECIO (private/shared)
                         $tipoBano = $precioObj->bathroom_type ?? $precioObj->bath ?? $room->bathroom_type ?? $type->bathroom_type ?? 'private';
-                        
+
                         // Extraemos el valor del precio
                         $montoPrecio = $precioObj ? ($precioObj->price ?? $precioObj->amount ?? $precioObj->monto ?? 0) : 0;
 
@@ -111,20 +111,18 @@ class OnlineBookingController extends Controller
             })->values()->toArray(); // 👈 IMPORTANTE: ->toArray() aquí también
 
             Log::info("Se encontraron " . count($availableRoomTypes) . " tipos de habitaciones válidas.");
-
-            
         }
 
         // 4. Enviamos a la vista de React
         return Inertia::render('booking/index', [
-        'availableRoomTypes' => $availableRoomTypes, // Lo enviamos directo a la raíz
-        'filters' => [
-            'check_in' => $checkin,
-            'check_out' => $checkout,
-            'duration_days' => $durationDays,
-            'guests' => (int) $guests,
-        ]
-    ]);
+            'availableRoomTypes' => $availableRoomTypes, // Lo enviamos directo a la raíz
+            'filters' => [
+                'check_in' => $checkin,
+                'check_out' => $checkout,
+                'duration_days' => $durationDays,
+                'guests' => (int) $guests,
+            ]
+        ]);
     }
 
     /**
@@ -132,9 +130,9 @@ class OnlineBookingController extends Controller
      */
     public function store(Request $request)
     {
-        Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE ===');
+        Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE CON QR ===');
 
-        // 1. Validamos lo que viene de React (ACTUALIZADO CON LOS NUEVOS CAMPOS)
+        // 1. Validamos lo que viene de React (INCLUYENDO EL COMPROBANTE)
         $validated = $request->validate([
             // Datos físicos del Huésped (Guest)
             'guest_name'         => 'required|string|max:255',
@@ -142,16 +140,16 @@ class OnlineBookingController extends Controller
             'guest_nationality'  => 'nullable|string|max:100',
             'guest_civil_status' => 'nullable|string|max:50',
             'guest_profession'   => 'nullable|string|max:100',
-            'guest_phone'        => 'required|string|max:20', 
-            
+            'guest_phone'        => 'required|string|max:20',
+
             // Dato exclusivo de contacto online (ReservationGuest)
             'guest_email'        => 'required|email|max:255',
-            
+
             // Datos de la Reserva
             'check_in'           => 'required|date',
             'duration_days'      => 'required|integer|min:1',
             'guests'             => 'required|integer|min:1',
-            
+
             // Datos del carrito de habitaciones
             'selectedRooms'                  => 'required|array|min:1',
             'selectedRooms.*.id'             => 'required|exists:rooms,id',
@@ -159,14 +157,19 @@ class OnlineBookingController extends Controller
             'selectedRooms.*.price'          => 'required|numeric',
             'selectedRooms.*.price_id'       => 'nullable|exists:prices,id',
             'selectedRooms.*.room_type_id'   => 'nullable|exists:room_types,id',
+
+            // 👇 NUEVO: Validación del comprobante de pago
+            'payment_voucher'    => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120', // Máx 5MB
         ]);
 
         // =========================================================
         // 🛡️ REGLA ESTRICTA DE CONSOLA: VALIDACIÓN DE CAPACIDAD
         // =========================================================
         $capacidadTotalCarrito = 0;
+        $totalPrecioNoche = 0; // Agregamos esto para calcular el total
         foreach ($validated['selectedRooms'] as $room) {
             $capacidadTotalCarrito += $room['capacity'];
+            $totalPrecioNoche += $room['price'];
         }
 
         if ($capacidadTotalCarrito < $validated['guests']) {
@@ -176,11 +179,17 @@ class OnlineBookingController extends Controller
             ]);
         }
 
-        try {
-            DB::transaction(function () use ($validated) {
+        // 👇 NUEVO: Guardar la imagen en el disco público
+        $voucherPath = null;
+        if ($request->hasFile('payment_voucher')) {
+            // Se guardará en: storage/app/public/vouchers/...
+            $voucherPath = $request->file('payment_voucher')->store('vouchers', 'public');
+        }
 
-                // 2. Gestión del Huésped (ACTUALIZADO PARA GUARDAR TELÉFONO Y DATOS COMPLETOS)
-                // Usamos updateOrCreate para no duplicar clientes si ya existen por su CI
+        try {
+            DB::transaction(function () use ($validated, $totalPrecioNoche, $voucherPath) {
+
+                // 2. Gestión del Huésped
                 $guest = Guest::updateOrCreate(
                     ['identification_number' => $validated['guest_ci']],
                     [
@@ -193,19 +202,28 @@ class OnlineBookingController extends Controller
                     ]
                 );
 
+                // Calcular el total a pagar y el adelanto
+                $totalAmount = $totalPrecioNoche * $validated['duration_days'];
+                $advanceAmount = $totalAmount * 0.5; // El 50% que cobraste con el QR
+
                 // 3. Crear la Reserva (Cabecera)
                 $reservation = Reservation::create([
-                    'user_id'       => null, 
+                    'user_id'       => null,
                     'guest_id'      => $guest->id,
                     'guest_count'   => $validated['guests'],
                     'arrival_date'  => $validated['check_in'],
-                    'arrival_time'  => '14:00:00', 
+                    'arrival_time'  => '14:00:00',
                     'duration_days' => $validated['duration_days'],
-                    'status'        => 'pendiente', 
-                    'payment_type'  => 'EFECTIVO', 
+                    'total_price'   => $totalAmount, // Sugerido guardar el total
+                    'advance_payment' => $advanceAmount, // Sugerido guardar cuánto adelantó
+
+                    // 👇 NUEVO: Estado y método de pago
+                    'status'        => 'Confirmada', // O 'Pendiente de Verificación' según prefieras
+                    'payment_type'  => 'QR',
+                    'voucher_path'  => $voucherPath, // <-- Guardamos la ruta de la imagen
                 ]);
 
-                // 👇 4. NUEVO: GUARDAR EL CORREO EN LA TABLA PIVOTE 👇
+                // 4. GUARDAR EL CORREO EN LA TABLA PIVOTE
                 \App\Models\ReservationGuest::create([
                     'reservation_id' => $reservation->id,
                     'guest_id'       => $guest->id,
@@ -226,14 +244,17 @@ class OnlineBookingController extends Controller
                     Room::where('id', $roomData['id'])->update(['status' => 'RESERVADO']);
                 }
 
-                Log::info("✅ Reserva Web exitosa. ID Reserva: {$reservation->id} | Email: {$validated['guest_email']}");
+                Log::info("✅ Reserva Web QR exitosa. ID Reserva: {$reservation->id} | Email: {$validated['guest_email']}");
             });
 
-            // Redirección SIN ZIGGY usando redirect() directo a la URL
-            return redirect('/reservar/exito')->with('success', '¡Tu reserva ha sido registrada con éxito!');
-
+            return redirect('/reservar/exito')->with('success', '¡Tu reserva ha sido registrada y tu pago está en validación!');
         } catch (\Exception $e) {
-            Log::error("❌ Error al guardar reserva web: " . $e->getMessage());
+            // Si hay error en la base de datos, borramos la imagen que acabamos de subir para no acumular basura
+            if ($voucherPath) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($voucherPath);
+            }
+
+            Log::error("❌ Error al guardar reserva web con QR: " . $e->getMessage());
             return back()->withErrors(['error' => 'Ocurrió un error inesperado al procesar tu reserva. Por favor, intenta de nuevo.']);
         }
     }
