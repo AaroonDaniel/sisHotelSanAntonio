@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { CalendarDays, BedDouble, Users, DollarSign, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -23,6 +23,29 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
         selectedRooms: [], // Arreglo para soportar múltiples habitaciones
         guestDetails: [],
     });
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const submitBooking = () => {
+        setIsSubmitting(true);
+        
+        // Enviamos toda la data de React hacia el Controller de Laravel
+        // Usamos la URL directa '/reservar/confirmar' en lugar de Ziggy
+        router.post('/reservar/confirmar', bookingData, {
+            forceFormData: true, // ⚠️ CRÍTICO: Obliga a Inertia a enviar esto como FormData (soporta archivos)
+            onSuccess: () => {
+                // Laravel redirigirá automáticamente a la página de éxito
+                console.log("¡Enviado con éxito!");
+            },
+            onError: (errors) => {
+                console.error("Errores de validación:", errors);
+                alert("Hubo un problema con la validación de tus datos. Revisa la consola.");
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
+            }
+        });
+    };
 
     // Funciones de navegación del formulario
     const nextStep = () => setCurrentStep((prev) => prev + 1);
@@ -177,7 +200,9 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                             {currentStep === 4 && (
                                 <PaymentSummary 
                                     bookingData={bookingData} 
+                                    setBookingData={setBookingData} // <-- Agrega esto
                                     onBack={prevStep} 
+                                    onSubmit={() => alert("¡Reserva confirmada!")} // <-- Agrega esto
                                 />
                             )}
                         </div>

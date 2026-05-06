@@ -132,6 +132,13 @@ class OnlineBookingController extends Controller
     {
         Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE CON QR ===');
 
+        Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE ===');
+
+        // 👇 AGREGA ESTO TEMPORALMENTE PARA COMPROBAR 👇
+        dd([
+            'todos_los_datos' => $request->all(),
+            'el_archivo_recibido' => $request->file('payment_voucher')
+        ]);
         // 1. Validamos lo que viene de React (INCLUYENDO EL COMPROBANTE)
         $validated = $request->validate([
             // Datos físicos del Huésped (Guest)

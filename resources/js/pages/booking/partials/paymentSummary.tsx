@@ -194,45 +194,28 @@ export default function PaymentSummary({
                                 </strong>
                                 .
                             </p>
+                            <div className="mb-6 w-full rounded-md bg-gray-50 p-4 border border-gray-100">
+        <h4 className="font-bold text-[#1e3a5f] mb-3 text-center">Instrucciones de Pago:</h4>
+        <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside ml-2">
+            <li>Abre la aplicación móvil de tu banco (Yape, BNB, Fie, etc.).</li>
+            <li>Busca y selecciona la opción <strong>"Pagar con QR"</strong> o "QR Simple".</li>
+            <li>Escanea la imagen de abajo e ingresa el monto exacto: <strong className="text-black text-base">Bs. {advanceAmount.toFixed(2)}</strong>.</li>
+        </ol>
+    </div>
 
                             {/* COMPONENTE QR DINÁMICO */}
                             <div className="mb-6 flex justify-center rounded-lg border-2 border-dashed border-gray-200 bg-white p-4">
                                 <QRCodeSVG
                                     // Aquí va el string de cobro de tu banco.
                                     // Si es fijo, pon el string del banco. Si es dinámico, pásalo por props.
-                                    value="AQUI_VA_EL_STRING_DE_COBRO_DEL_BANCO_O_YAPE"
+                                    value="HaLH08F7JgjdPxdf+SzI8jOYBqB02TAHh84QIDhspmonocseECj0HFvwzBKQFUbUp54siKS2OaSdy2tsvlW9XK0XUbAM6MrL0z0phGyXvBy60A9kyMmYkk7+3Sn7HEhBDNkV6nxnSI2PhIj6gNr+gcx8IsXF4g+WBLdKAOti9oXJ1kICwMP9mYKGLcnHVvpJMFOQRnGcrMK8IBur23BgYpfFhYmD+1UdKtsXemGr6dIV2kLGCzUTRaORs+4XBBQKeTNpW1jbpcS/mUdqSDfYxumRJr4OWkxx6PxXpo+4NHm0jfYjegQIRUIeFV8GK7U+rHT8FL9Hn4xoh4SrAq0RTA==|0f209f67724e461ec596c4c2"
                                     size={192} // Equivalente a w-48 h-48
                                     level="H" // Alto nivel de corrección de errores (útil si luego le pones un logo en el medio)
                                     includeMargin={true}
                                 />
                             </div>
 
-                            {/* LOGOS DE BANCOS */}
-                            <p className="mb-2 text-xs tracking-wide text-gray-400 uppercase">
-                                Bancos Soportados
-                            </p>
-                            <div className="mb-6 flex justify-center gap-3 opacity-70">
-                                <img
-                                    src="/images/bancos/bnb.png"
-                                    alt="BNB"
-                                    className="h-6 object-contain"
-                                />
-                                <img
-                                    src="/images/bancos/eco.png"
-                                    alt="Económico"
-                                    className="h-6 object-contain"
-                                />
-                                <img
-                                    src="/images/bancos/fie.png"
-                                    alt="Fie"
-                                    className="h-6 object-contain"
-                                />
-                                <img
-                                    src="/images/bancos/yape.png"
-                                    alt="Yape"
-                                    className="h-6 object-contain"
-                                />
-                            </div>
+                            
 
                             {/* UPLOAD COMPROBANTE */}
                             <div className="w-full border-t pt-6">
