@@ -28,7 +28,8 @@ class ReservationController extends Controller
             'Reservations' => Reservation::with([
                 'guest',
                 'details.room.roomType',
-                'details.requestedRoomType' // 👈 Cambiamos details.price por requestedRoomType
+                'details.requestedRoomType',
+                'payments'
             ])->latest()->get(),
 
             'Guests' => Guest::all(),

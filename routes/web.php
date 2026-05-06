@@ -19,6 +19,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\OnlineBookingController;
+use App\Http\Controllers\AdminBookingController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -199,6 +200,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
     Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
     Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
+
+    //Verificacion de Reserva online
+    Route::post('/admin/reservas/{id}/aprobar-pago', [AdminBookingController::class, 'approvePayment'])->name('admin.bookings.approve-payment');
+    Route::post('/admin/reservas/{id}/rechazar-pago', [AdminBookingController::class, 'rejectPayment'])->name('admin.bookings.reject-payment');
+    Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
+    Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
 });
 
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');

@@ -6,6 +6,8 @@ import {
     CheckCircle2,
     QrCode,
     UploadCloud,
+    XCircle,
+    Info
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useState } from 'react';
@@ -18,6 +20,8 @@ export default function PaymentSummary({
     isSubmitting,
 }: any) {
     const [voucher, setVoucher] = useState<File | null>(null);
+    // 👇 ESTADO PARA EL MODAL DE CONFIRMACIÓN 👇
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     // ==========================================
     // 🧮 MATEMÁTICAS DEL PAGO
@@ -34,7 +38,7 @@ export default function PaymentSummary({
 
     const totalAmount = totalPerNight * durationDays;
 
-    // Configuramos el adelanto al 50% (puedes cambiar este multiplicador)
+    // Configuramos el adelanto al 50%
     const advanceAmount = totalAmount * 0.5;
     const pendingAmount = totalAmount - advanceAmount;
 
@@ -50,18 +54,25 @@ export default function PaymentSummary({
         }
     };
 
-    const handleSubmit = () => {
+    // Validamos y abrimos el Modal
+    const handleOpenModal = () => {
         if (!voucher) {
             alert(
                 'Por favor, sube el comprobante de transferencia o pago QR para confirmar tu reserva.',
             );
             return;
         }
-        onSubmit(); // Llama a la función del componente padre que envía todo a Laravel
+        setShowConfirmModal(true);
+    };
+
+    // Ejecuta el guardado final en Laravel
+    const handleFinalSubmit = () => {
+        setShowConfirmModal(false);
+        onSubmit(); 
     };
 
     return (
-        <div className="mx-auto w-full max-w-4xl pb-10">
+        <div className="mx-auto w-full max-w-4xl pb-10 relative">
             <div className="mb-6 flex items-center">
                 <Button
                     variant="ghost"
@@ -194,28 +205,22 @@ export default function PaymentSummary({
                                 </strong>
                                 .
                             </p>
-                            <div className="mb-6 w-full rounded-md bg-gray-50 p-4 border border-gray-100">
-        <h4 className="font-bold text-[#1e3a5f] mb-3 text-center">Instrucciones de Pago:</h4>
-        <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside ml-2">
-            <li>Abre la aplicación móvil de tu banco (Yape, BNB, Fie, etc.).</li>
-            <li>Busca y selecciona la opción <strong>"Pagar con QR"</strong> o "QR Simple".</li>
-            <li>Escanea la imagen de abajo e ingresa el monto exacto: <strong className="text-black text-base">Bs. {advanceAmount.toFixed(2)}</strong>.</li>
-        </ol>
-    </div>
 
-                            {/* COMPONENTE QR DINÁMICO */}
                             <div className="mb-6 flex justify-center rounded-lg border-2 border-dashed border-gray-200 bg-white p-4">
-                                <QRCodeSVG
-                                    // Aquí va el string de cobro de tu banco.
-                                    // Si es fijo, pon el string del banco. Si es dinámico, pásalo por props.
-                                    value="HaLH08F7JgjdPxdf+SzI8jOYBqB02TAHh84QIDhspmonocseECj0HFvwzBKQFUbUp54siKS2OaSdy2tsvlW9XK0XUbAM6MrL0z0phGyXvBy60A9kyMmYkk7+3Sn7HEhBDNkV6nxnSI2PhIj6gNr+gcx8IsXF4g+WBLdKAOti9oXJ1kICwMP9mYKGLcnHVvpJMFOQRnGcrMK8IBur23BgYpfFhYmD+1UdKtsXemGr6dIV2kLGCzUTRaORs+4XBBQKeTNpW1jbpcS/mUdqSDfYxumRJr4OWkxx6PxXpo+4NHm0jfYjegQIRUIeFV8GK7U+rHT8FL9Hn4xoh4SrAq0RTA==|0f209f67724e461ec596c4c2"
-                                    size={192} // Equivalente a w-48 h-48
-                                    level="H" // Alto nivel de corrección de errores (útil si luego le pones un logo en el medio)
-                                    includeMargin={true}
+                                <img 
+                                    src="/images/qrCop.png" 
+                                    alt="Código QR de Pago" 
+                                    className="w-48 h-48 object-contain"
                                 />
                             </div>
 
-                            
+                            <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Bancos Soportados</p>
+                            <div className="flex gap-3 justify-center mb-6 opacity-70">
+                                <img src="/images/bancos/bnb.png" alt="BNB" className="h-6 object-contain" />
+                                <img src="/images/bancos/eco.png" alt="Económico" className="h-6 object-contain" />
+                                <img src="/images/bancos/fie.png" alt="Fie" className="h-6 object-contain" />
+                                <img src="/images/bancos/yape.png" alt="Yape" className="h-6 object-contain" />
+                            </div>
 
                             {/* UPLOAD COMPROBANTE */}
                             <div className="w-full border-t pt-6">
@@ -266,16 +271,70 @@ export default function PaymentSummary({
                     </Card>
 
                     <Button
-                        onClick={handleSubmit}
+                        onClick={handleOpenModal}
                         disabled={isSubmitting}
                         className="h-14 w-full rounded-sm bg-[#b3282d] text-lg font-bold text-white shadow-md transition-all hover:bg-[#921f24]"
                     >
                         {isSubmitting
-                            ? 'Procesando reserva...'
+                            ? 'Procesando...'
                             : 'Confirmar Reserva y Enviar'}
                     </Button>
                 </div>
             </div>
+
+            {/* ================= MODAL DE CANCELACIÓN Y POLÍTICAS (Estilo CancelModal) ================= */}
+            {showConfirmModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
+                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-6 text-center">
+                            
+                            {/* Ícono llamativo */}
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+                                <AlertCircle className="h-8 w-8" />
+                            </div>
+                            
+                            <h3 className="mb-2 text-xl font-bold text-gray-800">Políticas de Reserva</h3>
+                            
+                            <p className="text-sm text-gray-500 mb-4">
+                                Por favor lee atentamente antes de finalizar.
+                            </p>
+
+                            {/* Caja de políticas (Borde rojo) */}
+                            <div className="text-left bg-red-50 border border-red-200 p-4 rounded-xl space-y-3 text-sm text-red-900 shadow-inner">
+                                <p>
+                                    <strong>1. Cancelaciones:</strong> Tiene un plazo máximo de <strong>2 días antes</strong> de su fecha de Check-in para cancelar la reserva.
+                                </p>
+                                <p>
+                                    <strong>2. Devoluciones:</strong> Para solicitar su devolución o en caso de retraso, comuníquese obligatoriamente al número <strong className="text-red-700 text-base bg-white px-2 py-0.5 border border-red-200 rounded shadow-sm">70461010</strong>.
+                                </p>
+                                <p>
+                                    <strong>3. Penalidad:</strong> En caso contrario (no presentarse o no avisar a tiempo), el hotel retendrá el adelanto depositado.
+                                </p>
+                            </div>
+                            
+                            {/* Botones de acción estilo cancelModal */}
+                            <div className="mt-8 flex justify-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmModal(false)}
+                                    className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+                                    disabled={isSubmitting}
+                                >
+                                    Volver
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleFinalSubmit}
+                                    disabled={isSubmitting}
+                                    className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-red-500 active:scale-95 transition disabled:opacity-50"
+                                >
+                                    {isSubmitting ? 'Procesando...' : <><CheckCircle2 className="h-4 w-4" /> Acepto y Confirmar</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

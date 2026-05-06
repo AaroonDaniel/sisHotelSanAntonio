@@ -16,30 +16,31 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
     
     // Estado global de la reserva
     const [bookingData, setBookingData] = useState({
-        // Inicializamos con los filtros que vienen del backend (si existen)
-        checkIn: filters.check_in || '',
-        checkOut: filters.check_out || '',
+        check_in: filters.check_in || '',         
+        check_out: filters.check_out || '',        
         guests: filters.guests || 1,
-        selectedRooms: [], // Arreglo para soportar múltiples habitaciones
+        duration_days: filters.duration_days || 1,
+        selectedRooms: [], 
         guestDetails: [],
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // 👇 Función principal que manda todo a Laravel 👇
     const submitBooking = () => {
         setIsSubmitting(true);
         
         // Enviamos toda la data de React hacia el Controller de Laravel
-        // Usamos la URL directa '/reservar/confirmar' en lugar de Ziggy
+        // 👇 CAMBIO AQUÍ: Ahora apunta a '/reservar/confirmar' 👇
         router.post('/reservar/confirmar', bookingData, {
-            forceFormData: true, // ⚠️ CRÍTICO: Obliga a Inertia a enviar esto como FormData (soporta archivos)
+            forceFormData: true, 
             onSuccess: () => {
-                // Laravel redirigirá automáticamente a la página de éxito
                 console.log("¡Enviado con éxito!");
             },
             onError: (errors) => {
                 console.error("Errores de validación:", errors);
                 alert("Hubo un problema con la validación de tus datos. Revisa la consola.");
+                setIsSubmitting(false); 
             },
             onFinish: () => {
                 setIsSubmitting(false);
@@ -184,7 +185,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     setBookingData={setBookingData} 
                                     onNext={nextStep} 
                                     onBack={prevStep} 
-                                    availableRoomTypes={availableRoomTypes} // Pasamos la data de disponibilidad al paso 2
+                                    availableRoomTypes={availableRoomTypes} 
                                 />
                             )}
 
@@ -200,9 +201,10 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                             {currentStep === 4 && (
                                 <PaymentSummary 
                                     bookingData={bookingData} 
-                                    setBookingData={setBookingData} // <-- Agrega esto
+                                    setBookingData={setBookingData} 
                                     onBack={prevStep} 
-                                    onSubmit={() => alert("¡Reserva confirmada!")} // <-- Agrega esto
+                                    onSubmit={submitBooking} 
+                                    isSubmitting={isSubmitting} 
                                 />
                             )}
                         </div>

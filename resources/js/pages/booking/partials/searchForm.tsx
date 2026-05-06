@@ -40,10 +40,11 @@ export default function SearchForm({ bookingData, setBookingData, onNext }: any)
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         
+        
         // Hacemos la consulta a Laravel enviando las fechas y huéspedes
         router.get('/reservar', { 
-            check_in: bookingData.checkIn,
-            check_out: bookingData.checkOut, 
+            check_in: bookingData.check_in,
+            check_out: bookingData.check_out, 
             guests: bookingData.guests 
         }, {
             preserveState: true, // Súper importante para que no se reinicie el Stepper
@@ -92,8 +93,8 @@ export default function SearchForm({ bookingData, setBookingData, onNext }: any)
                                 required
                                 min={today}
                                 className="border-l-4 border-l-[#28a745] rounded-sm h-10 text-gray-700 w-full text-sm cursor-pointer"
-                                value={bookingData.checkIn}
-                                onChange={(e) => setBookingData({...bookingData, checkIn: e.target.value})}
+                                value={bookingData.check_in} // 👈 CAMBIADO A check_in
+                                onChange={(e) => setBookingData({...bookingData, check_in: e.target.value})} // 👈 CAMBIADO A check_in
                             />
                         </div>
 
@@ -109,8 +110,8 @@ export default function SearchForm({ bookingData, setBookingData, onNext }: any)
                                 required
                                 min={getMinCheckOutDate()}
                                 className="border-l-4 border-l-[#28a745] rounded-sm h-10 text-gray-700 w-full text-sm cursor-pointer"
-                                value={bookingData.checkOut}
-                                onChange={(e) => setBookingData({...bookingData, checkOut: e.target.value})}
+                                value={bookingData.check_out} // 👈 CAMBIADO A check_out
+                                onChange={(e) => setBookingData({...bookingData, check_out: e.target.value})} // 👈 CAMBIADO A check_out
                             />
                         </div>
 

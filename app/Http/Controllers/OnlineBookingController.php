@@ -7,6 +7,7 @@ use App\Models\RoomType;
 use App\Models\Reservation;
 use App\Models\Guest;
 use App\Models\ReservationDetail;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -132,112 +133,86 @@ class OnlineBookingController extends Controller
     {
         Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE CON QR ===');
 
-        Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE ===');
-
-        // 👇 AGREGA ESTO TEMPORALMENTE PARA COMPROBAR 👇
-        dd([
-            'todos_los_datos' => $request->all(),
-            'el_archivo_recibido' => $request->file('payment_voucher')
-        ]);
-        // 1. Validamos lo que viene de React (INCLUYENDO EL COMPROBANTE)
         $validated = $request->validate([
-            // Datos físicos del Huésped (Guest)
             'guest_name'         => 'required|string|max:255',
             'guest_ci'           => 'required|string|max:50',
-            'guest_nationality'  => 'nullable|string|max:100',
-            'guest_civil_status' => 'nullable|string|max:50',
-            'guest_profession'   => 'nullable|string|max:100',
+            'guest_nationality'  => 'required|string|max:100', // Asumo que los hiciste required
+            'guest_civil_status' => 'required|string|max:50',
+            'guest_profession'   => 'required|string|max:100',
             'guest_phone'        => 'required|string|max:20',
-
-            // Dato exclusivo de contacto online (ReservationGuest)
             'guest_email'        => 'required|email|max:255',
-
-            // Datos de la Reserva
             'check_in'           => 'required|date',
             'duration_days'      => 'required|integer|min:1',
             'guests'             => 'required|integer|min:1',
-
-            // Datos del carrito de habitaciones
             'selectedRooms'                  => 'required|array|min:1',
             'selectedRooms.*.id'             => 'required|exists:rooms,id',
             'selectedRooms.*.capacity'       => 'required|integer',
             'selectedRooms.*.price'          => 'required|numeric',
             'selectedRooms.*.price_id'       => 'nullable|exists:prices,id',
             'selectedRooms.*.room_type_id'   => 'nullable|exists:room_types,id',
-
-            // 👇 NUEVO: Validación del comprobante de pago
-            'payment_voucher'    => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120', // Máx 5MB
+            'payment_voucher'    => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120', 
         ]);
 
-        // =========================================================
-        // 🛡️ REGLA ESTRICTA DE CONSOLA: VALIDACIÓN DE CAPACIDAD
-        // =========================================================
         $capacidadTotalCarrito = 0;
-        $totalPrecioNoche = 0; // Agregamos esto para calcular el total
+        $totalPrecioNoche = 0; 
         foreach ($validated['selectedRooms'] as $room) {
             $capacidadTotalCarrito += $room['capacity'];
             $totalPrecioNoche += $room['price'];
         }
 
         if ($capacidadTotalCarrito < $validated['guests']) {
-            Log::warning("Intento de reserva bloqueado: Capacidad ({$capacidadTotalCarrito}) insuficiente para Huéspedes ({$validated['guests']})");
-            return back()->withErrors([
-                'error' => 'La capacidad total de las habitaciones seleccionadas no es suficiente para todos los huéspedes.'
-            ]);
+            Log::warning("Intento de reserva bloqueado: Capacidad insuficiente.");
+            return back()->withErrors(['error' => 'La capacidad total no es suficiente para todos los huéspedes.']);
         }
 
-        // 👇 NUEVO: Guardar la imagen en el disco público
         $voucherPath = null;
         if ($request->hasFile('payment_voucher')) {
-            // Se guardará en: storage/app/public/vouchers/...
             $voucherPath = $request->file('payment_voucher')->store('vouchers', 'public');
         }
 
         try {
-            DB::transaction(function () use ($validated, $totalPrecioNoche, $voucherPath) {
+            // 👇 Necesitamos extraer el ID de la reserva fuera de la transacción 👇
+            $reservationId = DB::transaction(function () use ($validated, $totalPrecioNoche, $voucherPath) {
 
-                // 2. Gestión del Huésped
                 $guest = Guest::updateOrCreate(
                     ['identification_number' => $validated['guest_ci']],
                     [
                         'full_name'    => strtoupper($validated['guest_name']),
-                        'nationality'  => strtoupper($validated['guest_nationality'] ?? 'BOLIVIA'),
-                        'civil_status' => strtoupper($validated['guest_civil_status'] ?? 'SOLTERO'),
-                        'profession'   => strtoupper($validated['guest_profession'] ?? 'NO ESPECIFICADO'),
+                        'nationality'  => strtoupper($validated['guest_nationality']),
+                        'civil_status' => strtoupper($validated['guest_civil_status']),
+                        'profession'   => strtoupper($validated['guest_profession']),
                         'phone'        => $validated['guest_phone'],
                         'profile_status' => 'INCOMPLETE'
                     ]
                 );
 
-                // Calcular el total a pagar y el adelanto
                 $totalAmount = $totalPrecioNoche * $validated['duration_days'];
-                $advanceAmount = $totalAmount * 0.5; // El 50% que cobraste con el QR
+                $advanceAmount = $totalAmount * 0.5;
 
-                // 3. Crear la Reserva (Cabecera)
+                // 3. Crear la Reserva
                 $reservation = Reservation::create([
-                    'user_id'       => null,
                     'guest_id'      => $guest->id,
                     'guest_count'   => $validated['guests'],
                     'arrival_date'  => $validated['check_in'],
                     'arrival_time'  => '14:00:00',
                     'duration_days' => $validated['duration_days'],
-                    'total_price'   => $totalAmount, // Sugerido guardar el total
-                    'advance_payment' => $advanceAmount, // Sugerido guardar cuánto adelantó
-
-                    // 👇 NUEVO: Estado y método de pago
-                    'status'        => 'Confirmada', // O 'Pendiente de Verificación' según prefieras
+                    
+                    // Asegúrate de que tu migración soporte estos campos, o ponlos en Payment
+                    // 'total_price'   => $totalAmount, 
+                    // 'advance_payment' => $advanceAmount, 
+                    
+                    'status'        => 'pendiente', // 👈 ESTO ES CLAVE para que vaya a la Tabla 3
                     'payment_type'  => 'QR',
-                    'voucher_path'  => $voucherPath, // <-- Guardamos la ruta de la imagen
                 ]);
 
-                // 4. GUARDAR EL CORREO EN LA TABLA PIVOTE
+                // 4. Guardar correo
                 \App\Models\ReservationGuest::create([
                     'reservation_id' => $reservation->id,
                     'guest_id'       => $guest->id,
                     'email'          => $validated['guest_email'],
                 ]);
 
-                // 5. Crear los Detalles (Las habitaciones asignadas)
+                // 5. Crear Detalles de Habitación
                 foreach ($validated['selectedRooms'] as $roomData) {
                     ReservationDetail::create([
                         'reservation_id'         => $reservation->id,
@@ -246,23 +221,45 @@ class OnlineBookingController extends Controller
                         'price'                  => $roomData['price'],
                         'requested_room_type_id' => $roomData['room_type_id'] ?? null,
                     ]);
-
-                    // Bloqueamos físicamente la habitación
                     Room::where('id', $roomData['id'])->update(['status' => 'RESERVADO']);
                 }
 
-                Log::info("✅ Reserva Web QR exitosa. ID Reserva: {$reservation->id} | Email: {$validated['guest_email']}");
+                // 👇 6. REGISTRAMOS EL PAGO PARA QUE LA TABLA 3 LO DETECTE 👇
+                Payment::create([
+                    'reservation_id' => $reservation->id,
+                    'amount' => $advanceAmount, // El 50% cobrado
+                    'payment_method' => 'QR/Transferencia',
+                    'reference_number' => $voucherPath, // La ruta de la foto
+                    'status' => 'PENDIENTE_VERIFICACION'
+                ]);
+
+                Log::info("✅ Reserva Web QR exitosa. ID Reserva: {$reservation->id}");
+                
+                return $reservation->id; // Retornamos el ID
             });
 
-            return redirect('/reservar/exito')->with('success', '¡Tu reserva ha sido registrada y tu pago está en validación!');
+            // 👇 REDIRIGIMOS AL NUEVO CONTROLADOR DEL RECIBO 👇
+            return redirect()->route('booking.receipt', ['id' => $reservationId]);
+
         } catch (\Exception $e) {
-            // Si hay error en la base de datos, borramos la imagen que acabamos de subir para no acumular basura
             if ($voucherPath) {
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($voucherPath);
             }
-
             Log::error("❌ Error al guardar reserva web con QR: " . $e->getMessage());
-            return back()->withErrors(['error' => 'Ocurrió un error inesperado al procesar tu reserva. Por favor, intenta de nuevo.']);
+            return back()->withErrors(['error' => 'Ocurrió un error inesperado al procesar tu reserva.']);
         }
+    }
+
+    public function showReceipt($id) {
+        $reservation = Reservation::with([
+            'guest', 
+            'details.room.roomType', 
+            'reservationGuests', 
+            'payments'
+        ])->findOrFail($id);
+
+        return Inertia::render('booking/Receipt', [
+            'reservation' => $reservation
+        ]);
     }
 }
