@@ -1,174 +1,125 @@
-import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { router } from '@inertiajs/react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Search, Minus, Plus, RefreshCcw, ArrowRight, Moon } from 'lucide-react';
+import { Search, CalendarDays, Users, ArrowRight } from 'lucide-react';
 
 export default function SearchForm({ bookingData, setBookingData, onNext }: any) {
-    const [nights, setNights] = useState(0);
-
+    
+    // Obtenemos la fecha actual para bloquear fechas pasadas en el calendario
     const today = new Date().toISOString().split('T')[0];
 
-    useEffect(() => {
-        if (bookingData.checkIn && bookingData.checkOut) {
-            const start = new Date(bookingData.checkIn);
-            const end = new Date(bookingData.checkOut);
-            const diffTime = Math.abs(end.getTime() - start.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            setNights(diffDays);
-        } else {
-            setNights(0);
-        }
-    }, [bookingData.checkIn, bookingData.checkOut]);
-
+    // Calcula la fecha mínima de salida (mínimo 1 día después del check-in)
     const getMinCheckOutDate = () => {
-        if (!bookingData.checkIn) return today;
-        const checkInDate = new Date(bookingData.checkIn);
+        if (!bookingData.check_in) return today;
+        const checkInDate = new Date(bookingData.check_in);
         checkInDate.setDate(checkInDate.getDate() + 1);
         return checkInDate.toISOString().split('T')[0];
     };
 
-    const handleMinus = () => setBookingData({ ...bookingData, guests: Math.max(1, bookingData.guests - 1) });
-    const handlePlus = () => setBookingData({ ...bookingData, guests: Math.min(10, bookingData.guests + 1) });
-
-    const handleClear = () => {
-        setBookingData({ ...bookingData, checkIn: '', checkOut: '', guests: 1 });
-    };
-
+    // Función que se ejecuta al darle al botón "Buscar Disponibilidad"
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        
-        
-        // Hacemos la consulta a Laravel enviando las fechas y huéspedes
-        router.get('/reservar', { 
+
+        // Validamos que las fechas existan
+        if (!bookingData.check_in || !bookingData.check_out) {
+            alert("Por favor selecciona las fechas de ingreso y salida.");
+            return;
+        }
+
+        // Enviamos la búsqueda al controlador de Laravel por GET o POST según lo tengas
+        // Asegúrate de que tu ruta /reservar/buscar o /reservar esté correcta
+        router.get('/reservar', {
             check_in: bookingData.check_in,
-            check_out: bookingData.check_out, 
-            guests: bookingData.guests 
+            check_out: bookingData.check_out,
+            guests: bookingData.guests
         }, {
-            preserveState: true, // Súper importante para que no se reinicie el Stepper
+            preserveState: true,
             preserveScroll: true,
-            onSuccess: (page: any) => {
-                // Obtenemos los datos agrupados EXACTAMENTE como vienen de Laravel
-                const roomsFromLaravel = page.props.availableRoomTypes || page.props.initialRooms || [];
-                
-                // Guardamos la data original en el estado global (bookingData) sin modificarla
-                setBookingData((prevData: any) => ({
-                    ...prevData,
-                    availableRooms: roomsFromLaravel // <--- ESTO ES LO QUE NECESITA EL PASO 2 AHORA
-                }));
-                
-                // Recién ahora, cuando ya tenemos los datos, avanzamos al Paso 2
+            onSuccess: () => {
+                // Si la búsqueda es exitosa, pasamos al Paso 2 (Elegir habitación)
                 onNext();
             }
         });
     };
 
     return (
-        <Card className="w-full max-w-4xl mx-auto bg-white shadow-sm border border-gray-200 rounded-sm">
-            <CardHeader className="relative flex-row justify-center items-center pb-4 pt-6">
-                <CardTitle className="text-xl text-[#1e3a5f] font-semibold">Buscar Disponibilidad</CardTitle>
-                <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={handleClear} 
-                    className="absolute right-4 top-5 text-[#b3282d] border-[#b3282d] hover:bg-red-50 rounded-sm h-8 px-3 text-xs"
-                >
-                    Limpiar
-                </Button>
-            </CardHeader>
+        <div className="w-full max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+                <h2 className="text-3xl font-bold text-[#1e3a5f]">Reserva tu Estadía</h2>
+                <p className="text-gray-500 mt-2">Selecciona tus fechas para ver las habitaciones disponibles.</p>
+            </div>
 
-            <CardContent className="px-6 pb-6">
-                <form onSubmit={handleSearch} className="space-y-5">
-                    
-                    {/* Fila 1: Fechas y Pasajeros en la misma línea para optimizar espacio */}
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_1fr] gap-4 items-end">
+            <Card className="border-t-4 border-t-[#b3282d] shadow-lg rounded-sm">
+                <CardContent className="p-6 sm:p-8">
+                    <form onSubmit={handleSearch} className="flex flex-col gap-6">
                         
-                        {/* Fecha de Check-in */}
-                        <div className="space-y-1.5">
-                            <Label className="text-gray-600 text-sm">Fecha de ingreso</Label>
-                            <Input 
-                                type="date" 
-                                required
-                                min={today}
-                                className="border-l-4 border-l-[#28a745] rounded-sm h-10 text-gray-700 w-full text-sm cursor-pointer"
-                                value={bookingData.check_in} // 👈 CAMBIADO A check_in
-                                onChange={(e) => setBookingData({...bookingData, check_in: e.target.value})} // 👈 CAMBIADO A check_in
-                            />
-                        </div>
-
-                        <div className="flex justify-center pb-2.5 hidden md:flex">
-                            <ArrowRight className="w-4 h-4 text-gray-400" />
-                        </div>
-
-                        {/* Fecha de Check-out */}
-                        <div className="space-y-1.5">
-                            <Label className="text-gray-600 text-sm">Fecha de salida</Label>
-                            <Input 
-                                type="date" 
-                                required
-                                min={getMinCheckOutDate()}
-                                className="border-l-4 border-l-[#28a745] rounded-sm h-10 text-gray-700 w-full text-sm cursor-pointer"
-                                value={bookingData.check_out} // 👈 CAMBIADO A check_out
-                                onChange={(e) => setBookingData({...bookingData, check_out: e.target.value})} // 👈 CAMBIADO A check_out
-                            />
-                        </div>
-
-                        {/* Pasajeros */}
-                        <div className="space-y-1.5">
-                            <Label className="text-gray-600 text-sm">Huéspedes (Máx. 10)</Label>
-                            <div className="flex items-center border border-gray-200 rounded-sm h-10 overflow-hidden bg-gray-50">
-                                <button type="button" onClick={handleMinus} disabled={bookingData.guests <= 1} className="px-3 h-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 border-r border-gray-200 text-gray-600">
-                                    <Minus className="w-3.5 h-3.5" />
-                                </button>
-                                <div className="flex-1 text-center text-sm text-gray-700 bg-white h-full flex items-center justify-center font-medium">
-                                    {bookingData.guests}
-                                </div>
-                                <button type="button" onClick={handlePlus} disabled={bookingData.guests >= 10} className="px-3 h-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 border-l border-gray-200 text-gray-600">
-                                    <Plus className="w-3.5 h-3.5" />
-                                </button>
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_1fr] gap-6 items-end">
+                            
+                            {/* Fecha de Check-in */}
+                            <div className="space-y-1.5">
+                                <Label className="text-gray-600 text-sm font-semibold flex items-center">
+                                    <CalendarDays className="w-4 h-4 mr-1 text-[#b3282d]" /> Fecha de ingreso
+                                </Label>
+                                <Input 
+                                    type="date" 
+                                    required
+                                    min={today}
+                                    className="border-l-4 border-l-[#b3282d] rounded-sm h-12 text-gray-700 w-full text-base cursor-pointer focus:ring-[#1e3a5f]"
+                                    value={bookingData.check_in || ''}
+                                    onChange={(e) => setBookingData({...bookingData, check_in: e.target.value})}
+                                />
                             </div>
-                        </div>
-                    </div>
 
-                    {/* Indicador de Noches */}
-                    <div className="flex justify-center h-5">
-                        {nights > 0 && (
-                            <span className="flex items-center text-xs font-medium text-[#1e3a5f] bg-blue-50 px-2 py-0.5 rounded-full">
-                                <Moon className="w-3.5 h-3.5 mr-1.5 text-[#1a73e8]" /> {nights} noche(s)
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Fila 2: reCAPTCHA y Botón Buscar (Alineados horizontalmente) */}
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-6 pt-2">
-                        
-                        {/* ReCAPTCHA Compacto */}
-                        <div className="flex flex-col items-center">
-                            <div className="bg-[#e0f2f1] text-[#006064] px-3 py-1 rounded-sm mb-2 text-[11px] w-full max-w-[260px] text-center">
-                                Actualice el navegador si no carga el captcha
+                            <div className="flex justify-center pb-3 hidden md:flex">
+                                <ArrowRight className="w-5 h-5 text-gray-400" />
                             </div>
-                            <div className="border border-gray-300 rounded-sm p-2 flex items-center gap-3 bg-[#f9f9f9] w-full max-w-[260px] border-l-4 border-l-[#b3282d] shadow-sm">
-                                <div className="w-6 h-6 border-2 border-gray-300 rounded bg-white flex-shrink-0 cursor-pointer hover:border-gray-400 transition-colors"></div>
-                                <span className="flex-1 text-xs text-gray-700 font-medium">No soy un robot</span>
-                                <div className="flex flex-col items-center justify-center text-[9px] text-gray-500">
-                                    <RefreshCcw className="w-4 h-4 text-[#1a73e8] mb-0.5" />
-                                    reCAPTCHA
-                                </div>
+
+                            {/* Fecha de Check-out */}
+                            <div className="space-y-1.5">
+                                <Label className="text-gray-600 text-sm font-semibold flex items-center">
+                                    <CalendarDays className="w-4 h-4 mr-1 text-[#b3282d]" /> Fecha de salida
+                                </Label>
+                                <Input 
+                                    type="date" 
+                                    required
+                                    min={getMinCheckOutDate()}
+                                    className="border-l-4 border-l-[#b3282d] rounded-sm h-12 text-gray-700 w-full text-base cursor-pointer focus:ring-[#1e3a5f]"
+                                    value={bookingData.check_out || ''}
+                                    onChange={(e) => setBookingData({...bookingData, check_out: e.target.value})}
+                                />
+                            </div>
+
+                            {/* Huéspedes */}
+                            <div className="space-y-1.5">
+                                <Label className="text-gray-600 text-sm font-semibold flex items-center">
+                                    <Users className="w-4 h-4 mr-1 text-[#1e3a5f]" /> Huéspedes
+                                </Label>
+                                <Input 
+                                    type="number" 
+                                    required
+                                    min="1"
+                                    max="10"
+                                    className="rounded-sm h-12 text-gray-700 w-full text-base focus:ring-[#1e3a5f]"
+                                    value={bookingData.guests || 1}
+                                    onChange={(e) => setBookingData({...bookingData, guests: parseInt(e.target.value) || 1})}
+                                />
                             </div>
                         </div>
 
-                        {/* Botón Buscar Compacto */}
-                        <button type="submit" className="relative w-20 h-20 rounded-full border-2 border-[#b3282d] flex items-center justify-center bg-white group hover:scale-105 transition-transform duration-300 shadow-sm">
-                            <div className="absolute inset-1 rounded-full bg-[#b3282d] flex flex-col items-center justify-center text-white group-hover:bg-[#921f24] transition-colors">
-                                <Search className="w-6 h-6 mb-0.5" />
-                                <span className="font-medium text-[11px]">Buscar</span>
-                            </div>
-                        </button>
-                    </div>
-                </form>
-            </CardContent>
-        </Card>
+                        <div className="mt-4 flex justify-center md:justify-end">
+                            <Button 
+                                type="submit" 
+                                className="w-full md:w-auto bg-[#1e3a5f] hover:bg-[#152a46] text-white px-8 h-12 text-lg rounded-sm shadow-md transition-colors flex items-center"
+                            >
+                                <Search className="w-5 h-5 mr-2" /> Buscar Disponibilidad
+                            </Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
     );
 }

@@ -179,7 +179,7 @@ class OnlineBookingController extends Controller
                     [
                         'full_name'    => strtoupper($validated['guest_name']),
                         'nationality'  => strtoupper($validated['guest_nationality']),
-                        'civil_status' => strtoupper($validated['guest_civil_status']),
+                        'civil_status' => strtoupper($validated['guest_civil_status'] ?? 'SINGLE'),
                         'profession'   => strtoupper($validated['guest_profession']),
                         'phone'        => $validated['guest_phone'],
                         'profile_status' => 'INCOMPLETE'
@@ -227,10 +227,11 @@ class OnlineBookingController extends Controller
                 // 👇 6. REGISTRAMOS EL PAGO PARA QUE LA TABLA 3 LO DETECTE 👇
                 Payment::create([
                     'reservation_id' => $reservation->id,
-                    'amount' => $advanceAmount, // El 50% cobrado
-                    'payment_method' => 'QR/Transferencia',
-                    'reference_number' => $voucherPath, // La ruta de la foto
-                    'status' => 'PENDIENTE_VERIFICACION'
+                    'amount'         => $advanceAmount,
+                    'method'         => 'Transferencia', // Cambiado a method
+                    'reference'      => $voucherPath,    // Cambiado a reference
+                    'type'           => 'ingreso',       // A veces es obligatorio
+                    'status'         => 'PENDIENTE'      // Ajustado a un status más común
                 ]);
 
                 Log::info("✅ Reserva Web QR exitosa. ID Reserva: {$reservation->id}");
@@ -246,7 +247,7 @@ class OnlineBookingController extends Controller
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($voucherPath);
             }
             Log::error("❌ Error al guardar reserva web con QR: " . $e->getMessage());
-            return back()->withErrors(['error' => 'Ocurrió un error inesperado al procesar tu reserva.']);
+           return back()->withErrors(['error' => 'Error SQL: ' . $e->getMessage()]);
         }
     }
 

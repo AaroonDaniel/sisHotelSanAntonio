@@ -177,14 +177,16 @@ export default function GuestDetailsForm({ bookingData, setBookingData, onNext, 
                             </label>
                             <select 
                                 name="guest_civil_status"
-                                value={bookingData.guest_civil_status || 'SOLTERO'}
+                                // 👇 Por defecto en inglés 👇
+                                value={bookingData.guest_civil_status || 'SINGLE'} 
                                 onChange={handleChange}
                                 className="flex h-11 w-full rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f]"
                             >
-                                <option value="SOLTERO">Soltero/a</option>
-                                <option value="CASADO">Casado/a</option>
-                                <option value="DIVORCIADO">Divorciado/a</option>
-                                <option value="VIUDO">Viudo/a</option>
+                                {/* 👇 values en inglés, texto en español 👇 */}
+                                <option value="SINGLE">Soltero/a</option>
+                                <option value="MARRIED">Casado/a</option>
+                                <option value="DIVORCED">Divorciado/a</option>
+                                <option value="WIDOWED">Viudo/a</option>
                             </select>
                         </div>
 
