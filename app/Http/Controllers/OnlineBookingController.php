@@ -169,7 +169,15 @@ class OnlineBookingController extends Controller
 
         $voucherPath = null;
         if ($request->hasFile('payment_voucher')) {
+            // Intentamos guardar la imagen
             $voucherPath = $request->file('payment_voucher')->store('vouchers', 'public');
+            
+            // 👇 SI LA CARPETA NO TIENE PERMISOS, DETENEMOS TODO 👇
+            if (!$voucherPath) {
+                return back()->withErrors(['error' => 'El servidor falló al guardar la imagen. Revisa los permisos de la carpeta storage/app/public.']);
+            }
+        } else {
+            return back()->withErrors(['error' => 'El archivo nunca llegó al servidor backend.']);
         }
 
         try {

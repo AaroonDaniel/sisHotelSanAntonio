@@ -9,7 +9,6 @@ import {
     XCircle,
     Info
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import React, { useState } from 'react';
 
 export default function PaymentSummary({
@@ -20,6 +19,9 @@ export default function PaymentSummary({
     isSubmitting,
 }: any) {
     const [voucher, setVoucher] = useState<File | null>(null);
+    // 👇 SOLUCIÓN: Agregamos el estado de la vista previa de la imagen 👇
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    
     // 👇 ESTADO PARA EL MODAL DE CONFIRMACIÓN 👇
     const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -38,19 +40,18 @@ export default function PaymentSummary({
 
     const totalAmount = totalPerNight * durationDays;
 
-    // Configuramos el adelanto al 50%
-    const advanceAmount = totalAmount * 0.5;
+    // 👇 CAMBIO AQUÍ: Configuramos el adelanto al 20% (multiplicando por 0.2) 👇
+    const advanceAmount = totalAmount * 0.2;
     const pendingAmount = totalAmount - advanceAmount;
 
-    // Manejar subida del comprobante
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setVoucher(e.target.files[0]);
-            // Guardamos el archivo en el estado global para mandarlo a Laravel
-            setBookingData({
-                ...bookingData,
-                payment_voucher: e.target.files[0],
-            });
+            const file = e.target.files[0];
+            setVoucher(file);
+            setPreviewUrl(URL.createObjectURL(file));
+
+            // 👇 Forma súper segura de Inertia para evitar que se pierda la imagen
+            setBookingData('payment_voucher', file);
         }
     };
 
@@ -102,7 +103,7 @@ export default function PaymentSummary({
                                         Titular:
                                     </span>
                                     <span className="font-semibold text-gray-800 uppercase">
-                                        {bookingData.guest_name}
+                                        {bookingData.guest_name || bookingData.full_name}
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-sm">
@@ -144,7 +145,7 @@ export default function PaymentSummary({
                                             <span>
                                                 {room.typeName}{' '}
                                                 <span className="text-xs text-gray-400">
-                                                    ({room.name})
+                                                    ({room.name || 'Habitación'})
                                                 </span>
                                             </span>
                                             <span className="font-medium">
@@ -164,8 +165,9 @@ export default function PaymentSummary({
                                         Bs. {totalAmount.toFixed(2)}
                                     </span>
                                 </div>
+                                {/* 👇 CAMBIO AQUÍ: Actualizamos el texto visual a 20% 👇 */}
                                 <div className="mt-2 flex justify-between rounded-sm border border-red-100 bg-red-50 p-3 text-lg font-bold text-[#b3282d]">
-                                    <span>Adelanto requerido (50%):</span>
+                                    <span>Adelanto requerido (20%):</span>
                                     <span>Bs. {advanceAmount.toFixed(2)}</span>
                                 </div>
                                 <div className="mt-1 flex justify-between px-1 text-xs text-gray-500">
@@ -176,11 +178,12 @@ export default function PaymentSummary({
                         </CardContent>
                     </Card>
 
+                    {/* 👇 CAMBIO AQUÍ: Actualizamos el texto de la alerta a 20% 👇 */}
                     <div className="flex items-start rounded-sm border border-blue-200 bg-blue-50 p-4">
                         <AlertCircle className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-blue-600" />
                         <p className="text-sm text-blue-800">
                             Para garantizar tu reserva, requerimos un adelanto
-                            del 50%. El saldo restante lo podrás cancelar al
+                            del 20%. El saldo restante lo podrás cancelar al
                             momento de hacer tu Check-in en el hotel.
                         </p>
                     </div>
@@ -214,13 +217,7 @@ export default function PaymentSummary({
                                 />
                             </div>
 
-                            <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Bancos Soportados</p>
-                            <div className="flex gap-3 justify-center mb-6 opacity-70">
-                                <img src="/images/bancos/bnb.png" alt="BNB" className="h-6 object-contain" />
-                                <img src="/images/bancos/eco.png" alt="Económico" className="h-6 object-contain" />
-                                <img src="/images/bancos/fie.png" alt="Fie" className="h-6 object-contain" />
-                                <img src="/images/bancos/yape.png" alt="Yape" className="h-6 object-contain" />
-                            </div>
+                            
 
                             {/* UPLOAD COMPROBANTE */}
                             <div className="w-full border-t pt-6">

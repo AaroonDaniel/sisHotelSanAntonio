@@ -134,7 +134,7 @@ export default function ViewReservationModal({
                         <ChevronLeft className="h-5 w-5" /> Volver al listado
                     </button>
 
-                    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-3">
+                    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-9 lg:grid-cols-3">
                         {/* Datos del Cliente y Reserva */}
                         <div className="space-y-6 lg:col-span-1">
                             <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-xl">
@@ -193,10 +193,12 @@ export default function ViewReservationModal({
                                 </h3>
 
                                 <div className="group relative flex min-h-[400px] flex-1 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-100 p-2">
-                                    {payment?.reference_number ? (
+                                    {/* 👇 CAMBIAR reference_number POR voucher_path 👇 */}
+                                    {payment?.voucher_path ? (
                                         <>
                                             <img
-                                                src={`/storage/${payment.reference_number}`}
+                                                // 👇 Y CAMBIAR TAMBIÉN AQUÍ 👇
+                                                src={`/storage/${payment.voucher_path}`}
                                                 alt="Comprobante"
                                                 className="max-h-[500px] w-full rounded object-contain"
                                                 onError={(e) => {
@@ -205,7 +207,8 @@ export default function ViewReservationModal({
                                                 }}
                                             />
                                             <a
-                                                href={`/storage/${payment.reference_number}`}
+                                                // 👇 Y CAMBIAR AQUÍ TAMBIÉN 👇
+                                                href={`/storage/${payment.voucher_path}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="absolute inset-0 flex items-center justify-center bg-black/50 font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
@@ -281,7 +284,15 @@ export default function ViewReservationModal({
     // ==========================================
     // 🛏️ VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
     // ==========================================
+    // ==========================================
+    // 🛏️ VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
+    // ==========================================
     if (confirmingStayRes) {
+        
+        // 👇 1. CALCULAMOS EL ADELANTO REAL DESDE LA TABLA DE PAGOS 👇
+        const advancePaid = confirmingStayRes.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
+        const paymentMethod = confirmingStayRes.payments?.[0]?.method || confirmingStayRes.payment_type || 'Transferencia';
+
         return (
             <AuthenticatedLayout user={auth.user}>
                 <Head title="Confirmar Estancia" />
@@ -342,12 +353,12 @@ export default function ViewReservationModal({
                                 <h3 className="mb-2 text-xs font-bold tracking-widest text-indigo-200 uppercase">
                                     Finanzas
                                 </h3>
+                                {/* 👇 2. MOSTRAMOS EL ADELANTO CALCULADO 👇 */}
                                 <div className="text-3xl font-black">
-                                    {confirmingStayRes.advance_payment} Bs
+                                    {advancePaid.toFixed(2)} Bs
                                 </div>
                                 <p className="mt-1 text-xs text-indigo-300">
-                                    Adelanto recibido (
-                                    {confirmingStayRes.payment_type})
+                                    Adelanto recibido ({paymentMethod})
                                 </p>
                             </div>
                         </div>
@@ -386,9 +397,9 @@ export default function ViewReservationModal({
                                                                 'private'
                                                                     ? '🚿 PRIVADO'
                                                                     : det.requested_bathroom ===
-                                                                        'compartido_sindesayuno'
-                                                                      ? '🚽 COMP. S/D'
-                                                                      : '🚽 COMP. C/D'}
+                                                                      'compartido_sindesayuno'
+                                                                    ? '🚽 COMP. S/D'
+                                                                    : '🚽 COMP. C/D'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -396,7 +407,6 @@ export default function ViewReservationModal({
                                                         {det.room_type?.name}
                                                     </div>
 
-                                                    {/* Visualización del precio acordado por esta habitación */}
                                                     <div className="mt-1 flex items-center gap-1 text-sm font-black text-indigo-600">
                                                         <Banknote className="h-3.5 w-3.5" />
                                                         {det.price} Bs.
@@ -452,7 +462,7 @@ export default function ViewReservationModal({
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Reservas" />
 
-            <div className="mx-auto max-w-[1500px] space-y-4 p-4 pt-2 lg:p-2 lg:pt-0.5">
+            <div className="mx-auto max-w-[1500px] space-y-6 px-4 pt-6 pb-12 sm:px-8 lg:px-16 xl:px-20">
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-1 text-base font-medium text-gray-400 transition-colors hover:text-white"
@@ -520,7 +530,7 @@ export default function ViewReservationModal({
                                                 <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
                                                     Huésped / Llegada
                                                 </th>
-                                                <th className="px-6 py-3 text-center text-[10px] font-black text-gray-400 uppercase">
+                                                <th className="w-28 px-6 py-3 text-center text-[10px] font-black whitespace-nowrap text-gray-400 uppercase">
                                                     Req.
                                                 </th>
                                                 <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
@@ -560,8 +570,8 @@ export default function ViewReservationModal({
                                                                 </span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <span className="rounded-full border border-orange-200 bg-orange-100 px-2.5 py-1 text-[10px] font-black text-orange-700">
+                                                        <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                            <span className="inline-block rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-[11px] font-black whitespace-nowrap text-orange-700 shadow-sm">
                                                                 {
                                                                     res.details
                                                                         .length
