@@ -12,16 +12,16 @@ import {
     CheckCircle2,
     ChevronLeft,
     Clock,
+    ExternalLink,
+    FileImage,
+    Globe,
     Pencil,
     Plus,
     Search,
     UserCheck,
     XCircle,
-    Globe,
-    FileImage,
-    ExternalLink
 } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AssignRoomsModal from './AssignRoomsModal';
 import ReservationModal from './reservationModal';
 
@@ -59,13 +59,12 @@ export default function ViewReservationModal({
             router.reload({
                 only: ['reservations'], // 👈 Solo pedimos las reservas nuevas
             });
-        }, 10000); 
+        }, 10000);
 
         // Limpiamos el temporizador cuando cerramos esta pantalla
         return () => clearInterval(interval);
     }, []);
 
-    
     const filteredReservations = useMemo(() => {
         return reservations.filter(
             (res) =>
@@ -82,22 +81,25 @@ export default function ViewReservationModal({
 
     // 1. NUEVO: Reservas Online Pendientes de Verificar el Pago
     const pendingOnlineVerification = useMemo(() => {
-        return filteredReservations.filter((res) => 
-            res.payments?.some((p: any) => p.status === 'PENDIENTE_VERIFICACION')
+        return filteredReservations.filter((res) =>
+            res.payments?.some(
+                (p: any) => p.status === 'PENDIENTE_VERIFICACION',
+            ),
         );
     }, [filteredReservations]);
 
     // 2. Pendientes de asignar habitación (Excluimos las que aún no verifican su pago)
-    const pendingAssignment = useMemo(
-        () =>
-            filteredReservations.filter(
-                (res) =>
-                    res.details.some((d: any) => d.room_id === null) &&
-                    res.status === 'pendiente' &&
-                    !res.payments?.some((p: any) => p.status === 'PENDIENTE_VERIFICACION'),
-            ),
-        [filteredReservations],
-    );
+    const pendingAssignment = useMemo(() => {
+        return filteredReservations.filter(
+            (res) =>
+                res.details.some((d: any) => d.room_id === null) &&
+                res.status === 'pendiente' &&
+                // 👇 ESTE ES EL ESCUDO: Ignora por completo las reservas web que no han sido verificadas 👇
+                !res.payments?.some(
+                    (p: any) => p.status === 'PENDIENTE_VERIFICACION',
+                ),
+        );
+    }, [filteredReservations]);
 
     // 3. Listos para Confirmar (Excluimos las que aún no verifican su pago)
     const readyForCheckin = useMemo(
@@ -106,7 +108,9 @@ export default function ViewReservationModal({
                 (res) =>
                     res.details.every((d: any) => d.room_id !== null) &&
                     res.status === 'pendiente' &&
-                    !res.payments?.some((p: any) => p.status === 'PENDIENTE_VERIFICACION'),
+                    !res.payments?.some(
+                        (p: any) => p.status === 'PENDIENTE_VERIFICACION',
+                    ),
             ),
         [filteredReservations],
     );
@@ -115,8 +119,10 @@ export default function ViewReservationModal({
     // 💻 VISTA PANTALLA COMPLETA: VERIFICACIÓN ONLINE
     // ==========================================
     if (verifyingOnlineRes) {
-        const payment = verifyingOnlineRes.payments?.find((p: any) => p.status === 'PENDIENTE_VERIFICACION');
-        
+        const payment = verifyingOnlineRes.payments?.find(
+            (p: any) => p.status === 'PENDIENTE_VERIFICACION',
+        );
+
         return (
             <AuthenticatedLayout user={auth.user}>
                 <Head title="Verificar Pago Online" />
@@ -139,7 +145,11 @@ export default function ViewReservationModal({
                                     {verifyingOnlineRes.guest?.full_name}
                                 </h2>
                                 <p className="text-sm font-bold text-gray-400">
-                                    CI: {verifyingOnlineRes.guest?.identification_number}
+                                    CI:{' '}
+                                    {
+                                        verifyingOnlineRes.guest
+                                            ?.identification_number
+                                    }
                                 </p>
                                 <p className="text-sm font-bold text-gray-400">
                                     Telf: {verifyingOnlineRes.guest?.phone}
@@ -147,16 +157,28 @@ export default function ViewReservationModal({
 
                                 <div className="mt-8 space-y-4 border-t pt-6">
                                     <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">Llegada</span>
-                                        <span className="font-bold text-gray-800">{verifyingOnlineRes.arrival_date}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Llegada
+                                        </span>
+                                        <span className="font-bold text-gray-800">
+                                            {verifyingOnlineRes.arrival_date}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">Noches</span>
-                                        <span className="font-bold text-gray-800">{verifyingOnlineRes.duration_days}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Noches
+                                        </span>
+                                        <span className="font-bold text-gray-800">
+                                            {verifyingOnlineRes.duration_days}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">Monto Reportado</span>
-                                        <span className="font-bold text-blue-600">Bs. {payment?.amount}</span>
+                                        <span className="text-sm text-gray-400">
+                                            Monto Reportado
+                                        </span>
+                                        <span className="font-bold text-blue-600">
+                                            Bs. {payment?.amount}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -164,56 +186,86 @@ export default function ViewReservationModal({
 
                         {/* Visor del Comprobante y Acciones */}
                         <div className="space-y-6 lg:col-span-2">
-                            <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl flex flex-col h-full">
-                                <h3 className="mb-4 flex items-center gap-2 text-xl font-black text-gray-800 border-b pb-4">
-                                    <FileImage className="h-6 w-6 text-blue-500" /> Comprobante Adjuntado
+                            <div className="flex h-full flex-col rounded-3xl border border-gray-100 bg-white p-8 shadow-xl">
+                                <h3 className="mb-4 flex items-center gap-2 border-b pb-4 text-xl font-black text-gray-800">
+                                    <FileImage className="h-6 w-6 text-blue-500" />{' '}
+                                    Comprobante Adjuntado
                                 </h3>
 
-                                <div className="flex-1 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 p-2 flex items-center justify-center relative overflow-hidden group min-h-[400px]">
+                                <div className="group relative flex min-h-[400px] flex-1 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-100 p-2">
                                     {payment?.reference_number ? (
                                         <>
-                                            <img 
-                                                src={`/storage/${payment.reference_number}`} 
-                                                alt="Comprobante" 
-                                                className="max-h-[500px] object-contain w-full rounded"
-                                                onError={(e) => { e.currentTarget.src = '/images/placeholder.png'; }}
+                                            <img
+                                                src={`/storage/${payment.reference_number}`}
+                                                alt="Comprobante"
+                                                className="max-h-[500px] w-full rounded object-contain"
+                                                onError={(e) => {
+                                                    e.currentTarget.src =
+                                                        '/images/placeholder.png';
+                                                }}
                                             />
-                                            <a 
-                                                href={`/storage/${payment.reference_number}`} 
-                                                target="_blank" 
+                                            <a
+                                                href={`/storage/${payment.reference_number}`}
+                                                target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white font-bold"
+                                                className="absolute inset-0 flex items-center justify-center bg-black/50 font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
                                             >
-                                                <ExternalLink className="w-6 h-6 mr-2" /> Ampliar Imagen
+                                                <ExternalLink className="mr-2 h-6 w-6" />{' '}
+                                                Ampliar Imagen
                                             </a>
                                         </>
                                     ) : (
-                                        <p className="text-gray-400 italic font-medium">No se encontró la imagen del comprobante.</p>
+                                        <p className="font-medium text-gray-400 italic">
+                                            No se encontró la imagen del
+                                            comprobante.
+                                        </p>
                                     )}
                                 </div>
 
                                 <div className="mt-8 flex gap-4">
                                     <button
                                         onClick={() => {
-                                            if(confirm("¿Rechazar comprobante? La reserva será cancelada y las habitaciones liberadas.")) {
-                                                router.post(`/admin/reservas/${verifyingOnlineRes.id}/rechazar-pago`, {}, {
-                                                    onSuccess: () => setVerifyingOnlineRes(null)
-                                                });
+                                            if (
+                                                confirm(
+                                                    '¿Rechazar comprobante? La reserva será cancelada y las habitaciones liberadas.',
+                                                )
+                                            ) {
+                                                router.post(
+                                                    `/admin/reservas/${verifyingOnlineRes.id}/rechazar-pago`,
+                                                    {},
+                                                    {
+                                                        onSuccess: () =>
+                                                            setVerifyingOnlineRes(
+                                                                null,
+                                                            ),
+                                                    },
+                                                );
                                             }
                                         }}
-                                        className="w-1/2 rounded-2xl bg-white border-2 border-red-100 text-red-600 py-4 text-sm font-black uppercase tracking-wider transition-all hover:bg-red-50 hover:border-red-200 active:scale-95 shadow-sm"
+                                        className="w-1/2 rounded-2xl border-2 border-red-100 bg-white py-4 text-sm font-black tracking-wider text-red-600 uppercase shadow-sm transition-all hover:border-red-200 hover:bg-red-50 active:scale-95"
                                     >
                                         ❌ Rechazar (Falso/Inválido)
                                     </button>
                                     <button
                                         onClick={() => {
-                                            if(confirm("¿Aprobar pago? La reserva pasará a 'Pendientes de Habitación'.")) {
-                                                router.post(`/admin/reservas/${verifyingOnlineRes.id}/aprobar-pago`, {}, {
-                                                    onSuccess: () => setVerifyingOnlineRes(null)
-                                                });
+                                            if (
+                                                confirm(
+                                                    "¿Aprobar pago? La reserva pasará a 'Pendientes de Habitación'.",
+                                                )
+                                            ) {
+                                                router.post(
+                                                    `/admin/reservas/${verifyingOnlineRes.id}/aprobar-pago`,
+                                                    {},
+                                                    {
+                                                        onSuccess: () =>
+                                                            setVerifyingOnlineRes(
+                                                                null,
+                                                            ),
+                                                    },
+                                                );
                                             }
                                         }}
-                                        className="w-1/2 rounded-2xl bg-blue-600 py-4 text-sm font-black text-white uppercase tracking-wider shadow-lg transition-all hover:bg-blue-500 active:scale-95"
+                                        className="w-1/2 rounded-2xl bg-blue-600 py-4 text-sm font-black tracking-wider text-white uppercase shadow-lg transition-all hover:bg-blue-500 active:scale-95"
                                     >
                                         ✓ Aprobar Comprobante
                                     </button>
@@ -369,7 +421,10 @@ export default function ViewReservationModal({
                                                 `/reservas/${confirmingStayRes.id}`,
                                                 { status: 'confirmada' },
                                                 {
-                                                    onSuccess: () => setConfirmingStayRes(null),
+                                                    onSuccess: () =>
+                                                        setConfirmingStayRes(
+                                                            null,
+                                                        ),
                                                 },
                                             );
                                         }}
@@ -713,10 +768,12 @@ export default function ViewReservationModal({
                         <div className="flex items-center justify-between border-b border-gray-100 bg-blue-50/50 px-6 py-5">
                             <div>
                                 <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-blue-600 uppercase">
-                                    <Globe className="h-5 w-5" /> 3. Reservas Online (Por Verificar Pago)
+                                    <Globe className="h-5 w-5" /> 3. Reservas
+                                    Online (Por Verificar Pago)
                                 </h2>
                                 <p className="mt-1 text-xs font-medium text-gray-500">
-                                    Revisa el comprobante subido por el cliente para confirmar su reserva oficial.
+                                    Revisa el comprobante subido por el cliente
+                                    para confirmar su reserva oficial.
                                 </p>
                             </div>
                             <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-black text-blue-800">
@@ -728,46 +785,79 @@ export default function ViewReservationModal({
                             {pendingOnlineVerification.length === 0 ? (
                                 <div className="flex h-full flex-col items-center justify-center p-12 text-center text-gray-400">
                                     <FileImage className="mb-4 h-12 w-12 opacity-20" />
-                                    <p className="text-sm font-bold tracking-wider uppercase">No hay reservas web por verificar</p>
+                                    <p className="text-sm font-bold tracking-wider uppercase">
+                                        No hay reservas web por verificar
+                                    </p>
                                 </div>
                             ) : (
                                 <table className="w-full text-left">
-                                    <thead className="bg-gray-50/50 border-b border-gray-100">
+                                    <thead className="border-b border-gray-100 bg-gray-50/50">
                                         <tr>
-                                            <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">Titular</th>
-                                            <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">Llegada</th>
-                                            <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase text-center">Habitaciones Req.</th>
-                                            <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">Acción</th>
+                                            <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
+                                                Titular
+                                            </th>
+                                            <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
+                                                Llegada
+                                            </th>
+                                            <th className="px-6 py-3 text-center text-[10px] font-black text-gray-400 uppercase">
+                                                Habitaciones Req.
+                                            </th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
+                                                Acción
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {pendingOnlineVerification.map((res) => (
-                                            <tr key={res.id} className="transition-colors hover:bg-blue-50/30">
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm font-black text-gray-800 uppercase">{res.guest?.full_name}</div>
-                                                    <div className="text-xs text-gray-400 mt-0.5">Telf: {res.guest?.phone}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex w-fit items-center gap-1.5 rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-blue-700">
-                                                        <CalendarDays className="h-3.5 w-3.5" />
-                                                        <span className="text-xs font-bold tracking-wide">{res.arrival_date}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-700">
-                                                        {res.details.length} Hab.
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <button 
-                                                        onClick={() => setVerifyingOnlineRes(res)} 
-                                                        className="inline-flex items-center gap-1.5 rounded-xl border-2 border-blue-600 text-blue-600 px-4 py-2 text-xs font-black uppercase shadow-sm transition-all hover:bg-blue-600 hover:text-white active:scale-95"
-                                                    >
-                                                        <FileImage className="h-3.5 w-3.5" /> Verificar Pago
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {pendingOnlineVerification.map(
+                                            (res) => (
+                                                <tr
+                                                    key={res.id}
+                                                    className="transition-colors hover:bg-blue-50/30"
+                                                >
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm font-black text-gray-800 uppercase">
+                                                            {
+                                                                res.guest
+                                                                    ?.full_name
+                                                            }
+                                                        </div>
+                                                        <div className="mt-0.5 text-xs text-gray-400">
+                                                            Telf:{' '}
+                                                            {res.guest?.phone}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex w-fit items-center gap-1.5 rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-blue-700">
+                                                            <CalendarDays className="h-3.5 w-3.5" />
+                                                            <span className="text-xs font-bold tracking-wide">
+                                                                {
+                                                                    res.arrival_date
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-700">
+                                                            {res.details.length}{' '}
+                                                            Hab.
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={() =>
+                                                                setVerifyingOnlineRes(
+                                                                    res,
+                                                                )
+                                                            }
+                                                            className="inline-flex items-center gap-1.5 rounded-xl border-2 border-blue-600 px-4 py-2 text-xs font-black text-blue-600 uppercase shadow-sm transition-all hover:bg-blue-600 hover:text-white active:scale-95"
+                                                        >
+                                                            <FileImage className="h-3.5 w-3.5" />{' '}
+                                                            Verificar Pago
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ),
+                                        )}
                                     </tbody>
                                 </table>
                             )}

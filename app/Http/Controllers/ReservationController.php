@@ -437,7 +437,8 @@ class ReservationController extends Controller
         $reservations = Reservation::with([
             'guest',
             'details.room.roomType',
-            'details.requestedRoomType'
+            'details.requestedRoomType',
+            'payments'
         ])
             ->whereIn('status', ['pendiente'])
             ->orderBy('arrival_date', 'asc')
