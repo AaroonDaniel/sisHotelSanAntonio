@@ -133,14 +133,16 @@ class OnlineBookingController extends Controller
     {
         Log::info('=== INICIANDO CREACIÓN DE RESERVA ONLINE CON QR ===');
 
-        $validated = $request->validate([
-            'guest_name'         => 'required|string|max:255',
-            'guest_ci'           => 'required|string|max:50',
-            'guest_nationality'  => 'required|string|max:100', // Asumo que los hiciste required
-            'guest_civil_status' => 'required|string|max:50',
-            'guest_profession'   => 'required|string|max:100',
-            'guest_phone'        => 'required|string|max:20',
-            'guest_email'        => 'required|email|max:255',
+       $validated = $request->validate([
+            'full_name'             => 'required|string|max:255',
+            'identification_number' => 'required|string|max:50',
+            'issued_in'             => 'required|string|max:20',
+            'nationality'           => 'required|string|max:100',
+            'civil_status'          => 'required|string|max:50',
+            'birth_date'            => 'required|date',
+            'profession'            => 'required|string|max:100',
+            'phone'                 => 'required|string|max:20',
+            'guest_email'           => 'required|email|max:255',
             'check_in'           => 'required|date',
             'duration_days'      => 'required|integer|min:1',
             'guests'             => 'required|integer|min:1',
@@ -175,13 +177,15 @@ class OnlineBookingController extends Controller
             $reservationId = DB::transaction(function () use ($validated, $totalPrecioNoche, $voucherPath) {
 
                 $guest = Guest::updateOrCreate(
-                    ['identification_number' => $validated['guest_ci']],
+                    ['identification_number' => $validated['identification_number']],
                     [
-                        'full_name'    => strtoupper($validated['guest_name']),
-                        'nationality'  => strtoupper($validated['guest_nationality']),
-                        'civil_status' => strtoupper($validated['guest_civil_status'] ?? 'SINGLE'),
-                        'profession'   => strtoupper($validated['guest_profession']),
-                        'phone'        => $validated['guest_phone'],
+                        'full_name'      => $validated['full_name'],
+                        'issued_in'      => $validated['issued_in'],
+                        'nationality'    => $validated['nationality'],
+                        'civil_status'   => $validated['civil_status'], // Llegará "SINGLE", "MARRIED", etc.
+                        'birth_date'     => $validated['birth_date'],
+                        'profession'     => $validated['profession'],
+                        'phone'          => $validated['phone'],
                         'profile_status' => 'INCOMPLETE'
                     ]
                 );
@@ -191,6 +195,7 @@ class OnlineBookingController extends Controller
 
                 // 3. Crear la Reserva
                 $reservation = Reservation::create([
+                    'user_id'       => 1,
                     'guest_id'      => $guest->id,
                     'guest_count'   => $validated['guests'],
                     'arrival_date'  => $validated['check_in'],
@@ -224,15 +229,18 @@ class OnlineBookingController extends Controller
                     Room::where('id', $roomData['id'])->update(['status' => 'RESERVADO']);
                 }
 
-                // 👇 6. REGISTRAMOS EL PAGO PARA QUE LA TABLA 3 LO DETECTE 👇
-                Payment::create([
-                    'reservation_id' => $reservation->id,
-                    'amount'         => $advanceAmount,
-                    'method'         => 'Transferencia', // Cambiado a method
-                    'reference'      => $voucherPath,    // Cambiado a reference
-                    'type'           => 'ingreso',       // A veces es obligatorio
-                    'status'         => 'PENDIENTE'      // Ajustado a un status más común
-                ]);
+               // 👇 6. REGISTRAMOS EL PAGO (Campo por campo para evitar bloqueos de seguridad) 👇
+                $payment = new Payment();
+                $payment->user_id = 1; // Asignamos al Administrador por defecto
+                $payment->reservation_id = $reservation->id;
+                $payment->amount = $advanceAmount;
+                $payment->method = 'Transferencia';
+                $payment->voucher_path = $voucherPath;
+                $payment->type = 'ingreso';
+                $payment->status = 'PENDIENTE_VERIFICACION';
+                
+                // Guardamos el registro en la base de datos
+                $payment->save();
 
                 Log::info("✅ Reserva Web QR exitosa. ID Reserva: {$reservation->id}");
                 
@@ -240,7 +248,7 @@ class OnlineBookingController extends Controller
             });
 
             // 👇 REDIRIGIMOS AL NUEVO CONTROLADOR DEL RECIBO 👇
-            return redirect()->route('booking.receipt', ['id' => $reservationId]);
+            return redirect('/reservar/recibo/' . $reservationId);
 
         } catch (\Exception $e) {
             if ($voucherPath) {

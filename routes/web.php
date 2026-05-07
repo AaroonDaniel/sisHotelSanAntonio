@@ -206,12 +206,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/reservas/{id}/rechazar-pago', [AdminBookingController::class, 'rejectPayment'])->name('admin.bookings.reject-payment');
     Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
     Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
+   
 });
 
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
 
-// Endpoints para procesar los pasos (pueden ser peticiones POST/Inertia)
+// 2. Buscar habitaciones por fecha
 Route::post('/reservar/buscar', [OnlineBookingController::class, 'searchRooms'])->name('booking.search');
+
+// 3. Guardar la reserva y el comprobante
 Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.store');
-Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('reservar.index');
+
+// 4. Mostrar el PDF del recibo final
+Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
+
 require __DIR__ . '/settings.php';

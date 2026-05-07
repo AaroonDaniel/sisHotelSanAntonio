@@ -16,12 +16,22 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
     
     // Estado global de la reserva
     const [bookingData, setBookingData] = useState({
-        check_in: filters.check_in || '',         
-        check_out: filters.check_out || '',        
+        check_in: filters.check_in || '',
+        check_out: filters.check_out || '',
         guests: filters.guests || 1,
         duration_days: filters.duration_days || 1,
         selectedRooms: [], 
-        guestDetails: [],
+        
+        // 👇 AHORA USAMOS LOS NOMBRES EXACTOS DEL SISTEMA INTERNO 👇
+        full_name: '',
+        identification_number: '',
+        issued_in: '', // Nuevo (Expedido en)
+        nationality: 'BOLIVIANA',
+        civil_status: 'SINGLE', 
+        birth_date: '', // Nuevo (Fecha de nacimiento)
+        profession: '',
+        phone: '',
+        guest_email: '', // Este lo mantenemos así porque va a otra tabla (ReservationGuest)
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);
