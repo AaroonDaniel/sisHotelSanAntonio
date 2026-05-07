@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, CalendarDays, User, CreditCard, Printer, Home } from 'lucide-react';
+import { CheckCircle2, Printer, Home } from 'lucide-react';
 import { Head, Link } from '@inertiajs/react';
 
 export default function Receipt({ reservation }: any) {
@@ -13,106 +13,119 @@ export default function Receipt({ reservation }: any) {
         window.print();
     };
 
+    // ==========================================
+    // 🧮 LÓGICA DE PAGOS Y SALDOS
+    // ==========================================
+    // 1. Sumamos el precio por noche de todas las habitaciones seleccionadas
+    const totalRoomsPerNight = reservation.details?.reduce((acc: number, curr: any) => acc + Number(curr.price || 0), 0) || 0;
+    
+    // 2. Multiplicamos por la cantidad de noches para el costo total
+    const durationDays = Number(reservation.duration_days) || 1;
+    const totalAmount = totalRoomsPerNight * durationDays;
+    
+    // 3. Obtenemos el monto que ya adelantó mediante QR
+    const advancePaid = reservation.payments && reservation.payments.length > 0 ? Number(reservation.payments[0].amount) : 0;
+    
+    // 4. Calculamos lo que falta pagar en recepción
+    const balanceDue = totalAmount - advancePaid;
+
     return (
-        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-gray-100 py-8 px-4 flex justify-center print:bg-white print:py-0 print:block">
             <Head title={`Comprobante #${reservation.id}`} />
 
-            <div className="max-w-3xl mx-auto">
-                {/* Botones de acción superiores (No se imprimen) */}
-                <div className="flex justify-between items-center mb-6 print:hidden">
+            {/* Contenedor principal estrecho tipo Factura/Ticket (Mitad de hoja) */}
+            <div className="w-full max-w-md print:max-w-[14cm] print:mx-0 print:w-full">
+                
+                {/* Botones de acción superiores (Ocultos al imprimir) */}
+                <div className="flex justify-between items-center mb-4 print:hidden">
                     <Link href="/reservar">
-                        <Button variant="outline" className="text-[#1e3a5f]">
-                            <Home className="w-4 h-4 mr-2" /> Nueva Reserva
+                        <Button variant="outline" size="sm" className="text-[#1e3a5f] bg-white">
+                            <Home className="w-4 h-4 mr-2" /> Inicio
                         </Button>
                     </Link>
-                    <Button onClick={handlePrint} className="bg-[#1e3a5f] hover:bg-[#152a46] text-white">
-                        <Printer className="w-4 h-4 mr-2" /> Imprimir Comprobante
+                    <Button onClick={handlePrint} size="sm" className="bg-[#1e3a5f] hover:bg-[#152a46] text-white shadow-sm">
+                        <Printer className="w-4 h-4 mr-2" /> Imprimir
                     </Button>
                 </div>
 
-                <Card className="border-t-8 border-t-[#28a745] shadow-lg bg-white">
-                    <CardHeader className="text-center border-b border-gray-100 pb-6 pt-8">
-                        <div className="flex justify-center mb-4">
-                            <CheckCircle2 className="w-16 h-16 text-[#28a745]" />
+                <Card className="border-t-8 border-t-[#28a745] shadow-lg bg-white print:shadow-none print:border-t-4 print:border-t-gray-800 rounded-sm">
+                    
+                    {/* ENCABEZADO DEL TICKET */}
+                    <CardHeader className="text-center border-b border-dashed border-gray-300 pb-4 pt-6">
+                        <div className="flex justify-center mb-2 print:hidden">
+                            <CheckCircle2 className="w-12 h-12 text-[#28a745]" />
                         </div>
-                        <CardTitle className="text-3xl font-bold text-gray-800">¡Reserva Confirmada!</CardTitle>
-                        <p className="text-gray-500 mt-2">
-                            Tu reserva ha sido registrada con éxito. Por favor, presenta este comprobante en recepción.
-                        </p>
+                        <h1 className="text-xl font-black text-gray-800 uppercase tracking-widest">Hotel San Antonio</h1>
+                        <CardTitle className="text-base font-bold text-gray-600 mt-1">COMPROBANTE DE RESERVA</CardTitle>
+                        <p className="text-sm font-mono text-gray-500 mt-1">N°: {String(reservation.id).padStart(5, '0')}</p>
                     </CardHeader>
 
-                    <CardContent className="p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            
-                            {/* Información de la Reserva */}
-                            <div className="space-y-4">
-                                <h3 className="font-bold text-lg text-[#b3282d] border-b pb-2">Detalles de Estadía</h3>
-                                <div className="flex items-center text-gray-700">
-                                    <span className="font-semibold w-24">N° Reserva:</span> 
-                                    <span className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">{reservation.id}</span>
-                                </div>
-                                <div className="flex items-center text-gray-700">
-                                    <span className="font-semibold w-24">Ingreso:</span> 
-                                    {reservation.arrival_date} (14:00)
-                                </div>
-                                <div className="flex items-center text-gray-700">
-                                    <span className="font-semibold w-24">Noches:</span> 
-                                    {reservation.duration_days} noche(s)
-                                </div>
-                                <div className="flex items-center text-gray-700">
-                                    <span className="font-semibold w-24">Huéspedes:</span> 
-                                    {reservation.guest_count} persona(s)
-                                </div>
+                    <CardContent className="p-6">
+                        
+                        {/* DATOS DEL CLIENTE Y ESTADÍA */}
+                        <div className="space-y-4 mb-6 text-sm text-gray-700">
+                            <div>
+                                <p className="font-bold text-[#1e3a5f] uppercase text-xs mb-1">Titular de la Reserva</p>
+                                <p className="font-semibold text-base">{reservation.guest?.full_name}</p>
+                                <p className="text-gray-500">CI/Pasaporte: {reservation.guest?.identification_number}</p>
                             </div>
-
-                            {/* Información del Titular */}
-                            <div className="space-y-4">
-                                <h3 className="font-bold text-lg text-[#b3282d] border-b pb-2">Datos del Titular</h3>
-                                <div className="flex items-center text-gray-700">
-                                    <User className="w-4 h-4 mr-2 text-gray-400" />
-                                    <span>{reservation.guest?.full_name}</span>
+                            
+                            <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-sm print:bg-transparent print:p-0 print:border-y print:border-dashed print:border-gray-300 print:py-3">
+                                <div>
+                                    <p className="font-bold text-gray-500 uppercase text-[10px]">Ingreso (Check-in)</p>
+                                    <p className="font-bold text-gray-800">{reservation.arrival_date}</p>
+                                    <p className="text-xs text-gray-500">14:00 hrs</p>
                                 </div>
-                                <div className="flex items-center text-gray-700">
-                                    <CreditCard className="w-4 h-4 mr-2 text-gray-400" />
-                                    <span>CI: {reservation.guest?.identification_number}</span>
+                                <div>
+                                    <p className="font-bold text-gray-500 uppercase text-[10px]">Detalles de estadía</p>
+                                    <p className="font-medium text-gray-800">{durationDays} Noche(s)</p>
+                                    <p className="text-xs text-gray-500">{reservation.guest_count} Huésped(es)</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Habitaciones Reservadas */}
-                        <div className="mt-8">
-                            <h3 className="font-bold text-lg text-[#b3282d] border-b pb-2 mb-4">Habitaciones Seleccionadas</h3>
-                            <div className="bg-gray-50 rounded-lg p-4">
+                        {/* HABITACIONES RESERVADAS */}
+                        <div className="mb-6">
+                            <p className="font-bold text-[#1e3a5f] uppercase text-xs mb-2 border-b border-gray-200 pb-1">Habitaciones Seleccionadas</p>
+                            <div className="space-y-2 text-sm">
                                 {reservation.details?.map((detail: any, index: number) => (
-                                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
-                                        <div>
-                                            <p className="font-semibold text-gray-800">
-                                                {detail.room?.room_type?.name || 'Habitación'} - {detail.room?.number || `N° ${detail.room?.id}`}
-                                            </p>
+                                    <div key={index} className="flex justify-between items-center">
+                                        <div className="text-gray-800">
+                                            {detail.room?.room_type?.name || 'Habitación'} {detail.room?.number ? `(${detail.room.number})` : ''}
                                         </div>
-                                        <div className="text-right font-medium text-gray-700">
-                                            Bs. {detail.price} / noche
+                                        <div className="text-gray-900 font-medium text-right">
+                                            Bs. {Number(detail.price).toFixed(2)} <span className="text-[10px] text-gray-500 block -mt-1 font-normal">/noche</span>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Pagos */}
-                        <div className="mt-8 flex justify-end">
-                            <div className="w-full md:w-1/2 bg-green-50 p-4 rounded-lg border border-green-100">
-                                <h3 className="font-bold text-green-800 mb-2">Estado de Pago</h3>
-                                {reservation.payments && reservation.payments.length > 0 ? (
-                                    <div className="flex justify-between items-center text-green-700">
-                                        <span>Adelanto pagado (QR):</span>
-                                        <span className="font-bold text-lg">Bs. {reservation.payments[0].amount}</span>
-                                    </div>
-                                ) : (
-                                    <p className="text-gray-600">Verificando comprobante...</p>
-                                )}
-                                <p className="text-xs text-green-600 mt-2">* Pago sujeto a verificación por recepción.</p>
+                        {/* DESGLOSE MATEMÁTICO DE PAGOS */}
+                        <div className="border-t-2 border-dashed border-gray-300 pt-4 space-y-2 text-sm">
+                            <div className="flex justify-between text-gray-600">
+                                <span>Costo total ({durationDays} noches):</span>
+                                <span>Bs. {totalAmount.toFixed(2)}</span>
+                            </div>
+                            
+                            <div className="flex justify-between text-green-700 font-bold bg-green-50 p-2 rounded-sm print:bg-transparent print:p-0">
+                                <span>Adelanto Pagado (QR):</span>
+                                <span>- Bs. {advancePaid.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-lg font-black text-gray-800 pt-2 border-t border-gray-200 mt-2">
+                                <span>Saldo a Pagar:</span>
+                                <span className="text-[#b3282d]">Bs. {balanceDue.toFixed(2)}</span>
                             </div>
                         </div>
+
+                        {/* PIE DEL TICKET */}
+                        <div className="mt-8 text-center text-xs text-gray-500 print:mt-12">
+                            <p className="font-semibold text-gray-700">Importante:</p>
+                            <p className="italic mb-2">El saldo pendiente debe cancelarse en recepción al momento del ingreso.</p>
+                            <p className="mt-4 font-bold tracking-widest uppercase">¡Gracias por su preferencia!</p>
+                        </div>
+
                     </CardContent>
                 </Card>
             </div>

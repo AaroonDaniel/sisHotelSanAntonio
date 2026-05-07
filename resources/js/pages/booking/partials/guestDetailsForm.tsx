@@ -1,63 +1,123 @@
-import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, User, Mail, CreditCard, Phone, Globe, Heart, Briefcase, MapPin, CalendarDays } from 'lucide-react';
+import {
+    ArrowLeft,
+    Briefcase,
+    CalendarDays,
+    CreditCard,
+    Globe,
+    Heart,
+    Mail,
+    MapPin,
+    Phone,
+    User,
+} from 'lucide-react';
+import React, { useState } from 'react';
 
 // ==========================================
 // 📚 LISTAS DE AUTOCOMPLETADO
 // ==========================================
 const NATIONALITIES = [
-    "BOLIVIANA", "ARGENTINA", "CHILENA", "PERUANA", "BRASILEÑA", 
-    "COLOMBIANA", "ECUATORIANA", "VENEZOLANA", "PARAGUAYA", "URUGUAYA", 
-    "MEXICANA", "ESTADOUNIDENSE", "ESPAÑOLA", "CUBANA", "DOMINICANA"
+    'BOLIVIANA',
+    'ARGENTINA',
+    'CHILENA',
+    'PERUANA',
+    'BRASILEÑA',
+    'COLOMBIANA',
+    'ECUATORIANA',
+    'VENEZOLANA',
+    'PARAGUAYA',
+    'URUGUAYA',
+    'MEXICANA',
+    'ESTADOUNIDENSE',
+    'ESPAÑOLA',
+    'CUBANA',
+    'DOMINICANA',
 ];
 
 const PROFESSIONS = [
-    "ESTUDIANTE", "COMERCIANTE", "INGENIERO/A", "MÉDICO/A", "ABOGADO/A", 
-    "PROFESOR/A", "CONTADOR/A", "ARQUITECTO/A", "ENFERMERO/A", "INDEPENDIENTE", 
-    "EMPRESARIO/A", "CHOFER", "AGRICULTOR/A", "JUBILADO/A", "EMPLEADO/A PÚBLICO/A",
-    "ADMINISTRADOR/A", "POLICÍA", "MILITAR", "TURISTA"
+    'ESTUDIANTE',
+    'COMERCIANTE',
+    'INGENIERO/A',
+    'MÉDICO/A',
+    'ABOGADO/A',
+    'PROFESOR/A',
+    'CONTADOR/A',
+    'ARQUITECTO/A',
+    'ENFERMERO/A',
+    'INDEPENDIENTE',
+    'EMPRESARIO/A',
+    'CHOFER',
+    'AGRICULTOR/A',
+    'JUBILADO/A',
+    'EMPLEADO/A PÚBLICO/A',
+    'ADMINISTRADOR/A',
+    'POLICÍA',
+    'MILITAR',
+    'TURISTA',
 ];
 
-export default function GuestDetailsForm({ bookingData, setBookingData, onNext, onBack }: any) {
-    
+export default function GuestDetailsForm({
+    bookingData,
+    setBookingData,
+    onNext,
+    onBack,
+}: any) {
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    ) => {
         const { name, value } = e.target;
-        
+
         // Campos que siempre deben ir en mayúsculas según las reglas de la base de datos
-        const upperCaseFields = ['full_name', 'issued_in', 'nationality', 'profession'];
-        const newValue = upperCaseFields.includes(name) ? value.toUpperCase() : value;
+        const upperCaseFields = [
+            'full_name',
+            'issued_in',
+            'nationality',
+            'profession',
+        ];
+        const newValue = upperCaseFields.includes(name)
+            ? value.toUpperCase()
+            : value;
 
         setBookingData({ ...bookingData, [name]: newValue });
-        
+
         if (errors[name]) {
             setErrors({ ...errors, [name]: '' });
         }
     };
 
     const handleContinue = () => {
-        const civilStatus = bookingData.civil_status || 'Soltero';
+        const civilStatus = bookingData.civil_status || 'SINGLE';
         let newErrors: Record<string, string> = {};
 
         // Validaciones obligatorias usando los nombres exactos de la BD
-        if (!bookingData.full_name) newErrors.full_name = "Tiene que completar este campo.";
-        if (!bookingData.identification_number) newErrors.identification_number = "Tiene que completar este campo.";
-        if (!bookingData.issued_in) newErrors.issued_in = "Indique dónde se expidió su documento (Ej: LP, SC).";
-        if (!bookingData.birth_date) newErrors.birth_date = "La fecha de nacimiento es obligatoria.";
-        if (!bookingData.phone) newErrors.phone = "Tiene que completar este campo.";
-        if (!bookingData.nationality) newErrors.nationality = "Tiene que completar este campo.";
-        if (!bookingData.profession) newErrors.profession = "Tiene que completar este campo.";
-        
+        if (!bookingData.full_name)
+            newErrors.full_name = 'Tiene que completar este campo.';
+        if (!bookingData.identification_number)
+            newErrors.identification_number = 'Tiene que completar este campo.';
+        if (!bookingData.issued_in)
+            newErrors.issued_in =
+                'Indique dónde se expidió su documento (Ej: LP, SC).';
+        if (!bookingData.birth_date)
+            newErrors.birth_date = 'La fecha de nacimiento es obligatoria.';
+        if (!bookingData.phone)
+            newErrors.phone = 'Tiene que completar este campo.';
+        if (!bookingData.nationality)
+            newErrors.nationality = 'Tiene que completar este campo.';
+        if (!bookingData.profession)
+            newErrors.profession = 'Tiene que completar este campo.';
+
         // Validación del Email (Va a la tabla reservation_guests)
         if (!bookingData.guest_email) {
-            newErrors.guest_email = "Tiene que completar este campo.";
+            newErrors.guest_email = 'Tiene que completar este campo.';
         } else {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(bookingData.guest_email)) {
-                newErrors.guest_email = "Por favor ingresa un correo electrónico válido.";
+                newErrors.guest_email =
+                    'Por favor ingresa un correo electrónico válido.';
             }
         }
 
@@ -74,113 +134,149 @@ export default function GuestDetailsForm({ bookingData, setBookingData, onNext, 
     const maxBirthDate = new Date().toISOString().split('T')[0];
 
     return (
-        <div className="w-full max-w-4xl mx-auto">
-            <div className="flex items-center mb-6">
-                <Button variant="ghost" onClick={onBack} className="text-gray-500 hover:text-gray-800 mr-2 px-2">
-                    <ArrowLeft className="w-5 h-5 mr-2" /> Volver a selección de habitaciones
+        <div className="mx-auto w-full max-w-4xl">
+            <div className="mb-6 flex items-center">
+                <Button
+                    variant="ghost"
+                    onClick={onBack}
+                    className="mr-2 px-2 text-gray-500 hover:text-gray-800"
+                >
+                    <ArrowLeft className="mr-2 h-5 w-5" /> Volver a selección de
+                    habitaciones
                 </Button>
-                <h2 className="text-2xl font-bold text-[#1e3a5f]">Datos del Titular de la Reserva</h2>
+                <h2 className="text-2xl font-bold text-[#1e3a5f]">
+                    Datos del Titular de la Reserva
+                </h2>
             </div>
 
-            <Card className="border border-gray-200 shadow-sm rounded-sm">
+            <Card className="rounded-sm border border-gray-200 shadow-sm">
                 <CardContent className="p-6 sm:p-8">
-                    <p className="text-gray-500 mb-8 text-sm sm:text-base">
-                        Ingresa los datos de la persona responsable de la reserva. Todos los campos son obligatorios para el registro hotelero.
+                    <p className="mb-8 text-sm text-gray-500 sm:text-base">
+                        Ingresa los datos de la persona responsable de la
+                        reserva. Todos los campos son obligatorios para el
+                        registro hotelero.
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         {/* ================= DATOS PRINCIPALES ================= */}
                         <div className="space-y-2 md:col-span-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <User className="w-4 h-4 mr-2 text-[#b3282d]" /> Nombre Completo *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <User className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Nombre Completo *
                             </label>
-                            <Input 
-                                type="text" 
-                                name="full_name" 
+                            <Input
+                                type="text"
+                                name="full_name"
                                 value={bookingData.full_name || ''}
-                                onChange={handleChange} 
+                                onChange={handleChange}
                                 placeholder="Ej: JUAN PEREZ MORALES"
                                 className={`h-11 border-gray-300 uppercase ${errors.full_name ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
-                            {errors.full_name && <p className="text-xs text-red-500 mt-1 font-medium">{errors.full_name}</p>}
+                            {errors.full_name && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.full_name}
+                                </p>
+                            )}
                         </div>
 
                         {/* CI y Expedido (Misma Fila en Pantallas Grandes) */}
-                        <div className="flex flex-col sm:flex-row gap-4 md:col-span-2">
-                            <div className="space-y-2 flex-1">
-                                <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                    <CreditCard className="w-4 h-4 mr-2 text-[#b3282d]" /> N° Documento (CI/Pasaporte) *
+                        <div className="flex flex-col gap-4 sm:flex-row md:col-span-2">
+                            <div className="flex-1 space-y-2">
+                                <label className="flex items-center text-sm font-semibold text-gray-700">
+                                    <CreditCard className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                    N° Documento (CI/Pasaporte) *
                                 </label>
-                                <Input 
-                                    type="text" 
-                                    name="identification_number" 
-                                    value={bookingData.identification_number || ''}
-                                    onChange={handleChange} 
+                                <Input
+                                    type="text"
+                                    name="identification_number"
+                                    value={
+                                        bookingData.identification_number || ''
+                                    }
+                                    onChange={handleChange}
                                     placeholder="Ej: 12345678"
                                     className={`h-11 border-gray-300 ${errors.identification_number ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                                 />
-                                {errors.identification_number && <p className="text-xs text-red-500 mt-1 font-medium">{errors.identification_number}</p>}
+                                {errors.identification_number && (
+                                    <p className="mt-1 text-xs font-medium text-red-500">
+                                        {errors.identification_number}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2 sm:w-1/3">
-                                <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                    <MapPin className="w-4 h-4 mr-2 text-[#b3282d]" /> Expedido *
+                                <label className="flex items-center text-sm font-semibold text-gray-700">
+                                    <MapPin className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                    Expedido *
                                 </label>
-                                <Input 
-                                    type="text" 
-                                    name="issued_in" 
+                                <Input
+                                    type="text"
+                                    name="issued_in"
                                     value={bookingData.issued_in || ''}
-                                    onChange={handleChange} 
+                                    onChange={handleChange}
                                     placeholder="Ej: LP"
                                     className={`h-11 border-gray-300 uppercase ${errors.issued_in ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                                 />
-                                {errors.issued_in && <p className="text-xs text-red-500 mt-1 font-medium">{errors.issued_in}</p>}
+                                {errors.issued_in && (
+                                    <p className="mt-1 text-xs font-medium text-red-500">
+                                        {errors.issued_in}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
                         {/* Fecha de Nacimiento */}
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <CalendarDays className="w-4 h-4 mr-2 text-[#b3282d]" /> Fecha Nacimiento *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <CalendarDays className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Fecha Nacimiento *
                             </label>
-                            <Input 
-                                type="date" 
-                                name="birth_date" 
+                            <Input
+                                type="date"
+                                name="birth_date"
                                 max={maxBirthDate}
-                                value={bookingData.birth_date || ''} 
-                                onChange={handleChange} 
+                                value={bookingData.birth_date || ''}
+                                onChange={handleChange}
                                 className={`h-11 border-gray-300 ${errors.birth_date ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
-                            {errors.birth_date && <p className="text-xs text-red-500 mt-1 font-medium">{errors.birth_date}</p>}
+                            {errors.birth_date && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.birth_date}
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <Phone className="w-4 h-4 mr-2 text-[#b3282d]" /> Teléfono / Celular *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <Phone className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Teléfono / Celular *
                             </label>
-                            <Input 
-                                type="tel" 
-                                name="phone" 
-                                value={bookingData.phone || ''} 
-                                onChange={handleChange} 
+                            <Input
+                                type="tel"
+                                name="phone"
+                                value={bookingData.phone || ''}
+                                onChange={handleChange}
                                 placeholder="Ej: 71234567"
                                 className={`h-11 border-gray-300 ${errors.phone ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
-                            {errors.phone && <p className="text-xs text-red-500 mt-1 font-medium">{errors.phone}</p>}
+                            {errors.phone && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.phone}
+                                </p>
+                            )}
                         </div>
 
                         {/* ================= DATOS COMPLEMENTARIOS CON AUTOCOMPLETADO ================= */}
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <Globe className="w-4 h-4 mr-2 text-[#b3282d]" /> Nacionalidad *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <Globe className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Nacionalidad *
                             </label>
-                            <Input 
-                                type="text" 
-                                name="nationality" 
+                            <Input
+                                type="text"
+                                name="nationality"
                                 list="nacionalidades"
-                                value={bookingData.nationality || ''} 
-                                onChange={handleChange} 
+                                value={bookingData.nationality || ''}
+                                onChange={handleChange}
                                 placeholder="Ej: BOLIVIANA"
                                 className={`h-11 border-gray-300 uppercase ${errors.nationality ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                                 autoComplete="off"
@@ -190,79 +286,96 @@ export default function GuestDetailsForm({ bookingData, setBookingData, onNext, 
                                     <option key={`nac-${index}`} value={nac} />
                                 ))}
                             </datalist>
-                            {errors.nationality && <p className="text-xs text-red-500 mt-1 font-medium">{errors.nationality}</p>}
+                            {errors.nationality && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.nationality}
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <Briefcase className="w-4 h-4 mr-2 text-[#b3282d]" /> Profesión / Ocupación *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <Briefcase className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Profesión / Ocupación *
                             </label>
-                            <Input 
-                                type="text" 
-                                name="profession" 
+                            <Input
+                                type="text"
+                                name="profession"
                                 list="profesiones"
-                                value={bookingData.profession || ''} 
-                                onChange={handleChange} 
+                                value={bookingData.profession || ''}
+                                onChange={handleChange}
                                 placeholder="Ej: ESTUDIANTE"
                                 className={`h-11 border-gray-300 uppercase ${errors.profession ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                                 autoComplete="off"
                             />
                             <datalist id="profesiones">
                                 {PROFESSIONS.map((prof, index) => (
-                                    <option key={`prof-${index}`} value={prof} />
+                                    <option
+                                        key={`prof-${index}`}
+                                        value={prof}
+                                    />
                                 ))}
                             </datalist>
-                            {errors.profession && <p className="text-xs text-red-500 mt-1 font-medium">{errors.profession}</p>}
+                            {errors.profession && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.profession}
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <Heart className="w-4 h-4 mr-2 text-[#b3282d]" /> Estado Civil *
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <Heart className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Estado Civil *
                             </label>
-                            <select 
+                            <select
                                 name="civil_status"
                                 value={bookingData.civil_status || 'Soltero'}
                                 onChange={handleChange}
-                                className="flex h-11 w-full rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f]"
+                                className="flex h-11 w-full rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:ring-2 focus-visible:ring-[#1e3a5f] focus-visible:outline-none"
                             >
-                                <option value="Soltero">Soltero/a</option>
-                                <option value="Casado">Casado/a</option>
-                                <option value="Divorciado">Divorciado/a</option>
-                                <option value="Viudo">Viudo/a</option>
+                                <option value="SINGLE">Soltero/a</option>
+                                <option value="MARRIED">Casado/a</option>
+                                <option value="DIVORCED">Divorciado/a</option>
+                                <option value="WIDOWED">Viudo/a</option>
                             </select>
                         </div>
 
                         {/* ================= DATOS DE CONTACTO WEB ================= */}
-                        <div className="space-y-2 md:col-span-2 border-t border-gray-100 pt-6 mt-2">
-                            <label className="text-sm font-semibold text-gray-700 flex items-center">
-                                <Mail className="w-4 h-4 mr-2 text-[#b3282d]" /> Correo Electrónico *
+                        <div className="mt-2 space-y-2 border-t border-gray-100 pt-6 md:col-span-2">
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <Mail className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                Correo Electrónico *
                             </label>
-                            <Input 
-                                type="email" 
-                                name="guest_email" 
-                                value={bookingData.guest_email || ''} 
-                                onChange={handleChange} 
+                            <Input
+                                type="email"
+                                name="guest_email"
+                                value={bookingData.guest_email || ''}
+                                onChange={handleChange}
                                 placeholder="ejemplo@correo.com"
                                 className={`h-11 border-gray-300 ${errors.guest_email ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
                             {errors.guest_email ? (
-                                <p className="text-xs text-red-500 mt-1 font-medium">{errors.guest_email}</p>
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.guest_email}
+                                </p>
                             ) : (
-                                <p className="text-xs text-gray-400 mt-1">Aquí enviaremos el comprobante y la confirmación de la reserva.</p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                    Aquí enviaremos el comprobante y la
+                                    confirmación de la reserva.
+                                </p>
                             )}
                         </div>
-
                     </div>
 
                     <div className="mt-10 flex justify-end">
-                        <Button 
-                            onClick={handleContinue} 
-                            className="bg-[#b3282d] hover:bg-[#921f24] text-white px-8 h-11 text-base rounded-sm shadow-sm transition-colors"
+                        <Button
+                            onClick={handleContinue}
+                            className="h-11 rounded-sm bg-[#b3282d] px-8 text-base text-white shadow-sm transition-colors hover:bg-[#921f24]"
                         >
                             Continuar al resumen final
                         </Button>
                     </div>
-
                 </CardContent>
             </Card>
         </div>

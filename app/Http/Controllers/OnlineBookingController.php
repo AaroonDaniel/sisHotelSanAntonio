@@ -58,7 +58,7 @@ class OnlineBookingController extends Controller
                             $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
                                 $resQ->where('arrival_date', '<', $checkout)
                                     ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
-                                    ->whereIn('status', ['Pendiente', 'Confirmada']);
+                                    ->whereIn('status', ['pendiente', 'confirmada']);
                             });
                         })
                         // Traemos el precio relacionado
@@ -71,7 +71,7 @@ class OnlineBookingController extends Controller
                             $q->whereHas('reservation', function ($resQ) use ($checkin, $checkout) {
                                 $resQ->where('arrival_date', '<', $checkout)
                                     ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$checkin])
-                                    ->whereIn('status', ['Pendiente', 'Confirmada']);
+                                    ->whereIn('status', ['pendiente', 'confirmada']);
                             });
                         });
                 })

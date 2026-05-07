@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react'; // 👈 1. Importamos useForm
 import { CalendarDays, BedDouble, Users, DollarSign, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -9,40 +9,37 @@ import RoomSelection from './partials/roomSelection';
 import GuestDetailsForm from './partials/guestDetailsForm';
 import PaymentSummary from './partials/paymentSummary';
 
-// CORRECCIÓN: Recibimos los datos limpios que envía el OnlineBookingController
 export default function BookingIndex({ availableRoomTypes = [], filters = {} }: any) {
     // Estado del Stepper
     const [currentStep, setCurrentStep] = useState(1);
     
-    // Estado global de la reserva
-    const [bookingData, setBookingData] = useState({
+    // 👇 2. CAMBIO VITAL: Reemplazamos useState por useForm 👇
+    const { data: bookingData, setData: setBookingData, post, processing } = useForm({
         check_in: filters.check_in || '',
         check_out: filters.check_out || '',
         guests: filters.guests || 1,
         duration_days: filters.duration_days || 1,
         selectedRooms: [], 
         
-        // 👇 AHORA USAMOS LOS NOMBRES EXACTOS DEL SISTEMA INTERNO 👇
         full_name: '',
         identification_number: '',
-        issued_in: '', // Nuevo (Expedido en)
+        issued_in: '',
         nationality: 'BOLIVIANA',
         civil_status: 'SINGLE', 
-        birth_date: '', // Nuevo (Fecha de nacimiento)
+        birth_date: '', 
         profession: '',
         phone: '',
-        guest_email: '', // Este lo mantenemos así porque va a otra tabla (ReservationGuest)
+        guest_email: '', 
+        // 👈 AÑADIMOS EL CAMPO DEL ARCHIVO DESDE EL PRINCIPIO
+        payment_voucher: null as File | null, 
     });
 
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // 👇 Función principal que manda todo a Laravel 👇
+    // 👇 3. Función principal usando el post de useForm 👇
     const submitBooking = () => {
-        setIsSubmitting(true);
-        
-        // Enviamos toda la data de React hacia el Controller de Laravel
-        // 👇 CAMBIO AQUÍ: Ahora apunta a '/reservar/confirmar' 👇
-        router.post('/reservar/confirmar', bookingData, {
+        // useForm arma el paquete "multipart/form-data" perfectamente sin perder la foto
+        post('/reservar/confirmar', {
+            preserveState: true,
+            preserveScroll: true,
             forceFormData: true, 
             onSuccess: () => {
                 console.log("¡Enviado con éxito!");
@@ -50,10 +47,6 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             onError: (errors) => {
                 console.error("Errores de validación:", errors);
                 alert("Hubo un problema con la validación de tus datos. Revisa la consola.");
-                setIsSubmitting(false); 
-            },
-            onFinish: () => {
-                setIsSubmitting(false);
             }
         });
     };
@@ -214,7 +207,8 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     setBookingData={setBookingData} 
                                     onBack={prevStep} 
                                     onSubmit={submitBooking} 
-                                    isSubmitting={isSubmitting} 
+                                    // 👈 4. Usamos processing de useForm para desactivar el botón
+                                    isSubmitting={processing} 
                                 />
                             )}
                         </div>
