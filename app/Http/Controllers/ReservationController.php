@@ -434,6 +434,9 @@ class ReservationController extends Controller
 
     public function reception()
     {
+        // 1. Obtenemos la fecha actual exacta en la zona horaria de Bolivia
+        $today = Carbon::now('America/La_Paz')->format('Y-m-d');
+
         $reservations = Reservation::with([
             'guest',
             'details.room.roomType',
@@ -441,6 +444,8 @@ class ReservationController extends Controller
             'payments'
         ])
             ->whereIn('status', ['pendiente'])
+            // 👇 2. NUEVO FILTRO: Solo trae reservas cuya fecha de llegada sea HOY o en el futuro
+            ->where('arrival_date', '>=', $today)
             ->orderBy('arrival_date', 'asc')
             ->get();
 

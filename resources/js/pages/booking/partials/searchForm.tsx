@@ -73,7 +73,7 @@ export default function SearchForm({ bookingData, setBookingData, onNext }: any)
                                 />
                             </div>
 
-                            <div className="flex justify-center pb-3 hidden md:flex">
+                            <div className="flex justify-center pb-3 md:flex">
                                 <ArrowRight className="w-5 h-5 text-gray-400" />
                             </div>
 

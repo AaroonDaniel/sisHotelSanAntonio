@@ -124,9 +124,9 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                             <p className="text-sm text-gray-500 mt-2">Empieza tu día con nuestro delicioso desayuno buffet.</p>
                         </div>
                         <div className="p-6 border border-gray-100 rounded-sm shadow-sm hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-red-50 text-[#b3282d] rounded-full flex items-center justify-center mx-auto mb-4">🚗</div>
-                            <h3 className="font-semibold text-gray-800">Parqueo Privado</h3>
-                            <p className="text-sm text-gray-500 mt-2">Comodidad y seguridad para tu vehículo en todo momento.</p>
+                            <div className="w-12 h-12 bg-red-50 text-[#b3282d] rounded-full flex items-center justify-center mx-auto mb-4">🔥</div>
+                            <h3 className="font-semibold text-gray-800">Calefacción</h3>
+                            <p className="text-sm text-gray-500 mt-2">Comodidad y calidez en todas nuestras habitaciones.</p>
                         </div>
                         <div className="p-6 border border-gray-100 rounded-sm shadow-sm hover:shadow-md transition-shadow">
                             <div className="w-12 h-12 bg-red-50 text-[#b3282d] rounded-full flex items-center justify-center mx-auto mb-4">📺</div>
