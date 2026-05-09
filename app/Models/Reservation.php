@@ -49,4 +49,12 @@ class Reservation extends Model
     {
         return $this->hasMany(ReservationGuest::class, 'reservation_id', 'id');
     }
+    public function getIsExpiredAttribute()
+    {
+        $today = \Carbon\Carbon::now('America/La_Paz')->startOfDay();
+        $arrival = \Carbon\Carbon::parse($this->arrival_date)->startOfDay();
+        
+        return $arrival->isBefore($today) && in_array($this->status, ['pendiente', 'confirmada']);
+    }
+
 }
