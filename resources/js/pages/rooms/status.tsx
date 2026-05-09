@@ -1069,7 +1069,7 @@ export default function RoomsStatus({
 
                 {/* GRILLA DE HABITACIONES */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {filteredRooms.map((room) => {
+                    {filteredRooms.map((room: Room) => {
                         const config = getStatusConfig(room);
                         const displayStatus = getDisplayStatus(room);
                         const isActionable = displayStatus === 'incomplete';
@@ -1105,16 +1105,12 @@ export default function RoomsStatus({
 
                         let corpState: any = null;
 
-                        // 👇 CAMBIO AQUÍ: Ahora solo evalúa si es ESTRICTAMENTE CORPORATIVO 👇
+                        // 👇 CAMBIO AQUÍ: Lógica de semáforo por Días Reales (Dinero = Días) 👇
+                        // 👇 CAMBIO AQUÍ: Lógica Maestra de Asignación Corporativa 👇
                         if (activeCheckin && isSpecialGroup) {
-                            // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
-                            // 1. Sumamos todo lo que ha pagado (Adelantos + Pagos posteriores)
+                            // 1. Sumamos todo lo que ha pagado
                             let totalPaid = 0;
-                            if (
-                                activeCheckin.payments &&
-                                activeCheckin.payments.length > 0
-                            ) {
-                                // Si hay un historial en la tabla de pagos, nos fiamos 100% de eso
+                            if (activeCheckin.payments && activeCheckin.payments.length > 0) {
                                 totalPaid = activeCheckin.payments.reduce(
                                     (acc: number, p: any) =>
                                         p.type === 'DEVOLUCION'
@@ -1123,67 +1119,80 @@ export default function RoomsStatus({
                                     0,
                                 );
                             } else {
-                                // Si la tabla de pagos viene vacía, usamos el adelanto original
-                                totalPaid =
-                                    parseFloat(
-                                        String(activeCheckin.advance_payment),
-                                    ) || 0;
+                                totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
                             }
 
-                            // 2. Precio acordado por noche (El backend ya lo sincroniza en el checkin)
-                            const agreedPrice =
-                                parseFloat(
-                                    String(activeCheckin.agreed_price),
-                                ) || 0;
-
-                            // 3. 🔄 LÓGICA DE CICLOS DE PAGO
-                            // 👇 CORRECCIÓN 1: Leemos los días desde la nueva relación del convenio (special_agreement)
+                            // 2. Variables del Convenio
+                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
                             const corpDays = Number(activeCheckin.special_agreement?.payment_frequency_days) 
                                           || Number(activeCheckin.corporate_days) 
                                           || 1;
-                            
-                            // ¿Cuánto cuesta el ciclo completo? 
                             const cyclePrice = agreedPrice * corpDays;
-                            
-                            // ¿Cuántos ciclos ha pagado POR COMPLETO? 
-                            const cyclesFullyPaid = cyclePrice > 0 ? Math.floor(totalPaid / cyclePrice) : 0;
-                            
-                            // Los días de vida que le damos son: El ciclo actual en el que está
-                            const daysGranted = (cyclesFullyPaid + 1) * corpDays;
 
-                            // 4. Calculamos la fecha límite estricta (Basada en su Plazo)
-                            // 👇 CORRECCIÓN 2: Obligamos al sistema a usar la fecha exacta que escribiste en el formulario
-                            const realDateString = activeCheckin.check_in_date; 
+                            // 3. Calculamos las medianoches (días reales) que han pasado
+                            const realDateString = activeCheckin.check_in_date || new Date().toISOString(); 
+                            const checkinDate = new Date(realDateString.split('T')[0] + "T00:00:00");
                             
-                            const dateOnly = realDateString.split('T')[0].split(' ')[0]; 
-                            
-                            const limitDate = new Date(dateOnly + "T00:00:00");
-                            // Le sumamos el Plazo Fijo del ciclo
-                            limitDate.setDate(limitDate.getDate() + daysGranted);
-                            // 5. Comparamos con HOY a la medianoche
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
 
-                            // 6. Diferencia matemática exacta
-                            const diffTime = limitDate.getTime() - today.getTime();
-                            const daysRemaining = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                            // 7. Colores del Semáforo (ESTRICTO)
-                            if (daysRemaining > 1) {
+                            const diffTime = today.getTime() - checkinDate.getTime();
+                            const diasEstadia = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
+
+                            // 4. 🧠 MATEMÁTICA DEL CICLO DE COBRO
+                            // ¿Cuántos ciclos enteros ya VENCIERON? (Se vence el día DESPUÉS de la fecha límite)
+                            const ciclosVencidos = Math.max(0, Math.floor((diasEstadia - 1) / corpDays));
+                            const deudaVencida = ciclosVencidos * cyclePrice;
+
+                            // El ciclo en el que estamos viviendo AHORA MISMO
+                            const cicloActual = ciclosVencidos + 1;
+                            const deudaCicloActual = cicloActual * cyclePrice;
+                            const faltanteTotal = deudaCicloActual - totalPaid;
+
+                            // 5. 🚦 EVALUACIÓN DEL SEMÁFORO
+                            if (totalPaid < deudaVencida) {
+                                // 🟥 MOROSO: Faltó pagar o completar un ciclo del pasado.
+                                const deudaMora = deudaVencida - totalPaid;
                                 corpState = {
-                                    badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
-                                    text: `PAGADO: ${daysRemaining} días`,
-                                };
-                            } else if (daysRemaining === 1) {
-                                corpState = {
-                                    badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
-                                    text: `COBRAR MAÑANA`,
+                                    badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+                                    text: `MOROSO: ${deudaMora.toFixed(2)} Bs`,
                                 };
                             } else {
-                                // Directo a MOROSO si llega a 0 (hoy) o menos (-1, -2...)
-                                corpState = {
-                                    badge: 'bg-red-600 text-white animate-pulse shadow-lg border-2 border-red-800 font-black tracking-widest',
-                                    text: `MOROSO (${Math.abs(daysRemaining)}d)`,
-                                };
+                                // Está al día con el pasado. Evaluamos el ciclo actual.
+                                const saldoAbonadoAlCiclo = totalPaid - deudaVencida;
+                                const umbral50Porciento = cyclePrice * 0.5;
+
+                                if (saldoAbonadoAlCiclo >= umbral50Porciento) {
+                                    // 🟩 VERDE: Ya pagó el 50% o más. Se deja pasar.
+                                    corpState = {
+                                        badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
+                                        text: `AL DIA`,
+                                    };
+                                } else {
+                                    // 🟨 AMARILLO: Menos del 50%. Mostramos alertas según el día.
+                                    const dueDate = cicloActual * corpDays;
+                                    const daysRemaining = dueDate - diasEstadia;
+
+                                    if (daysRemaining > 1) {
+                                        // Aún faltan días para su corte
+                                        corpState = {
+                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                                            text: `PENDIENTE: ${faltanteTotal.toFixed(2)} Bs`,
+                                        };
+                                    } else if (daysRemaining === 1) {
+                                        // Es un día antes de la fecha
+                                        corpState = {
+                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                                            text: `COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
+                                        };
+                                    } else {
+                                        // Llegó el día indicado
+                                        corpState = {
+                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
+                                            text: `COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
+                                        };
+                                    }
+                                }
                             }
                         }
 

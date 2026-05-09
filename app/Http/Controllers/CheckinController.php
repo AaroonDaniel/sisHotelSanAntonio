@@ -1113,7 +1113,7 @@ class CheckinController extends Controller
         $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+        if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
             $ratePerPerson = $isPrivate ? 90 : 60;
@@ -1225,6 +1225,16 @@ class CheckinController extends Controller
             $totalHospedaje = $totalConRebaja;
         } else {
             $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
+            
+            // 🚀 ESTE ES EL BLOQUE QUE FALTABA PARA QUE LA BASE DE DATOS COBRE IGUAL QUE EL PDF
+            if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
+                $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
+                $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+                $ratePerPerson = $isPrivate ? 90 : 60;
+                $paxCount = 1 + $checkin->companions->count();
+                $precioUnitario = $ratePerPerson * $paxCount;
+            }
+
             $totalHospedaje = $finalDays * $precioUnitario;
         }
 
@@ -1519,7 +1529,7 @@ class CheckinController extends Controller
 
         $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-        if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+        if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
             $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
             $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
             $ratePerPerson = $isPrivate ? 90 : 60;
@@ -1772,7 +1782,7 @@ class CheckinController extends Controller
 
             $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
-            if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+            if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
                 $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
                 $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
                 $ratePerPerson = $isPrivate ? 90 : 60;
@@ -2350,7 +2360,7 @@ class CheckinController extends Controller
             $primerCheckinId = null;
 
             // 🚀 VERIFICAMOS SI LA RESERVA ERA CORPORATIVA
-            $isCorporate = ($reservation->guest_count ?? 0) >= 30;
+            $isCorporate = ($reservation->guest_count ?? 0) >= 20;
 
             // Recorremos CADA HABITACIÓN reservada
             foreach ($reservation->details as $index => $detail) {
@@ -2360,7 +2370,7 @@ class CheckinController extends Controller
                 // 🚀 PREPARAMOS LAS NOTAS (Agregando la etiqueta corporativa si corresponde)
                 $baseNotes = 'Generado desde Reserva #' . $reservation->id;
                 if ($isCorporate) {
-                    $baseNotes .= ' [CORPORATIVO]';
+                    $baseNotes .= ' [DELEGACION]';
                 }
 
                 $checkin = \App\Models\Checkin::create([
@@ -2450,7 +2460,7 @@ class CheckinController extends Controller
 
                 // Calcular precio unitario (con soporte para tarifas corporativas)
                 $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-                if (str_contains(strtoupper($checkin->notes ?? ''), 'CORPORATIVO')) {
+                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
                     $bathroomType = strtolower($checkin->room->bathroom_type ?? '');
                     $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
                     $ratePerPerson = $isPrivate ? 90 : 60;
