@@ -1,5 +1,5 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
     ArrowLeft,
     Calendar,
@@ -11,15 +11,14 @@ import {
     Plus,
     Search,
     Trash2,
-    User as UserIcon,
-    XCircle
+    XCircle,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ReservationModal, { Guest, Reservation, Room } from './reservationModal';
 // 1. IMPORTAMOS LOS MODALES COMPARTIDOS
-import DeleteModal from './deleteModal'; 
-import CancelModal from '@/components/cancelModal';   // Importamos el de cancelar
+import CancelModal from '@/components/cancelModal'; // Importamos el de cancelar
 import ConfirmModal from '@/components/confirmModal'; // Importamos el de confirmar
+import DeleteModal from './deleteModal';
 
 interface Props {
     auth: { user: User };
@@ -42,26 +41,40 @@ const statusLabels: Record<string, string> = {
     finalizado: 'FINALIZADO',
 };
 
-export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }: Props) {
+export default function ReservationsIndex({
+    auth,
+    Reservations,
+    Guests,
+    Rooms,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
-    const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+    const [editingReservation, setEditingReservation] =
+        useState<Reservation | null>(null);
 
     // Estados para los modales
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [deletingReservationId, setDeletingReservationId] = useState<number | null>(null);
+    const [deletingReservationId, setDeletingReservationId] = useState<
+        number | null
+    >(null);
 
     // Nuevos estados para Confirmar y Cancelar
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-    const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
+    const [cancelingReservationId, setCancelingReservationId] = useState<
+        number | null
+    >(null);
 
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [confirmingReservationId, setConfirmingReservationId] = useState<number | null>(null);
+    const [confirmingReservationId, setConfirmingReservationId] = useState<
+        number | null
+    >(null);
 
     useEffect(() => {
         if (editingReservation) {
-            const updated = Reservations.find(r => r.id === editingReservation.id);
+            const updated = Reservations.find(
+                (r) => r.id === editingReservation.id,
+            );
             if (updated) setEditingReservation(updated);
         }
     }, [Reservations]);
@@ -69,14 +82,15 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
     const filteredReservations = Reservations.filter((res) => {
         const guestName = res.guest?.full_name || '';
         const searchLower = searchTerm.toLowerCase();
-        
-        const matchesSearch = 
+
+        const matchesSearch =
             guestName.toLowerCase().includes(searchLower) ||
-            (res.guest?.identification_number && res.guest.identification_number.includes(searchLower)) ||
+            (res.guest?.identification_number &&
+                res.guest.identification_number.includes(searchLower)) ||
             res.id.toString().includes(searchLower);
-        
-        const matchesStatus = statusFilter 
-            ? res.status.toLowerCase() === statusFilter.toLowerCase() 
+
+        const matchesStatus = statusFilter
+            ? res.status.toLowerCase() === statusFilter.toLowerCase()
             : true;
 
         return matchesSearch && matchesStatus;
@@ -100,9 +114,12 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Reservas" />
-            
+
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <button onClick={() => window.history.back()} className="group mb-6 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white">
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-6 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
                         <ArrowLeft className="h-4 w-4" />
                     </div>
@@ -111,12 +128,13 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
 
                 <div className="mb-8 flex items-end justify-between">
                     <div>
-                        <h2 className="text-3xl font-bold text-white">Reservas</h2>                        
+                        <h2 className="text-3xl font-bold text-white">
+                            Reservas
+                        </h2>
                     </div>
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                     {/* BARRA DE HERRAMIENTAS */}
                     <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-100 bg-gray-50/50 p-6 sm:flex-row sm:items-center">
                         <div className="relative w-full sm:w-72">
@@ -138,17 +156,24 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                             </div>
                             <select
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
+                                onChange={(e) =>
+                                    setStatusFilter(e.target.value)
+                                }
                                 className="block w-full rounded-xl border-gray-800 bg-white py-2.5 pl-10 text-sm text-gray-950 focus:border-green-500 focus:ring-green-500"
                             >
                                 <option value="">Todos los Estados</option>
                                 <option value="pendiente">Reservados</option>
-                                <option value="confirmado">Confirmados</option>
-                                <option value="cancelado">Cancelados</option>
+                                {/* 👇 AQUÍ ESTÁ LA CORRECCIÓN: Terminan en "a" 👇 */}
+                                <option value="confirmada">Confirmados</option>
+                                <option value="cancelada">Cancelados</option>
+                                
                             </select>
                         </div>
 
-                        <button onClick={openCreateModal} className="group ml-auto flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95">
+                        <button
+                            onClick={openCreateModal}
+                            className="group ml-auto flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                        >
                             <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
                             <span>Nueva Reserva</span>
                         </button>
@@ -157,28 +182,42 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                     {/* TABLA DE DATOS */}
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm text-gray-600">
-                            <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500">
+                            <thead className="bg-gray-50 text-xs font-bold tracking-wider text-gray-500 uppercase">
                                 <tr>
                                     <th className="px-6 py-4">ID / Huésped</th>
-                                    <th className="px-6 py-4">Fechas y Estadía</th>
+                                    <th className="px-6 py-4">
+                                        Fechas y Estadía
+                                    </th>
                                     <th className="px-6 py-4">Habitaciones</th>
                                     <th className="px-6 py-4">Adelanto</th>
-                                    <th className="px-6 py-4 text-center">Estado</th>
-                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                    <th className="px-6 py-4 text-center">
+                                        Estado
+                                    </th>
+                                    <th className="px-6 py-4 text-right">
+                                        Acciones
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {filteredReservations.length > 0 ? (
                                     filteredReservations.map((res) => (
-                                        <tr key={res.id} className={`transition-colors hover:bg-gray-50 ${res.status === 'cancelado' ? 'bg-gray-50 opacity-60' : ''}`}>
-                                            
+                                        <tr
+                                            key={res.id}
+                                            className={`transition-colors hover:bg-gray-50 ${res.status === 'cancelado' ? 'bg-gray-50 opacity-60' : ''}`}
+                                        >
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    
                                                     <div>
-                                                        <div className="font-bold text-gray-900">{res.guest?.full_name || 'Sin Nombre'}</div>
+                                                        <div className="font-bold text-gray-900">
+                                                            {res.guest
+                                                                ?.full_name ||
+                                                                'Sin Nombre'}
+                                                        </div>
                                                         <div className="text-xs text-gray-500">
-                                                            CI: {res.guest?.identification_number || 'S/N'}
+                                                            CI:{' '}
+                                                            {res.guest
+                                                                ?.identification_number ||
+                                                                'S/N'}
                                                         </div>
                                                         <div className="mt-0.5 inline-block rounded bg-gray-100 px-1.5 text-[10px] font-bold text-gray-500">
                                                             ID: #{res.id}
@@ -191,57 +230,96 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                 <div className="flex flex-col gap-1.5">
                                                     <div className="flex items-center gap-2 text-gray-700">
                                                         <Calendar className="h-4 w-4 text-gray-400" />
-                                                        <span className="font-semibold">{res.arrival_date}</span>
+                                                        <span className="font-semibold">
+                                                            {res.arrival_date}
+                                                        </span>
                                                     </div>
                                                     <div className="flex items-center gap-2 text-xs text-gray-500">
                                                         <Clock className="h-3.5 w-3.5" />
-                                                        <span>{res.arrival_time} • {res.duration_days} Noche(s)</span>
+                                                        <span>
+                                                            {res.arrival_time} •{' '}
+                                                            {res.duration_days}{' '}
+                                                            Noche(s)
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </td>
 
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap gap-1">
-                                                    {res.details && res.details.length > 0 ? (
-                                                        res.details.map((d, idx) => (
-                                                            <div key={idx} className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 shadow-sm">
-                                                                <span className="text-[10px] font-bold text-gray-400">HAB</span>
-                                                                <span className="text-sm font-bold text-gray-800">{d.room?.number || '?'}</span>
-                                                            </div>
-                                                        ))
+                                                    {res.details &&
+                                                    res.details.length > 0 ? (
+                                                        res.details.map(
+                                                            (d, idx) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 shadow-sm"
+                                                                >
+                                                                    <span className="text-[10px] font-bold text-gray-400">
+                                                                        HAB
+                                                                    </span>
+                                                                    <span className="text-sm font-bold text-gray-800">
+                                                                        {d.room
+                                                                            ?.number ||
+                                                                            '?'}
+                                                                    </span>
+                                                                </div>
+                                                            ),
+                                                        )
                                                     ) : (
-                                                        <span className="text-xs italic text-gray-400">Sin asignar</span>
+                                                        <span className="text-xs text-gray-400 italic">
+                                                            Sin asignar
+                                                        </span>
                                                     )}
                                                 </div>
                                             </td>
 
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-1.5">
-                                                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${res.advance_payment > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                    <div
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full ${res.advance_payment > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}
+                                                    >
                                                         <DollarSign className="h-4 w-4" />
                                                     </div>
                                                     <div className="flex flex-col">
-                                                        <span className={`font-bold ${res.advance_payment > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                                                            {res.advance_payment} Bs
+                                                        <span
+                                                            className={`font-bold ${res.advance_payment > 0 ? 'text-green-700' : 'text-gray-400'}`}
+                                                        >
+                                                            {
+                                                                res.advance_payment
+                                                            }{' '}
+                                                            Bs
                                                         </span>
-                                                        <span className="text-[10px] uppercase text-gray-400">{res.payment_type}</span>
+                                                        <span className="text-[10px] text-gray-400 uppercase">
+                                                            {res.payment_type}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </td>
 
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-bold uppercase shadow-sm ${statusStyles[res.status] || 'bg-gray-100 text-gray-600'}`}>
-                                                    {statusLabels[res.status] || res.status}
+                                                <span
+                                                    className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-bold uppercase shadow-sm ${statusStyles[res.status] || 'bg-gray-100 text-gray-600'}`}
+                                                >
+                                                    {statusLabels[res.status] ||
+                                                        res.status}
                                                 </span>
                                             </td>
 
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    
                                                     {/* BOTÓN CONFIRMAR -> Dispara confirmModal */}
-                                                    {res.status === 'pendiente' && (
-                                                        <button 
-                                                            onClick={() => { setConfirmingReservationId(res.id); setIsConfirmModalOpen(true); }}
+                                                    {res.status ===
+                                                        'pendiente' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setConfirmingReservationId(
+                                                                    res.id,
+                                                                );
+                                                                setIsConfirmModalOpen(
+                                                                    true,
+                                                                );
+                                                            }}
                                                             className="group relative rounded-lg p-2 text-green-500 transition hover:bg-green-50 hover:text-green-700"
                                                             title="Confirmar Llegada / Ocupar"
                                                         >
@@ -249,8 +327,10 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                         </button>
                                                     )}
 
-                                                    <button 
-                                                        onClick={() => openEditModal(res)}
+                                                    <button
+                                                        onClick={() =>
+                                                            openEditModal(res)
+                                                        }
                                                         className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-blue-50 hover:text-blue-600"
                                                         title="Editar"
                                                     >
@@ -258,9 +338,17 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                     </button>
 
                                                     {/* BOTÓN CANCELAR -> Dispara cancelModal */}
-                                                    {res.status !== 'cancelado' && (
-                                                        <button 
-                                                            onClick={() => { setCancelingReservationId(res.id); setIsCancelModalOpen(true); }}
+                                                    {res.status !==
+                                                        'cancelado' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setCancelingReservationId(
+                                                                    res.id,
+                                                                );
+                                                                setIsCancelModalOpen(
+                                                                    true,
+                                                                );
+                                                            }}
                                                             className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
                                                             title="Cancelar"
                                                         >
@@ -269,7 +357,11 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                                     )}
 
                                                     <button
-                                                        onClick={() => openDeleteModal(res.id)}
+                                                        onClick={() =>
+                                                            openDeleteModal(
+                                                                res.id,
+                                                            )
+                                                        }
                                                         className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
                                                         title="Eliminar permanentemente"
                                                     >
@@ -281,11 +373,19 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center">
+                                        <td
+                                            colSpan={6}
+                                            className="py-12 text-center"
+                                        >
                                             <div className="flex flex-col items-center justify-center text-gray-400">
                                                 <Calendar className="h-12 w-12 opacity-20" />
-                                                <p className="mt-2 text-sm font-medium">No se encontraron reservas.</p>
-                                                <p className="text-xs">Intenta cambiar los filtros o crea una nueva.</p>
+                                                <p className="mt-2 text-sm font-medium">
+                                                    No se encontraron reservas.
+                                                </p>
+                                                <p className="text-xs">
+                                                    Intenta cambiar los filtros
+                                                    o crea una nueva.
+                                                </p>
                                             </div>
                                         </td>
                                     </tr>
@@ -302,7 +402,7 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                     guests={Guests}
                     rooms={Rooms}
                 />
-                
+
                 {/* AQUI RENDERIZAMOS LOS 3 MODALES */}
                 <DeleteModal
                     show={isDeleteModalOpen}
@@ -310,16 +410,24 @@ export default function ReservationsIndex({ auth, Reservations, Guests, Rooms }:
                     reservationId={deletingReservationId}
                 />
 
-                <CancelModal 
-                    show={isCancelModalOpen} 
-                    onClose={() => setIsCancelModalOpen(false)} 
-                    actionUrl={cancelingReservationId ? `/reservas/${cancelingReservationId}` : null} 
+                <CancelModal
+                    show={isCancelModalOpen}
+                    onClose={() => setIsCancelModalOpen(false)}
+                    actionUrl={
+                        cancelingReservationId
+                            ? `/reservas/${cancelingReservationId}`
+                            : null
+                    }
                 />
-                
-                <ConfirmModal 
-                    show={isConfirmModalOpen} 
-                    onClose={() => setIsConfirmModalOpen(false)} 
-                    actionUrl={confirmingReservationId ? `/reservas/${confirmingReservationId}` : null} 
+
+                <ConfirmModal
+                    show={isConfirmModalOpen}
+                    onClose={() => setIsConfirmModalOpen(false)}
+                    actionUrl={
+                        confirmingReservationId
+                            ? `/reservas/${confirmingReservationId}`
+                            : null
+                    }
                 />
             </div>
         </AuthenticatedLayout>

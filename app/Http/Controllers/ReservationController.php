@@ -17,27 +17,34 @@ use Carbon\Carbon;
 
 class ReservationController extends Controller
 {
+
     public function index()
     {
-        $pendingReservations = Reservation::with(['guest', 'details.room.roomType'])
-            ->where('status', 'pendiente')
-            ->get();
+        // 1. Obtenemos TODAS las reservas con toda su información relacionada
+        $allReservations = Reservation::with([
+            'guest',
+            'details.room.roomType',
+            'details.requestedRoomType',
+            'payments'
+        ])->latest()->get();
 
         return Inertia::render('reservations/index', [
-            // 👇 AQUÍ ESTÁ LA CORRECCIÓN PRINCIPAL 👇
-            'Reservations' => Reservation::with([
-                'guest',
-                'details.room.roomType',
-                'details.requestedRoomType',
-                'payments'
-            ])->latest()->get(),
 
+            // MANTENEMOS TUS NOMBRES ORIGINALES INTACTOS:
+
+            // 1. Con "R" mayúscula (recibe todas las reservas)
+            'Reservations' => $allReservations,
+
+            // 2. Con "G" mayúscula
             'Guests' => Guest::all(),
 
+            // 3. Con "R" mayúscula y tu filtro original de estado intacto
             'Rooms' => Room::with(['roomType', 'price'])
                 ->whereIn('status', ['LIBRE', 'RESERVADO'])
                 ->get(),
-            'reservations' => $pendingReservations,
+
+            // 4. Con "r" minúscula (antes solo recibía las pendientes, AHORA recibe todas)
+            'reservations' => $allReservations,
         ]);
     }
 
