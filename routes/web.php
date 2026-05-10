@@ -20,6 +20,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\OnlineBookingController;
 use App\Http\Controllers\AdminBookingController;
+use App\Services\SiatService;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
@@ -187,7 +188,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'store'])->name('maintenances.store');
     Route::put('/mantenimientos/{maintenance}/resolve', [App\Http\Controllers\MaintenanceController::class, 'resolve'])->name('maintenances.resolve');
     Route::delete('/mantenimientos/{maintenance}', [App\Http\Controllers\MaintenanceController::class, 'destroy'])->name('maintenances.destroy');
-    
+
     Route::middleware(['role:ADMINISTRADOR'])->group(function () {});
     //Roles 
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
@@ -206,7 +207,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/reservas/{id}/rechazar-pago', [AdminBookingController::class, 'rejectPayment'])->name('admin.bookings.reject-payment');
     Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
     Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
-   
+
+
+    // Campo de prueba siat
+    Route::get('/test-siat', function (SiatService $siatService) {
+        return response()->json(
+            $siatService->verifyCommunication()
+        );
+    });
 });
 
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');

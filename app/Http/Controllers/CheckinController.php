@@ -2073,7 +2073,8 @@ class CheckinController extends Controller
         if ($num < 30) return $veinti[$num - 20];
 
         if ($num < 100) {
-            $d = floor($num / 10);
+            // Se agrega (int) para convertir el float a entero
+            $d = (int) floor($num / 10);
             $u = $num % 10;
             return $decenas[$d] . ($u > 0 ? ' y ' . $unidades[$u] : '');
         }
@@ -2081,7 +2082,8 @@ class CheckinController extends Controller
         if ($num == 100) return 'cien';
 
         if ($num < 1000) {
-            $c = floor($num / 100);
+            // Se agrega (int)
+            $c = (int) floor($num / 100);
             $resto = $num % 100;
             return $centenas[$c] . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
         }
@@ -2093,7 +2095,8 @@ class CheckinController extends Controller
         }
 
         if ($num < 1000000) {
-            $m = floor($num / 1000);
+            // Se agrega (int)
+            $m = (int) floor($num / 1000);
             $resto = $num % 1000;
             // Caso especial para "un mil" -> "mil"
             $miles = ($m == 1) ? 'mil' : $this->enteroALetras($m) . ' mil';

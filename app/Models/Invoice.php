@@ -11,21 +11,38 @@ class Invoice extends Model
 {
     use HasFactory;
 
+    // Campos asignables en masa, incluyendo los nuevos requerimientos del SIAT
     protected $fillable = [
         'invoice_number',
         'checkin_id',
         'issue_date',
+        'issue_time',
+        'user_id',
+        'status',
+        
+        // --- Nuevos campos de Facturación Electrónica (SIAT) ---
+        'customer_name',
+        'customer_nit',
+        'total_amount',
+        'additional_discount',
+        'total_subject_to_vat',
+        'cuf',
+        'payment_method_code',
+        'siat_reception_code',
+        'siat_status',
+        
+        // --- Campos antiguos (Mantenidos por compatibilidad) ---
         'control_code',
         'payment_method',
-        'user_id',
-        'issue_time',
-        'status',
     ];
 
-    // Convertimos las fechas automáticamente a objetos Carbon para poder formatearlas fácil
+    // Convertimos las fechas a Carbon y los montos a decimales con 2 ceros
     protected $casts = [
         'issue_date' => 'date',
         'issue_time' => 'datetime',
+        'total_amount' => 'decimal:2',
+        'additional_discount' => 'decimal:2',
+        'total_subject_to_vat' => 'decimal:2',
     ];
 
     // --- RELACIONES ---
@@ -43,7 +60,6 @@ class Invoice extends Model
     }
 
     // 3. Una factura tiene muchos detalles (Items cobrados)
-    // (Esta relación la usarás cuando crees el modelo InvoiceDetail)
     public function details(): HasMany
     {
         return $this->hasMany(InvoiceDetail::class);
