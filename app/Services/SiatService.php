@@ -5,6 +5,7 @@ namespace App\Services;
 use SoapClient;
 use SoapFault;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class SiatService
@@ -106,32 +107,79 @@ class SiatService
     /**
      * Obtiene el Código Único de Inicio de Sistemas (CUIS).
      */
-    public function getCuis()
+    public function getCuis(): array
     {
         try {
             $client = $this->getSoapClient('FacturacionCodigos');
             $params = ['SolicitudCuis' => $this->getBaseParameters()];
             
-            return $client->cuis($params);
+            $response = $client->cuis($params);
+
+            // Si la transacción fue exitosa
+            if (isset($response->RespuestaCuis->transaccion) && $response->RespuestaCuis->transaccion) {
+                return [
+                    'success' => true, 
+                    'codigo' => $response->RespuestaCuis->codigo
+                ];
+            }
+
+            // Si Impuestos rechazó la solicitud (ej. Token expirado, NIT inválido)
+            return [
+                'success' => false, 
+                'error' => 'Rechazado por SIAT', 
+                'detalles' => $response->RespuestaCuis->mensajesList ?? 'Error desconocido'
+            ];
+
         } catch (SoapFault $fault) {
             Log::error('SIAT getCuis Error: ' . $fault->getMessage());
-            return false;
+            return [
+                'success' => false, 
+                'error' => 'Fallo de conexión SOAP', 
+                'mensaje' => $fault->getMessage()
+            ];
         }
     }
 
     /**
      * Obtiene el Código Único de Facturación Diaria (CUFD).
      */
-    public function getCufd(string $cuis)
+    /**
+     * Obtiene el Código Único de Facturación Diaria (CUFD).
+     * Requiere el CUIS vigente. El CUFD cambia todos los días.
+     * * @param string $cuis El Código CUIS vigente.
+     */
+    public function getCufd(string $cuis): array
     {
         try {
             $client = $this->getSoapClient('FacturacionCodigos');
+            // Unimos los parámetros base (NIT, Sistema, etc.) con el CUIS que recibimos
             $params = ['SolicitudCufd' => array_merge($this->getBaseParameters(), ['cuis' => $cuis])];
             
-            return $client->cufd($params);
+            $response = $client->cufd($params);
+
+            // Verificamos si la transacción fue exitosa
+            if (isset($response->RespuestaCufd->transaccion) && $response->RespuestaCufd->transaccion) {
+                return [
+                    'success' => true, 
+                    'codigo' => $response->RespuestaCufd->codigo,
+                    'codigoControl' => $response->RespuestaCufd->codigoControl,
+                    'fechaVigencia' => $response->RespuestaCufd->fechaVigencia
+                ];
+            }
+
+            return [
+                'success' => false, 
+                'error' => 'Rechazado por SIAT', 
+                'detalles' => $response->RespuestaCufd->mensajesList ?? 'Error desconocido'
+            ];
+
         } catch (SoapFault $fault) {
             Log::error('SIAT getCufd Error: ' . $fault->getMessage());
-            return false;
+            return [
+                'success' => false, 
+                'error' => 'Fallo de conexión SOAP', 
+                'mensaje' => $fault->getMessage()
+            ];
         }
     }
 
@@ -247,5 +295,50 @@ class SiatService
             Log::error('SIAT reverseVoidInvoice Error: ' . $fault->getMessage());
             return $fault->faultstring;
         }
+    }
+
+    /**
+     * Obtiene el CUIS activo desde la caché, o solicita uno nuevo si no existe.
+     * El caché se configura para expirar un poco antes del año.
+     */
+    public function getActiveCuis(): ?string
+    {
+        return Cache::remember('siat_cuis_active', now()->addMonths(11), function () {
+            $response = $this->getCuis();
+            
+            if ($response['success']) {
+                return $response['codigo'];
+            }
+            
+            Log::error('SIAT Error: Failed to auto-renew CUIS');
+            return null;
+        });
+    }
+
+    /**
+     * Obtiene el CUFD activo desde la caché, o solicita uno nuevo si caducó.
+     * El CUFD se renueva automáticamente cada 24 horas.
+     */
+    public function getActiveCufd(): ?array
+    {
+        return Cache::remember('siat_cufd_active', now()->addHours(23), function () {
+            $cuis = $this->getActiveCuis();
+            
+            if (!$cuis) {
+                return null;
+            }
+
+            $response = $this->getCufd($cuis);
+            
+            if ($response['success']) {
+                return [
+                    'codigo' => $response['codigo'],
+                    'codigoControl' => $response['codigoControl']
+                ];
+            }
+            
+            Log::error('SIAT Error: Failed to auto-renew CUFD');
+            return null;
+        });
     }
 }

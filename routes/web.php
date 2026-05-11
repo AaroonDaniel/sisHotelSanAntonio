@@ -25,6 +25,14 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
 
+
+
+use App\Models\Invoice;
+use App\Models\InvoiceDetail;
+use App\Models\User;
+use App\Models\Checkin;
+use App\Services\SiatXmlBuilder;
+
 Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -211,9 +219,62 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Campo de prueba siat
     Route::get('/test-siat', function (SiatService $siatService) {
-        return response()->json(
-            $siatService->verifyCommunication()
-        );
+        // Usamos el CUIS exitoso que te devolvió Impuestos
+        $cuis = '19985EBF';
+
+        // Solicitamos el CUFD diario
+        $cufdResponse = $siatService->getCufd($cuis);
+
+        return response()->json([
+            'paso_1' => 'CUIS Obtenido: ' . $cuis,
+            'paso_2' => 'Solicitud de CUFD',
+            'respuesta_cufd' => $cufdResponse
+        ]);
+    });
+
+    Route::get('/test-xml', function () {
+        // Usamos directamente el CUFD válido que lograste capturar antes,
+        // así no dependemos de si el servidor del SIAT está caído ahora mismo.
+        $cufdResponse = [
+            'codigo' => 'FBQWVCK31nREE=M3NTZENzU5MEU=QzljRmVWTEZhVUMzcyNUYyOTRDN0',
+            'codigoControl' => '46EFD632A3DAF74'
+        ];
+
+        // Creamos una Factura falsa en memoria
+        $invoice = new \App\Models\Invoice([
+            'invoice_number' => 1,
+            'customer_name' => 'JUAN PEREZ',
+            'customer_nit' => '1234567',
+            'total_amount' => 1680.00,
+            'total_subject_to_vat' => 1680.00,
+            'payment_method_code' => 1, // Efectivo
+            'issue_time' => now(), // Fecha y hora actual
+        ]);
+
+        // Simulamos las relaciones
+        $user = User::first() ?? new User(['name' => 'Recepcionista Prueba']);
+        $checkin = Checkin::first() ?? new Checkin(['guest_id' => 1]);
+
+        $invoice->setRelation('user', $user);
+        $invoice->setRelation('checkin', $checkin);
+
+        // Creamos el detalle
+        $detail = new \App\Models\InvoiceDetail([
+            'id' => 1,
+            'description' => 'Habitación 3 - SIMPLE - BAÑO COMPARTIDO',
+            'quantity' => 21,
+            'unit_price' => 80.00,
+            'cost' => 1680.00,
+        ]);
+
+        $invoice->setRelation('details', collect([$detail]));
+
+        // Pasamos nuestra factura y el CUFD manual al constructor
+        $builder = new \App\Services\SiatXmlBuilder($invoice, $cufdResponse);
+        $xmlString = $builder->buildXml();
+
+        // Mostramos el resultado como un archivo XML
+        return response($xmlString, 200)->header('Content-Type', 'application/xml');
     });
 });
 
