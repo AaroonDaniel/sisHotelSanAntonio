@@ -232,9 +232,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     });
 
-    Route::get('/test-xml', function () {
-        // Usamos directamente el CUFD válido que lograste capturar antes,
-        // así no dependemos de si el servidor del SIAT está caído ahora mismo.
+    Route::get('/test-xml', function (\App\Services\SiatService $siatService) {
+        // Usamos tu CUIS oficial
+        $cuis = '19985EBF';
+
+        // Usamos directamente el CUFD válido que lograste capturar antes
         $cufdResponse = [
             'codigo' => 'FBQWVCK31nREE=M3NTZENzU5MEU=QzljRmVWTEZhVUMzcyNUYyOTRDN0',
             'codigoControl' => '46EFD632A3DAF74'
@@ -242,7 +244,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Creamos una Factura falsa en memoria
         $invoice = new \App\Models\Invoice([
-            'invoice_number' => 1,
+            'invoice_number' => 1, // Número correlativo de la factura
             'customer_name' => 'JUAN PEREZ',
             'customer_nit' => '1234567',
             'total_amount' => 1680.00,
@@ -269,12 +271,35 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         $invoice->setRelation('details', collect([$detail]));
 
-        // Pasamos nuestra factura y el CUFD manual al constructor
+        // Inicializamos el constructor
         $builder = new \App\Services\SiatXmlBuilder($invoice, $cufdResponse);
+        
+        // 1. Obtenemos el XML puro y su Hash de seguridad
         $xmlString = $builder->buildXml();
+        $hash = hash('sha256', $xmlString);
+        
+        // 2. Comprimimos el archivo en GZIP
+        $gzipArchive = $builder->getGzipArchive();
+        
+        // 3. Formateamos la fecha de envío
+        $fechaEnvio = $invoice->issue_time->format('Y-m-d\TH:i:s.v');
 
-        // Mostramos el resultado como un archivo XML
-        return response($xmlString, 200)->header('Content-Type', 'application/xml');
+        // 4. ¡DISPARAMOS LA FACTURA AL SIAT!
+        $responseSiat = $siatService->receiveInvoice(
+            $cuis,
+            $cufdResponse['codigo'],
+            $gzipArchive,
+            $fechaEnvio,
+            $hash
+        );
+
+        // Mostramos el resultado como un JSON en pantalla
+        return response()->json([
+            'mensaje' => 'Intento de envío al SIAT finalizado',
+            'cuf_generado' => $builder->generateCuf(),
+            'hash_enviado' => $hash,
+            'respuesta_siat' => $responseSiat
+        ]);
     });
 });
 
