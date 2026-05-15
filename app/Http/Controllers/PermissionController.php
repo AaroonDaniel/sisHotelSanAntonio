@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Permission;
 use Inertia\Inertia;
+use Illuminate\Validation\Rule;
 
 class PermissionController extends Controller
 {
@@ -26,17 +27,29 @@ class PermissionController extends Controller
         
         return back()->with('success', 'Permiso creado correctamente');
     }
+    public function update(Request $request, Permission $permiso) 
+{ 
+    // Usamos Rule::unique para que la sintaxis sea más limpia y segura
+    $request->validate([
+        'name' => [
+            'required',
+            'string',
+            'max:100',
+            // Esto ignora el registro actual correctamente para evitar el error de ID vacío
+            Rule::unique('permissions', 'name')->ignore($permiso->id),
+        ],
+    ]);
+    
+    // Transformamos el nombre antes de guardar
+    // Usamos Str::slug o str_replace para asegurar consistencia
+    $name = strtolower(str_replace(' ', '.', $request->name));
 
-    public function update(Request $request, Permission $permiso) { 
-        $request->validate([
-            'name' => 'required|string|max:100|unique:permissions,name,'.$permiso->id,
-        ]);
-        
-        $name = strtolower(str_replace(' ', '_', $request->name));
-        $permiso->update(['name' => $name]);
-        
-        return back()->with('success', 'Permiso actualizado correctamente');
-    }
+    $permiso->update([
+        'name' => $name
+    ]);
+    
+    return back()->with('success', 'Permiso actualizado correctamente');
+}
 
     public function destroy($id) {
     $permiso = Permission::find($id);
