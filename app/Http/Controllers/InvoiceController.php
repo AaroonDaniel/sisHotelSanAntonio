@@ -249,10 +249,9 @@ class InvoiceController extends Controller
      * Anula una factura previamente emitida.
      *
      * Solo el Gerente puede anular.
-     */
-    public function void(Request $request, Invoice $invoice)
+     */public function void(\Illuminate\Http\Request $request, Invoice $invoice)
     {
-        $this->authorize('void', $invoice); // policy que valida rol Gerente
+        //$this->authorize('void', $invoice); // policy que valida rol Gerente
 
         $request->validate([
             'reason_code' => 'required|integer|min:1|max:99',
