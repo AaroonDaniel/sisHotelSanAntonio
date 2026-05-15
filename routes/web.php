@@ -233,71 +233,81 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/test-xml', function (\App\Services\SiatService $siatService) {
-        // Usamos tu CUIS oficial
-        $cuis = '19985EBF';
+        
+        // 1. Usamos tu CUIS oficial y VIGENTE que el SIAT nos obliga a mantener
+        $cuisValido = '19985EBF';
 
-        // Usamos directamente el CUFD válido que lograste capturar antes
-        $cufdResponse = [
-            'codigo' => 'FBQWVCK31nREE=M3NTZENzU5MEU=QzljRmVWTEZhVUMzcyNUYyOTRDN0',
-            'codigoControl' => '46EFD632A3DAF74'
-        ];
+        // 2. Pedimos un CUFD fresco usando ese CUIS específico
+        $cufdResponse = $siatService->getCufd($cuisValido);
 
-        // Creamos una Factura falsa en memoria
+        if (!$cufdResponse['success']) {
+            return response()->json([
+                'mensaje' => '🛑 El SIAT rechazó el CUFD.',
+                'respuesta_exacta' => $cufdResponse
+            ]);
+        }
+
+        // 3. Creamos el Huésped falso
+        $guest = new \App\Models\Guest([
+            'id' => 1,
+            'full_name' => 'JUAN PEREZ',
+            'identification_number' => '1234567',
+            'nationality' => 'BOLIVIANA'
+        ]);
+
+        // 4. Creamos el Checkin y le anclamos el Huésped
+        $checkin = new \App\Models\Checkin(['id' => 1, 'guest_id' => 1]);
+        $checkin->setRelation('guest', $guest);
+
+        // 5. Creamos una Factura falsa en memoria
         $invoice = new \App\Models\Invoice([
-            'invoice_number' => 1, // Número correlativo de la factura
-            'customer_name' => 'JUAN PEREZ',
-            'customer_nit' => '1234567',
+            'id' => 1,
+            'invoice_number' => 1, 
             'total_amount' => 1680.00,
             'total_subject_to_vat' => 1680.00,
             'payment_method_code' => 1, // Efectivo
             'issue_time' => now(), // Fecha y hora actual
         ]);
 
-        // Simulamos las relaciones
-        $user = User::first() ?? new User(['name' => 'Recepcionista Prueba']);
-        $checkin = Checkin::first() ?? new Checkin(['guest_id' => 1]);
-
+        // 6. Simulamos al usuario Gerente
+        $user = new \App\Models\User(['id' => 1, 'name' => 'GERENTE']);
+        
         $invoice->setRelation('user', $user);
         $invoice->setRelation('checkin', $checkin);
 
-        // Creamos el detalle
+        // 7. Creamos el detalle
         $detail = new \App\Models\InvoiceDetail([
             'id' => 1,
-            'description' => 'Habitación 3 - SIMPLE - BAÑO COMPARTIDO',
+            'description' => 'Habitacion 3 - SIMPLE - BANO COMPARTIDO',
             'quantity' => 21,
             'unit_price' => 80.00,
             'cost' => 1680.00,
+            'discount' => 0,
         ]);
 
         $invoice->setRelation('details', collect([$detail]));
 
-        // Inicializamos el constructor
+        // Inicializamos el constructor con el CUFD recién horneado
         $builder = new \App\Services\SiatXmlBuilder($invoice, $cufdResponse);
         
-        // 1. Obtenemos el XML puro y su Hash de seguridad
+        // Obtenemos el XML puro, el Hash y comprimimos en GZIP
         $xmlString = $builder->buildXml();
         $hash = hash('sha256', $xmlString);
-        
-        // 2. Comprimimos el archivo en GZIP
         $gzipArchive = $builder->getGzipArchive();
-        
-        // 3. Formateamos la fecha de envío
         $fechaEnvio = $invoice->issue_time->format('Y-m-d\TH:i:s.v');
 
-        // 4. ¡DISPARAMOS LA FACTURA AL SIAT!
+        // ¡DISPARAMOS LA FACTURA AL SIAT!
         $responseSiat = $siatService->receiveInvoice(
-            $cuis,
+            $cuisValido,
             $cufdResponse['codigo'],
             $gzipArchive,
             $fechaEnvio,
             $hash
         );
 
-        // Mostramos el resultado como un JSON en pantalla
         return response()->json([
-            'mensaje' => 'Intento de envío al SIAT finalizado',
-            'cuf_generado' => $builder->generateCuf(),
-            'hash_enviado' => $hash,
+            'mensaje' => '✅ Intento de envío al SIAT finalizado',
+            'cufd_usado' => $cufdResponse['codigo'],
             'respuesta_siat' => $responseSiat
         ]);
     });
