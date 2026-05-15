@@ -217,6 +217,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
 
 
+    // Rutas de prueba para SIAT (puedes borrarlas después de probar)
+    
     // Campo de prueba siat
     Route::get('/test-siat', function (SiatService $siatService) {
         // Usamos el CUIS exitoso que te devolvió Impuestos
