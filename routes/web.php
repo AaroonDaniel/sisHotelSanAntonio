@@ -22,6 +22,7 @@ use App\Http\Controllers\OnlineBookingController;
 use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
+use App\Http\Controllers\ActivityLogController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -253,6 +254,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Re-enviar al SIAT TODAS las facturas offline de un evento (envío masivo)
     Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
         ->name('significant-events.resend');
+
+
+    // Auditoría de actividades
+    Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
 }); // <-- Cierre del grupo autenticado
 

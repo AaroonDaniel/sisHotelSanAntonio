@@ -1,0 +1,339 @@
+import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { Head } from '@inertiajs/react';
+import { ArrowLeft, ShieldCheck, Eye, FileClock, Link } from 'lucide-react';
+import { useState } from 'react';
+
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog';
+
+/* ----------------------------- Tipos ----------------------------- */
+
+type ActivityEvent = 'created' | 'updated' | 'deleted' | string;
+
+interface ActivityProperties {
+    old: Record<string, unknown> | null;
+    attributes: Record<string, unknown> | null;
+}
+
+interface ActivityCauser {
+    id: number;
+    name: string;
+}
+
+interface ActivityLog {
+    id: number;
+    description: ActivityEvent;
+    log_name: string | null;
+    subject_type: string;
+    subject_id: number | null;
+    event: ActivityEvent | null;
+    causer: ActivityCauser | null;
+    properties: ActivityProperties;
+    created_at: string | null;
+}
+
+interface PaginationLink {
+    url: string | null;
+    label: string;
+    active: boolean;
+}
+
+interface PaginatedLogs {
+    data: ActivityLog[];
+    links: PaginationLink[];
+    from: number | null;
+    to: number | null;
+    total: number;
+}
+
+interface Props {
+    auth: { 
+        user: { 
+            id: number;
+            name: string;
+            nickname: string;
+            full_name: string;
+            [key: string]: any; // Esto permite cualquier otro campo adicional de tu sistema
+        } 
+    };
+    logs: PaginatedLogs;
+}
+
+/* -------------------------- Utilidades --------------------------- */
+
+const ACTION_LABELS: Record<string, string> = {
+    created: 'Creado',
+    updated: 'Actualizado',
+    deleted: 'Eliminado',
+    restored: 'Restaurado',
+};
+
+const ACTION_STYLES: Record<string, string> = {
+    created: 'bg-green-100 text-green-700 border-green-200',
+    updated: 'bg-amber-100 text-amber-700 border-amber-200',
+    deleted: 'bg-red-100 text-red-700 border-red-200',
+    restored: 'bg-blue-100 text-blue-700 border-blue-200',
+};
+
+const MODULE_LABELS: Record<string, string> = {
+    usuarios: 'Usuarios',
+    checkins: 'Registros (Check-in)',
+    pagos: 'Pagos',
+    default: 'Sistema',
+};
+
+function formatDateTime(iso: string | null): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('es-BO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function actionLabel(event: ActivityEvent): string {
+    return ACTION_LABELS[event] ?? event;
+}
+
+function moduleLabel(log: ActivityLog): string {
+    if (log.log_name && MODULE_LABELS[log.log_name]) {
+        return MODULE_LABELS[log.log_name];
+    }
+    return log.log_name ?? log.subject_type ?? MODULE_LABELS.default;
+}
+
+/* ----------------------- Componente principal -------------------- */
+
+export default function ActivityLogIndex({ auth, logs }: Props) {
+    const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
+
+    return (
+        <AuthenticatedLayout user={auth.user}>
+            <Head title="Auditoría y Bitácora" />
+
+            <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
+
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-100 p-2">
+                            <ShieldCheck className="h-8 w-8 text-indigo-600" />
+                        </div>
+                        Auditoría y Bitácora
+                    </h2>
+                    <span className="text-sm text-gray-400">
+                        {logs.total} registro{logs.total === 1 ? '' : 's'} en total
+                    </span>
+                </div>
+
+                <Card className="overflow-hidden border border-gray-200 bg-white shadow-sm">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-gray-50">
+                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                    Fecha y Hora
+                                </TableHead>
+                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                    Usuario
+                                </TableHead>
+                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                    Acción
+                                </TableHead>
+                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                    Módulo
+                                </TableHead>
+                                <TableHead className="text-right text-xs font-bold uppercase text-gray-600">
+                                    Detalles
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+
+                        <TableBody>
+                            {logs.data.length === 0 && (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={5}
+                                        className="py-12 text-center text-sm text-gray-500"
+                                    >
+                                        <FileClock className="mx-auto mb-2 h-8 w-8 text-gray-300" />
+                                        No hay actividad registrada todavía.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+
+                            {logs.data.map((log) => (
+                                <TableRow
+                                    key={log.id}
+                                    className="transition-colors hover:bg-gray-50/60"
+                                >
+                                    <TableCell className="whitespace-nowrap text-sm font-medium text-gray-800">
+                                        {formatDateTime(log.created_at)}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-gray-700">
+                                        {log.causer ? (
+                                            log.causer.name
+                                        ) : (
+                                            <span className="italic text-gray-400">
+                                                Sistema
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                ACTION_STYLES[log.description] ??
+                                                'bg-gray-100 text-gray-700 border-gray-200'
+                                            }
+                                        >
+                                            {actionLabel(log.description)}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm text-gray-700">
+                                        {moduleLabel(log)}
+                                        {log.subject_id != null && (
+                                            <span className="ml-1 text-xs text-gray-400">
+                                                #{log.subject_id}
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <button
+                                            onClick={() => setSelectedLog(log)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-600 hover:text-white"
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            Ver cambios
+                                        </button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </Card>
+
+                {/* Paginación */}
+                {logs.links.length > 3 && (
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-1">
+                        {logs.links.map((link, index) => (
+                            <Link
+                                key={index}
+                                href={link.url ?? '#'}
+                                className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                                    link.active
+                                        ? 'bg-indigo-600 font-bold text-white'
+                                        : link.url
+                                          ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                          : 'cursor-not-allowed border border-gray-800 bg-gray-900 text-gray-600'
+                                }`}
+                                dangerouslySetInnerHTML={{ __html: link.label }}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <ChangeDetailDialog
+                log={selectedLog}
+                onClose={() => setSelectedLog(null)}
+            />
+        </AuthenticatedLayout>
+    );
+}
+
+/* ----------------------- Modal de detalles ----------------------- */
+
+interface ChangeDetailDialogProps {
+    log: ActivityLog | null;
+    onClose: () => void;
+}
+
+function ChangeDetailDialog({ log, onClose }: ChangeDetailDialogProps) {
+    if (!log) return null;
+
+    const { old, attributes } = log.properties;
+
+    return (
+        <Dialog open={!!log} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Eye className="h-5 w-5 text-indigo-600" />
+                        Detalle del cambio
+                    </DialogTitle>
+                    <DialogDescription>
+                        {moduleLabel(log)} · {actionLabel(log.description)} ·{' '}
+                        {formatDateTime(log.created_at)}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <ChangePanel
+                        title="Valores anteriores"
+                        tone="old"
+                        data={old}
+                    />
+                    <ChangePanel
+                        title="Valores nuevos"
+                        tone="new"
+                        data={attributes}
+                    />
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+interface ChangePanelProps {
+    title: string;
+    tone: 'old' | 'new';
+    data: Record<string, unknown> | null;
+}
+
+function ChangePanel({ title, tone, data }: ChangePanelProps) {
+    const accent =
+        tone === 'old'
+            ? 'border-red-200 bg-red-50'
+            : 'border-green-200 bg-green-50';
+    const heading = tone === 'old' ? 'text-red-700' : 'text-green-700';
+
+    return (
+        <div className={`rounded-xl border p-3 ${accent}`}>
+            <h4 className={`mb-2 text-xs font-bold uppercase ${heading}`}>
+                {title}
+            </h4>
+            {data && Object.keys(data).length > 0 ? (
+                <pre className="max-h-72 overflow-auto rounded-lg bg-white/70 p-2 text-xs text-gray-800">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            ) : (
+                <p className="text-xs italic text-gray-500">Sin datos.</p>
+            )}
+        </div>
+    );
+}

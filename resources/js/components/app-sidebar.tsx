@@ -13,7 +13,7 @@ import {
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 // Añadimos los íconos Users y Receipt para los nuevos módulos
-import { BookOpen, Folder, LayoutGrid, Users, Receipt } from 'lucide-react'; 
+import { BookOpen, Folder, LayoutGrid, Users, Receipt, ShieldCheck } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -31,6 +31,11 @@ const mainNavItems: NavItem[] = [
         title: 'Gastos',
         href: '/expenses',  // <-- Preparado para el módulo de Gastos
         icon: Receipt,
+    },
+    {
+        title: 'Auditoría',
+        href: '/auditoria',
+        icon: ShieldCheck,
     },
 ];
 

@@ -7,10 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Traits\AutoUpperCase;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Checkin extends Model
 {
-    use AutoUpperCase;
+    use AutoUpperCase, LogsActivity;
     protected $appends = ['advance_payment'];
 
     protected $fillable = [
@@ -135,6 +137,15 @@ class Checkin extends Model
     public function transfers()
     {
         return $this->hasMany(RoomTransfer::class);
+    }
+
+     public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('checkins');
     }
 
 }
