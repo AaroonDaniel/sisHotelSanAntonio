@@ -10,10 +10,14 @@ use App\Services\SiatXmlBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+
 use Illuminate\Support\Str;
+
 use Inertia\Inertia;
 use Exception;
+use FPDF;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Illuminate\Support\Facades\Storage;
 
 class InvoiceController extends Controller
 {
@@ -30,7 +34,7 @@ class InvoiceController extends Controller
     public function index()
     {
         $invoices = Invoice::with(['checkin.guest', 'checkin.room', 'user'])
-            ->whereHas('checkin', fn ($q) => $q->where('status', '!=', 'activo'))
+            ->whereHas('checkin', fn($q) => $q->where('status', '!=', 'activo'))
             ->orderBy('issue_date', 'desc')
             ->orderBy('issue_time', 'desc')
             ->get()
@@ -51,6 +55,7 @@ class InvoiceController extends Controller
                     'room_number'     => $invoice->checkin->room->number ?? '-',
                     'user_name'       => $invoice->user->name ?? 'Desconocido',
                     'can_void'        => $this->canBeVoided($invoice),
+                    'is_factura'      => !empty($invoice->cuf),
                 ];
             });
 
@@ -249,18 +254,19 @@ class InvoiceController extends Controller
      * Anula una factura previamente emitida.
      *
      * Solo el Gerente puede anular.
-     */public function void(\Illuminate\Http\Request $request, Invoice $invoice)
+     */
+    public function void(Request $request, Invoice $invoice)
     {
-        //$this->authorize('void', $invoice); // policy que valida rol Gerente
-
         $request->validate([
-            'reason_code' => 'required|integer|min:1|max:99',
+            'void_reason_code' => 'required|integer|min:1|max:99',
         ]);
 
-        if (!$this->canBeVoided($invoice)) {
-            return back()->withErrors([
-                'error' => 'Esta factura no puede ser anulada (estado o ventana de tiempo no válida).',
-            ]);
+        if ($invoice->status === 'voided') {
+            return back()->with('info', 'La factura ya estaba anulada.');
+        }
+
+        if (empty($invoice->cuf)) {
+            return back()->withErrors(['error' => 'La factura no tiene CUF, no se puede anular en el SIAT.']);
         }
 
         try {
@@ -268,36 +274,34 @@ class InvoiceController extends Controller
             $cufdData = $this->siatService->getActiveCufd();
 
             if (!$cuis || !$cufdData) {
-                return back()->withErrors(['error' => 'No se pudo conectar con el SIAT.']);
+                return back()->withErrors(['error' => 'No hay CUIS/CUFD vigente para anular.']);
             }
 
-            $response = $this->siatService->voidInvoice(
+            $resp = $this->siatService->voidInvoice(
                 $cuis,
                 $cufdData['codigo'],
                 $invoice->cuf,
-                (int) $request->reason_code
+                (int) $request->input('void_reason_code')
             );
 
-            if ($response['status'] !== 'voided') {
-                Log::warning("Anulación rechazada por SIAT: " . $response['mensaje']);
-                return back()->withErrors([
-                    'error' => 'SIAT rechazó la anulación: ' . $response['mensaje'],
-                ]);
+            // El SIAT aprobó la anulación
+            if (($resp['status'] ?? null) === 'voided') {
+                $invoice->update(['status' => 'voided']);
+                return back()->with('success', 'Factura anulada correctamente en el SIAT.');
             }
 
-            $invoice->update([
-                'status'            => 'voided',
-                'siat_status'       => 'voided',
-                'void_reason_code'  => $request->reason_code,
-                'voided_at'         => now(),
-                'voided_by_user_id' => $request->user()->id,
-            ]);
+            // Caso especial: el SIAT puede responder "rechazado" con mensaje de que ya
+            // estaba anulada (códigos 985/984 según catálogo). Lo tratamos como éxito.
+            $mensaje = strtolower($resp['mensaje'] ?? '');
+            if (str_contains($mensaje, 'ya anulada') || str_contains($mensaje, 'previamente anulada')) {
+                $invoice->update(['status' => 'voided']);
+                return back()->with('success', 'La factura ya estaba anulada en el SIAT; estado sincronizado localmente.');
+            }
 
-            return redirect()
-                ->route('invoices.index')
-                ->with('success', "Factura #{$invoice->invoice_number} anulada correctamente.");
-        } catch (Exception $e) {
-            Log::error("Error en anulación: " . $e->getMessage());
+            Log::warning("Anulación rechazada para factura {$invoice->id}: " . ($resp['mensaje'] ?? ''));
+            return back()->withErrors(['error' => 'El SIAT rechazó la anulación: ' . ($resp['mensaje'] ?? 'sin mensaje')]);
+        } catch (\Throwable $e) {
+            Log::error("Error en anulación de factura {$invoice->id}: " . $e->getMessage());
             return back()->withErrors(['error' => 'Error al anular: ' . $e->getMessage()]);
         }
     }
@@ -384,5 +388,133 @@ class InvoiceController extends Controller
         // Ventana de anulación: máximo configurable (por defecto 1080 hrs = 45 días)
         $windowHours = config('siat.void_window_hours', 1080);
         return $invoice->issue_time->diffInHours(now()) <= $windowHours;
+    }
+
+    public function show(Invoice $invoice)
+    {
+        $invoice->load(['details.service', 'checkin.guest', 'checkin.room', 'user']);
+
+        return view('invoices.ticket', [
+            'invoice'     => $invoice,
+            'status'      => $invoice->status,        // 'valid' | 'voided'
+            'siat_status' => $invoice->siat_status,   // 'pending' | 'accepted' | 'rejected' | 'offline'
+            'is_offline'  => $invoice->siat_status === 'offline',
+            'is_voided'   => $invoice->status === 'voided',
+        ]);
+    }
+    public function downloadTicket(Invoice $invoice)
+    {
+        $invoice->load(['details', 'checkin.guest', 'user']);
+
+        // 1. GENERAR EL QR Y GUARDARLO TEMPORALMENTE COMO IMAGEN
+        // Formato SIAT: URL de consulta + Parámetros de la factura
+        $qrContent = "https://pilotosiat.impuestos.gob.bo/consulta/QR?nit=" . config('siat.nit') . 
+                     "&cuf=" . $invoice->cuf . "&numero=" . $invoice->invoice_number . "&t=" . $invoice->total_amount;
+        
+        $qrFilename = "qr_temp_{$invoice->id}.png";
+        $qrPath = storage_path("app/public/{$qrFilename}");
+        
+        // Creamos la imagen PNG del QR
+        //QrCode::format('png')->size(150)->margin(0)->generate($qrContent, $qrPath);
+
+        // 2. CONFIGURAR FPDF (Tamaño 80mm de ancho x 250mm de alto aproximado)
+        $pdf = new Fpdf('P', 'mm', [80, 250]);
+        $pdf->AddPage();
+        $pdf->SetMargins(4, 5, 4); // Márgenes muy estrechos para aprovechar el rollo
+        $pdf->SetAutoPageBreak(true, 5);
+
+        // --- ENCABEZADO ---
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(0, 5, utf8_decode('HOTEL SAN ANTONIO'), 0, 1, 'C');
+        
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, utf8_decode('NIT: ' . config('siat.nit', '000000000')), 0, 1, 'C');
+        $pdf->Cell(0, 4, utf8_decode('FACTURA N°: ' . $invoice->invoice_number), 0, 1, 'C');
+        $pdf->Cell(0, 4, utf8_decode('Cód. Autorización (CUF):'), 0, 1, 'C');
+        
+        // El CUF suele ser muy largo, lo partimos con MultiCell
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->MultiCell(0, 3, $invoice->cuf, 0, 'C');
+        $pdf->Ln(3);
+
+        // --- DATOS DEL HUÉSPED ---
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(15, 4, 'Fecha:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, $invoice->issue_date->format('d/m/Y') . ' ' . $invoice->issue_time->format('H:i'), 0, 1);
+        
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(15, 4, utf8_decode('Señor(es):'), 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(0, 4, utf8_decode($invoice->customer_name), 0, 'L');
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(15, 4, 'NIT/CI:', 0, 0);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(0, 4, $invoice->customer_nit, 0, 1);
+        
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, '', 'T', 1); // Línea divisoria
+        $pdf->Ln(2);
+
+        // --- DETALLE DE SERVICIOS ---
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(45, 4, 'Detalle', 0, 0, 'L');
+        $pdf->Cell(10, 4, 'Cant.', 0, 0, 'C');
+        $pdf->Cell(17, 4, 'Subt.', 0, 1, 'R');
+        $pdf->Cell(0, 0, '', 'T', 1); 
+        $pdf->Ln(1);
+
+        $pdf->SetFont('Arial', '', 8);
+        foreach ($invoice->details as $item) {
+            $x = $pdf->GetX();
+            $y = $pdf->GetY();
+            // MultiCell para que la descripción baje de línea si es muy larga
+            $pdf->MultiCell(45, 4, utf8_decode($item->description), 0, 'L');
+            $newY = $pdf->GetY();
+            // Volvemos a subir para colocar cantidad y costo
+            $pdf->SetXY($x + 45, $y);
+            $pdf->Cell(10, 4, number_format($item->quantity, 0), 0, 0, 'C');
+            $pdf->Cell(17, 4, number_format($item->cost, 2), 0, 1, 'R');
+            $pdf->SetY($newY + 1); // Empujamos el Y hacia abajo para la siguiente fila
+        }
+        
+        $pdf->Cell(0, 0, '', 'T', 1); 
+        $pdf->Ln(2);
+
+        // --- TOTALES ---
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell(45, 5, 'TOTAL Bs.', 0, 0, 'R');
+        $pdf->Cell(27, 5, number_format($invoice->total_amount, 2), 0, 1, 'R');
+        $pdf->Ln(3);
+
+        // --- LEYENDAS SIAT ---
+        $pdf->SetFont('Arial', '', 7);
+        if ($invoice->siat_status === 'offline') {
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->MultiCell(0, 3, utf8_decode('Este documento es la Representación Gráfica de un Documento Fiscal Digital emitido fuera de línea.'), 0, 'C');
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', '', 7);
+        }
+
+        $pdf->MultiCell(0, 3, utf8_decode(config('siat.leyenda', 'Ley N° 453: El proveedor deberá entregar el producto en las modalidades y términos ofertados.')), 0, 'C');
+        $pdf->Ln(3);
+
+        // --- IMPRESIÓN DEL QR ---
+        $x_qr = ($pdf->GetPageWidth() - 30) / 2; // Centrar el QR de 30x30mm
+        $pdf->Image($qrPath, $x_qr, $pdf->GetY(), 30, 30, 'PNG');
+        $pdf->Ln(32);
+
+        $pdf->Cell(0, 4, utf8_decode('¡Gracias por su preferencia!'), 0, 1, 'C');
+
+        // Borrar el QR temporal para no llenar el disco
+        if(file_exists($qrPath)){
+            unlink($qrPath);
+        }
+
+        // --- SALIDA DEL PDF ---
+        // 'I' envía el PDF directamente al navegador sin descargarlo
+        $pdf->Output('I', "factura_{$invoice->invoice_number}.pdf");
+        exit;
     }
 }

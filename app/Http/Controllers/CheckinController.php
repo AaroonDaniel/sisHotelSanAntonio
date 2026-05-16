@@ -1035,7 +1035,7 @@ class CheckinController extends Controller
 
             if ($isEverythingComplete) {
                 $updateData['is_temporary'] = false;
-               
+
                 $checkin->update($updateData);
                 return redirect()->back()->with('success', 'Check-in completado al 100%. Habitación ocupada definitivamente.');
             } else {
@@ -1197,124 +1197,262 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
     }
 
-    public function checkout(Request $request, Checkin $checkin)
+    function checkout(Request $request, Checkin $checkin)
     {
-        // 1. Cargamos las relaciones necesarias para realizar los cálculos financieros
-        $checkin->load(['room.price', 'checkinDetails.service', 'payments']);
+        // 1. Cargamos las relaciones necesarias para los cálculos
+        $checkin->load(['room.price', 'checkinDetails.service', 'payments', 'guest', 'companions']);
 
-        $room = Room::find($checkin->room_id);
-        if ($room) {
-            $room->update(['status' => 'LIMPIEZA']);
-        }
+        return DB::transaction(function () use ($request, $checkin) {
 
-        // 2. Establecemos las fechas y calculamos los días reales de estadía
-        $checkOutDate = $request->input('check_out_date')
-            ? \Carbon\Carbon::parse($request->input('check_out_date'))
-            : now();
-        $waivePenalty = $request->boolean('waive_penalty', false);
-
-        $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
-
-        // 3. Calculamos el precio acordado considerando si hay un descuento/rebaja en este momento
-        $agreedPrice = $checkin->agreed_price;
-        if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-            $totalConRebaja = floatval($request->discount);
-            if ($finalDays > 0) {
-                $agreedPrice = $totalConRebaja / $finalDays;
-            }
-            $totalHospedaje = $totalConRebaja;
-        } else {
-            $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
-            
-            // 🚀 ESTE ES EL BLOQUE QUE FALTABA PARA QUE LA BASE DE DATOS COBRE IGUAL QUE EL PDF
-            if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
-                $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
-                $ratePerPerson = $isPrivate ? 90 : 60;
-                $paxCount = 1 + $checkin->companions->count();
-                $precioUnitario = $ratePerPerson * $paxCount;
+            // --- Estado de la habitación ---
+            $room = Room::find($checkin->room_id);
+            if ($room) {
+                $room->update(['status' => 'LIMPIEZA']);
             }
 
-            $totalHospedaje = $finalDays * $precioUnitario;
-        }
+            // --- Fechas y días facturables ---
+            $checkOutDate = $request->input('check_out_date')
+                ? Carbon::parse($request->input('check_out_date'))
+                : now();
+            $waivePenalty = $request->boolean('waive_penalty', false);
+            $finalDays    = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
-        // 4. Calculamos el total de servicios consumidos
-        $servicesTotal = 0;
-        foreach ($checkin->checkinDetails as $detail) {
-            $precioServicio = $detail->selling_price ?? $detail->service->price;
-            $servicesTotal += $detail->quantity * $precioServicio;
-        }
+            // --- Precio acordado (con o sin rebaja manual) ---
+            $agreedPrice = $checkin->agreed_price;
+            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+                $totalConRebaja = floatval($request->discount);
+                if ($finalDays > 0) {
+                    $agreedPrice = $totalConRebaja / $finalDays;
+                }
+                $totalHospedaje = $totalConRebaja;
+                $precioUnitario = $agreedPrice;
+            } else {
+                $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
 
-        // 5. Calculamos el saldo pendiente real (Hospedaje + Servicios + Saldo Anterior - Pagos previos)
-        $carriedBalance = floatval($checkin->carried_balance ?? 0);
-        $grandTotal = $totalHospedaje + $servicesTotal + $carriedBalance;
-
-        $totalPagadoPrevio = 0;
-        foreach ($checkin->payments as $pago) {
-            $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
-        }
-
-        $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
-
-        // 6. Registro del pago en la base de datos
-        $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
-        $bancoRecibido = strtoupper($request->input('qr_bank', ''));
-        $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
-
-        if ($metodoRecibido === 'ambos') {
-            // Soporte para pago mixto (efectivo y QR)
-            $montoEfectivo = floatval($request->input('monto_efectivo', 0));
-            $montoQr = floatval($request->input('monto_qr', 0));
-
-            if ($montoEfectivo > 0) {
-                \App\Models\Payment::create([
-                    'checkin_id' => $checkin->id,
-                    'user_id'    => $userId,
-                    'amount'     => $montoEfectivo,
-                    'method'     => 'EFECTIVO',
-                    'type'       => 'PAGO'
-                ]);
-            }
-            if ($montoQr > 0) {
-                \App\Models\Payment::create([
-                    'checkin_id' => $checkin->id,
-                    'user_id'    => $userId,
-                    'amount'     => $montoQr,
-                    'method'     => 'QR',
-                    'bank_name'  => $bancoRecibido ?: 'OTROS',
-                    'type'       => 'PAGO'
-                ]);
-            }
-        } else {
-            // Registro del pago único basado en el saldo calculado
-            if ($saldoPendienteFinal > 0) {
-                $metodoUpper = strtoupper($metodoRecibido);
-                // Normalización de métodos de pago QR comunes
-                if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
-                    $bancoRecibido = $metodoUpper;
-                    $metodoUpper = 'QR';
+                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
+                    $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
+                    $isPrivate     = in_array($bathroomType, ['private', 'privado']);
+                    $ratePerPerson = $isPrivate ? 90 : 60;
+                    $paxCount      = 1 + $checkin->companions->count();
+                    $precioUnitario = $ratePerPerson * $paxCount;
                 }
 
-                \App\Models\Payment::create([
-                    'checkin_id' => $checkin->id,
-                    'user_id'    => $userId,
-                    'amount'     => $saldoPendienteFinal,
-                    'method'     => $metodoUpper,
-                    'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
-                    'type'       => 'PAGO'
+                $totalHospedaje = $finalDays * $precioUnitario;
+            }
+
+            // --- Servicios consumidos ---
+            $servicesTotal = 0;
+            $serviciosDetalle = [];
+            foreach ($checkin->checkinDetails as $detail) {
+                $precioServicio = $detail->selling_price ?? $detail->service->price;
+                $subtotal = $detail->quantity * $precioServicio;
+                $servicesTotal += $subtotal;
+
+                $serviciosDetalle[] = [
+                    'service_id'  => $detail->service_id ?? null,
+                    'description' => $detail->service->name ?? 'Servicio adicional',
+                    'quantity'    => $detail->quantity,
+                    'unit_price'  => $precioServicio,
+                    'cost'        => $subtotal,
+                ];
+            }
+
+            // --- Saldo pendiente ---
+            $carriedBalance = floatval($checkin->carried_balance ?? 0);
+            $grandTotal     = $totalHospedaje + $servicesTotal + $carriedBalance;
+
+            $totalPagadoPrevio = 0;
+            foreach ($checkin->payments as $pago) {
+                $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+            }
+            $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
+
+            // --- Registro de pago(s) ---
+            $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
+            $bancoRecibido  = strtoupper($request->input('qr_bank', ''));
+            $userId         = \Illuminate\Support\Facades\Auth::id() ?? 1;
+
+            if ($metodoRecibido === 'ambos') {
+                $montoEfectivo = floatval($request->input('monto_efectivo', 0));
+                $montoQr       = floatval($request->input('monto_qr', 0));
+
+                if ($montoEfectivo > 0) {
+                    Payment::create([
+                        'checkin_id' => $checkin->id,
+                        'user_id'    => $userId,
+                        'amount'     => $montoEfectivo,
+                        'method'     => 'EFECTIVO',
+                        'type'       => 'PAGO',
+                    ]);
+                }
+                if ($montoQr > 0) {
+                    Payment::create([
+                        'checkin_id' => $checkin->id,
+                        'user_id'    => $userId,
+                        'amount'     => $montoQr,
+                        'method'     => 'QR',
+                        'bank_name'  => $bancoRecibido ?: 'OTROS',
+                        'type'       => 'PAGO',
+                    ]);
+                }
+            } else {
+                if ($saldoPendienteFinal > 0) {
+                    $metodoUpper = strtoupper($metodoRecibido);
+                    if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
+                        $bancoRecibido = $metodoUpper;
+                        $metodoUpper   = 'QR';
+                    }
+
+                    Payment::create([
+                        'checkin_id' => $checkin->id,
+                        'user_id'    => $userId,
+                        'amount'     => $saldoPendienteFinal,
+                        'method'     => $metodoUpper,
+                        'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
+                        'type'       => 'PAGO',
+                    ]);
+                }
+            }
+
+            // --- Finalizar la estadía ---
+            $checkin->update([
+                'check_out_date' => $checkOutDate,
+                'duration_days'  => $finalDays,
+                'agreed_price'   => $agreedPrice,
+                'status'         => 'finalizado',
+            ]);
+
+            // =========================================================
+            // FACTURACIÓN ELECTRÓNICA SIAT
+            // =========================================================
+            // El bloque está envuelto en try/catch para garantizar que cualquier
+            // falla (red, evento significativo activo, error SOAP) NO interrumpa
+            // el cierre del checkout. La factura siempre se crea en BD; lo que
+            // varía es su `siat_status` (accepted | offline).
+            // =========================================================
+
+            $invoice = Invoice::create([
+                'checkin_id'          => $checkin->id,
+                'invoice_number'      => (Invoice::max('invoice_number') ?? 0) + 1,
+                'control_code'         => '-',
+                'payment_method'       => 'EF',
+                'customer_name'       => strtoupper($request->input('customer_name') ?? $checkin->guest->full_name ?? 'SIN NOMBRE'),
+                'customer_nit'        => $request->input('customer_nit', '0'),
+                'issue_date'          => now()->format('Y-m-d'),
+                'issue_time'          => now(),
+                'user_id'             => $userId,
+                'payment_method_code' => (int) $request->input('payment_method_code', 1), // 1 = Efectivo en catálogo SIAT
+                'total_amount'        => $grandTotal,
+                'additional_discount' => floatval($request->input('additional_discount', 0)),
+                'total_subject_to_vat' => $grandTotal - floatval($request->input('additional_discount', 0)),
+                'status'              => 'valid',
+                'siat_status'         => 'pending',
+            ]);
+
+            // Detalle: hospedaje
+            $invoice->details()->create([
+                'description' => "Servicio de Hospedaje Habitación {$checkin->room->number} ({$finalDays} día/s)",
+                'quantity'    => $finalDays,
+                'unit_price'  => $precioUnitario,
+                'cost'        => $totalHospedaje,
+            ]);
+
+            // Detalle: servicios consumidos
+            foreach ($serviciosDetalle as $svc) {
+                $invoice->details()->create($svc);
+            }
+
+            // --- Intentar emitir contra el SIAT con contingencia silenciosa ---
+            $this->emitInvoiceToSiat($invoice);
+
+            return response()->json([
+                'success'    => true,
+                'message'    => 'Estadía finalizada',
+                'invoice_id' => $invoice->id,
+                'siat_status' => $invoice->fresh()->siat_status,
+            ]);
+        });
+    }
+
+    protected function emitInvoiceToSiat(Invoice $invoice): void
+    {
+        $siat = app(\App\Services\SiatService::class);
+
+        try {
+            // 1. ¿Hay un evento significativo activo? -> emisión offline directa
+            $eventoActivo = \App\Models\SignificantEvent::where('status', 'active')->first();
+            if ($eventoActivo) {
+                throw new \RuntimeException("Evento significativo activo (#{$eventoActivo->id}). Emisión offline forzada.");
+            }
+
+            // 2. Obtener CUFD / CUIS vigentes
+            $cufdData = $siat->getActiveCufd();
+            $cuis     = $siat->getActiveCuis();
+            if (!$cufdData || !$cuis) {
+                throw new \RuntimeException('No se pudo obtener CUFD/CUIS vigentes del SIAT.');
+            }
+
+            // 3. Construir XML + CUF
+            $builder     = new \App\Services\SiatXmlBuilder($invoice, $cufdData);
+            $xml         = $builder->buildXml();
+            $gzipArchive = $builder->getGzipArchive();
+            $cuf         = $builder->generateCuf();
+            $hash        = hash('sha256', $xml);
+
+            $invoice->update(['cuf' => $cuf]);
+
+            // 4. Enviar al SIAT
+            $resp = $siat->receiveInvoice(
+                $cuis,
+                $cufdData['codigo'],
+                $gzipArchive,
+                now()->format('Y-m-d\TH:i:s.v'),
+                $hash
+            );
+
+            if (($resp['status'] ?? null) === 'accepted') {
+                $invoice->update([
+                    'siat_status'         => 'accepted',
+                    'siat_reception_code' => $resp['codigoRecepcion'] ?? null,
                 ]);
+                return;
+            }
+
+            // El SIAT respondió pero rechazó o reportó offline -> cae a contingencia
+            if (($resp['status'] ?? null) === 'offline') {
+                throw new \RuntimeException('SIAT no respondió (offline).');
+            }
+
+            // Rechazo lógico (datos malos): NO es contingencia, lo marcamos como rejected
+            // y dejamos que el Gerente lo revise. El checkout igual sigue.
+            $invoice->update(['siat_status' => 'rejected']);
+            Log::warning("Factura {$invoice->id} rechazada por SIAT: " . ($resp['mensaje'] ?? 'sin mensaje'));
+        } catch (\Throwable $e) {
+            // CONTINGENCIA SILENCIOSA
+            Log::warning("Factura {$invoice->id} a contingencia offline: " . $e->getMessage());
+
+            try {
+                // Reconstruir XML aunque el CUFD haya fallado: si tenemos CUFD cacheado lo usamos,
+                // si no, dejamos el archivo en estado mínimo para reenvío posterior.
+                $cufdData = $siat->getActiveCufd() ?? ['codigo' => 'PENDIENTE', 'codigoControl' => 'PENDIENTE'];
+                $builder  = new \App\Services\SiatXmlBuilder($invoice, $cufdData);
+                $gzip     = $builder->getGzipArchive();
+                $cuf      = $builder->generateCuf();
+
+                $filename = "offline_invoices/invoice_{$invoice->id}_" . now()->format('Ymd_His') . '.xml.gz';
+                \Illuminate\Support\Facades\Storage::disk('local')->put($filename, $gzip);
+
+                $invoice->update([
+                    'cuf'         => $cuf,
+                    'siat_status' => 'offline',
+                ]);
+            } catch (\Throwable $inner) {
+                // Si ni siquiera podemos serializar el XML, dejamos la factura
+                // marcada offline sin archivo y avisamos en logs. El checkout NO falla.
+                Log::error("No se pudo generar XML offline para factura {$invoice->id}: " . $inner->getMessage());
+                $invoice->update(['siat_status' => 'offline']);
             }
         }
-
-        // 7. Actualizamos el registro de check-in a estado finalizado
-        $checkin->update([
-            'check_out_date' => $checkOutDate,
-            'duration_days'  => $finalDays,
-            'agreed_price'   => $agreedPrice,
-            'status'         => 'finalizado'
-        ]);
-
-        return response()->json(['success' => true, 'message' => 'Estadía finalizada']);
     }
 
     // --- FUNCIÓN DE CANCELACIÓN (Solo primeros 10 minutos) ---

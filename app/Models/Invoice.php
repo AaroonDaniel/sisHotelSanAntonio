@@ -13,27 +13,29 @@ class Invoice extends Model
 
     // Campos asignables en masa, incluyendo los nuevos requerimientos del SIAT
     protected $fillable = [
-        'invoice_number',
         'checkin_id',
+        'invoice_number',
+        'control_code',
+        'payment_method',
+        'customer_name',
+        'customer_nit',
         'issue_date',
         'issue_time',
         'user_id',
-        'status',
-        
-        // --- Nuevos campos de Facturación Electrónica (SIAT) ---
-        'customer_name',
-        'customer_nit',
+        'payment_method_code',
         'total_amount',
         'additional_discount',
         'total_subject_to_vat',
         'cuf',
-        'payment_method_code',
+        'cufd_code',
         'siat_reception_code',
+        'status',
         'siat_status',
-        
-        // --- Campos antiguos (Mantenidos por compatibilidad) ---
-        'control_code',
-        'payment_method',
+        'significant_event_id',
+        'offline_xml_path',
+        'void_reason_code',
+        'voided_at',
+        'voided_by_user_id',
     ];
 
     // Convertimos las fechas a Carbon y los montos a decimales con 2 ceros

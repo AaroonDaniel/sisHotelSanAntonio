@@ -232,7 +232,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('significant-events.end');
     Route::post('/significant-events/{event}/resend', [SignificantEventController::class, 'resendOfflineInvoices'])
         ->name('significant-events.resend');
-    
+
+    Route::get('/facturacion/{invoice}', [\App\Http\Controllers\InvoiceController::class, 'show'])->name('invoices.show');
+    Route::get('/facturacion/{invoice}/pdf', [\App\Http\Controllers\InvoiceController::class, 'downloadTicket'])->name('invoices.pdf');
+    Route::post('/facturacion/{invoice}/anular', [\App\Http\Controllers\InvoiceController::class, 'void'])->name('invoices.void');
+
     // Campo de prueba siat
     Route::get('/test-siat', function (SiatService $siatService) {
         // Usamos el CUIS exitoso que te devolvió Impuestos
@@ -249,7 +253,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/test-xml', function (\App\Services\SiatService $siatService) {
-        
+
         // 1. Usamos tu CUIS oficial y VIGENTE que el SIAT nos obliga a mantener
         $cuisValido = '19985EBF';
 
@@ -278,7 +282,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // 5. Creamos una Factura falsa en memoria
         $invoice = new \App\Models\Invoice([
             'id' => 1,
-            'invoice_number' => 1, 
+            'invoice_number' => 1,
             'total_amount' => 1680.00,
             'total_subject_to_vat' => 1680.00,
             'payment_method_code' => 1, // Efectivo
@@ -287,7 +291,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // 6. Simulamos al usuario Gerente
         $user = new \App\Models\User(['id' => 1, 'name' => 'GERENTE']);
-        
+
         $invoice->setRelation('user', $user);
         $invoice->setRelation('checkin', $checkin);
 
@@ -305,7 +309,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Inicializamos el constructor con el CUFD recién horneado
         $builder = new \App\Services\SiatXmlBuilder($invoice, $cufdResponse);
-        
+
         // Obtenemos el XML puro, el Hash y comprimimos en GZIP
         $xmlString = $builder->buildXml();
         $hash = hash('sha256', $xmlString);
@@ -329,34 +333,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/test-anular/{invoice_id}', function ($invoice_id, \App\Services\SiatService $siatService) {
-    $invoice = \App\Models\Invoice::find($invoice_id);
+        $invoice = \App\Models\Invoice::find($invoice_id);
 
-    if (!$invoice || !$invoice->cuf) {
-        return 'La factura no existe o no tiene un CUF válido para anular.';
-    }
+        if (!$invoice || !$invoice->cuf) {
+            return 'La factura no existe o no tiene un CUF válido para anular.';
+        }
 
-    // Código 1: Factura mal emitida (catálogo SIAT)
-    $motivoAnulacion = 1; 
+        // Código 1: Factura mal emitida (catálogo SIAT)
+        $motivoAnulacion = 1;
 
-    // Disparamos la anulación al SIAT
-    $response = $siatService->voidInvoice(
-        config('siat.cuis', '19985EBF'), // Tu CUIS válido
-        $invoice->cufd_code ?? $siatService->getActiveCufd()['codigo'], // Usa el CUFD de la BD o uno nuevo
-        $invoice->cuf,
-        $motivoAnulacion
-    );
+        // Disparamos la anulación al SIAT
+        $response = $siatService->voidInvoice(
+            config('siat.cuis', '19985EBF'), // Tu CUIS válido
+            $invoice->cufd_code ?? $siatService->getActiveCufd()['codigo'], // Usa el CUFD de la BD o uno nuevo
+            $invoice->cuf,
+            $motivoAnulacion
+        );
 
-    if ($response['status'] === 'accepted') {
-        $invoice->update([
-            'status' => 'ANULADA',
-            'void_reason_code' => $motivoAnulacion,
-            'voided_at' => now()
-        ]);
-        return response()->json(['mensaje' => '✅ Factura Anulada con éxito en el SIAT', 'data' => $response]);
-    }
+        if ($response['status'] === 'accepted') {
+            $invoice->update([
+                'status' => 'ANULADA',
+                'void_reason_code' => $motivoAnulacion,
+                'voided_at' => now()
+            ]);
+            return response()->json(['mensaje' => '✅ Factura Anulada con éxito en el SIAT', 'data' => $response]);
+        }
 
-    return response()->json(['mensaje' => '🛑 Error al anular', 'data' => $response]);
-});
+        return response()->json(['mensaje' => '🛑 Error al anular', 'data' => $response]);
+    });
 });
 
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
