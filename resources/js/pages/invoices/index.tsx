@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -7,6 +7,7 @@ import {
     CheckCircle2,
     FileText,
     Receipt,
+    RefreshCw,
     Search,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -19,10 +20,17 @@ interface InvoiceData {
     issue_date: string;
     issue_time: string;
     control_code: string;
+    payment_method: string;
     guest_name: string;
     room_number: string;
     user_name: string;
-    status: string; // Ej: VALIDADA, ANULADA, PENDIENTE_ENVIO_OFFLINE
+    status: string;        // 'valid' | 'voided'
+    siat_status: string;   // 'pending' | 'accepted' | 'rejected' | 'offline'
+    is_factura: boolean;
+    is_offline: boolean;
+    is_voided: boolean;
+    can_void: boolean;
+    can_resend: boolean;
 }
 
 interface Props {
@@ -44,21 +52,37 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
         number: string;
     } | null>(null);
 
-    const checkIsFactura = (code: string) => {
-        if (!code) return false;
-        if (code === '-') return false; // Los recibos antiguos o ventas sin SIAT
-        return code.length > 5; // Un CUF o código de control siempre tiene más de 5 caracteres
-    };
+    // Loading state para reenvío
+    const [resendingId, setResendingId] = useState<number | null>(null);
 
     const openVoidModal = (id: number, number: string) => {
         setInvoiceToVoid({ id, number });
         setIsVoidModalOpen(true);
     };
 
+    const handleResendOffline = (invoice: InvoiceData) => {
+        if (!confirm(
+            `¿Re-enviar la factura #${invoice.invoice_number} al SIAT?\n\n` +
+            `Esta operación intentará subir el XML guardado en contingencia.`
+        )) {
+            return;
+        }
+
+        setResendingId(invoice.id);
+
+        router.post(
+            `/facturacion/${invoice.id}/resend-offline`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setResendingId(null),
+            },
+        );
+    };
+
     const filteredInvoices = Invoices.filter((invoice) => {
-        const isFactura = checkIsFactura(invoice.control_code);
-        if (activeTab === 'facturas' && !isFactura) return false;
-        if (activeTab === 'recibos' && isFactura) return false;
+        if (activeTab === 'facturas' && !invoice.is_factura) return false;
+        if (activeTab === 'recibos' && invoice.is_factura) return false;
         return (
             String(invoice.invoice_number)
                 .toLowerCase()
@@ -112,16 +136,12 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                 {pdfUrl ? (
                     <div className="flex flex-1 items-center justify-center">
                         <div className="flex h-[75vh] w-full max-w-3xl animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl zoom-in-95 fade-in">
-                            {/* Header del visor */}
                             <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-                                {/* Título opcional */}
                                 <h2 className="text-sm font-semibold text-gray-700">
                                     Vista previa del PDF
                                 </h2>
 
-                                {/* Botones */}
                                 <div className="flex items-center gap-2">
-                                    {/* Abrir en nueva pestaña */}
                                     <a
                                         href={pdfUrl}
                                         target="_blank"
@@ -131,7 +151,6 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                         Abrir
                                     </a>
 
-                                    {/* Descargar PDF */}
                                     <a
                                         href={pdfUrl}
                                         download
@@ -140,7 +159,6 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                         Descargar
                                     </a>
 
-                                    {/* Cerrar visor */}
                                     <button
                                         onClick={() => setPdfUrl(null)}
                                         className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-black"
@@ -150,7 +168,6 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                 </div>
                             </div>
 
-                            {/* Visor PDF */}
                             <div className="flex-1 bg-gray-200 p-2">
                                 <iframe
                                     src={pdfUrl}
@@ -185,20 +202,15 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
                                     {filteredInvoices.map((invoice) => {
-                                        const isFactura = checkIsFactura(
-                                            invoice.control_code,
-                                        );
-                                        const isAnulada =
-                                            invoice.status === 'ANULADA' ||
-                                            invoice.status === 'voided';
-                                        const isOffline =
-                                            invoice.status ===
-                                            'PENDIENTE_ENVIO_OFFLINE';
+                                        const isFactura = invoice.is_factura;
+                                        const isAnulada = invoice.is_voided;
+                                        const isOffline = invoice.is_offline;
+                                        const isResending = resendingId === invoice.id;
 
                                         return (
                                             <tr
                                                 key={invoice.id}
-                                                className={`transition-colors hover:bg-gray-50/50 ${isAnulada ? 'bg-red-50/20' : ''}`}
+                                                className={`transition-colors hover:bg-gray-50/50 ${isAnulada ? 'bg-red-50/20' : ''} ${isOffline ? 'bg-amber-50/30' : ''}`}
                                             >
                                                 <td className="px-6 py-3 font-medium whitespace-nowrap text-gray-900">
                                                     <div className="flex items-center gap-2">
@@ -216,10 +228,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                                     : ''
                                                             }
                                                         >
-                                                            #
-                                                            {
-                                                                invoice.invoice_number
-                                                            }
+                                                            #{invoice.invoice_number}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -227,19 +236,27 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                     {isFactura ? (
                                                         isAnulada ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
-                                                                <Ban className="h-3 w-3" />{' '}
+                                                                <Ban className="h-3 w-3" />
                                                                 Anulada
                                                             </span>
                                                         ) : isOffline ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
-                                                                <AlertTriangle className="h-3 w-3" />{' '}
-                                                                Offline
-                                                                (Contingencia)
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                Offline (Contingencia)
+                                                            </span>
+                                                        ) : invoice.siat_status === 'rejected' ? (
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                Rechazada
+                                                            </span>
+                                                        ) : invoice.siat_status === 'accepted' ? (
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                Validada
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
-                                                                <CheckCircle2 className="h-3 w-3" />{' '}
-                                                                Validada
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                                                                Pendiente
                                                             </span>
                                                         )
                                                     ) : (
@@ -261,6 +278,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                 </td>
                                                 <td className="px-6 py-3 text-right whitespace-nowrap">
                                                     <div className="flex justify-end gap-2">
+                                                        {/* Ver PDF */}
                                                         <button
                                                             onClick={() =>
                                                                 setPdfUrl(
@@ -268,30 +286,61 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                                 )
                                                             }
                                                             className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-600 hover:text-white"
+                                                            title="Ver documento"
                                                         >
-                                                            <FileText className="h-3.5 w-3.5" />{' '}
-                                                            Ver Doc
+                                                            <FileText className="h-3.5 w-3.5" />
+                                                            Ver PDF
                                                         </button>
-                                                        {isFactura &&
-                                                            !isAnulada && (
-                                                                <button
-                                                                    onClick={() =>
-                                                                        openVoidModal(
-                                                                            invoice.id,
-                                                                            invoice.invoice_number,
-                                                                        )
-                                                                    }
-                                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white"
-                                                                >
-                                                                    <Ban className="h-3.5 w-3.5" />{' '}
-                                                                    Anular
-                                                                </button>
-                                                            )}
+
+                                                        {/* Re-enviar Offline */}
+                                                        {invoice.can_resend && (
+                                                            <button
+                                                                onClick={() => handleResendOffline(invoice)}
+                                                                disabled={isResending}
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                                                title="Re-enviar al SIAT"
+                                                            >
+                                                                <RefreshCw
+                                                                    className={`h-3.5 w-3.5 ${isResending ? 'animate-spin' : ''}`}
+                                                                />
+                                                                {isResending ? 'Enviando...' : 'Re-enviar'}
+                                                            </button>
+                                                        )}
+
+                                                        {/* Anular */}
+                                                        {invoice.can_void && (
+                                                            <button
+                                                                onClick={() =>
+                                                                    openVoidModal(
+                                                                        invoice.id,
+                                                                        invoice.invoice_number,
+                                                                    )
+                                                                }
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white"
+                                                                title="Anular factura"
+                                                            >
+                                                                <Ban className="h-3.5 w-3.5" />
+                                                                Anular
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
                                         );
                                     })}
+
+                                    {filteredInvoices.length === 0 && (
+                                        <tr>
+                                            <td
+                                                colSpan={5}
+                                                className="px-6 py-10 text-center text-sm text-gray-400"
+                                            >
+                                                {activeTab === 'recibos'
+                                                    ? 'Los recibos no se registran en esta tabla. Para verlos, ingresa al historial de check-ins finalizados.'
+                                                    : 'No hay documentos para mostrar.'}
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

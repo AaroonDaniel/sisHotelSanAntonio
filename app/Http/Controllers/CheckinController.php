@@ -20,6 +20,13 @@ use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin
 use App\Models\SpecialAgreement;
 use Illuminate\Support\Facades\Log;
 
+use App\Models\SignificantEvent;
+use App\Services\SiatXmlBuilder;
+use App\Services\SiatService;
+
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+
 class CheckinController extends Controller
 {
     public function index()
@@ -1197,181 +1204,291 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
     }
 
+    /**
+     * Checkout con Transacción de DOBLE FASE.
+     *
+     * Fase 1 (BD - atómica): pagos, cierre del checkin, y — SOLO si el huésped
+     *        pidió factura — un Invoice local con siat_status = 'pending'.
+     *        Se hace COMMIT antes de tocar el SIAT.
+     *
+     * Fase 2 (SIAT - fuera de transacción): si hay factura, se intenta emitir.
+     *        Si SIAT falla, queda en 'offline'. El checkout NUNCA tira 500.
+     *
+     * Regla de negocio: tipo_documento ∈ {factura, recibo}.
+     *   - 'factura' → crea Invoice + intenta SIAT.
+     *   - 'recibo'  → NO crea Invoice. Solo Payment y cierre del Checkin.
+     *
+     * Si el front no envía tipo_documento se asume 'recibo' (más conservador:
+     * evita crear facturas fantasma).
+     */
     function checkout(Request $request, Checkin $checkin)
     {
         // 1. Cargamos las relaciones necesarias para los cálculos
         $checkin->load(['room.price', 'checkinDetails.service', 'payments', 'guest', 'companions']);
 
-        return DB::transaction(function () use ($request, $checkin) {
+        // Tipo de documento: factura o recibo. Default = recibo.
+        $tipoDocumento = strtolower((string) $request->input('tipo_documento', 'recibo'));
+        if (!in_array($tipoDocumento, ['factura', 'recibo'], true)) {
+            $tipoDocumento = 'recibo';
+        }
+        $emitInvoice = ($tipoDocumento === 'factura');
 
-            // --- Estado de la habitación ---
-            $room = Room::find($checkin->room_id);
-            if ($room) {
-                $room->update(['status' => 'LIMPIEZA']);
-            }
+        // =========================================================
+        // FASE 1 — Persistencia local (transacción atómica)
+        // =========================================================
+        try {
+            $invoice = DB::transaction(function () use ($request, $checkin, $emitInvoice) {
 
-            // --- Fechas y días facturables ---
-            $checkOutDate = $request->input('check_out_date')
-                ? Carbon::parse($request->input('check_out_date'))
-                : now();
-            $waivePenalty = $request->boolean('waive_penalty', false);
-            $finalDays    = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
-
-            // --- Precio acordado (con o sin rebaja manual) ---
-            $agreedPrice = $checkin->agreed_price;
-            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-                $totalConRebaja = floatval($request->discount);
-                if ($finalDays > 0) {
-                    $agreedPrice = $totalConRebaja / $finalDays;
-                }
-                $totalHospedaje = $totalConRebaja;
-                $precioUnitario = $agreedPrice;
-            } else {
-                $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
-
-                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                    $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
-                    $isPrivate     = in_array($bathroomType, ['private', 'privado']);
-                    $ratePerPerson = $isPrivate ? 90 : 60;
-                    $paxCount      = 1 + $checkin->companions->count();
-                    $precioUnitario = $ratePerPerson * $paxCount;
+                // --- Estado de la habitación ---
+                $room = Room::find($checkin->room_id);
+                if ($room) {
+                    $room->update(['status' => 'LIMPIEZA']);
                 }
 
-                $totalHospedaje = $finalDays * $precioUnitario;
-            }
+                // --- Fechas y días facturables ---
+                $checkOutDate = $request->input('check_out_date')
+                    ? Carbon::parse($request->input('check_out_date'))
+                    : now();
+                $waivePenalty = $request->boolean('waive_penalty', false);
+                $finalDays    = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
-            // --- Servicios consumidos ---
-            $servicesTotal = 0;
-            $serviciosDetalle = [];
-            foreach ($checkin->checkinDetails as $detail) {
-                $precioServicio = $detail->selling_price ?? $detail->service->price;
-                $subtotal = $detail->quantity * $precioServicio;
-                $servicesTotal += $subtotal;
+                // --- Precio acordado (con o sin rebaja manual) ---
+                $agreedPrice = $checkin->agreed_price;
+                if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+                    $totalConRebaja = floatval($request->discount);
+                    if ($finalDays > 0) {
+                        $agreedPrice = $totalConRebaja / $finalDays;
+                    }
+                    $totalHospedaje = $totalConRebaja;
+                    $precioUnitario = $agreedPrice;
+                } else {
+                    $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
 
-                $serviciosDetalle[] = [
-                    'service_id'  => $detail->service_id ?? null,
-                    'description' => $detail->service->name ?? 'Servicio adicional',
-                    'quantity'    => $detail->quantity,
-                    'unit_price'  => $precioServicio,
-                    'cost'        => $subtotal,
-                ];
-            }
-
-            // --- Saldo pendiente ---
-            $carriedBalance = floatval($checkin->carried_balance ?? 0);
-            $grandTotal     = $totalHospedaje + $servicesTotal + $carriedBalance;
-
-            $totalPagadoPrevio = 0;
-            foreach ($checkin->payments as $pago) {
-                $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
-            }
-            $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
-
-            // --- Registro de pago(s) ---
-            $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
-            $bancoRecibido  = strtoupper($request->input('qr_bank', ''));
-            $userId         = \Illuminate\Support\Facades\Auth::id() ?? 1;
-
-            if ($metodoRecibido === 'ambos') {
-                $montoEfectivo = floatval($request->input('monto_efectivo', 0));
-                $montoQr       = floatval($request->input('monto_qr', 0));
-
-                if ($montoEfectivo > 0) {
-                    Payment::create([
-                        'checkin_id' => $checkin->id,
-                        'user_id'    => $userId,
-                        'amount'     => $montoEfectivo,
-                        'method'     => 'EFECTIVO',
-                        'type'       => 'PAGO',
-                    ]);
-                }
-                if ($montoQr > 0) {
-                    Payment::create([
-                        'checkin_id' => $checkin->id,
-                        'user_id'    => $userId,
-                        'amount'     => $montoQr,
-                        'method'     => 'QR',
-                        'bank_name'  => $bancoRecibido ?: 'OTROS',
-                        'type'       => 'PAGO',
-                    ]);
-                }
-            } else {
-                if ($saldoPendienteFinal > 0) {
-                    $metodoUpper = strtoupper($metodoRecibido);
-                    if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
-                        $bancoRecibido = $metodoUpper;
-                        $metodoUpper   = 'QR';
+                    if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
+                        $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
+                        $isPrivate     = in_array($bathroomType, ['private', 'privado']);
+                        $ratePerPerson = $isPrivate ? 90 : 60;
+                        $paxCount      = 1 + $checkin->companions->count();
+                        $precioUnitario = $ratePerPerson * $paxCount;
                     }
 
-                    Payment::create([
-                        'checkin_id' => $checkin->id,
-                        'user_id'    => $userId,
-                        'amount'     => $saldoPendienteFinal,
-                        'method'     => $metodoUpper,
-                        'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
-                        'type'       => 'PAGO',
-                    ]);
+                    $totalHospedaje = $finalDays * $precioUnitario;
                 }
-            }
 
-            // --- Finalizar la estadía ---
-            $checkin->update([
-                'check_out_date' => $checkOutDate,
-                'duration_days'  => $finalDays,
-                'agreed_price'   => $agreedPrice,
-                'status'         => 'finalizado',
-            ]);
+                // --- Servicios consumidos ---
+                $servicesTotal = 0;
+                $serviciosDetalle = [];
+                foreach ($checkin->checkinDetails as $detail) {
+                    $precioServicio = $detail->selling_price ?? $detail->service->price;
+                    $subtotal = $detail->quantity * $precioServicio;
+                    $servicesTotal += $subtotal;
 
-            // =========================================================
-            // FACTURACIÓN ELECTRÓNICA SIAT
-            // =========================================================
-            // El bloque está envuelto en try/catch para garantizar que cualquier
-            // falla (red, evento significativo activo, error SOAP) NO interrumpa
-            // el cierre del checkout. La factura siempre se crea en BD; lo que
-            // varía es su `siat_status` (accepted | offline).
-            // =========================================================
+                    $serviciosDetalle[] = [
+                        'service_id'  => $detail->service_id ?? null,
+                        'description' => $detail->service->name ?? 'Servicio adicional',
+                        'quantity'    => $detail->quantity,
+                        'unit_price'  => $precioServicio,
+                        'cost'        => $subtotal,
+                    ];
+                }
 
-            $invoice = Invoice::create([
-                'checkin_id'          => $checkin->id,
-                'invoice_number'      => (Invoice::max('invoice_number') ?? 0) + 1,
-                'control_code'         => '-',
-                'payment_method'       => 'EF',
-                'customer_name'       => strtoupper($request->input('customer_name') ?? $checkin->guest->full_name ?? 'SIN NOMBRE'),
-                'customer_nit'        => $request->input('customer_nit', '0'),
-                'issue_date'          => now()->format('Y-m-d'),
-                'issue_time'          => now(),
-                'user_id'             => $userId,
-                'payment_method_code' => (int) $request->input('payment_method_code', 1), // 1 = Efectivo en catálogo SIAT
-                'total_amount'        => $grandTotal,
-                'additional_discount' => floatval($request->input('additional_discount', 0)),
-                'total_subject_to_vat' => $grandTotal - floatval($request->input('additional_discount', 0)),
-                'status'              => 'valid',
-                'siat_status'         => 'pending',
-            ]);
+                // --- Saldo pendiente ---
+                $carriedBalance = floatval($checkin->carried_balance ?? 0);
+                $grandTotal     = $totalHospedaje + $servicesTotal + $carriedBalance;
 
-            // Detalle: hospedaje
-            $invoice->details()->create([
-                'description' => "Servicio de Hospedaje Habitación {$checkin->room->number} ({$finalDays} día/s)",
-                'quantity'    => $finalDays,
-                'unit_price'  => $precioUnitario,
-                'cost'        => $totalHospedaje,
-            ]);
+                $totalPagadoPrevio = 0;
+                foreach ($checkin->payments as $pago) {
+                    $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                }
+                $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
 
-            // Detalle: servicios consumidos
-            foreach ($serviciosDetalle as $svc) {
-                $invoice->details()->create($svc);
-            }
+                // --- Registro de pago(s) ---
+                $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
+                $bancoRecibido  = strtoupper($request->input('qr_bank', ''));
+                $userId         = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
-            // --- Intentar emitir contra el SIAT con contingencia silenciosa ---
-            $this->emitInvoiceToSiat($invoice);
+                // --- Mapeo del método principal para la factura/caja ---
+                // payment_method (BD varchar(2)): EF / QR / TC / TR
+                // payment_method_code (catálogo SIAT): 1=Efectivo, 7=Tarjeta crédito (QR/digital), 2=Tarjeta, 6=Transferencia
+                [$methodAcronym, $siatMethodCode] = $this->mapPaymentMethod($metodoRecibido);
 
+                if ($metodoRecibido === 'ambos') {
+                    $montoEfectivo = floatval($request->input('monto_efectivo', 0));
+                    $montoQr       = floatval($request->input('monto_qr', 0));
+
+                    if ($montoEfectivo > 0) {
+                        Payment::create([
+                            'checkin_id' => $checkin->id,
+                            'user_id'    => $userId,
+                            'amount'     => $montoEfectivo,
+                            'method'     => 'EFECTIVO',
+                            'type'       => 'PAGO',
+                        ]);
+                    }
+                    if ($montoQr > 0) {
+                        Payment::create([
+                            'checkin_id' => $checkin->id,
+                            'user_id'    => $userId,
+                            'amount'     => $montoQr,
+                            'method'     => 'QR',
+                            'bank_name'  => $bancoRecibido ?: 'OTROS',
+                            'type'       => 'PAGO',
+                        ]);
+                    }
+                    // En pago mixto, para la caja/factura prima el método con mayor monto
+                    if ($montoQr > $montoEfectivo) {
+                        $methodAcronym  = 'QR';
+                        $siatMethodCode = 7;
+                    } else {
+                        $methodAcronym  = 'EF';
+                        $siatMethodCode = 1;
+                    }
+                } else {
+                    if ($saldoPendienteFinal > 0) {
+                        $metodoUpper = strtoupper($metodoRecibido);
+                        if (in_array($metodoUpper, ['YAPE', 'BNB', 'FIE', 'ECO'])) {
+                            $bancoRecibido = $metodoUpper;
+                            $metodoUpper   = 'QR';
+                        }
+
+                        Payment::create([
+                            'checkin_id' => $checkin->id,
+                            'user_id'    => $userId,
+                            'amount'     => $saldoPendienteFinal,
+                            'method'     => $metodoUpper,
+                            'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
+                            'type'       => 'PAGO',
+                        ]);
+                    }
+                }
+
+                // --- Finalizar la estadía ---
+                $checkin->update([
+                    'check_out_date' => $checkOutDate,
+                    'duration_days'  => $finalDays,
+                    'agreed_price'   => $agreedPrice,
+                    'status'         => 'finalizado',
+                ]);
+
+                // =========================================================
+                // FACTURA LOCAL — solo si el huésped pidió factura
+                // =========================================================
+                if (!$emitInvoice) {
+                    // RECIBO: no se crea Invoice. La caja solo registró Payment
+                    // y cerró el Checkin. El front muestra el PDF de recibo
+                    // con GET /checks/{id}/checkout-receipt.
+                    return null;
+                }
+
+                $invoice = Invoice::create([
+                    'checkin_id'           => $checkin->id,
+                    'invoice_number'       => (Invoice::max('invoice_number') ?? 0) + 1,
+
+                    // Códigos: el SIAT usa CUF; control_code y payment_method
+                    // son requeridos por la tabla (NOT NULL).
+                    'control_code'         => '-',
+                    'payment_method'       => $methodAcronym,            // EF | QR | TC | TR
+
+                    'customer_name'        => strtoupper($request->input('customer_name') ?? $checkin->guest->full_name ?? 'SIN NOMBRE'),
+                    'customer_nit'         => $request->input('customer_nit', '0'),
+                    'issue_date'           => now()->format('Y-m-d'),
+                    'issue_time'           => now(),
+                    'user_id'              => $userId,
+                    'payment_method_code'  => (int) $request->input('payment_method_code', $siatMethodCode),
+                    'total_amount'         => $grandTotal,
+                    'additional_discount'  => floatval($request->input('additional_discount', 0)),
+                    'total_subject_to_vat' => $grandTotal - floatval($request->input('additional_discount', 0)),
+                    'status'               => 'valid',
+                    'siat_status'          => 'pending',
+                ]);
+
+                // Detalle: hospedaje
+                $invoice->details()->create([
+                    'description' => "Servicio de Hospedaje Habitación {$checkin->room->number} ({$finalDays} día/s)",
+                    'quantity'    => $finalDays,
+                    'unit_price'  => $precioUnitario,
+                    'cost'        => $totalHospedaje,
+                ]);
+
+                // Detalle: servicios consumidos
+                foreach ($serviciosDetalle as $svc) {
+                    $invoice->details()->create($svc);
+                }
+
+                return $invoice;
+            });
+        } catch (\Throwable $e) {
+            // Si la FASE 1 falla, sí devolvemos 500 — porque la BD quedó intacta
+            // y el problema NO es el SIAT, es lógica/datos.
+            Log::error("Checkout FASE 1 falló para checkin {$checkin->id}: " . $e->getMessage());
             return response()->json([
-                'success'    => true,
-                'message'    => 'Estadía finalizada',
-                'invoice_id' => $invoice->id,
-                'siat_status' => $invoice->fresh()->siat_status,
+                'success' => false,
+                'message' => 'Error al cerrar la estadía: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        // =========================================================
+        // FASE 2 — Emisión al SIAT (solo si se creó Invoice)
+        // =========================================================
+        // Si el huésped pidió RECIBO, $invoice es null: no hay nada que
+        // mandar al SIAT, el checkout ya está cerrado y devolvemos la URL
+        // del PDF de recibo.
+        // =========================================================
+        if ($invoice === null) {
+            return response()->json([
+                'success'      => true,
+                'message'      => 'Estadía finalizada. Se generó un recibo (sin factura electrónica).',
+                'invoice_id'   => null,
+                'siat_status'  => null,
+                'document'     => 'recibo',
+                'document_url' => url("/checks/{$checkin->id}/checkout-receipt"),
             ]);
-        });
+        }
+
+        // En este punto la BD YA está commiteada y existe una Invoice en
+        // estado 'pending'. Cualquier excepción aquí solo cambia siat_status.
+        try {
+            $this->emitInvoiceToSiat($invoice);
+        } catch (\Throwable $e) {
+            Log::error("Checkout FASE 2 SIAT falló para factura {$invoice->id}: " . $e->getMessage());
+            $invoice->update(['siat_status' => 'offline']);
+        }
+
+        $invoice->refresh();
+
+        return response()->json([
+            'success'      => true,
+            'message'      => $invoice->siat_status === 'offline'
+                ? 'Estadía finalizada. Factura emitida en modo Offline (contingencia).'
+                : 'Estadía finalizada. Factura electrónica emitida.',
+            'invoice_id'   => $invoice->id,
+            'siat_status'  => $invoice->siat_status,
+            'document'     => 'factura',
+            'document_url' => url("/checks/{$checkin->id}/checkout-invoice"),
+        ]);
+    }
+
+    /**
+     * Mapea el método de pago de UI a los acrónimos de caja (varchar(2))
+     * y al código del catálogo SIAT.
+     *
+     * @return array [string $acronym, int $siatCode]
+     */
+    protected function mapPaymentMethod(string $metodo): array
+    {
+        $m = strtoupper(trim($metodo));
+
+        // Bancos QR conocidos -> QR
+        if (in_array($m, ['YAPE', 'BNB', 'FIE', 'ECO', 'QR'])) {
+            return ['QR', 7];
+        }
+
+        return match ($m) {
+            'EFECTIVO'      => ['EF', 1],
+            'TARJETA'       => ['TC', 2],
+            'TRANSFERENCIA' => ['TR', 6],
+            default         => ['EF', 1],
+        };
     }
 
     protected function emitInvoiceToSiat(Invoice $invoice): void
