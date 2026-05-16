@@ -22,25 +22,12 @@ use App\Http\Controllers\OnlineBookingController;
 use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
-use App\Services\SiatService;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Suport\Facades\DB;
 use Inertia\Inertia;
-
-
-
-use App\Models\Invoice;
-use App\Models\InvoiceDetail;
-use App\Models\User;
-use App\Models\Checkin;
-use App\Services\SiatXmlBuilder;
 
 Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-
-    // --- CORRECCIÓN 1: Borrada la ruta duplicada de aquí arriba ---
-    // (La dejé solo abajo para mantener el orden, o puedes descomentarla aquí y borrar la de abajo)
 
     Route::get('/dashboard', function () {
         return Inertia::render('dashboard');
@@ -50,18 +37,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
 
     //Perfil de Usuario
-    Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('user.profile.edit'); // <-- Le agregamos 'user.' al inicio
+    Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('user.profile.edit');
     Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('user.profile.update');
     Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('user.profile.password');
 
-    // Bloques 
+    // Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
     Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
     Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
     Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
     Route::delete('/bloques/{block}', [BlockController::class, 'destroy'])->name('blocks.destroy');
     Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
-
 
     //Pisos
     Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
@@ -78,7 +64,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/tipohabitacion/{roomType}', [RoomTypeController::class, 'destroy'])->name('room_types.destroy');
     Route::patch('/tipohabitacion/{roomType}/toggle', [RoomTypeController::class, 'toggleStatus'])->name('room_types.toggle');
     Route::get('/status', [RoomController::class, 'status'])->name('rooms.status');
-    Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
 
     //Tipos de precios habitaciones
     Route::get('/precios', [PriceController::class, 'index'])->name('prices.index');
@@ -95,9 +80,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/habitaciones/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::delete('/habitaciones/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
     Route::patch('/habitaciones/{room}/toggle', [RoomController::class, 'toggleStatus'])->name('rooms.toggle');
-    Route::post('/rooms/{room}/maintenance', [App\Http\Controllers\RoomController::class, 'markAsMaintenance'])->name('rooms.maintenance');
-    Route::put('/rooms/{room}/finish-maintenance', [App\Http\Controllers\RoomController::class, 'finishMaintenance'])->name('rooms.finish_maintenance');
-    Route::put('/rooms/{room}/clean', [App\Http\Controllers\RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
+    Route::post('/rooms/{room}/maintenance', [RoomController::class, 'markAsMaintenance'])->name('rooms.maintenance');
+    Route::put('/rooms/{room}/finish-maintenance', [RoomController::class, 'finishMaintenance'])->name('rooms.finish_maintenance');
+    Route::put('/rooms/{room}/clean', [RoomController::class, 'markAsClean'])->name('rooms.markAsClean');
 
     //Invitados
     Route::get('/invitados', [GuestController::class, 'index'])->name('guests.index');
@@ -132,17 +117,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
-    Route::get('/search/issued-in', [\App\Http\Controllers\GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
+    Route::get('/search/issued-in', [GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
 
     // Ruta Original (POST)
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');
 
-    // Ruta de Tolerancia (PUT) - LE CAMBIÉ EL NOMBRE A .update_transfer
+    // Ruta de Tolerancia (PUT)
     Route::put('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.update_transfer');
 
-    Route::post('/checkins/{checkin}/add-payment', [App\Http\Controllers\CheckinController::class, 'addPayment'])->name('checkins.addPayment');
-    Route::post('/checkins/from-reservation', [App\Http\Controllers\CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
+    Route::post('/checkins/{checkin}/add-payment', [CheckinController::class, 'addPayment'])->name('checkins.addPayment');
+    Route::post('/checkins/from-reservation', [CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
 
     // Ruta de Merge
     Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
@@ -153,7 +138,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/checkin-details/{id}', [CheckinDetailController::class, 'update'])->name('checkindetails.update');
     Route::delete('/checkin-details/{id}', [CheckinDetailController::class, 'destroy'])->name('checkindetails.destroy');
 
-    // Vista previa de servicios adicionales huesped (Esta es la que vale, borré la de arriba)
+    // Vista previa de servicios adicionales huésped
     Route::get('/guests/view-detail', [CheckinController::class, 'generateViewDetail'])->name('guests.view_detail');
     Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
 
@@ -173,19 +158,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/reservations/availability', [ReservationController::class, 'checkAvailability'])->name('reservations.availability');
     Route::post('/reservas/{id}/assign-rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assign');
 
-    //Facturacion
-    Route::get('/facturacion', [\App\Http\Controllers\InvoiceController::class, 'index'])->name('invoices.index');
-
-    //Reportes 
+    //Reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
     //Cierre de caja
-    Route::get('/reports/financial', [\App\Http\Controllers\ReportController::class, 'financialIndex'])->name('reports.financial');
-    Route::get('/reports/financial/pdf', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
-    Route::get('/reports/financial/excel', [\App\Http\Controllers\ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
+    Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial');
+    Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
+    Route::get('/reports/financial/excel', [ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
+
     //Gastos
     Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
     Route::post('/gastos', [ExpenseController::class, 'store'])->name('gastos.store');
@@ -199,8 +182,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/mantenimientos/{maintenance}/resolve', [App\Http\Controllers\MaintenanceController::class, 'resolve'])->name('maintenances.resolve');
     Route::delete('/mantenimientos/{maintenance}', [App\Http\Controllers\MaintenanceController::class, 'destroy'])->name('maintenances.destroy');
 
-    Route::middleware(['role:ADMINISTRADOR'])->group(function () {});
-    //Roles 
+    //Roles
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
     Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
     Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
@@ -212,166 +194,75 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
     Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 
-    //Verificacion de Reserva online
+    //Verificación de Reserva online
     Route::post('/admin/reservas/{id}/aprobar-pago', [AdminBookingController::class, 'approvePayment'])->name('admin.bookings.approve-payment');
     Route::post('/admin/reservas/{id}/rechazar-pago', [AdminBookingController::class, 'rejectPayment'])->name('admin.bookings.reject-payment');
     Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
     Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
 
+    // ==========================================
+    // MÓDULO DE FACTURACIÓN Y GESTIÓN DE DOCUMENTOS
+    // ==========================================
 
-    // Rutas de prueba para SIAT (puedes borrarlas después de probar)
-    Route::post('/invoices/{invoice}/void', [App\Http\Controllers\InvoiceController::class, 'void'])->name('invoices.void');
-    Route::post('/invoices/{invoice}/reverse-void', [InvoiceController::class, 'reverseVoid'])
-        ->name('invoices.reverse-void');
+    // 1. Mostrar la tabla de gestión (React lee el JSON)
+    Route::get('/facturacion', [InvoiceController::class, 'index'])
+        ->name('invoices.index');
 
-    Route::resource('significant-events', SignificantEventController::class)
-        ->only(['index', 'show']);
-    Route::post('/significant-events/start', [SignificantEventController::class, 'start'])
+    // 2. Ruta GET para el iframe/descarga del PDF
+    //    (evita el error de "JSON Unexpected token 'H'")
+    Route::get('/facturacion/{invoice}/download', [InvoiceController::class, 'downloadTicket'])
+        ->name('invoices.download');
+
+    // 3. Procesar Anulación de una factura (POST) — solo Gerente
+    Route::post('/facturacion/{invoice}/anular', [InvoiceController::class, 'void'])
+        ->name('invoices.void');
+
+    // 4. Re-enviar UNA factura Offline / Contingencia al SIAT (POST)
+    Route::post('/facturacion/{invoice}/resend-offline', [InvoiceController::class, 'resendOffline'])
+        ->name('invoices.resend-offline');
+
+    // 5. Vista básica de la factura (ticket)
+    Route::get('/facturacion/{invoice}', [InvoiceController::class, 'show'])
+        ->name('invoices.show');
+
+    // ==========================================
+    // MÓDULO DE CONTINGENCIA SIAT (EVENTOS SIGNIFICATIVOS)
+    // ==========================================
+
+    // Listado de eventos de contingencia
+    Route::get('/contingencias', [SignificantEventController::class, 'index'])
+        ->name('significant-events.index');
+
+    // Estado actual: ¿hay un evento activo ahora mismo?
+    // (lo consulta la UI para mostrar el banner "MODO OFFLINE ACTIVO")
+    Route::get('/contingencias/estado/actual', [SignificantEventController::class, 'currentStatus'])
+        ->name('significant-events.current');
+
+    // Abrir un evento significativo (entra en modo contingencia / offline)
+    Route::post('/contingencias/iniciar', [SignificantEventController::class, 'start'])
         ->name('significant-events.start');
-    Route::post('/significant-events/{event}/end', [SignificantEventController::class, 'end'])
+
+    // Detalle de un evento de contingencia
+    Route::get('/contingencias/{event}', [SignificantEventController::class, 'show'])
+        ->name('significant-events.show');
+
+    // Cerrar un evento significativo (vuelve a modo online)
+    Route::post('/contingencias/{event}/finalizar', [SignificantEventController::class, 'end'])
         ->name('significant-events.end');
-    Route::post('/significant-events/{event}/resend', [SignificantEventController::class, 'resendOfflineInvoices'])
+
+    // Re-enviar al SIAT TODAS las facturas offline de un evento (envío masivo)
+    Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
         ->name('significant-events.resend');
 
-    Route::get('/facturacion/{invoice}', [\App\Http\Controllers\InvoiceController::class, 'show'])->name('invoices.show');
-    Route::get('/facturacion/{invoice}/pdf', [\App\Http\Controllers\InvoiceController::class, 'downloadTicket'])->name('invoices.pdf');
-    Route::post('/facturacion/{invoice}/anular', [\App\Http\Controllers\InvoiceController::class, 'void'])->name('invoices.void');
+}); // <-- Cierre del grupo autenticado
 
-    // Campo de prueba siat
-    Route::get('/test-siat', function (SiatService $siatService) {
-        // Usamos el CUIS exitoso que te devolvió Impuestos
-        $cuis = '19985EBF';
-
-        // Solicitamos el CUFD diario
-        $cufdResponse = $siatService->getCufd($cuis);
-
-        return response()->json([
-            'paso_1' => 'CUIS Obtenido: ' . $cuis,
-            'paso_2' => 'Solicitud de CUFD',
-            'respuesta_cufd' => $cufdResponse
-        ]);
-    });
-
-    Route::get('/test-xml', function (\App\Services\SiatService $siatService) {
-
-        // 1. Usamos tu CUIS oficial y VIGENTE que el SIAT nos obliga a mantener
-        $cuisValido = '19985EBF';
-
-        // 2. Pedimos un CUFD fresco usando ese CUIS específico
-        $cufdResponse = $siatService->getCufd($cuisValido);
-
-        if (!$cufdResponse['success']) {
-            return response()->json([
-                'mensaje' => '🛑 El SIAT rechazó el CUFD.',
-                'respuesta_exacta' => $cufdResponse
-            ]);
-        }
-
-        // 3. Creamos el Huésped falso
-        $guest = new \App\Models\Guest([
-            'id' => 1,
-            'full_name' => 'JUAN PEREZ',
-            'identification_number' => '1234567',
-            'nationality' => 'BOLIVIANA'
-        ]);
-
-        // 4. Creamos el Checkin y le anclamos el Huésped
-        $checkin = new \App\Models\Checkin(['id' => 1, 'guest_id' => 1]);
-        $checkin->setRelation('guest', $guest);
-
-        // 5. Creamos una Factura falsa en memoria
-        $invoice = new \App\Models\Invoice([
-            'id' => 1,
-            'invoice_number' => 1,
-            'total_amount' => 1680.00,
-            'total_subject_to_vat' => 1680.00,
-            'payment_method_code' => 1, // Efectivo
-            'issue_time' => now(), // Fecha y hora actual
-        ]);
-
-        // 6. Simulamos al usuario Gerente
-        $user = new \App\Models\User(['id' => 1, 'name' => 'GERENTE']);
-
-        $invoice->setRelation('user', $user);
-        $invoice->setRelation('checkin', $checkin);
-
-        // 7. Creamos el detalle
-        $detail = new \App\Models\InvoiceDetail([
-            'id' => 1,
-            'description' => 'Habitacion 3 - SIMPLE - BANO COMPARTIDO',
-            'quantity' => 21,
-            'unit_price' => 80.00,
-            'cost' => 1680.00,
-            'discount' => 0,
-        ]);
-
-        $invoice->setRelation('details', collect([$detail]));
-
-        // Inicializamos el constructor con el CUFD recién horneado
-        $builder = new \App\Services\SiatXmlBuilder($invoice, $cufdResponse);
-
-        // Obtenemos el XML puro, el Hash y comprimimos en GZIP
-        $xmlString = $builder->buildXml();
-        $hash = hash('sha256', $xmlString);
-        $gzipArchive = $builder->getGzipArchive();
-        $fechaEnvio = $invoice->issue_time->format('Y-m-d\TH:i:s.v');
-
-        // ¡DISPARAMOS LA FACTURA AL SIAT!
-        $responseSiat = $siatService->receiveInvoice(
-            $cuisValido,
-            $cufdResponse['codigo'],
-            $gzipArchive,
-            $fechaEnvio,
-            $hash
-        );
-
-        return response()->json([
-            'mensaje' => '✅ Intento de envío al SIAT finalizado',
-            'cufd_usado' => $cufdResponse['codigo'],
-            'respuesta_siat' => $responseSiat
-        ]);
-    });
-
-    Route::get('/test-anular/{invoice_id}', function ($invoice_id, \App\Services\SiatService $siatService) {
-        $invoice = \App\Models\Invoice::find($invoice_id);
-
-        if (!$invoice || !$invoice->cuf) {
-            return 'La factura no existe o no tiene un CUF válido para anular.';
-        }
-
-        // Código 1: Factura mal emitida (catálogo SIAT)
-        $motivoAnulacion = 1;
-
-        // Disparamos la anulación al SIAT
-        $response = $siatService->voidInvoice(
-            config('siat.cuis', '19985EBF'), // Tu CUIS válido
-            $invoice->cufd_code ?? $siatService->getActiveCufd()['codigo'], // Usa el CUFD de la BD o uno nuevo
-            $invoice->cuf,
-            $motivoAnulacion
-        );
-
-        if ($response['status'] === 'accepted') {
-            $invoice->update([
-                'status' => 'ANULADA',
-                'void_reason_code' => $motivoAnulacion,
-                'voided_at' => now()
-            ]);
-            return response()->json(['mensaje' => '✅ Factura Anulada con éxito en el SIAT', 'data' => $response]);
-        }
-
-        return response()->json(['mensaje' => '🛑 Error al anular', 'data' => $response]);
-    });
-});
-
+// ==========================================
+// RESERVAS ONLINE (Rutas públicas)
+// ==========================================
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
+Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.confirm');
 
-// 2. Buscar habitaciones por fecha
-Route::post('/reservar/buscar', [OnlineBookingController::class, 'searchRooms'])->name('booking.search');
-
-// 3. Guardar la reserva y el comprobante
-Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.store');
-
-// 4. Mostrar el PDF del recibo final
-Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
+// Mostrar el PDF del recibo final de reserva online
+Route::get('/reservar/recibo-publico/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt_public');
 
 require __DIR__ . '/settings.php';

@@ -55,16 +55,18 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
 
     // Al cargar la página, verificamos si hay un horario "Aplicado" (Guardado en LocalStorage)
     useEffect(() => {
-        const storedSchedule = localStorage.getItem('hotel_active_schedule');
-        if (storedSchedule) {
-            try {
-                const parsed = JSON.parse(storedSchedule);
-                setAppliedScheduleId(parsed.id);
-            } catch (e) {
-                console.error('Error leyendo horario activo', e);
-            }
+    // Guardamos solo el ID como string plano, no un objeto JSON.
+    const storedScheduleId = localStorage.getItem('hotel_active_schedule_id');
+    if (storedScheduleId) {
+        const id = Number(storedScheduleId);
+        if (Number.isInteger(id) && id > 0) {
+            setAppliedScheduleId(id);
+        } else {
+            // Valor corrupto: lo limpiamos
+            localStorage.removeItem('hotel_active_schedule_id');
         }
-    }, []);
+    }
+}, []);
 
     // --- 2. LÓGICA DE FILTRADO ---
     const filteredSchedules = Schedules.filter((schedule) =>

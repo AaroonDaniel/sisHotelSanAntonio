@@ -9,6 +9,7 @@ import {
     Receipt,
     RefreshCw,
     Search,
+    ExternalLink // Añadimos el ícono para el enlace externo
 } from 'lucide-react';
 import { useState } from 'react';
 import VoidInvoiceModal from './VoidInvoiceModal';
@@ -31,6 +32,7 @@ interface InvoiceData {
     is_voided: boolean;
     can_void: boolean;
     can_resend: boolean;
+    total_amount?: number; // Asegúrate de enviarlo desde el backend para formar la URL
 }
 
 interface Props {
@@ -207,6 +209,10 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                         const isOffline = invoice.is_offline;
                                         const isResending = resendingId === invoice.id;
 
+                                        // CONSTRUCCIÓN DE LA URL DE VERIFICACIÓN SIAT
+                                        // Usa config('siat.nit') si lo envías desde backend, o pon tu NIT real.
+                                        const siatUrl = `https://pilotosiat.impuestos.gob.bo/consulta/QR?nit=3327479013&cuf=${invoice.control_code}&numero=${invoice.invoice_number}&t=${invoice.total_amount || 720}`;
+
                                         return (
                                             <tr
                                                 key={invoice.id}
@@ -278,11 +284,12 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                 </td>
                                                 <td className="px-6 py-3 text-right whitespace-nowrap">
                                                     <div className="flex justify-end gap-2">
-                                                        {/* Ver PDF */}
+                                                        
+                                                        {/* BOTÓN: VER PDF */}
                                                         <button
                                                             onClick={() =>
                                                                 setPdfUrl(
-                                                                    `/checks/${invoice.checkin_id}/checkout-${isFactura ? 'invoice' : 'receipt'}`,
+                                                                    `/facturacion/${invoice.id}/download`,
                                                                 )
                                                             }
                                                             className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-600 hover:text-white"
@@ -292,7 +299,21 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                             Ver PDF
                                                         </button>
 
-                                                        {/* Re-enviar Offline */}
+                                                        {/* BOTÓN: VERIFICAR EN SIAT */}
+                                                        {isFactura && invoice.siat_status === 'accepted' && !isAnulada && (
+                                                            <a
+                                                                href={siatUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-600 hover:text-white"
+                                                                title="Verificar en Impuestos Nacionales"
+                                                            >
+                                                                <ExternalLink className="h-3.5 w-3.5" />
+                                                                Validar SIAT
+                                                            </a>
+                                                        )}
+
+                                                        {/* BOTÓN: RE-ENVIAR OFFLINE */}
                                                         {invoice.can_resend && (
                                                             <button
                                                                 onClick={() => handleResendOffline(invoice)}
@@ -307,7 +328,7 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                             </button>
                                                         )}
 
-                                                        {/* Anular */}
+                                                        {/* BOTÓN: ANULAR */}
                                                         {invoice.can_void && (
                                                             <button
                                                                 onClick={() =>

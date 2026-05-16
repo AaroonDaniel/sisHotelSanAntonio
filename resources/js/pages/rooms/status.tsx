@@ -308,67 +308,63 @@ export default function RoomsStatus({
         }
     }, [flash?.auto_open_checkins]);
     useEffect(() => {
-        const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
-        if (queueStr && !isCheckinModalOpen) {
-            // 👇 ESCUDO PROTECTOR: Atrapa textos a medias o basura en memoria
-            try {
-                let queue: number[] = JSON.parse(queueStr);
-                let openedModal = false;
+    const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
+    if (queueStr && !isCheckinModalOpen) {
+        // Formato CSV simple: "12,45,7". Parsear números nunca lanza
+        // excepción; los valores inválidos (NaN) se descartan con filter.
+        let queue: number[] = queueStr
+            .split(',')
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isInteger(n) && n > 0);
 
-                // 🚀 BUCLE: Avanza instantáneamente ignorando las habitaciones ya completadas
-                while (queue.length > 0 && !openedModal) {
-                    const nextCheckinId = queue[0];
+        let openedModal = false;
 
-                    const roomWithCheckin = Rooms.find(
-                        (r) =>
-                            r.checkins &&
-                            r.checkins.some((c) => c.id === nextCheckinId),
-                    );
+        // BUCLE: avanza ignorando las habitaciones ya completadas
+        while (queue.length > 0 && !openedModal) {
+            const nextCheckinId = queue[0];
 
-                    if (roomWithCheckin) {
-                        const checkin = roomWithCheckin.checkins!.find(
-                            (c) => c.id === nextCheckinId,
-                        );
-                        if (checkin) {
-                            const isTitularIncomplete =
-                                checkin.guest?.profile_status === 'INCOMPLETE';
-                            const isOriginMissing =
-                                !checkin.origin || checkin.origin.trim() === '';
+            const roomWithCheckin = Rooms.find(
+                (r) =>
+                    r.checkins &&
+                    r.checkins.some((c) => c.id === nextCheckinId),
+            );
 
-                            if (isTitularIncomplete || isOriginMissing) {
-                                // FALTAN DATOS: Nos detenemos aquí y abrimos el modal
-                                setCheckinToEdit(checkin);
-                                setSelectedRoomId(roomWithCheckin.id);
-                                setIsCheckinModalOpen(true);
-                                openedModal = true;
-                            } else {
-                                // ESTÁ COMPLETA: La sacamos de la lista y el bucle revisa la siguiente al instante
-                                queue.shift();
-                            }
-                        } else {
-                            queue.shift();
-                        }
+            if (roomWithCheckin) {
+                const checkin = roomWithCheckin.checkins!.find(
+                    (c) => c.id === nextCheckinId,
+                );
+                if (checkin) {
+                    const isTitularIncomplete =
+                        checkin.guest?.profile_status === 'INCOMPLETE';
+                    const isOriginMissing =
+                        !checkin.origin || checkin.origin.trim() === '';
+
+                    if (isTitularIncomplete || isOriginMissing) {
+                        // FALTAN DATOS: nos detenemos aquí y abrimos el modal
+                        setCheckinToEdit(checkin);
+                        setSelectedRoomId(roomWithCheckin.id);
+                        setIsCheckinModalOpen(true);
+                        openedModal = true;
                     } else {
+                        // ESTÁ COMPLETA: la sacamos y el bucle revisa la siguiente
                         queue.shift();
                     }
-                }
-
-                // Actualizamos la memoria
-                if (queue.length > 0) {
-                    sessionStorage.setItem(
-                        'pendingCheckinsQueue',
-                        JSON.stringify(queue),
-                    );
                 } else {
-                    sessionStorage.removeItem('pendingCheckinsQueue');
+                    queue.shift();
                 }
-            } catch (error) {
-                // 🛑 SI ALGO FALLA (Ej: texto cortado), SE DESTRUYE LA MEMORIA CORRUPTA Y NO SE CUELGA
-                console.error("🧹 Basura detectada en la memoria (JSON incompleto), limpiando para evitar cuelgues...");
-                sessionStorage.removeItem('pendingCheckinsQueue');
+            } else {
+                queue.shift();
             }
         }
-    }, [Rooms, isCheckinModalOpen]);
+
+        // Actualizamos la memoria (de nuevo como CSV)
+        if (queue.length > 0) {
+            sessionStorage.setItem('pendingCheckinsQueue', queue.join(','));
+        } else {
+            sessionStorage.removeItem('pendingCheckinsQueue');
+        }
+    }
+}, [Rooms, isCheckinModalOpen]);
     // =========================================================
     // 1. LÓGICA DE ESTADO (Corregida para no afectar salones)
     // =========================================================

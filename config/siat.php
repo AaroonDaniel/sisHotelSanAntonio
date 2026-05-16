@@ -10,6 +10,8 @@ return [
     'branch_code' => env('SIAT_BRANCH_CODE', 0),
     'pos_code' => env('SIAT_POS_CODE', 0),
 
+    'cuis' => env('SIAT_CUIS', ''),
+
     // --- NUEVOS DATOS DESCRIPTIVOS PARA EL XML ---
     'razon_social'         => env('SIAT_RAZON_SOCIAL', 'HOTEL SAN ANTONIO'),
     'municipio'            => env('SIAT_MUNICIPIO', 'Potosi'),
