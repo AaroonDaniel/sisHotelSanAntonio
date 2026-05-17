@@ -189,6 +189,9 @@ export default function RoomsStatus({
     // Detalles de una nueva vista para los datos del usuario
     const [isOccupiedModalOpen, setIsOccupiedModalOpen] = useState(false);
     const [occupiedCheckinData, setOccupiedCheckinData] = useState<any>(null);
+    // Semáforo de convenio calculado en la card, que se pasa al modal
+    // para que ambos muestren EXACTAMENTE el mismo estado (fuente única).
+    const [occupiedCorpState, setOccupiedCorpState] = useState<any>(null);
 
     // Cambio de estado para confirmar limpieza
     const [isCleanConfirmModalOpen, setIsCleanConfirmModalOpen] =
@@ -441,6 +444,119 @@ export default function RoomsStatus({
     };
 
     // =========================================================
+    // 🚦 SEMÁFORO DE CONVENIOS — FUENTE ÚNICA DE VERDAD
+    // ---------------------------------------------------------
+    // Calcula el estado del convenio (MOROSO / COBRAR HOY / COBRAR
+    // MAÑANA / PENDIENTE / AL DIA) a partir de los ciclos de cobro
+    // y el umbral del 50% pagado. Se usa tanto para pintar el badge
+    // de la card como para alimentar el OccupiedRoomModal, de modo
+    // que ambos muestren siempre el mismo resultado.
+    //
+    // Devuelve null si el check-in no es un convenio corporativo.
+    // =========================================================
+    const computeCorpState = (activeCheckin: any): any => {
+        if (!activeCheckin) return null;
+
+        const convenio = activeCheckin?.special_agreement;
+        const isSpecialGroup =
+            convenio?.type === 'corporativo' ||
+            convenio?.type === 'delegacion';
+
+        if (!isSpecialGroup) return null;
+
+        // 1. Total pagado. Las devoluciones ya vienen con monto negativo,
+        //    por eso solo se SUMA el array (no se resta por type).
+        let totalPaid = 0;
+        if (activeCheckin.payments && activeCheckin.payments.length > 0) {
+            totalPaid = activeCheckin.payments.reduce(
+                (acc: number, p: any) => acc + (parseFloat(p.amount) || 0),
+                0,
+            );
+        } else {
+            totalPaid =
+                parseFloat(String(activeCheckin.advance_payment)) || 0;
+        }
+
+        // 2. Variables del convenio.
+        const agreedPrice =
+            parseFloat(String(activeCheckin.agreed_price)) || 0;
+        const corpDays =
+            Number(convenio?.payment_frequency_days) ||
+            Number(activeCheckin.corporate_days) ||
+            1;
+        const cyclePrice = agreedPrice * corpDays;
+
+        // 3. Días reales de estadía (medianoches transcurridas).
+        const realDateString =
+            activeCheckin.check_in_date || new Date().toISOString();
+        const checkinDate = new Date(
+            realDateString.split('T')[0] + 'T00:00:00',
+        );
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const diffTime = today.getTime() - checkinDate.getTime();
+        const diasEstadia = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        // 4. Matemática del ciclo de cobro.
+        const ciclosVencidos = Math.max(
+            0,
+            Math.floor((diasEstadia - 1) / corpDays),
+        );
+        const deudaVencida = ciclosVencidos * cyclePrice;
+        const cicloActual = ciclosVencidos + 1;
+        const deudaCicloActual = cicloActual * cyclePrice;
+        const faltanteTotal = deudaCicloActual - totalPaid;
+
+        // 5. Evaluación del semáforo.
+        if (totalPaid < deudaVencida) {
+            // 🟥 MOROSO: faltó completar un ciclo del pasado.
+            const deudaMora = deudaVencida - totalPaid;
+            return {
+                level: 'moroso',
+                badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+                text: `MOROSO: ${deudaMora.toFixed(2)} Bs`,
+            };
+        }
+
+        const saldoAbonadoAlCiclo = totalPaid - deudaVencida;
+        const umbral50Porciento = cyclePrice * 0.5;
+
+        if (saldoAbonadoAlCiclo >= umbral50Porciento) {
+            // 🟩 AL DÍA: ya pagó el 50% o más del ciclo actual.
+            return {
+                level: 'al_dia',
+                badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
+                text: 'AL DIA',
+            };
+        }
+
+        // 🟨 PENDIENTE: menos del 50% pagado. Alerta según el día.
+        const dueDate = cicloActual * corpDays;
+        const daysRemaining = dueDate - diasEstadia;
+
+        if (daysRemaining > 1) {
+            return {
+                level: 'pendiente',
+                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                text: `PENDIENTE: ${faltanteTotal.toFixed(2)} Bs`,
+            };
+        }
+        if (daysRemaining === 1) {
+            return {
+                level: 'pendiente',
+                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                text: `COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
+            };
+        }
+        return {
+            level: 'pendiente',
+            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
+            text: `COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
+        };
+    };
+
+    // =========================================================
     // 2. LÓGICA DE CLICK (Se mantiene igual a la tuya)
     // =========================================================
     const handleRoomClick = (room: Room) => {
@@ -477,6 +593,8 @@ export default function RoomsStatus({
                         setIsCheckinModalOpen(true);
                     } else {
                         setOccupiedCheckinData({ ...activeCheckin, room });
+                        // Semáforo unificado: mismo cálculo que el badge de la card.
+                        setOccupiedCorpState(computeCorpState(activeCheckin));
                         setIsOccupiedModalOpen(true);
                     }
                 }
@@ -1080,117 +1198,11 @@ export default function RoomsStatus({
                         const isEligibleForMulti =
                             isMultiCheckoutMode && isOccupied;
 
-                        // 🌟 SEMÁFORO FINANCIERO (CORPORATIVO / DELEGACIÓN) 🌟
-
-                        // 1. Leemos el convenio desde la relación (usamos "as any" para que TypeScript no moleste)
-                        const convenio = (activeCheckin as any)
-                            ?.special_agreement;
-
-                        // 2. Verificamos el tipo directamente en el convenio
-                        const isSpecialGroup =
-                            convenio?.type === 'corporativo' ||
-                            convenio?.type === 'delegacion';
-
-                        // 🚀 ESTA ES LA PRUEBA EN CONSOLA (Para ver si Laravel manda el convenio)
-                        /*if (activeCheckin) {
-                            console.log(
-                                `[PRUEBA] Habitación ${room.number} | Grupo Especial: ${isSpecialGroup}`,
-                            );
-                            console.log(`➡️ Datos del Convenio:`, convenio);
-                        }*/
-
-                        let corpState: any = null;
-
-                        // 👇 CAMBIO AQUÍ: Lógica de semáforo por Días Reales (Dinero = Días) 👇
-                        // 👇 CAMBIO AQUÍ: Lógica Maestra de Asignación Corporativa 👇
-                        if (activeCheckin && isSpecialGroup) {
-                            // 1. Sumamos todo lo que ha pagado
-                            let totalPaid = 0;
-                            if (activeCheckin.payments && activeCheckin.payments.length > 0) {
-                                totalPaid = activeCheckin.payments.reduce(
-                                    (acc: number, p: any) =>
-                                        p.type === 'DEVOLUCION'
-                                            ? acc - (parseFloat(p.amount) || 0)
-                                            : acc + (parseFloat(p.amount) || 0),
-                                    0,
-                                );
-                            } else {
-                                totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
-                            }
-
-                            // 2. Variables del Convenio
-                            const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
-                            const corpDays = Number(activeCheckin.special_agreement?.payment_frequency_days) 
-                                          || Number(activeCheckin.corporate_days) 
-                                          || 1;
-                            const cyclePrice = agreedPrice * corpDays;
-
-                            // 3. Calculamos las medianoches (días reales) que han pasado
-                            const realDateString = activeCheckin.check_in_date || new Date().toISOString(); 
-                            const checkinDate = new Date(realDateString.split('T')[0] + "T00:00:00");
-                            
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-
-                            const diffTime = today.getTime() - checkinDate.getTime();
-                            const diasEstadia = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
-
-                            // 4. 🧠 MATEMÁTICA DEL CICLO DE COBRO
-                            // ¿Cuántos ciclos enteros ya VENCIERON? (Se vence el día DESPUÉS de la fecha límite)
-                            const ciclosVencidos = Math.max(0, Math.floor((diasEstadia - 1) / corpDays));
-                            const deudaVencida = ciclosVencidos * cyclePrice;
-
-                            // El ciclo en el que estamos viviendo AHORA MISMO
-                            const cicloActual = ciclosVencidos + 1;
-                            const deudaCicloActual = cicloActual * cyclePrice;
-                            const faltanteTotal = deudaCicloActual - totalPaid;
-
-                            // 5. 🚦 EVALUACIÓN DEL SEMÁFORO
-                            if (totalPaid < deudaVencida) {
-                                // 🟥 MOROSO: Faltó pagar o completar un ciclo del pasado.
-                                const deudaMora = deudaVencida - totalPaid;
-                                corpState = {
-                                    badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
-                                    text: `MOROSO: ${deudaMora.toFixed(2)} Bs`,
-                                };
-                            } else {
-                                // Está al día con el pasado. Evaluamos el ciclo actual.
-                                const saldoAbonadoAlCiclo = totalPaid - deudaVencida;
-                                const umbral50Porciento = cyclePrice * 0.5;
-
-                                if (saldoAbonadoAlCiclo >= umbral50Porciento) {
-                                    // 🟩 VERDE: Ya pagó el 50% o más. Se deja pasar.
-                                    corpState = {
-                                        badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
-                                        text: `AL DIA`,
-                                    };
-                                } else {
-                                    // 🟨 AMARILLO: Menos del 50%. Mostramos alertas según el día.
-                                    const dueDate = cicloActual * corpDays;
-                                    const daysRemaining = dueDate - diasEstadia;
-
-                                    if (daysRemaining > 1) {
-                                        // Aún faltan días para su corte
-                                        corpState = {
-                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
-                                            text: `PENDIENTE: ${faltanteTotal.toFixed(2)} Bs`,
-                                        };
-                                    } else if (daysRemaining === 1) {
-                                        // Es un día antes de la fecha
-                                        corpState = {
-                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
-                                            text: `COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
-                                        };
-                                    } else {
-                                        // Llegó el día indicado
-                                        corpState = {
-                                            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
-                                            text: `COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
-                                        };
-                                    }
-                                }
-                            }
-                        }
+                        // 🚦 SEMÁFORO DE CONVENIOS — usa la función pura
+                        // `computeCorpState`, la MISMA que alimenta el modal,
+                        // garantizando que card y modal nunca discrepen.
+                        const corpState: any =
+                            computeCorpState(activeCheckin);
 
                         // 🔍 LÓGICA DE RESERVAS ORDENADAS
                         let sortedReservations: any[] = [];
@@ -1576,9 +1588,13 @@ export default function RoomsStatus({
             />
             <OccupiedRoomModal
                 show={isOccupiedModalOpen}
-                onClose={() => setIsOccupiedModalOpen(false)}
+                onClose={() => {
+                    setIsOccupiedModalOpen(false);
+                    setOccupiedCorpState(null);
+                }}
                 checkin={occupiedCheckinData}
                 services={services} // <--- ESTA ES LA CLAVE
+                corpState={occupiedCorpState}
                 onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
             />
             <MultiCheckoutModal
@@ -3236,78 +3252,14 @@ function FinancialHistoryModal({
     };
 
     const room = checkin.room;
-    const normalPrice = parseFloat(room?.price?.amount || 0);
-    const agreedPrice = parseFloat(checkin.agreed_price || 0);
-    const isCorporate =
-        checkin.is_corporate && agreedPrice > 0 && agreedPrice < normalPrice;
 
-    // Calcular el total de pagos reales
+    // Total realmente pagado. Las devoluciones YA se guardan con monto
+    // negativo en BD, por lo que solo se SUMA el array completo. Restar
+    // por type === 'DEVOLUCION' provocaría una doble resta.
     const payments = checkin.payments || [];
     const totalPaid = payments.reduce((acc: number, p: any) => {
-        const amount = parseFloat(p.amount) || 0;
-        return p.type === 'DEVOLUCION' ? acc - amount : acc + amount;
+        return acc + (parseFloat(p.amount) || 0);
     }, 0);
-
-    // Lógica inteligente de Tarifas Corporativas
-    let corporateMessage = null;
-    if (isCorporate) {
-        const frequency = parseInt(String(checkin.payment_frequency)) || 1;
-        const daysPaid = Math.floor(totalPaid / agreedPrice);
-
-        // 🚀 AQUÍ APLICAMOS LA FUNCIÓN REPARADORA
-        const checkinDate = parseLaravelDate(checkin.check_in_date);
-        checkinDate.setHours(0, 0, 0, 0);
-
-        const limitDate = new Date(checkinDate);
-        limitDate.setDate(limitDate.getDate() + daysPaid + frequency);
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (today > limitDate) {
-            corporateMessage = (
-                <div className="mb-4 rounded-r-xl border-l-4 border-red-600 bg-red-50 p-4 shadow-sm">
-                    <h4 className="flex items-center gap-2 text-sm font-black tracking-wider text-red-800 uppercase">
-                        <AlertTriangle className="h-5 w-5" /> Acuerdo Vencido
-                    </h4>
-                    <p className="mt-2 text-sm leading-relaxed text-red-700">
-                        El huésped cubrió la tarifa corporativa (
-                        <b>Bs. {agreedPrice}</b>) hasta el{' '}
-                        <b className="text-red-900">
-                            {limitDate.toLocaleDateString()}
-                        </b>
-                        . A partir de esa fecha, el sistema aplicará la tarifa
-                        normal de{' '}
-                        <b className="border-b border-red-300 pb-0.5 text-red-900">
-                            Bs. {normalPrice}
-                        </b>{' '}
-                        por cada día extra de mora.
-                    </p>
-                </div>
-            );
-        } else {
-            corporateMessage = (
-                <div className="mb-4 rounded-r-xl border-l-4 border-emerald-500 bg-emerald-50 p-4 shadow-sm">
-                    <h4 className="flex items-center gap-2 text-sm font-black tracking-wider text-emerald-800 uppercase">
-                        <CheckCircle2 className="h-5 w-5" /> Acuerdo Activo
-                    </h4>
-                    <p className="mt-2 text-sm leading-relaxed text-emerald-700">
-                        El huésped está al día con sus pagos. La tarifa
-                        corporativa de <b>Bs. {agreedPrice}</b> está asegurada
-                        hasta el{' '}
-                        <b className="text-emerald-900">
-                            {limitDate.toLocaleDateString()}
-                        </b>
-                        .
-                        <br />
-                        <span className="mt-1 block text-xs opacity-70">
-                            (Tarifa normal sin acuerdo: Bs. {normalPrice})
-                        </span>
-                    </p>
-                </div>
-            );
-        }
-    }
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
@@ -3346,8 +3298,6 @@ function FinancialHistoryModal({
                             </p>
                         </div>
                     </div>
-
-                    {corporateMessage}
 
                     <h4 className="mb-3 flex items-center gap-2 text-sm font-black tracking-wider text-gray-700 uppercase">
                         <Banknote className="h-4 w-4 text-gray-400" /> Detalle

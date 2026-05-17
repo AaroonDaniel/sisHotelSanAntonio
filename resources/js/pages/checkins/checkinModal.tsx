@@ -771,82 +771,93 @@ export default function CheckinModal({
     }, [show, checkinToEdit, initialRoomId, targetGuestId, schedules, rooms]);
 
     // =========================================================================
-    // 🚀 EFECTO PARA BUSCAR LA TARIFA EXACTA POR TIPO DE BAÑO Y CAPACIDAD
+    // 🚀 BUGFIX CRÍTICO: AJUSTE AUTOMÁTICO DE PRECIO POR CANTIDAD DE HUÉSPEDES
+    // -------------------------------------------------------------------------
+    // Antes este cálculo estaba encerrado dentro de `if (data.auto_adjust_price)`,
+    // por lo que con el toggle apagado (su estado por defecto) el precio NUNCA
+    // se ajustaba por ocupación: solo restauraba el precio base.
+    //
+    // Regla de negocio restaurada:
+    //   - En estadías ESTÁNDAR el precio se recalcula SIEMPRE según el conteo
+    //     real de huéspedes (titular + acompañantes), sin depender del toggle.
+    //   - Si la ocupación es MENOR a la capacidad de la habitación, se busca
+    //     una tarifa equivalente (misma capacidad y tipo de baño).
+    //   - Si la ocupación llena/supera la capacidad, rige el precio base.
+    //   - Los convenios (corporativo/delegación) tienen precio cerrado: este
+    //     efecto NO los toca.
     // =========================================================================
+
+    /** Calcula la tarifa que corresponde a un conteo real de huéspedes. */
+    const computeAdjustedPrice = (
+        roomId: string | number,
+        totalGuests: number,
+    ): number => {
+        const currentRoom = rooms?.find(
+            (r: any) =>
+                String(r.id) === String(roomId) ||
+                String(r.id) === String(initialRoomId),
+        );
+
+        const originalPrice = Number(currentRoom?.price?.amount || 0);
+        const maxCapacity = Number(currentRoom?.room_type?.capacity || 1);
+        const bathroomType = currentRoom?.price?.bathroom_type;
+
+        const effectiveGuests = Math.max(1, totalGuests);
+
+        // Ocupación completa o sin tipo de baño definido => tarifa base.
+        if (effectiveGuests >= maxCapacity || !bathroomType) {
+            return originalPrice;
+        }
+
+        // Ocupación parcial: buscamos la tarifa para esa cantidad exacta.
+        const matchedRoom = rooms?.find((r: any) => {
+            const rCap = Number(r?.room_type?.capacity);
+            const rBath = r?.price?.bathroom_type;
+            return rCap === effectiveGuests && rBath === bathroomType;
+        });
+
+        return matchedRoom
+            ? Number(matchedRoom?.price?.amount || 0)
+            : originalPrice;
+    };
+
+    // Referencia para distinguir la HIDRATACIÓN inicial (carga del modal) de
+    // los cambios activos del recepcionista. En modo edición no debemos pisar
+    // el `agreed_price` guardado en BD al abrir; solo al modificar huéspedes.
+    const priceHydratedRef = useRef<boolean>(false);
+
     useEffect(() => {
-        if (show && data.type === 'estandar') {
-            const currentRoom = rooms?.find(
-                (r: any) =>
-                    String(r.id) === String(data.room_id) ||
-                    String(r.id) === String(initialRoomId),
-            );
+        // Al abrir/cerrar el modal reseteamos la bandera de hidratación.
+        if (!show) {
+            priceHydratedRef.current = false;
+        }
+    }, [show]);
 
-            const originalPrice = Number(currentRoom?.price?.amount || 0);
-            // 👇 CORRECCIÓN 2: Usamos estrictamente room_type
-            const maxCapacity = Number(currentRoom?.room_type?.capacity || 1);
-            const bathroomType = currentRoom?.price?.bathroom_type;
-            const totalP = 1 + (data.companions?.length || 0);
+    useEffect(() => {
+        // Solo aplica a estadías estándar. Los convenios conservan precio cerrado.
+        if (!show || data.type !== 'estandar') return;
 
-            // 🛑 SEGURO: Respetar datos de BD en modo edición si no se toca el botón
-            if (checkinToEdit && !data.auto_adjust_price) {
-                return;
-            }
+        const totalP = 1 + (data.companions?.length || 0);
 
-            /*console.log('=========================================');
-            console.log('💰 [BÚSQUEDA DE TARIFA OFICIAL]...');
-            console.log(
-                `-> Hab original: Capacidad ${maxCapacity}, Baño: ${bathroomType}`,
-            );
-            console.log(`-> Ocupantes reales: ${totalP}`);
-            */
-            if (data.auto_adjust_price) {
-                let newCalculatedPrice = originalPrice;
+        // PRIMERA ejecución tras abrir el modal = hidratación.
+        // En modo edición respetamos el precio que viene de BD; no recalculamos.
+        if (!priceHydratedRef.current) {
+            priceHydratedRef.current = true;
+            if (checkinToEdit) return;
+        }
 
-                // 🌟 LÓGICA DE BÚSQUEDA HOTELERA
-                if (totalP < maxCapacity && bathroomType) {
-                    // Buscamos otra habitación en el mapa que tenga la capacidad exacta de los ocupantes Y el mismo tipo de baño
-                    const matchedRoom = rooms?.find((r: any) => {
-                        // 👇 CORRECCIÓN 2: Usamos estrictamente room_type
-                        const rCap = Number(r?.room_type?.capacity);
-                        const rBath = r?.price?.bathroom_type;
-                        return rCap === totalP && rBath === bathroomType;
-                    });
+        const newCalculatedPrice = computeAdjustedPrice(data.room_id, totalP);
 
-                    if (matchedRoom) {
-                        // 👇 CORRECCIÓN 1: Agregamos ?. y un fallback a || 0 por seguridad
-                        newCalculatedPrice = Number(
-                            matchedRoom?.price?.amount || 0,
-                        );
-                        /*console.log(
-                            `-> 🎯 Tarifa encontrada! Se aplicó precio de habitación de ${totalP} persona(s) con baño ${bathroomType}: ${newCalculatedPrice} Bs`,
-                        );*/
-                    } else {
-                        /*console.log(
-                            `-> ⚠️ No hay tarifa registrada para ${totalP} persona(s) con baño ${bathroomType}. Se mantiene: ${newCalculatedPrice} Bs`,
-                        );*/
-                    }
-                }
-
-                if (Number(data.agreed_price) !== newCalculatedPrice) {
-                    setData('agreed_price', newCalculatedPrice);
-                }
-            } else {
-                /*console.log(
-                    '-> 🛑 Ajuste Apagado. Restaurando precio original:',
-                    originalPrice,
-                    'Bs',
-                );*/
-                if (
-                    originalPrice > 0 &&
-                    Number(data.agreed_price) !== originalPrice
-                ) {
-                    setData('agreed_price', originalPrice);
-                }
-            }
-            /*console.log('=========================================');*/
+        // BUGFIX: el ajuste por ocupación es AUTOMÁTICO. Ya no depende de
+        // `auto_adjust_price`. El recepcionista ve subir/bajar el precio en
+        // vivo al agregar o quitar un huésped.
+        if (
+            newCalculatedPrice > 0 &&
+            Number(data.agreed_price) !== newCalculatedPrice
+        ) {
+            setData('agreed_price', newCalculatedPrice);
         }
     }, [
-        data.auto_adjust_price,
         data.companions?.length,
         data.room_id,
         data.type,
@@ -2673,6 +2684,15 @@ export default function CheckinModal({
                                             const isAutoAdjusted =
                                                 finalPrice !== originalPrice;
 
+                                            // 🚦 Conteo real de huéspedes y delta de precio.
+                                            // Permite que el recepcionista vea cuánto sube/baja
+                                            // la tarifa al añadir o quitar una persona.
+                                            const occupantsCount =
+                                                1 +
+                                                (data.companions?.length || 0);
+                                            const priceDelta =
+                                                finalPrice - originalPrice;
+
                                             // ==========================================
                                             // 💰 LÓGICA DEL TOTAL A COBRAR
                                             // ==========================================
@@ -2716,19 +2736,55 @@ export default function CheckinModal({
                                                                         )}{' '}
                                                                         Bs / noche
                                                                     </span>
-                                                                    <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-amber-700 uppercase shadow-sm">
-                                                                        Tarifa Ajustada
+                                                                    {/* 🚦 Delta: cuánto sube/baja la tarifa */}
+                                                                    {data.type ===
+                                                                        'estandar' &&
+                                                                        priceDelta !==
+                                                                            0 && (
+                                                                            <span
+                                                                                className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase shadow-sm ${
+                                                                                    priceDelta <
+                                                                                    0
+                                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                                        : 'bg-amber-100 text-amber-700'
+                                                                                }`}
+                                                                            >
+                                                                                {priceDelta <
+                                                                                0
+                                                                                    ? '▼'
+                                                                                    : '▲'}{' '}
+                                                                                {Math.abs(
+                                                                                    priceDelta,
+                                                                                ).toFixed(
+                                                                                    2,
+                                                                                )}{' '}
+                                                                                Bs
+                                                                            </span>
+                                                                        )}
+                                                                    <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
+                                                                        {
+                                                                            occupantsCount
+                                                                        }{' '}
+                                                                        húesp.
                                                                     </span>
                                                                 </>
                                                             ) : (
-                                                                <span className="text-sm font-bold text-green-800">
-                                                                    {Number(
-                                                                        finalPrice,
-                                                                    ).toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs / noche
-                                                                </span>
+                                                                <>
+                                                                    <span className="text-sm font-bold text-green-800">
+                                                                        {Number(
+                                                                            finalPrice,
+                                                                        ).toFixed(
+                                                                            2,
+                                                                        )}{' '}
+                                                                        Bs / noche
+                                                                    </span>
+                                                                    <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
+                                                                        {
+                                                                            occupantsCount
+                                                                        }{' '}
+                                                                        húesp.
+                                                                    </span>
+                                                                </>
                                                             )}
                                                         </div>
                                                     </div>
