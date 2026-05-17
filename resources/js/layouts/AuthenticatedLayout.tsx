@@ -1,14 +1,14 @@
 import OpenRegisterModal from '@/components/OpenRegisterModal';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ChevronDown,
     Hotel,
     LogOut,
     Menu,
     User as UserIcon,
+    Users, // <-- IMPORTANTE: Importamos el icono Users
     X,
-    AlertTriangle,
-    Users // <-- IMPORTANTE: Importamos el icono Users
 } from 'lucide-react';
 import { PropsWithChildren, useState } from 'react';
 
@@ -54,10 +54,10 @@ export default function AuthenticatedLayout({
     const handleSwitchUser = (e: React.MouseEvent) => {
         e.preventDefault();
         setShowUserMenu(false);
-        
+
         // ACTIVAMOS EL PASE LIBRE (Modo Relevo)
         localStorage.setItem('relay_mode_active', 'true');
-        
+
         router.post('/logout');
     };
     return (
@@ -136,12 +136,21 @@ export default function AuthenticatedLayout({
                                 >
                                     Gastos
                                 </Link>
+                                <Link
+                                    href="/auditoria"
+                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                        url.startsWith('/auditoria')
+                                            ? 'border-red-500 text-white'
+                                            : 'border-transparent text-white hover:border-white/50'
+                                    }`}
+                                >
+                                    Auditoría
+                                </Link>
                             </div>
                         </div>
 
                         {/* Menú Usuario */}
                         <div className="hidden gap-4 sm:ml-6 sm:flex sm:items-center">
-                            
                             {/* NUEVO BOTÓN: Cambio de Usuario */}
                             <button
                                 onClick={handleSwitchUser}
@@ -149,7 +158,9 @@ export default function AuthenticatedLayout({
                                 title="Cambiar de cuenta sin cerrar la caja actual"
                             >
                                 <Users className="h-4 w-4" />
-                                <span className="hidden md:block">Cambio de usuario</span>
+                                <span className="hidden md:block">
+                                    Cambio de usuario
+                                </span>
                             </button>
 
                             <div className="relative ml-3">
@@ -234,31 +245,44 @@ export default function AuthenticatedLayout({
                 {children}
                 <OpenRegisterModal />
                 {showLogoutWarning && (
-                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
-                        <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 z-[9999] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
+                        <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
                             <div className="p-6 text-center">
                                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
                                     <AlertTriangle className="h-8 w-8" />
                                 </div>
-                                <h3 className="mb-2 text-xl font-bold text-gray-800">¡Turno Aún Abierto!</h3>
-                                <p className="text-gray-600  text-bold text-base leading-relaxed">
-                                    <b className="text-gray-700">{user.nickname || auth?.user?.name}</b>, el sistema detecta que aún tienes dinero bajo tu responsabilidad. 
-                                    No puedes abandonar el sistema sin antes imprimir tu <b className="text-red-500">Parte Diario</b> y cerrar la caja.
+                                <h3 className="mb-2 text-xl font-bold text-gray-800">
+                                    ¡Turno Aún Abierto!
+                                </h3>
+                                <p className="text-bold text-base leading-relaxed text-gray-600">
+                                    <b className="text-gray-700">
+                                        {user.nickname || auth?.user?.name}
+                                    </b>
+                                    , el sistema detecta que aún tienes dinero
+                                    bajo tu responsabilidad. No puedes abandonar
+                                    el sistema sin antes imprimir tu{' '}
+                                    <b className="text-red-500">Parte Diario</b>{' '}
+                                    y cerrar la caja.
                                 </p>
-                                
+
                                 <div className="mt-8 flex justify-center gap-3">
                                     <button
-                                        onClick={() => setShowLogoutWarning(false)}
-                                        className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+                                        onClick={() =>
+                                            setShowLogoutWarning(false)
+                                        }
+                                        className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
                                     >
                                         Volver al sistema
                                     </button>
                                     <Link
-                                        href="/reports/financial" 
-                                        onClick={() => setShowLogoutWarning(false)}
-                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-red-500 active:scale-95 transition"
+                                        href="/reports/financial"
+                                        onClick={() =>
+                                            setShowLogoutWarning(false)
+                                        }
+                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95"
                                     >
-                                        <LogOut className="h-4 w-4" /> Ir a Cerrar Caja
+                                        <LogOut className="h-4 w-4" /> Ir a
+                                        Cerrar Caja
                                     </Link>
                                 </div>
                             </div>

@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 use App\Traits\AutoUpperCase;
 
 class Room extends Model
 {
     use AutoUpperCase;
+
     protected $fillable = [
         'number',
         'block_id',
@@ -26,6 +29,27 @@ class Room extends Model
         'status',
         'notes',
     ];
+
+    /**
+     * Atributos virtuales que se serializan hacia el frontend (Inertia/React).
+     */
+    protected $appends = ['image_url'];
+
+    // --- ACCESSORS ---
+
+    /**
+     * URL pública de la imagen de la habitación.
+     * Retorna la URL completa vía Storage o null si no hay imagen.
+     */
+    protected function imageUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->image_path
+                ? Storage::url($this->image_path)
+                : null,
+        );
+    }
+
     // --- RELACIONES CON PADRES (BelongsTo) ---
 
     public function roomType(): BelongsTo
@@ -49,7 +73,6 @@ class Room extends Model
     }
 
     // --- RELACIONES CON HIJOS (HasMany) ---
-    // (Estas te servirán para ver el historial de uso de la habitación)
 
     public function checkins(): HasMany
     {
@@ -60,6 +83,7 @@ class Room extends Model
     {
         return $this->hasMany(Reservation::class);
     }
+
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class, 'room_type_id', 'room_type_id');
@@ -69,8 +93,9 @@ class Room extends Model
     {
         return $this->hasMany(ReservationDetail::class);
     }
+
     public function checkinDetails(): HasMany
     {
-        return $this->hasMany(CheckinDetail::class); // Asegúrate de que el modelo se llame CheckinDetail
+        return $this->hasMany(CheckinDetail::class);
     }
 }

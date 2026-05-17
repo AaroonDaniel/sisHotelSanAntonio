@@ -5,6 +5,7 @@ import {
     BedDouble,
     Building2,
     DollarSign,
+    Image as ImageIcon,
     Layers,
     Pencil,
     Plus,
@@ -68,7 +69,8 @@ interface Room {
     status: string;
     is_active: boolean;
     notes?: string;
-    image_path?: string;
+    image_url?: string | null;
+    
     // IDs
     room_type_id: number;
     block_id: number;
@@ -270,20 +272,18 @@ export default function RoomsIndex({
                                                 </td>
 
                                                 {/* Columna: Imagen */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex justify-center">
-                                                        {room.image_path ? (
-                                                            <img
-                                                                src={`/storage/${room.image_path}`}
-                                                                alt={`Habitación ${room.number}`}
-                                                                className="h-10 w-10 rounded-lg border border-gray-200 object-cover"
-                                                            />
-                                                        ) : (
-                                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-gray-300 text-xs text-gray-400">
-                                                                N/A
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    {room.image_url ? (
+                                                        <img
+                                                            src={room.image_url}
+                                                            alt={`Habitación ${room.number}`}
+                                                            className="h-12 w-12 rounded-lg object-cover shadow-sm ring-1 ring-gray-200"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-400 ring-1 ring-gray-200">
+                                                            <ImageIcon className="h-5 w-5" />
+                                                        </div>
+                                                    )}
                                                 </td>
 
                                                 {/* Columna: Acciones (Toggle + Edit + Delete) */}
@@ -317,7 +317,6 @@ export default function RoomsIndex({
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
-                                                        
 
                                                         {/* Eliminar */}
                                                         <button

@@ -43,6 +43,7 @@ interface Room {
     status: string;
     notes?: string;
     image_path?: string;
+    image_url?: string | null; // <-- Campo virtual (accessor del modelo)
     is_active?: boolean;
 }
 
@@ -125,11 +126,17 @@ export default function RoomModal({
         const file = e.target.files?.[0];
         if (file) {
             setData('image', file);
-            setPreview(URL.createObjectURL(file));
+            // Liberamos el blob anterior antes de generar el nuevo
+            setPreview((prev) => {
+                if (prev && prev.startsWith('blob:')) {
+                    URL.revokeObjectURL(prev);
+                }
+                return URL.createObjectURL(file);
+            });
         }
     };
 
-    // --- 2. CORRECCIÓN DEL USE EFFECT ---
+    // --- SINCRONIZACIÓN AL ABRIR EL MODAL ---
     useEffect(() => {
         if (!show) return;
 
@@ -158,17 +165,13 @@ export default function RoomModal({
                 INHABILITADO: 'disabled',
             };
 
-            // Intentamos traducir, si no existe (raro), usamos 'available' por defecto
             const mappedStatus =
                 statusMapReverse[RoomToEdit.status] || 'available';
 
             // Actualizamos estados UI
             setSelectedBathroomType(initialBathType);
-            setPreview(
-                RoomToEdit.image_path
-                    ? `/storage/${RoomToEdit.image_path}`
-                    : null,
-            );
+            // Usamos el accessor image_url ya resuelto por el backend
+            setPreview(RoomToEdit.image_url ?? null);
 
             // Actualizamos Formulario
             setData({
@@ -177,7 +180,7 @@ export default function RoomModal({
                 floor_id: RoomToEdit.floor_id.toString(),
                 price_id: RoomToEdit.price_id.toString(),
                 room_type_id: RoomToEdit.room_type_id.toString(),
-                status: mappedStatus, // <--- AQUI USAMOS EL VALOR TRADUCIDO
+                status: mappedStatus,
                 notes: RoomToEdit.notes || '',
                 is_active: RoomToEdit.is_active ?? true,
                 image: null,
@@ -204,17 +207,29 @@ export default function RoomModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [show, RoomToEdit]);
 
+    // Liberamos el ObjectURL al desmontar o al cambiar el preview
+    useEffect(() => {
+        return () => {
+            if (preview && preview.startsWith('blob:')) {
+                URL.revokeObjectURL(preview);
+            }
+        };
+    }, [preview]);
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+
         const options = {
-            preserveScroll: true, // <--- AGREGAR ESTO SIEMPRE
+            forceFormData: true, // Garantiza multipart/form-data para el archivo
+            preserveScroll: true,
             onSuccess: () => {
                 reset();
                 onClose();
             },
         };
+
         if (RoomToEdit) {
-            // Importante: al usar _method: 'put', Inertia lo maneja correctamente
+            // _method: 'put' ya está en data → Inertia hace el spoofing vía POST
             post(`/habitaciones/${RoomToEdit.id}`, options);
         } else {
             post('/habitaciones', options);
@@ -223,7 +238,6 @@ export default function RoomModal({
 
     if (!show) return null;
 
-    // ... (El resto del renderizado es idéntico a tu código)
     // Calculamos el precio visual
     const displayAmount = prices.find(
         (p) => p.id.toString() === data.price_id,
@@ -476,8 +490,24 @@ export default function RoomModal({
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                 Foto
                             </label>
+
                             <div className="flex items-start gap-4">
-                                <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                {/* CONTENEDOR DE LA IMAGEN */}
+                                <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-sm">
+                                    {/* BOTÓN X PARA ELIMINAR */}
+                                    {preview && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPreview(null);
+                                                setData('image', null); // si usas Inertia/FormData
+                                            }}
+                                            className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-gray-500 text-white shadow hover:bg-gray-600"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+
                                     {preview ? (
                                         <img
                                             src={preview}
@@ -486,19 +516,27 @@ export default function RoomModal({
                                         />
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center text-gray-400">
-                                            <ImageIcon className="h-6 w-6" />
+                                            <ImageIcon className="h-7 w-7" />
                                         </div>
                                     )}
                                 </div>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleImageChange}
-                                    className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-full file:border-0 file:bg-green-50 file:px-4 file:py-1.5 file:text-sm file:font-semibold file:text-green-700 hover:file:bg-green-100"
-                                />
+
+                                <div className="flex-1">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        className="block w-full cursor-pointer text-sm text-gray-500 file:mr-4 file:cursor-pointer file:rounded-full file:border-0 file:bg-green-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-green-700 hover:file:bg-green-100"
+                                    />
+
+                                    <p className="mt-1.5 text-xs text-gray-400">
+                                        Formatos: JPG, PNG o WEBP. Máximo 2 MB.
+                                    </p>
+                                </div>
                             </div>
+
                             {errors.image && (
-                                <p className="mt-1 text-xs font-bold text-red-500">
+                                <p className="mt-1 text-xs font-bold text-gray-500">
                                     {errors.image}
                                 </p>
                             )}

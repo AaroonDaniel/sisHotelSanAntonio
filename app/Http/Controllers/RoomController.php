@@ -55,7 +55,7 @@ class RoomController
 
     public function store(Request $request)
     {
-        // 1. Validación (Aceptamos español e inglés para el status)
+        // 1. Validación
         $validated = $request->validate([
             'number' => 'required|unique:rooms,number',
             'room_type_id' => 'required|exists:room_types,id',
@@ -64,7 +64,7 @@ class RoomController
             'block_id' => 'required|exists:blocks,id',
             'status' => 'required|in:libre,ocupado,reservado,limpieza,mantenimiento,inhabilitado,available,occupied,reserved,cleaning,maintenance,disabled',
             'notes' => 'nullable|string',
-            'image' => 'nullable|image|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         // 2. Mapeo de Español a Inglés para la Base de Datos
@@ -74,10 +74,9 @@ class RoomController
             'reserved' => 'reservado',
             'cleaning' => 'limpieza',
             'maintenance' => 'mantenimiento',
-            'disabled' => 'inhabilitado'
+            'disabled' => 'inhabilitado',
         ];
 
-        // Si el status viene en español, lo traducimos
         if (isset($mapStatus[$validated['status']])) {
             $validated['status'] = $mapStatus[$validated['status']];
         }
@@ -85,13 +84,13 @@ class RoomController
         // 3. Valores por defecto
         $validated['is_active'] = true;
 
-        if ($request->hasFile('image')) {
-            $validated['image_path'] = $request
-                ->file('image')
-                ->store('rooms', 'public'); // rooms/archivo.jpg
-        }
+        // 4. Imagen: se guarda en disco público o se persiste como null
+        $validated['image_path'] = $request->hasFile('image')
+            ? $request->file('image')->store('rooms', 'public')
+            : null;
 
         Room::create($validated);
+
         return redirect()->back();
     }
 
@@ -106,7 +105,7 @@ class RoomController
             'room_type_id' => 'required|exists:room_types,id',
             'status' => 'required|in:libre,ocupado,reservado,limpieza,mantenimiento,inhabilitado,available,occupied,reserved,cleaning,maintenance,disabled',
             'notes' => 'nullable|string',
-            'image' => 'nullable|image|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         // 2. Mapeo de Español a Inglés
@@ -116,35 +115,41 @@ class RoomController
             'reserved' => 'reservado',
             'cleaning' => 'limpieza',
             'maintenance' => 'mantenimiento',
-            'disabled' => 'inhabilitado'
+            'disabled' => 'inhabilitado',
         ];
-
 
         if (isset($mapStatus[$validated['status']])) {
             $validated['status'] = $mapStatus[$validated['status']];
         }
 
-        // 3. Manejo del checkbox 'is_active' (si se envía)
+        // 3. Manejo del checkbox 'is_active'
         if ($request->has('is_active')) {
             $validated['is_active'] = $request->boolean('is_active');
         }
 
-
         if ($request->hasFile('image')) {
-            // opcional: borrar la anterior
+            // 1. El usuario subió una imagen NUEVA
             if ($room->image_path) {
                 Storage::disk('public')->delete($room->image_path);
             }
-
-            $validated['image_path'] = $request
-                ->file('image')
-                ->store('rooms', 'public');
+            $validated['image_path'] = $request->file('image')->store('rooms', 'public');
+            
+        } elseif (array_key_exists('image', $validated) && is_null($validated['image'])) {
+            // 2. El usuario QUITÓ la imagen a propósito (envió image = null)
+            if ($room->image_path) {
+                Storage::disk('public')->delete($room->image_path);
+            }
+            $validated['image_path'] = null;
+            
+        } else {
+            // 3. No se tocó el campo de imagen en absoluto
+            unset($validated['image']);
         }
 
         $room->update($validated);
+
         return redirect()->back();
     }
-
     public function destroy(Room $room)
     {
         $room->delete();
