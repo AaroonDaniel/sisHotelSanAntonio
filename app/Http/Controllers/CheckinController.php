@@ -1203,6 +1203,68 @@ class CheckinController extends Controller
         // 3. Respuesta para Inertia (Recarga automática)
         return redirect()->back()->with('success', 'Adelanto de ' . number_format($request->amount, 2) . ' Bs registrado correctamente.');
     }
+    /**
+     * Registra una devolución de dinero al Huésped (Punto 5.8).
+     * El monto se guarda como NEGATIVO en la tabla payments para que
+     * el arqueo de caja del turno del recepcionista cuadre correctamente.
+     */
+    public function refund(Request $request, Checkin $checkin)
+    {
+        // 1. Validación
+        $validated = $request->validate([
+            'amount' => 'required|numeric|gt:0',
+            'method' => 'required|in:efectivo,qr,transferencia,tarjeta',
+            'notes'  => 'required|string|max:500',
+        ], [
+            'amount.gt'       => 'El monto a devolver debe ser mayor a cero.',
+            'method.in'       => 'El método de devolución seleccionado no es válido.',
+            'notes.required'  => 'Debe indicar el motivo de la devolución.',
+        ]);
+
+        $userId = Auth::id();
+
+        // 2. Verificar que el usuario tenga una caja activa
+        $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+            ->where('status', 'ABIERTA')
+            ->first();
+
+        if (!$cajaAbierta) {
+            return back()->withErrors([
+                'amount' => 'No tiene una caja abierta. Debe aperturar caja antes de registrar una devolución.',
+            ]);
+        }
+
+        // 3. Registro financiero de la devolución (monto ESTRICTAMENTE NEGATIVO)
+        DB::transaction(function () use ($validated, $checkin, $userId, $cajaAbierta) {
+
+            $metodo = strtoupper($validated['method']);
+            $banco  = $metodo === 'EFECTIVO' ? null : $metodo;
+
+            // El monto SIEMPRE se guarda en negativo: -abs() garantiza que
+            // aunque el front envíe el valor en positivo, en la tabla payments
+            // quede como salida de dinero. NO debe existir ningún mutador
+            // (setAmountAttribute) en el modelo Payment que vuelva a aplicar
+            // abs() o invierta el signo: eso descuadraría el arqueo de caja.
+            $montoNegativo = -abs((float) $validated['amount']);
+
+            Payment::create([
+                'checkin_id'       => $checkin->id,
+                'user_id'          => $userId,
+                'cash_register_id' => $cajaAbierta->id,
+                'amount'           => $montoNegativo,
+                'method'           => $metodo,
+                'bank_name'        => $banco,
+                'description'      => 'DEVOLUCIÓN: ' . $validated['notes'],
+                'type'             => 'DEVOLUCION',
+                'payment_date'     => now(),
+            ]);
+        });
+
+        return back()->with(
+            'success',
+            'Devolución de ' . number_format($validated['amount'], 2) . ' Bs registrada correctamente.'
+        );
+    }
 
     /**
      * Checkout con Transacción de DOBLE FASE.

@@ -7,7 +7,7 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 // 👇 NUEVO: Importación obligatoria para usar Storage
-use Illuminate\Support\Facades\Storage; 
+use Illuminate\Support\Facades\Storage;
 
 class MaintenanceController extends Controller
 {
@@ -33,10 +33,10 @@ class MaintenanceController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'room_id' => 'required|exists:rooms,id',
-            'issue' => 'required|string|max:255',
+            'room_id'     => 'required|exists:rooms,id',
+            'issue'       => 'required|string|max:255',
             'description' => 'nullable|string',
-            'photo' => 'nullable|image|max:5120',
+            'photo'       => 'nullable|image|max:5120',
         ]);
 
         $photoPath = null;
@@ -45,15 +45,13 @@ class MaintenanceController extends Controller
         }
 
         Maintenance::create([
-            'room_id' => $request->room_id,
-            // 👇 CORRECCIÓN: Se quitó el $request()-> sobrante
-            'user_id' => auth()->$request->id(), 
-            'issue' => $request->issue,
+            'room_id'     => $request->room_id,
+            'user_id'     => $request->user()->id, // <-- corregido
+            'issue'       => $request->issue,
             'description' => $request->description,
-            'photo_path' => $photoPath,
+            'photo_path'  => $photoPath,
         ]);
 
-        // Bloquear automáticamente la habitación
         Room::where('id', $request->room_id)->update(['status' => 'Mantenimiento']);
 
         return back()->with('success', 'Falla reportada. Habitación bloqueada por mantenimiento.');
@@ -76,14 +74,14 @@ class MaintenanceController extends Controller
 
         return back()->with('success', 'Mantenimiento finalizado. Habitación actualizada.');
     }
-    
+
     // 👇 METODO DESTROY CORREGIDO Y HABILITADO
     public function destroy(Maintenance $maintenance)
     {
         // Si el mantenimiento tiene una foto, eliminarla del almacenamiento
         if ($maintenance->photo_path) {
             // Ya no es necesario poner la \ invertida, porque importamos la fachada arriba
-            Storage::disk('public')->delete($maintenance->photo_path); 
+            Storage::disk('public')->delete($maintenance->photo_path);
         }
 
         $maintenance->delete();

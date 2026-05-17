@@ -8,6 +8,7 @@ import {
     CheckCircle2,
     ChevronDown,
     Clock,
+    Undo2,
     Utensils,
     Wallet,
     X,
@@ -22,6 +23,19 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@headlessui/react';
 import CheckinDetailModal from '../checkindetails/checkindetailModal';
 
 interface ModalProps {
@@ -96,16 +110,32 @@ export default function OccupiedRoomModal({
         if (!liveCheckin) return 0;
 
         if (liveCheckin.payments && liveCheckin.payments.length > 0) {
+            // El backend guarda las devoluciones con monto NEGATIVO (-abs).
+            // Por eso aquí solo se SUMA el array completo: los pagos positivos
+            // aumentan el adelanto y las devoluciones (negativas) lo reducen
+            // automáticamente. NO se debe restar manualmente por type, eso
+            // invertiría el signo dos veces y volvería a sumar la devolución.
             return liveCheckin.payments.reduce((acc: number, p: any) => {
-                // Aquí va la lógica completa que faltaba (en lugar del // ...)
-                const amount = parseFloat(p.amount) || 0;
-                if (p.type === 'DEVOLUCION') {
-                    return acc - amount;
-                }
-                return acc + amount;
+                return acc + (parseFloat(p.amount) || 0);
             }, 0);
         }
         return parseFloat(liveCheckin.advance_payment) || 0;
+    }, [liveCheckin]);
+
+    // Historial de movimientos de dinero (entradas y salidas) de la habitación,
+    // ordenado del más reciente al más antiguo para el recepcionista.
+    const paymentHistory = useMemo(() => {
+        if (!liveCheckin?.payments || liveCheckin.payments.length === 0)
+            return [];
+        return [...liveCheckin.payments].sort((a: any, b: any) => {
+            const fa = new Date(
+                a.payment_date || a.created_at || 0,
+            ).getTime();
+            const fb = new Date(
+                b.payment_date || b.created_at || 0,
+            ).getTime();
+            return fb - fa;
+        });
     }, [liveCheckin]);
 
     // Retorno condicional después de los hooks
@@ -452,11 +482,88 @@ export default function OccupiedRoomModal({
                                             {isSpecialGroup && (
                                                 <div className="flex flex-col items-end">
                                                     <span className="rounded bg-indigo-100 px-2 py-1 text-[9px] font-black tracking-widest text-indigo-700 uppercase">
-                                                        Corporativo 
+                                                        Corporativo
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
+
+                                        {/* --- HISTORIAL DE MOVIMIENTOS DE DINERO --- */}
+                                        {paymentHistory.length > 0 && (
+                                            <div className="mb-2 border-t border-dashed border-gray-200 pt-2">
+                                                <span className="mb-1 block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
+                                                    Movimientos de Caja
+                                                </span>
+                                                <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
+                                                    {paymentHistory.map(
+                                                        (p: any) => {
+                                                            const monto =
+                                                                parseFloat(
+                                                                    p.amount,
+                                                                ) || 0;
+                                                            const esDevolucion =
+                                                                monto < 0;
+                                                            return (
+                                                                <div
+                                                                    key={p.id}
+                                                                    className={`flex items-start justify-between rounded px-2 py-1 text-[10px] ${
+                                                                        esDevolucion
+                                                                            ? 'bg-red-50'
+                                                                            : 'bg-green-50'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex flex-col">
+                                                                        <span
+                                                                            className={`font-bold ${
+                                                                                esDevolucion
+                                                                                    ? 'text-red-600'
+                                                                                    : 'text-green-700'
+                                                                            }`}
+                                                                        >
+                                                                            {esDevolucion
+                                                                                ? 'Devolución'
+                                                                                : 'Pago / Adelanto'}
+                                                                            {p.method
+                                                                                ? ` · ${p.method}`
+                                                                                : ''}
+                                                                        </span>
+                                                                        <span className="text-[9px] text-gray-400">
+                                                                            {formatDate(
+                                                                                p.payment_date ||
+                                                                                    p.created_at,
+                                                                            )}
+                                                                        </span>
+                                                                        {p.description && (
+                                                                            <span className="text-[9px] text-gray-500 italic">
+                                                                                {
+                                                                                    p.description
+                                                                                }
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span
+                                                                        className={`ml-2 font-black whitespace-nowrap ${
+                                                                            esDevolucion
+                                                                                ? 'text-red-600'
+                                                                                : 'text-green-700'
+                                                                        }`}
+                                                                    >
+                                                                        {esDevolucion
+                                                                            ? '- '
+                                                                            : '+ '}
+                                                                        {formatCurrency(
+                                                                            Math.abs(
+                                                                                monto,
+                                                                            ),
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        },
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* --- BOTÓN / FORMULARIO DE ADELANTO --- */}
                                         {!showPaymentForm ? (
@@ -750,6 +857,11 @@ export default function OccupiedRoomModal({
                                         Mueve al huésped a otra habitación o
                                         agrégalo a un grupo existente.
                                     </p>
+                                    <div className="mt-3">
+                                        <RefundDialog
+                                            checkinId={liveCheckin.id}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -959,5 +1071,184 @@ function InfoBox({ label, value }: { label: string; value: string }) {
                 {value}
             </span>
         </div>
+    );
+}
+// =====================================================================
+// COMPONENTE: Diálogo de Devolución de dinero al Huésped (Punto 5.8)
+// =====================================================================
+interface RefundDialogProps {
+    checkinId: number;
+}
+
+type RefundMethod = 'efectivo' | 'qr' | 'transferencia' | 'tarjeta';
+
+function RefundDialog({ checkinId }: RefundDialogProps) {
+    const [open, setOpen] = useState<boolean>(false);
+
+    const { data, setData, post, processing, errors, reset } = useForm<{
+        amount: string;
+        method: RefundMethod;
+        notes: string;
+    }>({
+        amount: '',
+        method: 'efectivo',
+        notes: '',
+    });
+
+    const handleClose = (): void => {
+        reset();
+        setOpen(false);
+    };
+
+    const handleSubmit = (e: React.FormEvent): void => {
+        e.preventDefault();
+
+        // Construimos la URL manualmente sin usar Ziggy
+        post(`/checkins/${checkinId}/refund`, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                reset();
+                setOpen(false);
+            },
+        });
+    };
+
+    return (
+        <>
+            {/* --- BOTÓN DISPARADOR (junto a Registrar Pago / Checkout) --- */}
+            <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(true)}
+                className="flex w-full items-center justify-center gap-2 border-orange-300 bg-orange-50 font-bold text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+            >
+                <Undo2 className="h-4 w-4" />
+                Devolución
+            </Button>
+
+            {/* --- MODAL INTERNO DE DEVOLUCIÓN --- */}
+            <Dialog
+                open={open}
+                onOpenChange={(value) =>
+                    value ? setOpen(true) : handleClose()
+                }
+            >
+                <DialogContent className="rounded-2xl border-none bg-white p-6 shadow-2xl sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-orange-700">
+                            <Undo2 className="h-5 w-5" />
+                            Registrar Devolución
+                        </DialogTitle>
+                        <DialogDescription className="text-sm text-gray-500">
+                            Este monto se descontará de la caja del turno
+                            actual. La operación queda registrada en la
+                            auditoría financiera.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleSubmit} className="mt-2 space-y-4">
+                        {/* MONTO */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="refund-amount">
+                                Monto a devolver (Bs.)
+                            </Label>
+                            <Input
+                                id="refund-amount"
+                                type="number"
+                                min="1"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={data.amount}
+                                onChange={(e) =>
+                                    setData('amount', e.target.value)
+                                }
+                            />
+                            {errors.amount && (
+                                <p className="text-xs font-medium text-red-600">
+                                    {errors.amount}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* MÉTODO DE PAGO */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="refund-method">
+                                Método de devolución
+                            </Label>
+                            <Select
+                                value={data.method}
+                                onValueChange={(value) =>
+                                    setData('method', value as RefundMethod)
+                                }
+                            >
+                                <SelectTrigger id="refund-method">
+                                    <SelectValue placeholder="Seleccione un método" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="efectivo">
+                                        Efectivo
+                                    </SelectItem>
+                                    <SelectItem value="qr">QR</SelectItem>
+                                    <SelectItem value="transferencia">
+                                        Transferencia
+                                    </SelectItem>
+                                    <SelectItem value="tarjeta">
+                                        Tarjeta
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {errors.method && (
+                                <p className="text-xs font-medium text-red-600">
+                                    {errors.method}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* MOTIVO (OBLIGATORIO) */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="refund-notes">
+                                Motivo de la devolución
+                            </Label>
+                            <Textarea
+                                id="refund-notes"
+                                rows={3}
+                                placeholder="Ej. Salida anticipada, cobro duplicado, etc."
+                                value={data.notes}
+                                onChange={(e) =>
+                                    setData('notes', e.target.value)
+                                }
+                            />
+                            {errors.notes && (
+                                <p className="text-xs font-medium text-red-600">
+                                    {errors.notes}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* ACCIONES */}
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={handleClose}
+                                disabled={processing}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={processing}
+                                className="bg-orange-600 font-bold text-white hover:bg-orange-700"
+                            >
+                                {processing
+                                    ? 'Procesando...'
+                                    : 'Confirmar Devolución'}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

@@ -116,22 +116,39 @@ class Checkin extends Model
         return $this->hasMany(Payment::class);
     }
 
-    // Opcional: Para obtener el total pagado real calculado desde la nueva tabla
+    /**
+     * Total realmente pagado por el Huésped.
+     *
+     * sum('amount') de SQL ya resta automáticamente los montos negativos
+     * (devoluciones), por lo que NO se debe filtrar por 'type' ni invertir
+     * signos manualmente. La contabilidad cuadra sola.
+     */
     public function getRealPaidAttribute()
     {
-        return $this->payments->sum('amount');
+        return (float) $this->payments()->sum('amount');
     }
+
     public function parentCheckin()
     {
         return $this->belongsTo(Checkin::class, 'parent_checkin_id');
     }
+
     public function specialAgreement(): BelongsTo
     {
         return $this->belongsTo(SpecialAgreement::class);
     }
+
+    /**
+     * Adelanto NETO de la estadía.
+     *
+     * Incluye TODOS los movimientos de dinero del checkin: los pagos
+     * positivos suman y las devoluciones (guardadas como monto negativo)
+     * restan de forma natural. No se filtra por 'type' para que una
+     * devolución reduzca el adelanto real inmediatamente.
+     */
     public function getAdvancePaymentAttribute()
     {
-        return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
+        return (float) ($this->payments()->sum('amount') ?? 0);
     }
 
     public function transfers()

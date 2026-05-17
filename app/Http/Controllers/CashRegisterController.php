@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\CashRegister;
+use App\Models\Payment;
 use Illuminate\Support\Facades\Auth; // Agregamos esto para complacer a Intelephense
+use Inertia\Inertia;
 
 class CashRegisterController extends Controller
 {
@@ -57,4 +59,52 @@ class CashRegisterController extends Controller
 
         return redirect('/login')->with('success', 'Turno cerrado correctamente. ¡Buen trabajo!');
     }
-}
+
+    /**
+     * Hoja de caja (arqueo) de un turno.
+     *
+     * Regla contable: se suman TODOS los pagos del turno, positivos y
+     * negativos. Las devoluciones están guardadas con monto negativo, por
+     * lo que reducen tanto el total general como el total del método de
+     * pago correspondiente (si se devuelven 50 Bs en efectivo, el efectivo
+     * del turno baja 50 Bs). No se filtra por 'type' en ningún momento.
+     */
+    public function show(CashRegister $cashRegister)
+    {
+        // 1. Todos los movimientos del turno (entradas y salidas).
+        $payments = Payment::where('cash_register_id', $cashRegister->id)
+            ->with('checkin.room')
+            ->orderBy('payment_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 2. Total de ingresos NETO: sum() resta los negativos solo.
+        $totalIncome = (float) $payments->sum('amount');
+
+        // 3. Desglose por método de pago. Los montos negativos (devoluciones)
+        //    reducen el total del método al que pertenecen.
+        $byMethod = $payments
+            ->groupBy(fn ($p) => strtoupper($p->method ?? 'SIN_METODO'))
+            ->map(fn ($group, $method) => [
+                'method'      => $method,
+                'total'       => (float) $group->sum('amount'),
+                'count'       => $group->count(),
+                'refunds'     => (float) $group->where('amount', '<', 0)->sum('amount'),
+                'collections' => (float) $group->where('amount', '>=', 0)->sum('amount'),
+            ])
+            ->values();
+
+        // 4. Efectivo esperado en caja = apertura + ingresos netos en efectivo.
+        $cashMovements = (float) $payments
+            ->filter(fn ($p) => strtoupper($p->method ?? '') === 'EFECTIVO')
+            ->sum('amount');
+        $expectedCash = (float) $cashRegister->opening_amount + $cashMovements;
+
+        return Inertia::render('cash-registers/show', [
+            'CashRegister'  => $cashRegister,
+            'Payments'      => $payments,
+            'TotalIncome'   => $totalIncome,
+            'ByMethod'      => $byMethod,
+            'ExpectedCash'  => $expectedCash,
+        ]);
+    }}

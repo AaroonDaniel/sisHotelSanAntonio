@@ -23,6 +23,7 @@ use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
+
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -129,6 +130,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/checkins/{checkin}/add-payment', [CheckinController::class, 'addPayment'])->name('checkins.addPayment');
     Route::post('/checkins/from-reservation', [CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
+    Route::post('/checkins/{checkin}/refund', [CheckinController::class, 'refund'])->name('checkins.refund');
 
     // Ruta de Merge
     Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
@@ -169,6 +171,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
+    Route::get('/cash-registers/{cashRegister}', [CashRegisterController::class, 'show'])->name('cash-registers.show');
 
     //Gastos
     Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
