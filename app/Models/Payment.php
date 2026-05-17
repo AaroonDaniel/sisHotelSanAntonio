@@ -25,6 +25,11 @@ class Payment extends Model
         'status',
     ];
 
+    protected $casts = [
+        'amount'       => 'decimal:2',
+        'payment_date' => 'datetime',
+    ];
+
     public function checkin(): BelongsTo
     {
         return $this->belongsTo(Checkin::class);
@@ -34,6 +39,12 @@ class Payment extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function cashRegister(): BelongsTo
+    {
+        return $this->belongsTo(CashRegister::class);
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

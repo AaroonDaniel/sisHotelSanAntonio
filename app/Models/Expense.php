@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Expense extends Model
 {
@@ -16,14 +17,16 @@ class Expense extends Model
         'description',
     ];
 
-    // Relación: A qué turno (caja) pertenece este gasto
-    public function cashRegister()
+    protected $casts = [
+        'amount' => 'decimal:2',
+    ];
+
+    public function cashRegister(): BelongsTo
     {
         return $this->belongsTo(CashRegister::class);
     }
 
-    // Relación: Quién hizo el gasto
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }

@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Expense;
 use App\Models\CashRegister;
 use Illuminate\Http\Request;
+
 use Inertia\Inertia;
 use Fpdf;
 use Carbon\Carbon;
@@ -400,32 +401,104 @@ class ReportController extends Controller
     public function financialIndex(Request $request)
     {
         $startDate = $request->query('start_date', now()->toDateString());
-        $endDate = $request->query('end_date', now()->toDateString());
+        $endDate   = $request->query('end_date', now()->toDateString());
+        $userId    = $request->query('user_id', 'todos');
 
-        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->orderBy('created_at', 'desc')
+        $rangoInicio = $startDate . ' 00:00:00';
+        $rangoFin    = $endDate . ' 23:59:59';
+
+        // =========================================================
+        // 1. INGRESOS Y DEVOLUCIONES (tabla payments)
+        // Las devoluciones ya vienen como valores negativos, por lo que
+        // un sum('amount') refleja la caja real automáticamente.
+        // =========================================================
+        $paymentsQuery = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
+
+        if ($userId !== 'todos') {
+            $paymentsQuery->where('user_id', $userId);
+        }
+
+        $payments = $paymentsQuery->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($p) {
+                // Monto real con signo: las DEVOLUCION se fuerzan a negativo
+                // por seguridad, aunque ya deberían venir negativas en BD.
+                $montoReal = $p->type === 'DEVOLUCION'
+                    ? -abs((float) $p->amount)
+                    : (float) $p->amount;
+
                 return [
-                    'id' => $p->id,
-                    'user_name' => $p->user->name ?? 'Desconocido',
-                    'amount' => (float) $p->amount,
-                    'method' => $p->method,
-                    'bank_name' => $p->bank_name,
-                    'type' => $p->type, 
-                    'date' => $p->created_at->format('d/m/Y'),
-                    'time' => $p->created_at->format('H:i'),
+                    'id'          => $p->id,
+                    'user_name'   => $p->user->name ?? 'Desconocido',
+                    'amount'      => $montoReal,
+                    'method'      => $p->method,
+                    'bank_name'   => $p->bank_name,
+                    'type'        => $p->type,
+                    'date'        => $p->created_at->format('d/m/Y'),
+                    'time'        => $p->created_at->format('H:i'),
                     'room_number' => $p->checkin->room->number ?? '-',
-                    'guest_name' => $p->checkin->guest->full_name ?? 'Sin Huésped',
+                    'guest_name'  => $p->checkin->guest->full_name ?? 'Sin Huésped',
                 ];
             });
 
+        // =========================================================
+        // 2. EGRESOS / GASTOS (tabla expenses)
+        // =========================================================
+        $expensesQuery = Expense::with(['user'])
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
+
+        if ($userId !== 'todos') {
+            $expensesQuery->where('user_id', $userId);
+        }
+
+        $expenses = $expensesQuery->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($e) {
+                return [
+                    'id'          => $e->id,
+                    'user_name'   => $e->user->name ?? 'Desconocido',
+                    'amount'      => (float) $e->amount,
+                    'description' => $e->description,
+                    'date'        => $e->created_at->format('d/m/Y'),
+                    'time'        => $e->created_at->format('H:i'),
+                ];
+            });
+
+        // =========================================================
+        // 3. APERTURA DE CAJA (monto inicial del turno)
+        // =========================================================
+        $aperturaQuery = CashRegister::whereBetween('opened_at', [$rangoInicio, $rangoFin]);
+        if ($userId !== 'todos') {
+            $aperturaQuery->where('user_id', $userId);
+        }
+        $totalApertura = (float) $aperturaQuery->sum('opening_amount');
+
+        // =========================================================
+        // 4. CÁLCULO DE TOTALES (la caja debe cuadrar matemáticamente)
+        //    payments->sum() ya incluye pagos (+) y devoluciones (-).
+        // =========================================================
+        $totalIngresos     = (float) $payments->where('type', '!=', 'DEVOLUCION')->sum('amount');
+        $totalDevoluciones = (float) $payments->where('type', 'DEVOLUCION')->sum('amount'); // negativo
+        $totalGastos       = (float) $expenses->sum('amount');
+
+        // Total de Liquidación: Apertura + Ingresos + Devoluciones(neg) - Gastos
+        $totalLiquidacion = $totalApertura + $totalIngresos + $totalDevoluciones - $totalGastos;
+
         return Inertia::render('reports/financial', [
-            'Payments' => $payments,
+            'Payments' => $payments->values(),
+            'Expenses' => $expenses->values(),
+            'Summary'  => [
+                'apertura'      => round($totalApertura, 2),
+                'ingresos'      => round($totalIngresos, 2),
+                'devoluciones'  => round($totalDevoluciones, 2), // valor negativo
+                'gastos'        => round($totalGastos, 2),
+                'liquidacion'   => round($totalLiquidacion, 2),
+            ],
             'Filters' => [
                 'start_date' => $startDate,
-                'end_date' => $endDate,
+                'end_date'   => $endDate,
+                'user_id'    => $userId,
             ],
             'users' => User::where('is_active', true)->get(['id', 'full_name', 'nickname']),
         ]);

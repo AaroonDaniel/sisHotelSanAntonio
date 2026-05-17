@@ -31,8 +31,10 @@ class CheckinController extends Controller
 {
     public function index()
     {
-
-        $checkins = Checkin::with(['guest', 'room.roomType', 'companions', 'schedule', 'services'])
+        // Se carga SIEMPRE la relación 'payments' para que el frontend (index y
+        // occupiedRoomModal) nunca reciba un 'undefined' al ejecutar .reduce().
+        // Si un check-in no tiene pagos, Eloquent devuelve una colección vacía [].
+        $checkins = Checkin::with(['guest', 'room.roomType', 'companions', 'schedule', 'services', 'payments'])
             ->orderBy('created_at', 'desc')
             ->get();
 
