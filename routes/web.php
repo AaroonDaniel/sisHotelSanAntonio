@@ -121,6 +121,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
     Route::get('/search/issued-in', [GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
+    Route::post('/checkins/{checkin}/cancel-agreement', [CheckinController::class, 'cancelAgreement'])
+    ->name('checkins.cancelAgreement');
+    Route::get('/checkins/preview-price', [CheckinController::class, 'previewPrice'])
+    ->name('checkins.previewPrice');
 
     // Ruta Original (POST)
     Route::post('/checkins/{checkin}/transfer', [CheckinController::class, 'transfer'])->name('checkins.transfer');

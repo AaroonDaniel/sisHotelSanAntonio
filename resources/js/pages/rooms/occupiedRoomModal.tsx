@@ -1,13 +1,17 @@
 import { router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
+    AlertTriangle,
     ArrowRightLeft,
     Banknote,
     BedDouble,
+    Building2,
+    CalendarClock,
     CalendarDays,
     CheckCircle2,
     ChevronDown,
     Clock,
+    ShieldOff,
     Undo2,
     Utensils,
     Wallet,
@@ -38,12 +42,21 @@ import {
 import { Textarea } from '@headlessui/react';
 import CheckinDetailModal from '../checkindetails/checkindetailModal';
 
+interface CorpState {
+    level: 'moroso' | 'pendiente' | 'al_dia';
+    badge: string;
+    text: string;
+}
+
 interface ModalProps {
     show: boolean;
     onClose: () => void;
     checkin: any | null;
     services: any[];
     onTransfer: () => void;
+    // Semáforo del convenio calculado en status.tsx (fuente única).
+    // Si llega null, el check-in no es un convenio corporativo.
+    corpState?: CorpState | null;
 }
 
 export default function OccupiedRoomModal({
@@ -52,6 +65,7 @@ export default function OccupiedRoomModal({
     checkin,
     services,
     onTransfer,
+    corpState = null,
 }: ModalProps) {
     const { props } = usePage<any>();
 
@@ -92,8 +106,9 @@ export default function OccupiedRoomModal({
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
+    const [showCancelAgreementModal, setShowCancelAgreementModal] = useState(false);
 
-    // --- FORMULARIO DE ADELANTO ---
+    // --- FORMULARIOS ---
     const {
         data: paymentData,
         setData: setPaymentData,
@@ -106,15 +121,15 @@ export default function OccupiedRoomModal({
         qr_bank: '',
     });
 
+    const {
+        post: postCancelAgreement,
+        processing: processingCancel,
+    } = useForm({});
+
+    // --- LÓGICA MEMOIZADA DE FINANZAS Y CONVENIOS (ARRIBA DEL RETURN NULL) ---
     const totalPaid = useMemo(() => {
         if (!liveCheckin) return 0;
-
         if (liveCheckin.payments && liveCheckin.payments.length > 0) {
-            // El backend guarda las devoluciones con monto NEGATIVO (-abs).
-            // Por eso aquí solo se SUMA el array completo: los pagos positivos
-            // aumentan el adelanto y las devoluciones (negativas) lo reducen
-            // automáticamente. NO se debe restar manualmente por type, eso
-            // invertiría el signo dos veces y volvería a sumar la devolución.
             return liveCheckin.payments.reduce((acc: number, p: any) => {
                 return acc + (parseFloat(p.amount) || 0);
             }, 0);
@@ -122,8 +137,6 @@ export default function OccupiedRoomModal({
         return parseFloat(liveCheckin.advance_payment) || 0;
     }, [liveCheckin]);
 
-    // Historial de movimientos de dinero (entradas y salidas) de la habitación,
-    // ordenado del más reciente al más antiguo para el recepcionista.
     const paymentHistory = useMemo(() => {
         if (!liveCheckin?.payments || liveCheckin.payments.length === 0)
             return [];
@@ -138,8 +151,49 @@ export default function OccupiedRoomModal({
         });
     }, [liveCheckin]);
 
-    // Retorno condicional después de los hooks
+    const agreementInfo = useMemo<{
+        frequency: number;
+        dueDate: Date | null;
+    } | null>(() => {
+        const agreement = liveCheckin?.special_agreement;
+        if (!agreement) return null;
+
+        const frequency = parseInt(
+            agreement.payment_frequency_days ?? '0',
+            10,
+        );
+
+        if (!frequency || frequency <= 0) {
+            return { frequency: 0, dueDate: null };
+        }
+
+        let dueDate: Date | null = null;
+        if (agreement.next_payment_date) {
+            dueDate = new Date(agreement.next_payment_date);
+        } else if (liveCheckin?.check_in_date) {
+            const base = new Date(liveCheckin.check_in_date);
+            dueDate = new Date(base);
+            dueDate.setDate(base.getDate() + frequency);
+
+            const now = new Date();
+            while (dueDate < now) {
+                dueDate.setDate(dueDate.getDate() + frequency);
+            }
+        }
+
+        return { frequency, dueDate };
+    }, [liveCheckin]);
+
+    const agreementTransitionNote = useMemo<string | null>(() => {
+        const notes: string = liveCheckin?.notes ?? '';
+        const match = notes.match(/\[CONVENIO ANULADO[^\]]*\]/i);
+        return match ? match[0].replace(/[[\]]/g, '') : null;
+    }, [liveCheckin]);
+
+
+    // --- AHORA SÍ, PODEMOS CORTAR EL RENDERIZADO TEMPRANO ---
     if (!show || !liveCheckin) return null;
+
 
     const handleClose = () => {
         setExpandedGuestId(null);
@@ -153,87 +207,18 @@ export default function OccupiedRoomModal({
         setExpandedGuestId(expandedGuestId === id ? null : id);
     };
 
-    // --- LÓGICA FINANCIERA ---
-    // --- LÓGICA FINANCIERA (EN VIVO / TIEMPO REAL) ---
-    const formatCurrency = (amount: number) =>
-        new Intl.NumberFormat('es-BO', {
-            style: 'currency',
-            currency: 'BOB',
-        }).format(amount);
-
-    // En occupiedRoomModal.tsx
-    const calculateRealNights = () => {
-        // Usamos check_in_date porque es la fecha de inicio de cobro que tú manejas/modificas
-        if (!liveCheckin.check_in_date) return 1;
-
-        // 1. Convertimos la fecha de inicio de cobro a objeto Date
-        const checkInDate = new Date(liveCheckin.check_in_date);
-        const now = new Date();
-
-        // 2. Obtenemos la hora de salida del horario (Schedule) para el corte
-        const checkoutTimeStr =
-            liveCheckin.schedule?.check_out_time || '13:00:00';
-        const [checkoutHour, checkoutMinute] = checkoutTimeStr
-            .split(':')
-            .map(Number);
-
-        // 3. Calculamos la diferencia en días naturales (sin importar la hora exacta todavía)
-        const startDay = new Date(
-            checkInDate.getFullYear(),
-            checkInDate.getMonth(),
-            checkInDate.getDate(),
+    const confirmCancelAgreement = () => {
+        if (!liveCheckin) return;
+        postCancelAgreement(
+            `/checkins/${liveCheckin.id}/cancel-agreement`,
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => setShowCancelAgreementModal(false),
+            },
         );
-        const currentDay = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-        );
-
-        // Diferencia de días
-        let days = Math.floor(
-            (currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24),
-        );
-
-        // 4. Reglas de negocio:
-        if (days < 0) return 0; // Por si la fecha es futura
-        if (days === 0) return 1; // Si es el mismo día, se cobra al menos 1 noche
-
-        // 5. Verificamos si hoy ya pasó la hora de salida (Check-out)
-        const limitToday = new Date();
-        limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
-
-        // Si la hora actual ya pasó el límite de salida, se cuenta como una noche más
-        if (now.getTime() > limitToday.getTime()) {
-            days += 1;
-        }
-
-        return days;
     };
 
-    const days = calculateRealNights();
-
-    // 2. Costos financieros
-    const oldDebt = parseFloat(liveCheckin.carried_balance || 0);
-    const pricePerNight =
-        parseFloat(liveCheckin.agreed_price) ||
-        parseFloat(liveCheckin.room?.price?.amount) ||
-        0;
-
-    const currentRoomCost = days * pricePerNight;
-    const servicesCost =
-        liveCheckin.services?.reduce((acc: number, s: any) => {
-            const precio = parseFloat(s.pivot?.selling_price) || 0;
-            const cantidad = parseFloat(s.pivot?.quantity) || 0;
-            return acc + precio * cantidad;
-        }, 0) || 0;
-
-    const grandTotal = oldDebt + currentRoomCost + servicesCost;
-    const balanceDue = grandTotal - totalPaid;
-    const isSpecialGroup =
-        liveCheckin?.special_agreement?.type === 'corporativo' ||
-        liveCheckin?.special_agreement?.type === 'delegacion';
-
-    // --- MANEJADORES DE PAGO ---
     const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const amountValue = parseFloat(paymentData.amount);
@@ -261,6 +246,73 @@ export default function OccupiedRoomModal({
         });
     };
 
+    const formatCurrency = (amount: number) =>
+        new Intl.NumberFormat('es-BO', {
+            style: 'currency',
+            currency: 'BOB',
+        }).format(amount);
+
+    const calculateRealNights = () => {
+        if (!liveCheckin.check_in_date) return 1;
+
+        const checkInDate = new Date(liveCheckin.check_in_date);
+        const now = new Date();
+
+        const checkoutTimeStr =
+            liveCheckin.schedule?.check_out_time || '13:00:00';
+        const [checkoutHour, checkoutMinute] = checkoutTimeStr
+            .split(':')
+            .map(Number);
+
+        const startDay = new Date(
+            checkInDate.getFullYear(),
+            checkInDate.getMonth(),
+            checkInDate.getDate(),
+        );
+        const currentDay = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+        );
+
+        let days = Math.floor(
+            (currentDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24),
+        );
+
+        if (days < 0) return 0; 
+        if (days === 0) return 1; 
+
+        const limitToday = new Date();
+        limitToday.setHours(checkoutHour, checkoutMinute, 0, 0);
+
+        if (now.getTime() > limitToday.getTime()) {
+            days += 1;
+        }
+
+        return days;
+    };
+
+    const days = calculateRealNights();
+    const oldDebt = parseFloat(liveCheckin.carried_balance || 0);
+    const pricePerNight =
+        parseFloat(liveCheckin.agreed_price) ||
+        parseFloat(liveCheckin.room?.price?.amount) ||
+        0;
+
+    const currentRoomCost = days * pricePerNight;
+    const servicesCost =
+        liveCheckin.services?.reduce((acc: number, s: any) => {
+            const precio = parseFloat(s.pivot?.selling_price) || 0;
+            const cantidad = parseFloat(s.pivot?.quantity) || 0;
+            return acc + precio * cantidad;
+        }, 0) || 0;
+
+    const grandTotal = oldDebt + currentRoomCost + servicesCost;
+    const balanceDue = grandTotal - totalPaid;
+    const isSpecialGroup =
+        liveCheckin?.special_agreement?.type === 'corporativo' ||
+        liveCheckin?.special_agreement?.type === 'delegacion';
+
     const formatDate = (dateString: string) => {
         if (!dateString) return '---';
         const date = new Date(dateString);
@@ -285,7 +337,6 @@ export default function OccupiedRoomModal({
             {/* MODAL PRINCIPAL */}
             <Dialog open={show} onOpenChange={handleClose}>
                 <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden bg-gray-50/50 p-0 sm:max-w-[1000px]">
-                    {/* ACCESIBILIDAD: Header oculto obligatorio con Title y Description */}
                     <DialogHeader className="sr-only">
                         <DialogTitle>
                             Detalle de Habitación {liveCheckin.room?.number}
@@ -459,7 +510,6 @@ export default function OccupiedRoomModal({
                                                 </span>
                                             </div>
 
-                                            {/* 👇 MAGIA: Ocultamos esta parte si es corporativo 👇 */}
                                             {!isSpecialGroup && (
                                                 <>
                                                     <div className="mx-2 h-8 w-px bg-gray-200"></div>
@@ -478,7 +528,6 @@ export default function OccupiedRoomModal({
                                                 </>
                                             )}
 
-                                            {/* 👇 OPCIONAL: Para que no quede vacío, ponemos un letrerito 👇 */}
                                             {isSpecialGroup && (
                                                 <div className="flex flex-col items-end">
                                                     <span className="rounded bg-indigo-100 px-2 py-1 text-[9px] font-black tracking-widest text-indigo-700 uppercase">
@@ -797,6 +846,138 @@ export default function OccupiedRoomModal({
                                     </div>
                                 </div>
 
+                                {/* --- SECCIÓN DE CONVENIO CORPORATIVO + SEMÁFORO (Punto 3.13) --- */}
+                                {isSpecialGroup && (
+                                    <div className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
+                                        <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-5 py-3">
+                                            <h3 className="flex items-center gap-2 text-xs font-bold tracking-wider text-indigo-600 uppercase">
+                                                <Building2 className="h-4 w-4" />
+                                                Convenio Corporativo
+                                            </h3>
+                                            {/* BADGE SEMÁFORO — usa corpState de status.tsx */}
+                                            {corpState && (
+                                                <span
+                                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black tracking-wide uppercase ${corpState.badge}`}
+                                                >
+                                                    {corpState.text}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-3 p-5">
+                                            {/* Datos del convenio */}
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                <div>
+                                                    <span className="block text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                                                        Tipo de Trato
+                                                    </span>
+                                                    <span className="font-bold text-gray-800 capitalize">
+                                                        {liveCheckin
+                                                            .special_agreement
+                                                            ?.type ??
+                                                            'Corporativo'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                                                        Precio Pactado
+                                                    </span>
+                                                    <span className="font-bold text-indigo-700">
+                                                        {formatCurrency(
+                                                            parseFloat(
+                                                                liveCheckin
+                                                                    .special_agreement
+                                                                    ?.agreed_price ??
+                                                                    liveCheckin.agreed_price ??
+                                                                    0,
+                                                            ),
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Frecuencia / fecha límite (info complementaria) */}
+                                            {agreementInfo &&
+                                            agreementInfo.frequency > 0 ? (
+                                                <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                                    <CalendarClock className="h-4 w-4 text-gray-400" />
+                                                    <div className="text-xs">
+                                                        <span className="text-gray-500">
+                                                            Pago pactado cada{' '}
+                                                        </span>
+                                                        <span className="font-bold text-gray-700">
+                                                            {
+                                                                agreementInfo.frequency
+                                                            }{' '}
+                                                            día(s)
+                                                        </span>
+                                                        {agreementInfo.dueDate && (
+                                                            <>
+                                                                <span className="text-gray-500">
+                                                                    {' '}
+                                                                    · Próximo
+                                                                    vencimiento:{' '}
+                                                                </span>
+                                                                <span
+                                                                    className={`font-bold ${
+                                                                        corpState?.level ===
+                                                                        'moroso'
+                                                                            ? 'text-red-600'
+                                                                            : corpState?.level ===
+                                                                                'pendiente'
+                                                                              ? 'text-amber-600'
+                                                                              : 'text-emerald-600'
+                                                                    }`}
+                                                                >
+                                                                    {agreementInfo.dueDate.toLocaleDateString(
+                                                                        'es-BO',
+                                                                        {
+                                                                            day: 'numeric',
+                                                                            month: 'long',
+                                                                        },
+                                                                    )}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 italic">
+                                                    Convenio sin pago periódico
+                                                    pactado.
+                                                </p>
+                                            )}
+
+                                            {/* Botón Anular Convenio */}
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowCancelAgreementModal(
+                                                        true,
+                                                    )
+                                                }
+                                                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100 active:scale-95"
+                                            >
+                                                <ShieldOff className="h-4 w-4" />
+                                                Anular Convenio
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* --- HISTORIAL FINANCIERO: transición de trato (Punto 3.13) --- */}
+                                {agreementTransitionNote && (
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                                        <h3 className="mb-2 flex items-center gap-2 text-xs font-bold tracking-wider text-amber-700 uppercase">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            Historial Financiero del Convenio
+                                        </h3>
+                                        <p className="text-xs leading-relaxed text-amber-800">
+                                            {agreementTransitionNote}
+                                        </p>
+                                    </div>
+                                )}
+
                                 {/* --- SECCIÓN DE CONSUMOS --- */}
                                 <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                                     <div className="mb-4 flex items-center justify-between">
@@ -928,12 +1109,66 @@ export default function OccupiedRoomModal({
                 </DialogContent>
             </Dialog>
 
+            {/* --- MODAL DE CONFIRMACIÓN DE ANULACIÓN DE CONVENIO (Punto 3.13) --- */}
+            <Dialog
+                open={showCancelAgreementModal}
+                onOpenChange={setShowCancelAgreementModal}
+            >
+                <DialogContent className="rounded-2xl border-none bg-white p-6 text-center shadow-2xl sm:max-w-[420px]">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Anular Convenio Corporativo</DialogTitle>
+                        <DialogDescription>
+                            Confirme la anulación del convenio corporativo de
+                            esta estadía.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-red-100 bg-red-50 shadow-sm">
+                        <ShieldOff className="h-7 w-7 text-red-600" />
+                    </div>
+                    <h3 className="mb-2 text-xl font-bold tracking-tight text-gray-800">
+                        ¿Anular Convenio Corporativo?
+                    </h3>
+                    <p className="mb-4 text-sm leading-relaxed text-gray-500">
+                        El dinero ya pagado{' '}
+                        <strong className="text-gray-700">
+                            no se verá afectado
+                        </strong>
+                        . A partir de hoy se aplicará el{' '}
+                        <strong className="text-gray-700">precio normal</strong>{' '}
+                        de la habitación y se retirará la frecuencia de pago
+                        pactada.
+                    </p>
+                    <div className="mb-5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-left text-[11px] text-amber-800">
+                        Quedará constancia de la transición en el historial
+                        financiero de la habitación.
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            onClick={() => setShowCancelAgreementModal(false)}
+                            disabled={processingCancel}
+                            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={confirmCancelAgreement}
+                            disabled={processingCancel}
+                            className="w-full transform rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition hover:bg-red-700 active:scale-[0.98] disabled:opacity-50"
+                        >
+                            {processingCancel
+                                ? 'Anulando...'
+                                : 'Sí, Anular Convenio'}
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             {/* MODAL DE SERVICIOS */}
             <CheckinDetailModal
                 show={showServiceModal}
                 onClose={() => {
                     setShowServiceModal(false);
-                    // Magia de actualización de datos en el padre usando la palabra clave de Inertia
                     router.reload({ only: ['Checkins', 'Rooms'] });
                 }}
                 checkins={liveCheckin ? [liveCheckin] : []}
@@ -1103,7 +1338,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
     const handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
 
-        // Construimos la URL manualmente sin usar Ziggy
         post(`/checkins/${checkinId}/refund`, {
             preserveScroll: true,
             preserveState: true,
@@ -1116,7 +1350,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
 
     return (
         <>
-            {/* --- BOTÓN DISPARADOR (junto a Registrar Pago / Checkout) --- */}
             <Button
                 type="button"
                 variant="outline"
@@ -1127,7 +1360,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                 Devolución
             </Button>
 
-            {/* --- MODAL INTERNO DE DEVOLUCIÓN --- */}
             <Dialog
                 open={open}
                 onOpenChange={(value) =>
@@ -1148,7 +1380,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                     </DialogHeader>
 
                     <form onSubmit={handleSubmit} className="mt-2 space-y-4">
-                        {/* MONTO */}
                         <div className="space-y-1.5">
                             <Label htmlFor="refund-amount">
                                 Monto a devolver (Bs.)
@@ -1171,13 +1402,12 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                             )}
                         </div>
 
-                        {/* MÉTODO DE PAGO */}
                         <div className="space-y-1.5">
                             <Label htmlFor="refund-method">
                                 Método de devolución
                             </Label>
                             <Select
-                                value={data.method}
+                                value={data.method} 
                                 onValueChange={(value) =>
                                     setData('method', value as RefundMethod)
                                 }
@@ -1205,7 +1435,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                             )}
                         </div>
 
-                        {/* MOTIVO (OBLIGATORIO) */}
                         <div className="space-y-1.5">
                             <Label htmlFor="refund-notes">
                                 Motivo de la devolución
@@ -1226,7 +1455,6 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                             )}
                         </div>
 
-                        {/* ACCIONES */}
                         <div className="flex justify-end gap-3 pt-2">
                             <Button
                                 type="button"

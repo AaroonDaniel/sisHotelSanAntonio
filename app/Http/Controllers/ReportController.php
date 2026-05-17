@@ -144,11 +144,75 @@ class ReportController extends Controller
             }
         }
 
+        // ============================================================
+        // 📒 LIBRO DIARIO (Punto 7.9) — Movimientos del día en curso
+        // ============================================================
+        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd]) // Corrección a created_at aplicada
+            ->get()
+            ->map(function ($p) {
+                $monto = (float) $p->amount; // las devoluciones ya vienen negativas
+                return [
+                    'id'          => 'PAY-' . $p->id,
+                    'kind'        => $monto < 0 ? 'devolucion' : 'ingreso',
+                    'concept'     => $monto < 0
+                        ? 'Devolución a huésped'
+                        : ($p->type === 'ADELANTO' ? 'Adelanto de estadía' : 'Pago / Amortización'),
+                    'reference'   => $p->checkin && $p->checkin->room
+                        ? 'Hab. ' . $p->checkin->room->number
+                        : '—',
+                    'guest'       => $p->checkin && $p->checkin->guest
+                        ? $p->checkin->guest->full_name
+                        : 'Sin Huésped',
+                    'method'      => $p->method,
+                    'bank'        => $p->bank_name,
+                    'user'        => $p->user->name ?? 'Sistema',
+                    'amount'      => $monto,
+                    'occurred_at' => Carbon::parse($p->created_at)->toIso8601String(),
+                ];
+            });
+
+        $expenses = Expense::with('user')
+            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
+            ->get()
+            ->map(function ($e) {
+                return [
+                    'id'          => 'EXP-' . $e->id,
+                    'kind'        => 'egreso',
+                    'concept'     => $e->description ?? 'Gasto operativo',
+                    'reference'   => 'Egreso de caja',
+                    'guest'       => '—',
+                    'method'      => 'EFECTIVO',
+                    'bank'        => null,
+                    'user'        => $e->user->name ?? 'Sistema',
+                    'amount'      => -1 * abs((float) $e->amount), // egreso siempre negativo
+                    'occurred_at' => Carbon::parse($e->created_at)->toIso8601String(),
+                ];
+            });
+
+        // Unificamos y ordenamos cronológicamente (más reciente primero).
+        $dailyBook = $payments->concat($expenses)
+            ->sortByDesc('occurred_at')
+            ->values();
+
+        // Totales para las Cards superiores.
+        $ingresosHoy     = $payments->where('kind', 'ingreso')->sum('amount');
+        $devolucionesHoy = abs($payments->where('kind', 'devolucion')->sum('amount'));
+        $egresosHoy      = abs($expenses->sum('amount'));
+        $totalNeto       = $ingresosHoy - $devolucionesHoy - $egresosHoy;
+
         return Inertia::render('reports/index', [
-            'Entrantes' => $entrantes->sortBy('room_number')->values()->all(),
-            'Quedantes' => $quedantes->sortBy('room_number')->values()->all(),
-            'Salientes' => $salientes->sortBy('room_number')->values()->all(),
-            'TargetDate' => $targetDate 
+            'Entrantes'  => $entrantes->sortBy('room_number')->values()->all(),
+            'Quedantes'  => $quedantes->sortBy('room_number')->values()->all(),
+            'Salientes'  => $salientes->sortBy('room_number')->values()->all(),
+            'TargetDate' => $targetDate,
+            'DailyBook'  => $dailyBook,
+            'BookSummary'=> [
+                'ingresos'     => round($ingresosHoy, 2),
+                'egresos'      => round($egresosHoy, 2),
+                'devoluciones' => round($devolucionesHoy, 2),
+                'neto'         => round($totalNeto, 2),
+            ],
         ]);
     }
 

@@ -51,35 +51,67 @@ class CheckinController extends Controller
         ]);
     }
 
-    // Funcion Calculo de precio acordado segun ocupacion y capacidad
-    // Funcion Calculo de precio acordado segun ocupacion y capacidad
-    public function calculateAgreedPrice($roomId, $totalGuests)
+    /**
+     * Calcula el precio acordado de una habitación según el conteo real de huéspedes.
+     *
+     * Regla de negocio:
+     *  - Si la ocupación es MENOR a la capacidad del tipo de habitación, se busca
+     *    una tarifa (Price) activa que coincida con el tipo de baño y un RoomType
+     *    cuya capacidad sea igual al número real de huéspedes.
+     *  - Si la ocupación llena o supera la capacidad, se cobra la tarifa base.
+     *  - Nunca devuelve menos que la tarifa base de 1 persona disponible.
+     *
+     * @param  int  $roomId
+     * @param  int  $totalGuests  Conteo real de huéspedes (titular + acompañantes).
+     * @return float
+     */
+    public function calculateAgreedPrice(int $roomId, int $totalGuests): float
     {
         $room = \App\Models\Room::with(['price', 'roomType'])->findOrFail($roomId);
 
-        // Datos por defecto de la habitación original
-        $originalPrice = $room->price->amount ?? 0;
-        $bathroomType = $room->price->bathroom_type ?? null;
-        $roomCapacity = $room->roomType->capacity ?? 1;
+        $originalPrice = (float) ($room->price->amount ?? 0);
+        $bathroomType  = $room->price->bathroom_type ?? null;
+        $roomCapacity  = (int) ($room->roomType->capacity ?? 1);
 
-        $agreedPrice = $originalPrice;
+        // Nunca menos de 1 huésped para el cálculo.
+        $effectiveGuests = max(1, $totalGuests);
 
-        // Si la cantidad de personas es menor a la capacidad máxima y hay un tipo de baño definido
-        if ($totalGuests < $roomCapacity && $bathroomType) {
-            // Buscamos un precio activo que coincida con el tipo de baño y la cantidad de huéspedes actual
-            $adjustedPrice = \App\Models\Price::where('is_active', true)
-                ->where('bathroom_type', $bathroomType)
-                ->whereHas('roomType', function ($query) use ($totalGuests) {
-                    $query->where('capacity', $totalGuests);
-                })
-                ->first();
-
-            if ($adjustedPrice) {
-                $agreedPrice = $adjustedPrice->amount;
-            }
+        // Ocupación completa o salón => tarifa base.
+        if ($effectiveGuests >= $roomCapacity || !$bathroomType) {
+            return $originalPrice;
         }
 
-        return $agreedPrice;
+        // Ocupación parcial: buscamos la tarifa que corresponde al conteo real.
+        $adjustedPrice = \App\Models\Price::where('is_active', true)
+            ->where('bathroom_type', $bathroomType)
+            ->whereHas('roomType', fn($q) => $q->where('capacity', $effectiveGuests))
+            ->value('amount');
+
+        return $adjustedPrice !== null ? (float) $adjustedPrice : $originalPrice;
+    }
+
+    /**
+     * Endpoint AJAX de previsualización de precio.
+     * El frontend lo consume cada vez que el recepcionista agrega/quita un huésped
+     * para mostrar en vivo cuánto sube o baja el precio.
+     */
+    public function previewPrice(Request $request)
+    {
+        $validated = $request->validate([
+            'room_id'      => 'required|exists:rooms,id',
+            'total_guests' => 'required|integer|min:1',
+        ]);
+
+        $room      = \App\Models\Room::with('price')->findOrFail($validated['room_id']);
+        $basePrice = (float) ($room->price->amount ?? 0);
+        $adjusted  = $this->calculateAgreedPrice($validated['room_id'], $validated['total_guests']);
+
+        return response()->json([
+            'base_price'    => $basePrice,
+            'adjusted_price' => $adjusted,
+            'delta'         => $adjusted - $basePrice,
+            'total_guests'  => (int) $validated['total_guests'],
+        ]);
     }
 
     public function store(Request $request)
@@ -331,28 +363,32 @@ class CheckinController extends Controller
         }
 
         $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
-        $basePrice = $roomModelForPrice->price->amount ?? 0;
-        $agreedPrice = $basePrice;
+        $basePrice  = (float) ($roomModelForPrice->price->amount ?? 0);
 
-        $isSpecialDeal = $request->boolean('is_corporate') || in_array($request->input('type'), ['corporativo', 'delegacion']);
+        $isSpecialDeal = $request->boolean('is_corporate')
+            || in_array($request->input('type'), ['corporativo', 'delegacion']);
 
-        // CÓDIGO CORREGIDO
         if ($isSpecialDeal) {
-            // Respeta el precio enviado por React, si no viene nada, usa la regla de los -20 Bs
+            // CONVENIO CERRADO: el precio lo fija el Gerente/recepción.
+            // No se recalcula por conteo de huéspedes.
             $agreedPrice = $request->filled('agreed_price')
-                ? floatval($request->input('agreed_price'))
+                ? (float) $request->input('agreed_price')
                 : max(0, $basePrice - 20);
-        } elseif ($request->boolean('auto_adjust_price')) {
+        } else {
+            // BUGFIX 3.13.2: para estadías normales el precio SIEMPRE se ajusta
+            // matemáticamente según el conteo real de huéspedes. Antes esto solo
+            // ocurría si llegaba el flag 'auto_adjust_price', que el frontend
+            // dejó de enviar -> el precio quedaba "congelado" en la tarifa base.
             $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
         }
 
+        // El descuento manual sigue teniendo prioridad sobre el precio calculado.
         if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-            $minAllowed = $agreedPrice * 0.5;
-            $agreedPrice = max(floatval($request->discount), $isAssigningSalon ? 0 : $minAllowed);
+            $minAllowed  = $agreedPrice * 0.5;
+            $agreedPrice = max((float) $request->discount, $isAssigningSalon ? 0 : $minAllowed);
         }
 
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
-
         // =========================================================
         // 5. INICIO DE TRANSACCIÓN EN BASE DE DATOS
         // =========================================================
@@ -744,6 +780,77 @@ class CheckinController extends Controller
         return redirect()->back()->with('success', 'Pago registrado exitosamente.');
     }
 
+    /**
+     * Anula el convenio corporativo de un check-in activo (Punto 3.13).
+     *
+     * Regla de negocio:
+     *  - NO se altera el dinero ya pagado (los Payment quedan intactos).
+     *  - Se desvincula el SpecialAgreement (special_agreement_id = null).
+     *  - El agreed_price pasa a ser el precio NORMAL de la habitación,
+     *    recalculado según el conteo real de huéspedes, vigente DESDE este momento.
+     *  - Se deja constancia en notes y en un SignificantEvent para auditoría.
+     */
+    public function cancelAgreement(Request $request, \App\Models\Checkin $checkin)
+    {
+        if (is_null($checkin->special_agreement_id)) {
+            return redirect()->back()->with('error', 'Este check-in no tiene un convenio activo.');
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($checkin) {
+
+            $ahora     = \Carbon\Carbon::now();
+            $userId    = \Illuminate\Support\Facades\Auth::id() ?? 1;
+            $agreement = $checkin->specialAgreement;
+
+            // 1. Días que el huésped estuvo bajo trato corporativo.
+            $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
+            $diasCorporativo = max(0, intval($checkInDate->diffInDays($ahora)));
+
+            // 2. Precio NORMAL desde ahora: tarifa de la habitación ajustada por ocupación real.
+            $totalGuests = 1 + $checkin->companions()->count();
+            $precioNormal = $this->calculateAgreedPrice($checkin->room_id, $totalGuests);
+
+            // 3. Nota financiera de transición (queda visible en el modal).
+            $transicion = sprintf(
+                ' [CONVENIO ANULADO el %s: Trato corporativo respetado hasta el %s (%d dias). '
+                    . 'Trato normal desde el %s a Bs %s/noche.]',
+                $ahora->format('d/m/Y H:i'),
+                $ahora->format('d/m/Y'),
+                $diasCorporativo,
+                $ahora->format('d/m/Y'),
+                number_format($precioNormal, 2)
+            );
+
+            // 4. Aplicar los cambios. El dinero ya pagado NO se toca.
+            $oldAgreementId = $checkin->special_agreement_id;
+            $checkin->update([
+                'special_agreement_id' => null,                 // corporate_client = false
+                'agreed_price'         => $precioNormal,          // precio original desde ahora
+                'notes'                => trim(($checkin->notes ?? '') . $transicion),
+            ]);
+
+            // 5. Eliminamos el convenio (la frecuencia de pago se va con él).
+            \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
+
+            // 6. Constancia en SignificantEvent para auditoría del Gerente.
+            \App\Models\SignificantEvent::create([
+                'checkin_id'  => $checkin->id,
+                'user_id'     => $userId,
+                'event_type'  => 'ANULACION_CONVENIO',
+                'description' => sprintf(
+                    'Convenio corporativo anulado en Hab. %s. Vigente %d dias. '
+                        . 'Nuevo precio normal: Bs %s.',
+                    $checkin->room->number ?? '-',
+                    $diasCorporativo,
+                    number_format($precioNormal, 2)
+                ),
+                'event_date'  => $ahora,
+            ]);
+
+            return redirect()->back()->with('success', 'Convenio corporativo anulado. El precio normal aplica desde hoy.');
+        });
+    }
+
     public function update(Request $request, Checkin $checkin)
     {
         $validated = $request->validate([
@@ -973,39 +1080,44 @@ class CheckinController extends Controller
 
             $extraNotes = "";
 
+            // 🌟 Recalculamos matemáticamente al agregar/quitar personas en la edición.
             if ($isSpecialGroupNow) {
-                // 5.1 ES UN GRUPO ESPECIAL O AUTO-AJUSTE (Crear o Actualizar)
-                $tipoTratoNuevo = $isAutoAdjustNow ? 'AJUSTE DE PRECIO' : ($typeRequest ?? 'corporativo');
-                $frecuenciaDias = $isAutoAdjustNow ? 0 : (int) $request->input('corporate_days', 0);
+                // Grupo especial / convenio cerrado: respeta el precio enviado.
+                $updatedAgreedPrice = $request->filled('agreed_price')
+                    ? (float) $request->input('agreed_price')
+                    : $precioActualGuardado;
+            } else {
+                // BUGFIX: estadía normal -> el precio se ajusta SIEMPRE por conteo real.
+                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            }
 
-                // Usamos updateOrCreate para que cree uno nuevo si no tenía, o actualice el que ya tiene
+            $extraNotes = "";
+
+            if ($isSpecialGroupNow) {
+                $tipoTratoNuevo  = $isAutoAdjustNow ? 'AJUSTE DE PRECIO' : ($typeRequest ?? 'corporativo');
+                $frecuenciaDias  = $isAutoAdjustNow ? 0 : (int) $request->input('corporate_days', 0);
+
                 $agreement = \App\Models\SpecialAgreement::updateOrCreate(
-                    ['id' => $checkin->special_agreement_id], // Busca si ya existe
+                    ['id' => $checkin->special_agreement_id],
                     [
-                        'type' => $tipoTratoNuevo,
-                        'agreed_price' => $updatedAgreedPrice,
+                        'type'                   => $tipoTratoNuevo,
+                        'agreed_price'           => $updatedAgreedPrice,
                         'payment_frequency_days' => $frecuenciaDias,
                     ]
                 );
-
-                // Aseguramos que el checkin tenga el ID correcto
                 $checkin->special_agreement_id = $agreement->id;
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
-                // 5.2 DE ESPECIAL A NORMAL ("El Castigo")
-                $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
-                $now = \Carbon\Carbon::now();
-                $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays($now)));
+                // De especial a normal: se revoca el convenio y se recalcula por huéspedes.
+                $checkInDate          = \Carbon\Carbon::parse($checkin->check_in_date);
+                $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays(\Carbon\Carbon::now())));
 
-                $updatedAgreedPrice = $basePrice;
+                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
 
                 $oldAgreementId = $checkin->special_agreement_id;
-                $checkin->special_agreement_id = null; // 🌟 Desconectamos el convenio
+                $checkin->special_agreement_id = null;
                 \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
 
                 $extraNotes = " [SISTEMA: Convenio revocado. Duró {$diasQueFueCorporativo} días.]";
-            } else {
-                // 5.3 SIGUE SIENDO NORMAL
-                $updatedAgreedPrice = $basePrice;
             }
 
             // 🌟 Si es Auto Ajuste o Especial, consideramos la capacidad como llena

@@ -100,6 +100,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                 { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
                 { name: 'Libro Diario', icon: BookDown, url: '#' }, 
                 { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
+                { name: 'Control Diario de Ingresos y Egresos', icon: FileText, url: '/reports/financialMovement' },
             ],
         },
     ];
