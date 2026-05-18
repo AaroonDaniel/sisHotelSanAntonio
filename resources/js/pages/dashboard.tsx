@@ -98,9 +98,9 @@ export default function Dashboard({ auth }: DashboardProps) {
             theme: 'amber',
             items: [
                 { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
-                { name: 'Libro Diario', icon: BookDown, url: '#' }, 
+                //{ name: 'Libro Diario', icon: BookDown, url: '#' }, 
                 { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
-                { name: 'Control Diario de Ingresos y Egresos', icon: FileText, url: '/reports/financialMovement' },
+                { name: 'Ingresos y Egresos diarios', icon: FileText, url: '/reports/financialMovement' },
             ],
         },
     ];

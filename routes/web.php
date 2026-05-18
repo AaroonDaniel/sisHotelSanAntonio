@@ -168,6 +168,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
+    Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement');
     //Cierre de caja
     Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial');
     Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
@@ -176,6 +177,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
     Route::get('/cash-registers/{cashRegister}', [CashRegisterController::class, 'show'])->name('cash-registers.show');
+
 
     //Gastos
     Route::get('/gastos', [ExpenseController::class, 'index'])->name('gastos.index');
