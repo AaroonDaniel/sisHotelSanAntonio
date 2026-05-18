@@ -1,8 +1,17 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
-import { ArrowLeft, ShieldCheck, Eye, FileClock, Link } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
+import { ArrowLeft, Eye, FileClock, Link, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -11,15 +20,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from '@/components/ui/dialog';
 
 /* ----------------------------- Tipos ----------------------------- */
 
@@ -62,14 +62,14 @@ interface PaginatedLogs {
 }
 
 interface Props {
-    auth: { 
-        user: { 
+    auth: {
+        user: {
             id: number;
             name: string;
             nickname: string;
             full_name: string;
             [key: string]: any; // Esto permite cualquier otro campo adicional de tu sistema
-        } 
+        };
     };
     logs: PaginatedLogs;
 }
@@ -130,7 +130,7 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
 
             <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
                 <button
-                    onClick={() => window.history.back()}
+                    onClick={() => router.visit('/rooms/status')}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white"
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 group-hover:border-gray-500 group-hover:bg-gray-700">
@@ -147,7 +147,8 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                         Auditoría y Bitácora
                     </h2>
                     <span className="text-sm text-gray-400">
-                        {logs.total} registro{logs.total === 1 ? '' : 's'} en total
+                        {logs.total} registro{logs.total === 1 ? '' : 's'} en
+                        total
                     </span>
                 </div>
 
@@ -155,19 +156,19 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-gray-50">
-                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Fecha y Hora
                                 </TableHead>
-                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Usuario
                                 </TableHead>
-                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Acción
                                 </TableHead>
-                                <TableHead className="text-xs font-bold uppercase text-gray-600">
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Módulo
                                 </TableHead>
-                                <TableHead className="text-right text-xs font-bold uppercase text-gray-600">
+                                <TableHead className="text-right text-xs font-bold text-gray-600 uppercase">
                                     Detalles
                                 </TableHead>
                             </TableRow>
@@ -191,14 +192,14 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                     key={log.id}
                                     className="transition-colors hover:bg-gray-50/60"
                                 >
-                                    <TableCell className="whitespace-nowrap text-sm font-medium text-gray-800">
+                                    <TableCell className="text-sm font-medium whitespace-nowrap text-gray-800">
                                         {formatDateTime(log.created_at)}
                                     </TableCell>
                                     <TableCell className="text-sm text-gray-700">
                                         {log.causer ? (
                                             log.causer.name
                                         ) : (
-                                            <span className="italic text-gray-400">
+                                            <span className="text-gray-400 italic">
                                                 Sistema
                                             </span>
                                         )}
@@ -207,8 +208,10 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                         <Badge
                                             variant="outline"
                                             className={
-                                                ACTION_STYLES[log.description] ??
-                                                'bg-gray-100 text-gray-700 border-gray-200'
+                                                ACTION_STYLES[
+                                                    log.description
+                                                ] ??
+                                                'border-gray-200 bg-gray-100 text-gray-700'
                                             }
                                         >
                                             {actionLabel(log.description)}
@@ -251,8 +254,14 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                           ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
                                           : 'cursor-not-allowed border border-gray-800 bg-gray-900 text-gray-600'
                                 }`}
-                                dangerouslySetInnerHTML={{ __html: link.label }}
-                            />
+                            >
+                                {/* 👇 AQUÍ ESTÁ LA MAGIA 👇 */}
+                                <span
+                                    dangerouslySetInnerHTML={{
+                                        __html: link.label,
+                                    }}
+                                />
+                            </Link>
                         ))}
                     </div>
                 )}
@@ -332,7 +341,7 @@ function ChangePanel({ title, tone, data }: ChangePanelProps) {
                     {JSON.stringify(data, null, 2)}
                 </pre>
             ) : (
-                <p className="text-xs italic text-gray-500">Sin datos.</p>
+                <p className="text-xs text-gray-500 italic">Sin datos.</p>
             )}
         </div>
     );

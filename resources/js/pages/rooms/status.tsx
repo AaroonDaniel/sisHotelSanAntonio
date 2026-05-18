@@ -49,6 +49,26 @@ import TransferModal from './transferModal';
 // Evitar errores de TS con Ziggy
 declare var route: any;
 
+// =========================================================
+// 🕐 HELPER DE FECHAS — Normaliza una fecha a medianoche local.
+// Acepta string (ISO o "YYYY-MM-DD HH:mm:ss" de Laravel) o Date.
+// =========================================================
+
+const stripTime = (input: string | Date): Date => {
+    let d: Date;
+
+    if (input instanceof Date) {
+        d = new Date(input.getTime());
+    } else {
+        const datePart = String(input).split('T')[0].split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        d = new Date(year, (month || 1) - 1, day || 1);
+    }
+
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
 // --- INTERFACES ---
 interface User {
     id: number;
@@ -311,63 +331,63 @@ export default function RoomsStatus({
         }
     }, [flash?.auto_open_checkins]);
     useEffect(() => {
-    const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
-    if (queueStr && !isCheckinModalOpen) {
-        // Formato CSV simple: "12,45,7". Parsear números nunca lanza
-        // excepción; los valores inválidos (NaN) se descartan con filter.
-        let queue: number[] = queueStr
-            .split(',')
-            .map((s) => Number(s.trim()))
-            .filter((n) => Number.isInteger(n) && n > 0);
+        const queueStr = sessionStorage.getItem('pendingCheckinsQueue');
+        if (queueStr && !isCheckinModalOpen) {
+            // Formato CSV simple: "12,45,7". Parsear números nunca lanza
+            // excepción; los valores inválidos (NaN) se descartan con filter.
+            let queue: number[] = queueStr
+                .split(',')
+                .map((s) => Number(s.trim()))
+                .filter((n) => Number.isInteger(n) && n > 0);
 
-        let openedModal = false;
+            let openedModal = false;
 
-        // BUCLE: avanza ignorando las habitaciones ya completadas
-        while (queue.length > 0 && !openedModal) {
-            const nextCheckinId = queue[0];
+            // BUCLE: avanza ignorando las habitaciones ya completadas
+            while (queue.length > 0 && !openedModal) {
+                const nextCheckinId = queue[0];
 
-            const roomWithCheckin = Rooms.find(
-                (r) =>
-                    r.checkins &&
-                    r.checkins.some((c) => c.id === nextCheckinId),
-            );
-
-            if (roomWithCheckin) {
-                const checkin = roomWithCheckin.checkins!.find(
-                    (c) => c.id === nextCheckinId,
+                const roomWithCheckin = Rooms.find(
+                    (r) =>
+                        r.checkins &&
+                        r.checkins.some((c) => c.id === nextCheckinId),
                 );
-                if (checkin) {
-                    const isTitularIncomplete =
-                        checkin.guest?.profile_status === 'INCOMPLETE';
-                    const isOriginMissing =
-                        !checkin.origin || checkin.origin.trim() === '';
 
-                    if (isTitularIncomplete || isOriginMissing) {
-                        // FALTAN DATOS: nos detenemos aquí y abrimos el modal
-                        setCheckinToEdit(checkin);
-                        setSelectedRoomId(roomWithCheckin.id);
-                        setIsCheckinModalOpen(true);
-                        openedModal = true;
+                if (roomWithCheckin) {
+                    const checkin = roomWithCheckin.checkins!.find(
+                        (c) => c.id === nextCheckinId,
+                    );
+                    if (checkin) {
+                        const isTitularIncomplete =
+                            checkin.guest?.profile_status === 'INCOMPLETE';
+                        const isOriginMissing =
+                            !checkin.origin || checkin.origin.trim() === '';
+
+                        if (isTitularIncomplete || isOriginMissing) {
+                            // FALTAN DATOS: nos detenemos aquí y abrimos el modal
+                            setCheckinToEdit(checkin);
+                            setSelectedRoomId(roomWithCheckin.id);
+                            setIsCheckinModalOpen(true);
+                            openedModal = true;
+                        } else {
+                            // ESTÁ COMPLETA: la sacamos y el bucle revisa la siguiente
+                            queue.shift();
+                        }
                     } else {
-                        // ESTÁ COMPLETA: la sacamos y el bucle revisa la siguiente
                         queue.shift();
                     }
                 } else {
                     queue.shift();
                 }
+            }
+
+            // Actualizamos la memoria (de nuevo como CSV)
+            if (queue.length > 0) {
+                sessionStorage.setItem('pendingCheckinsQueue', queue.join(','));
             } else {
-                queue.shift();
+                sessionStorage.removeItem('pendingCheckinsQueue');
             }
         }
-
-        // Actualizamos la memoria (de nuevo como CSV)
-        if (queue.length > 0) {
-            sessionStorage.setItem('pendingCheckinsQueue', queue.join(','));
-        } else {
-            sessionStorage.removeItem('pendingCheckinsQueue');
-        }
-    }
-}, [Rooms, isCheckinModalOpen]);
+    }, [Rooms, isCheckinModalOpen]);
     // =========================================================
     // 1. LÓGICA DE ESTADO (Corregida para no afectar salones)
     // =========================================================
@@ -459,8 +479,7 @@ export default function RoomsStatus({
 
         const convenio = activeCheckin?.special_agreement;
         const isSpecialGroup =
-            convenio?.type === 'corporativo' ||
-            convenio?.type === 'delegacion';
+            convenio?.type === 'corporativo' || convenio?.type === 'delegacion';
 
         if (!isSpecialGroup) return null;
 
@@ -473,32 +492,32 @@ export default function RoomsStatus({
                 0,
             );
         } else {
-            totalPaid =
-                parseFloat(String(activeCheckin.advance_payment)) || 0;
+            totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
         }
 
         // 2. Variables del convenio.
-        const agreedPrice =
-            parseFloat(String(activeCheckin.agreed_price)) || 0;
+        const agreedPrice = parseFloat(String(activeCheckin.agreed_price)) || 0;
         const corpDays =
             Number(convenio?.payment_frequency_days) ||
             Number(activeCheckin.corporate_days) ||
             1;
         const cyclePrice = agreedPrice * corpDays;
 
-        // 3. Días reales de estadía (medianoches transcurridas).
-        const realDateString =
-            activeCheckin.check_in_date || new Date().toISOString();
-        const checkinDate = new Date(
-            realDateString.split('T')[0] + 'T00:00:00',
+        // 3. Días reales de estadía — POR DÍAS NATURALES.
+        //    Normalizamos ambas fechas a medianoche para que las horas
+        //    del check-in (ej. 12:09) NO afecten el conteo de días.
+        const checkinDay = stripTime(
+            activeCheckin.check_in_date || new Date().toISOString(),
         );
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = stripTime(new Date());
 
-        const diffTime = today.getTime() - checkinDate.getTime();
-        const diasEstadia = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const MS_PER_DAY = 1000 * 60 * 60 * 24;
+        const diffTime = today.getTime() - checkinDay.getTime();
+        // Math.round evita errores de redondeo por cambios de horario (DST).
+        const diasEstadia = Math.max(0, Math.round(diffTime / MS_PER_DAY));
 
         // 4. Matemática del ciclo de cobro.
+        //    ciclosVencidos: ciclos del pasado que YA debieron pagarse.
         const ciclosVencidos = Math.max(
             0,
             Math.floor((diasEstadia - 1) / corpDays),
@@ -508,9 +527,16 @@ export default function RoomsStatus({
         const deudaCicloActual = cicloActual * cyclePrice;
         const faltanteTotal = deudaCicloActual - totalPaid;
 
-        // 5. Evaluación del semáforo.
+        // 5. Fecha de vencimiento del ciclo actual (en días naturales).
+        //    dueDateDay = checkinDay + (cicloActual * corpDays) días.
+        const dueDateDay = new Date(checkinDay.getTime());
+        dueDateDay.setDate(dueDateDay.getDate() + cicloActual * corpDays);
+        dueDateDay.setHours(0, 0, 0, 0);
+
+        // 6. Evaluación del semáforo.
+
+        // 🟥 MOROSO POR CICLO PASADO: faltó completar un ciclo anterior.
         if (totalPaid < deudaVencida) {
-            // 🟥 MOROSO: faltó completar un ciclo del pasado.
             const deudaMora = deudaVencida - totalPaid;
             return {
                 level: 'moroso',
@@ -522,8 +548,8 @@ export default function RoomsStatus({
         const saldoAbonadoAlCiclo = totalPaid - deudaVencida;
         const umbral50Porciento = cyclePrice * 0.5;
 
+        // 🟩 AL DÍA: ya pagó el 50% o más del ciclo actual.
         if (saldoAbonadoAlCiclo >= umbral50Porciento) {
-            // 🟩 AL DÍA: ya pagó el 50% o más del ciclo actual.
             return {
                 level: 'al_dia',
                 badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
@@ -531,28 +557,66 @@ export default function RoomsStatus({
             };
         }
 
-        // 🟨 PENDIENTE: menos del 50% pagado. Alerta según el día.
-        const dueDate = cicloActual * corpDays;
-        const daysRemaining = dueDate - diasEstadia;
+        // 🟨 / 🟥 PENDIENTE — comparación POR DÍA NATURAL.
+        const todayTime = today.getTime();
+        const dueTime = dueDateDay.getTime();
 
-        if (daysRemaining > 1) {
+        // CASO A: aún no llega el día de vencimiento.
+        if (todayTime < dueTime) {
+            const diasFaltantes = Math.round(
+                (dueTime - todayTime) / MS_PER_DAY,
+            );
+            if (diasFaltantes === 1) {
+                return {
+                    level: 'pendiente',
+                    badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                    text: `COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
+                };
+            }
             return {
                 level: 'pendiente',
                 badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
                 text: `PENDIENTE: ${faltanteTotal.toFixed(2)} Bs`,
             };
         }
-        if (daysRemaining === 1) {
+
+        // CASO B: hoy ES el día de vencimiento (today === dueDate).
+        //    El huésped tiene hasta la hora de check-out para pagar.
+        //    Si ya se superó esa hora, pasa a MOROSO; si no, "COBRAR HOY".
+        if (todayTime === dueTime) {
+            // Hora límite configurada en el horario del check-in.
+            const checkoutTime: string | undefined =
+                activeCheckin?.room?.active_checkin?.schedule?.check_out_time ||
+                activeCheckin?.schedule?.check_out_time;
+
+            if (checkoutTime) {
+                const [h, m] = String(checkoutTime).split(':').map(Number);
+                const limite = new Date();
+                limite.setHours(h || 0, m || 0, 0, 0);
+
+                if (new Date().getTime() > limite.getTime()) {
+                    // ⛔ Venció la hora de check-out sin pago => MOROSO.
+                    return {
+                        level: 'moroso',
+                        badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+                        text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs`,
+                    };
+                }
+            }
+
+            // Dentro del plazo del día => cobrar hoy.
             return {
                 level: 'pendiente',
-                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
-                text: `COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
+                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
+                text: `COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
             };
         }
+
+        // CASO C: today > dueDate => moroso directo (pasó el día natural).
         return {
-            level: 'pendiente',
-            badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
-            text: `COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
+            level: 'moroso',
+            badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+            text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs`,
         };
     };
 
@@ -1201,8 +1265,7 @@ export default function RoomsStatus({
                         // 🚦 SEMÁFORO DE CONVENIOS — usa la función pura
                         // `computeCorpState`, la MISMA que alimenta el modal,
                         // garantizando que card y modal nunca discrepen.
-                        const corpState: any =
-                            computeCorpState(activeCheckin);
+                        const corpState: any = computeCorpState(activeCheckin);
 
                         // 🔍 LÓGICA DE RESERVAS ORDENADAS
                         let sortedReservations: any[] = [];
@@ -2535,7 +2598,7 @@ function CheckoutConfirmationModal({
                                                             'factura',
                                                         )
                                                     }
-                                                    className={`flex  flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-600 bg-blue-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-600 bg-blue-50 text-green-700 shadow-sm ring-1 ring-green-600' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                 >
                                                     <div
                                                         className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-600' : 'border-gray-300'}`}

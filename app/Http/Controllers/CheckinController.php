@@ -832,21 +832,18 @@ class CheckinController extends Controller
             // 5. Eliminamos el convenio (la frecuencia de pago se va con él).
             \App\Models\SpecialAgreement::where('id', $oldAgreementId)->delete();
 
-            // 6. Constancia en SignificantEvent para auditoría del Gerente.
-            \App\Models\SignificantEvent::create([
-                'checkin_id'  => $checkin->id,
-                'user_id'     => $userId,
-                'event_type'  => 'ANULACION_CONVENIO',
-                'description' => sprintf(
-                    'Convenio corporativo anulado en Hab. %s. Vigente %d dias. '
-                        . 'Nuevo precio normal: Bs %s.',
-                    $checkin->room->number ?? '-',
-                    $diasCorporativo,
-                    number_format($precioNormal, 2)
-                ),
-                'event_date'  => $ahora,
-            ]);
-
+            // --- REEMPLAZA EL CÓDIGO DE LAS NOTAS POR ESTO ---
+        $notasActuales = $checkin->notes ?? '';
+        
+        // 1. Limpiamos cualquier nota de anulación anterior para no duplicar texto gigante
+        $notasActuales = trim(preg_replace('/\[CONVENIO ANULADO.*?\]/i', '', $notasActuales));
+        
+        // 2. Creamos una nota concisa y clara
+        $notaAnulacion = "[CONVENIO ANULADO: Pasa a tarifa normal de Bs " . $precioNormal . "]";
+        
+        // 3. Unimos el texto y usamos substr() para NUNCA pasarnos de 145 caracteres
+        $checkin->notes = substr(trim($notasActuales . ' ' . $notaAnulacion), 0, 145);
+        $checkin->save();
             return redirect()->back()->with('success', 'Convenio corporativo anulado. El precio normal aplica desde hoy.');
         });
     }
