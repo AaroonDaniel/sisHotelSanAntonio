@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\Invoice;
 use App\Models\Guest;
+use App\Models\SiatCredential;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use DOMDocument;
 use DOMElement;
 use Exception;
@@ -15,84 +18,65 @@ use Exception;
  * (Sector 1 - Compra Venta) según el XSD vigente del SIAT.
  *
  * Modalidad: Computarizada en Línea (codigoModalidad = 2)
- * Hashing: SHA-256 sobre el XML plano (sin firma XAdES).
+ * Hashing:   SHA-256 sobre el XML plano (sin firma XAdES).
+ *
+ * El builder consume directamente la credencial CUFD vigente
+ * (modelo SiatCredential) en lugar de un array suelto, de modo que
+ * el CUF y el nodo <cufd> provienen de la misma fuente de verdad.
  */
 class SiatXmlBuilder
 {
     protected Invoice $invoice;
-    protected string $cufd;
-    protected string $controlCode;
+    protected SiatCredential $cufd;
+    protected CarbonInterface $issuedAt;
     protected DOMDocument $xmlDocument;
 
-    public function __construct(Invoice $invoice, array $cufdData)
+    /**
+     * @param Invoice         $invoice  Factura ya persistida con sus detalles y Huésped.
+     * @param SiatCredential  $cufd     Credencial CUFD vigente (tabla siat_credentials).
+     */
+    public function __construct(Invoice $invoice, SiatCredential $cufd)
     {
         $this->invoice = $invoice;
-        $this->cufd = $cufdData['codigo'];
-        $this->controlCode = $cufdData['codigoControl'];
+        $this->cufd    = $cufd;
+
+        // Fecha/hora real de la transacción. Se fija una sola vez en el
+        // constructor para que el CUF, el nodo <fechaEmision> y el campo
+        // fechaEnvio del SOAP usen exactamente el mismo instante.
+        $this->issuedAt = $invoice->issue_time
+            ? Carbon::parse($invoice->issue_time)
+            : Carbon::now();
+
         $this->xmlDocument = new DOMDocument('1.0', 'UTF-8');
         $this->xmlDocument->formatOutput = true;
     }
 
     // =========================================================
-    // 1. GENERACIÓN DEL CUF (56 dígitos + verificador + control)
+    // 1. GENERACIÓN DEL CUF
     // =========================================================
 
     /**
-     * Genera el Código Único de Factura (CUF).
-     *
-     * Estructura de la cadena base (56 dígitos):
-     *  - NIT emisor             : 13 dígitos
-     *  - Fecha/hora emisión     : 17 dígitos (YYYYMMDDHHmmssSSS)
-     *  - Sucursal               : 4 dígitos
-     *  - Modalidad              : 1 dígito
-     *  - Tipo de emisión        : 1 dígito
-     *  - Tipo de factura        : 1 dígito
-     *  - Tipo doc. sector       : 2 dígitos
-     *  - Número de factura      : 10 dígitos
-     *  - Punto de venta         : 4 dígitos
-     *  ------------------------------------
-     *  TOTAL                    : 53 dígitos numéricos base
-     *
-     *  Sobre estos 53 dígitos se calcula el dígito verificador
-     *  Módulo 11, se concatena, se convierte a Base 16, y finalmente
-     *  se anexa el Código de Control del CUFD.
+     * Genera el Código Único de Factura (CUF) delegando el algoritmo
+     * a SiatUtils, que valida la vigencia del CUFD y aplica Módulo 11.
      */
     public function generateCuf(): string
     {
-        $nit          = str_pad((string) config('siat.nit'), 13, '0', STR_PAD_LEFT);
-        $date         = $this->invoice->issue_time->format('YmdHisv'); // 17 dígitos
-        $branch       = str_pad((string) config('siat.branch_code'), 4, '0', STR_PAD_LEFT);
-        $modality     = (string) config('siat.modality', 2); // 2 = Computarizada
-        $emissionType = '1'; // 1 = Online
-        $invoiceType  = '1'; // 1 = Factura con Derecho a Crédito Fiscal
-        $sectorDoc    = str_pad('1', 2, '0', STR_PAD_LEFT); // 01 = Compra Venta
-        $number       = str_pad((string) $this->invoice->invoice_number, 10, '0', STR_PAD_LEFT);
-        $pos          = str_pad((string) config('siat.pos_code', 0), 4, '0', STR_PAD_LEFT);
-
-        $concatenated = $nit . $date . $branch . $modality . $emissionType
-                      . $invoiceType . $sectorDoc . $number . $pos;
-
-        // Validación defensiva: la cadena base DEBE medir 53 dígitos exactos.
-        if (strlen($concatenated) !== 53) {
-            throw new Exception(
-                "Cadena CUF inválida: se esperaban 53 dígitos, se obtuvieron "
-                . strlen($concatenated) . " ({$concatenated})"
-            );
-        }
-
-        $digit  = SiatUtils::modulo11($concatenated, 1, 9, false);
-        $cufHex = SiatUtils::toBase16($concatenated . $digit);
-
-        return $cufHex . $this->controlCode;
+        return SiatUtils::buildCuf($this->cufd, $this->issuedAt, [
+            'nit'          => config('siat.nit'),
+            'branch'       => config('siat.branch_code', 0),
+            'modality'     => config('siat.modality', 2),
+            'emissionType' => 1, // 1 = Online
+            'invoiceType'  => 1, // 1 = Factura con Derecho a Crédito Fiscal
+            'sectorDoc'    => 1, // 01 = Compra Venta
+            'number'       => $this->invoice->invoice_number,
+            'pos'          => config('siat.pos_code', 0),
+        ]);
     }
 
     // =========================================================
     // 2. CONSTRUCCIÓN DEL XML (orden estricto del XSD)
     // =========================================================
 
-    /**
-     * Construye el documento XML respetando el orden estricto del XSD.
-     */
     public function buildXml(): string
     {
         $this->xmlDocument = new DOMDocument('1.0', 'UTF-8');
@@ -105,6 +89,10 @@ class SiatXmlBuilder
 
         $root->appendChild($this->buildHeader());
 
+        if ($this->invoice->details->isEmpty()) {
+            throw new Exception("La factura #{$this->invoice->invoice_number} no tiene detalles; el XML sería inválido.");
+        }
+
         foreach ($this->invoice->details as $item) {
             $root->appendChild($this->buildDetail($item));
         }
@@ -113,9 +101,7 @@ class SiatXmlBuilder
     }
 
     /**
-     * Construye el nodo <cabecera>.
-     *
-     * IMPORTANTE: el orden de los elementos es estricto y no admite alteraciones.
+     * Construye el nodo <cabecera>. El orden de los elementos es estricto.
      */
     protected function buildHeader(): DOMElement
     {
@@ -129,7 +115,7 @@ class SiatXmlBuilder
         $this->appendText($header, 'telefono', config('siat.telefono', ''));
         $this->appendText($header, 'numeroFactura', (string) $this->invoice->invoice_number);
         $this->appendText($header, 'cuf', $this->generateCuf());
-        $this->appendText($header, 'cufd', $this->cufd);
+        $this->appendText($header, 'cufd', $this->cufd->code);
         $this->appendText($header, 'codigoSucursal', (string) config('siat.branch_code'));
         $this->appendText($header, 'direccion', config('siat.direccion'));
 
@@ -141,11 +127,12 @@ class SiatXmlBuilder
             $this->appendText($header, 'codigoPuntoVenta', (string) $posCode);
         }
 
-        // --- Fecha de emisión ---
+        // --- Fecha de emisión real de la transacción ---
+        // Mismo instante usado para el CUF; formato ISO-8601 con milisegundos.
         $this->appendText(
             $header,
             'fechaEmision',
-            $this->invoice->issue_time->format('Y-m-d\TH:i:s.v')
+            $this->issuedAt->format('Y-m-d\TH:i:s.v')
         );
 
         // --- Datos del comprador (extraídos del Huésped) ---
@@ -256,7 +243,6 @@ class SiatXmlBuilder
 
     /**
      * Obtiene el Huésped asociado a la factura a través del Checkin.
-     * Lanza excepción si no existe la relación, ya que es un requisito fiscal.
      */
     protected function getInvoiceGuest(): Guest
     {
@@ -274,7 +260,7 @@ class SiatXmlBuilder
 
     /**
      * Razón Social / Nombre del comprador.
-     * Cuando el NIT es 0 (consumidor sin nombre), el SIAT exige literal "SIN NOMBRE".
+     * Cuando el documento es 0 (consumidor sin nombre), el SIAT exige "SIN NOMBRE".
      */
     protected function resolveBusinessName(Guest $guest): string
     {
@@ -297,31 +283,26 @@ class SiatXmlBuilder
      *  4 = OD   (Otro Documento)
      *  5 = NIT  (Número de Identificación Tributaria)
      *
-     * Mientras el modelo Guest no tenga un campo explícito `document_type`,
-     * se infiere por nacionalidad. Cuando se agregue ese campo, esta función
-     * deberá leerlo directamente.
+     * Se lee directamente la propiedad explícita `document_type` del Huésped.
+     * Si está ausente o vacía, se usa '1' (CI) como fallback. Ya NO se infiere
+     * por nacionalidad: esa heurística producía clasificaciones fiscales
+     * incorrectas para huéspedes extranjeros con CI boliviana, dobles
+     * nacionalidades o nacionalidad no registrada.
      */
     protected function resolveDocumentType(Guest $guest): int
     {
-        // Hook para cuando se agregue el campo en la migración:
-        if (!empty($guest->document_type)) {
-            return (int) $guest->document_type;
+        $type = $guest->document_type ?? null;
+
+        if ($type === null || trim((string) $type) === '') {
+            return 1; // Fallback: CI
         }
 
-        $nationality = strtoupper(trim((string) $guest->nationality));
-
-        // Boliviano sin marca explícita => CI
-        if ($nationality === '' || str_starts_with($nationality, 'BOLIVIAN')) {
-            return 1;
-        }
-
-        // Extranjero => CEX por defecto (el operador podrá ajustar a Pasaporte si corresponde)
-        return 2;
+        return (int) $type;
     }
 
     /**
      * Número de documento del comprador.
-     * Si el NIT es vacío o "0", SIAT exige el literal "0".
+     * Si el documento es vacío o "0", SIAT exige el literal "0".
      */
     protected function resolveDocumentNumber(Guest $guest): string
     {
@@ -333,26 +314,18 @@ class SiatXmlBuilder
     // 4. HELPERS DE FORMATO Y NODOS
     // =========================================================
 
-    /**
-     * Formatea un valor monetario al estilo SIAT (punto decimal, 2 dígitos).
-     */
     protected function money($value): string
     {
         return number_format((float) $value, 2, '.', '');
     }
 
-    /**
-     * Agrega un nodo de texto al elemento padre.
-     */
     protected function appendText(DOMElement $parent, string $tag, string $value): void
     {
-        $textoSeguro = (string) $value;
-        $parent->appendChild($this->xmlDocument->createElement($tag, htmlspecialchars($textoSeguro, ENT_XML1)));
+        $parent->appendChild(
+            $this->xmlDocument->createElement($tag, htmlspecialchars((string) $value, ENT_XML1))
+        );
     }
 
-    /**
-     * Agrega un nodo nulo con atributo xsi:nil="true".
-     */
     protected function appendNil(DOMElement $parent, string $tag): void
     {
         $node = $this->xmlDocument->createElement($tag);

@@ -7,6 +7,8 @@ use App\Models\Checkin;
 use App\Models\SignificantEvent;
 use App\Services\SiatService;
 use App\Services\SiatXmlBuilder;
+use App\Models\SiatCredential;
+use App\Exceptions\SiatOfflineException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -125,8 +127,10 @@ class InvoiceController extends Controller
             'additional_discount' => 'nullable|numeric|min:0',
         ]);
 
+        // -----------------------------------------------------
+        // FASE 1 — persistir la factura
+        // -----------------------------------------------------
         try {
-            // FASE 1 — persistir
             $invoice = DB::transaction(function () use ($request) {
                 $checkin = Checkin::with(['room.price', 'services', 'guest'])
                     ->findOrFail($request->checkin_id);
@@ -192,16 +196,35 @@ class InvoiceController extends Controller
                 return $invoice;
             });
         } catch (Exception $e) {
-            Log::error("Error Facturación FASE 1: " . $e->getMessage());
+            Log::error("Error Facturación FASE 1 (persistencia): " . $e->getMessage());
             return back()->withErrors(['error' => 'Error al generar la factura: ' . $e->getMessage()]);
         }
 
-        // FASE 2 — intentar SIAT
+        // -----------------------------------------------------
+        // FASE 2 — intentar emitir al SIAT
+        // -----------------------------------------------------
         try {
             $this->emitToSiat($invoice);
-        } catch (\Throwable $e) {
-            Log::error("Error Facturación FASE 2 (SIAT) factura {$invoice->id}: " . $e->getMessage());
+        } catch (SiatOfflineException $e) {
+            // Contingencia LEGÍTIMA: el SIAT no responde por red/SOAP.
+            // La factura es válida y se reenviará luego.
+            Log::warning("Factura #{$invoice->invoice_number} en modo offline (SIAT inaccesible): " . $e->getMessage());
             $invoice->update(['siat_status' => 'offline']);
+        } catch (\Throwable $e) {
+            // Error de NUESTRO código (SiatXmlBuilder, variable inexistente,
+            // datos faltantes, CUFD inválido, etc.). NO es contingencia.
+            // No se marca offline: se deja en estado 'error' para revisión.
+            Log::error("Error Facturación FASE 2 (código interno) factura #{$invoice->id}: " . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace'     => $e->getTraceAsString(),
+            ]);
+
+            $invoice->update(['siat_status' => 'error']);
+
+            return redirect()
+                ->route('invoices.index')
+                ->with('error', 'La factura se registró pero falló la generación fiscal (error interno). '
+                    . 'Revise los datos del Huésped o las credenciales SIAT antes de reintentar.');
         }
 
         $invoice->refresh();
@@ -210,6 +233,7 @@ class InvoiceController extends Controller
             'accepted' => 'Factura electrónica generada y aceptada por SIAT.',
             'offline'  => 'Factura guardada en modo Offline (contingencia). Podrá reenviarse luego.',
             'rejected' => 'La factura fue rechazada por SIAT. Revise los datos.',
+            'error'    => 'La factura se registró pero hubo un error interno al generarla.',
             default    => 'Factura emitida.',
         };
 
@@ -342,81 +366,8 @@ class InvoiceController extends Controller
      */
     public function resendOffline(Invoice $invoice)
     {
-        if ($invoice->siat_status !== 'offline') {
-            return back()->withErrors(['error' => 'La factura no está en estado offline.']);
-        }
-
-        try {
-            $cuis     = $this->siatService->getActiveCuis();
-            $cufdData = $this->siatService->getActiveCufd();
-
-            if (!$cuis || !$cufdData) {
-                return back()->withErrors([
-                    'error' => 'No se pudo obtener CUIS/CUFD vigentes. El SIAT sigue inaccesible.',
-                ]);
-            }
-
-            // Si existe el archivo offline guardado, lo usamos. Si no, regeneramos.
-            $gzipArchive = null;
-            $xmlString   = null;
-
-            if (!empty($invoice->offline_xml_path) && Storage::disk('local')->exists($invoice->offline_xml_path)) {
-                $gzipArchive = Storage::disk('local')->get($invoice->offline_xml_path);
-                // Para el hash necesitamos el XML descomprimido
-                $xmlString = gzdecode($gzipArchive) ?: null;
-            }
-
-            // Reconstrucción si no hay archivo o no se pudo leer
-            if ($gzipArchive === null || $xmlString === null) {
-                $invoice->load(['details', 'checkin.guest', 'user']);
-                $builder     = new SiatXmlBuilder($invoice, $cufdData);
-                $xmlString   = $builder->buildXml();
-                $gzipArchive = $builder->getGzipArchive();
-
-                // Si el CUF está vacío (XML mínimo previo), regenerarlo
-                if (empty($invoice->cuf)) {
-                    $invoice->update(['cuf' => $builder->generateCuf()]);
-                }
-            }
-
-            $hash = hash('sha256', $xmlString);
-
-            $resp = $this->siatService->receiveInvoice(
-                $cuis,
-                $cufdData['codigo'],
-                $gzipArchive,
-                now()->format('Y-m-d\TH:i:s.v'),
-                $hash
-            );
-
-            if (($resp['status'] ?? null) === 'accepted') {
-                $invoice->update([
-                    'siat_status'         => 'accepted',
-                    'siat_reception_code' => $resp['codigoRecepcion'] ?? null,
-                    'cufd_code'           => $cufdData['codigo'],
-                ]);
-
-                // Limpieza opcional del archivo offline (lo conservamos por auditoría)
-                Log::info("Factura {$invoice->id} reenviada correctamente al SIAT.");
-
-                return back()->with('success', "Factura #{$invoice->invoice_number} reenviada y aceptada por SIAT.");
-            }
-
-            if (($resp['status'] ?? null) === 'offline') {
-                return back()->with('warning', 'El SIAT sigue sin responder. La factura permanece offline.');
-            }
-
-            // Rechazo lógico: SIAT respondió pero rechazó
-            $invoice->update(['siat_status' => 'rejected']);
-            Log::warning("Reenvío rechazado para factura {$invoice->id}: " . ($resp['mensaje'] ?? ''));
-
-            return back()->withErrors([
-                'error' => 'El SIAT rechazó el reenvío: ' . ($resp['mensaje'] ?? 'sin mensaje'),
-            ]);
-        } catch (\Throwable $e) {
-            Log::error("Error al reenviar factura offline {$invoice->id}: " . $e->getMessage());
-            return back()->withErrors(['error' => 'Error al reenviar: ' . $e->getMessage()]);
-        }
+        return redirect()->route('invoices.index')
+            ->with('warning', 'Las facturas offline deben enviarse empaquetadas (Etapa VI). Esto se implementará en la siguiente fase de pruebas.');
     }
 
     // =========================================================
@@ -442,7 +393,7 @@ class InvoiceController extends Controller
 
         // 1. QR del SIAT
         $qrContent = "https://pilotosiat.impuestos.gob.bo/consulta/QR?nit=" . config('siat.nit') .
-                     "&cuf=" . $invoice->cuf . "&numero=" . $invoice->invoice_number . "&t=" . $invoice->total_amount;
+            "&cuf=" . $invoice->cuf . "&numero=" . $invoice->invoice_number . "&t=" . $invoice->total_amount;
 
         $qrFilename = "qr_temp_{$invoice->id}.png";
         $qrPath = storage_path("app/public/{$qrFilename}");
@@ -543,35 +494,51 @@ class InvoiceController extends Controller
     {
         $invoice->load(['details', 'checkin.guest', 'user']);
 
-        // Detectar contingencia
+        // --- Resolver el CUFD vigente ---
+        // Si hay un Evento Significativo activo, se usa su CUFD de contingencia.
+        // En caso contrario, se obtiene el CUFD vigente de siat_credentials.
         $activeEvent = SignificantEvent::where('status', SignificantEvent::STATUS_ACTIVE)
             ->latest('start_at')
             ->first();
 
         if ($activeEvent) {
-            $cufdData = [
-                'codigo'        => $activeEvent->cufd_event,
-                'codigoControl' => $activeEvent->cufd_event_control_code,
-            ];
+            // CUFD del evento: lo envolvemos en un SiatCredential transitorio
+            // para que SiatXmlBuilder reciba siempre el mismo tipo.
+            $cufd = new SiatCredential([
+                'type'           => 'CUFD',
+                'code'           => $activeEvent->cufd_event,
+                'control_code'   => $activeEvent->cufd_event_control_code,
+                'fecha_vigencia' => $activeEvent->cufd_event_vigencia
+                    ?? now()->addDay(), // el CUFD del evento se considera vigente durante la contingencia
+            ]);
         } else {
-            $cufdData = $this->siatService->getActiveCufd();
-            if (!$cufdData) {
-                throw new Exception('No se pudo obtener CUFD del SIAT y no hay Evento Significativo activo.');
+            // CUFD vigente desde la nueva arquitectura de credenciales.
+            $cufd = $this->siatService->getActiveCufd();
+
+            if (!$cufd instanceof SiatCredential) {
+                // No es contingencia de red: es un problema de configuración/credenciales.
+                throw new Exception(
+                    'No se pudo obtener un CUFD vigente desde siat_credentials '
+                        . 'y no hay Evento Significativo activo.'
+                );
             }
         }
 
-        $builder     = new SiatXmlBuilder($invoice, $cufdData);
+        // --- Construir CUF + XML con el CUFD resuelto ---
+        // Si el SiatXmlBuilder o el cálculo del CUF fallan, la excepción se
+        // propaga como error de código (NO offline).
+        $builder     = new SiatXmlBuilder($invoice, $cufd);
         $xmlString   = $builder->buildXml();
         $gzipArchive = $builder->getGzipArchive();
         $cuf         = $builder->generateCuf();
         $hash        = hash('sha256', $xmlString);
 
         $invoice->update([
-            'cuf'        => $cuf,
-            'cufd_code'  => $cufdData['codigo'] ?? null,
+            'cuf'       => $cuf,
+            'cufd_code' => $cufd->code,
         ]);
 
-        // CASO A: contingencia activa -> guardar offline directamente
+        // --- CASO A: contingencia activa -> guardar offline directamente ---
         if ($activeEvent) {
             $path = $this->storeOfflineXml($gzipArchive, $invoice);
             $invoice->update([
@@ -581,27 +548,38 @@ class InvoiceController extends Controller
             return;
         }
 
-        // CASO B: online
+        // --- CASO B: online -> enviar al SIAT ---
         $cuis = $this->siatService->getActiveCuis();
+        if (!$cuis) {
+            // Sin CUIS no es un fallo de red puntual: es un problema de credenciales.
+            throw new Exception('No se pudo obtener un CUIS activo para emitir la factura.');
+        }
+
         $response = $this->siatService->receiveInvoice(
             $cuis,
-            $cufdData['codigo'],
+            $cufd->code,
             $gzipArchive,
             now()->format('Y-m-d\TH:i:s.v'),
             $hash
         );
 
-        // CASO C: SIAT no responde -> fallback offline
+        // --- CASO C: SIAT inalcanzable (fallo de red/SOAP comprobado) ---
+        // SiatService ya distinguió red vs rechazo lógico vía isNetworkFailure().
+        // Solo aquí se autoriza el modo offline: lanzamos la excepción tipada.
         if (($response['status'] ?? null) === 'offline') {
             $path = $this->storeOfflineXml($gzipArchive, $invoice);
             $invoice->update([
                 'siat_status'      => 'offline',
                 'offline_xml_path' => $path,
             ]);
-            Log::warning("Factura #{$invoice->invoice_number} guardada offline por timeout SIAT.");
-            return;
+
+            throw new SiatOfflineException(
+                'SIAT inaccesible al emitir la factura #' . $invoice->invoice_number
+                    . ': ' . ($response['mensaje'] ?? 'sin detalle')
+            );
         }
 
+        // --- Aceptada ---
         if (($response['status'] ?? null) === 'accepted') {
             $invoice->update([
                 'siat_status'         => 'accepted',
@@ -610,9 +588,9 @@ class InvoiceController extends Controller
             return;
         }
 
-        // Rechazo lógico
+        // --- Rechazo lógico del SIAT (datos inválidos): NO es offline ---
         $invoice->update(['siat_status' => 'rejected']);
-        Log::warning("Factura SIAT rechazada: " . ($response['mensaje'] ?? ''));
+        Log::warning("Factura #{$invoice->invoice_number} rechazada por SIAT: " . ($response['mensaje'] ?? ''));
     }
 
     /**
@@ -620,15 +598,10 @@ class InvoiceController extends Controller
      */
     private function storeOfflineXml(string $gzipArchive, Invoice $invoice): string
     {
-        $filename = sprintf(
-            'siat/offline/%s_%s_%s.gz',
-            now()->format('Ymd'),
-            $invoice->invoice_number,
-            Str::random(8)
-        );
-
-        Storage::disk('local')->put($filename, $gzipArchive);
-        return $filename;
+        $fileName = "factura_offline_{$invoice->invoice_number}_" . time() . ".xml.gz";
+        $path = "siat/offline/{$fileName}";
+        \Illuminate\Support\Facades\Storage::disk('local')->put($path, $gzipArchive);
+        return $path;
     }
 
     /**

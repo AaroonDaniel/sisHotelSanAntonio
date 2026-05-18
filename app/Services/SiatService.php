@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SiatCredential;
+use Carbon\Carbon;
 use SoapClient;
 use SoapFault;
 use Exception;
@@ -634,64 +635,65 @@ class SiatService
      * margen. Devuelve un array con 'codigo' y 'codigoControl', o null si
      * no se pudo obtener ni renovar.
      */
-    public function getActiveCufd(): ?array
+    public function getActiveCufd(): ?SiatCredential
     {
-        // 1. Buscar CUFD vigente y no expirado en BD.
-        $credential = SiatCredential::active()
+        // 1. CUFD local todavía vigente.
+        $cufd = SiatCredential::query()
             ->where('type', 'cufd')
-            ->where('environment', $this->environment)
-            ->where('branch_code', $this->branchCode)
-            ->where('pos_code', $this->posCode)
-            ->where('expires_at', '>', now())
-            ->latest('issued_at')
+            ->where('is_active', true)
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '>', Carbon::now())
+            ->latest('expires_at')
             ->first();
 
-        if ($credential) {
-            return [
-                'codigo'        => $credential->code,
-                'codigoControl' => $credential->control_code,
-            ];
+        if ($cufd) {
+            return $cufd;
         }
 
-        // 2. No hay CUFD vigente: se necesita un CUIS para solicitarlo.
+        // 2. No hay CUFD vigente: solicitar uno nuevo al SIAT.
         $cuis = $this->getActiveCuis();
-
         if (!$cuis) {
-            Log::error('SIAT Error: Cannot renew CUFD without an active CUIS.');
+            Log::error('SIAT getActiveCufd: no hay CUIS activo para renovar el CUFD.');
             return null;
         }
 
-        // 3. Solicitar un nuevo CUFD al SIAT.
         $response = $this->getCufd($cuis);
 
-        if (!($response['success'] ?? false)) {
-            // Mantener visibilidad del motivo exacto de rechazo del SIAT.
-            $motivo    = $response['detalles'] ?? $response['mensaje'] ?? 'Razón desconocida';
-            $errorData = is_array($motivo) || is_object($motivo) ? json_encode($motivo) : $motivo;
-
-            Log::error('SIAT Error: Failed to auto-renew CUFD. Detalle SIAT: ' . $errorData);
+        if (empty($response['success'])) {
+            Log::error('SIAT getActiveCufd: fallo al renovar CUFD.', [
+                'detalle' => $response['detalles'] ?? $response['mensaje'] ?? 'desconocido',
+            ]);
             return null;
         }
 
-        // 4. Persistir el nuevo CUFD de forma atómica.
-        try {
-            $credential = $this->storeCredential(
-                type: 'cufd',
-                code: $response['codigo'],
-                controlCode: $response['codigoControl'] ?? null,
-                issuedAt: now(),
-                expiresAt: now()->addHours(23),
-            );
-
-            return [
-                'codigo'        => $credential->code,
-                'codigoControl' => $credential->control_code,
-            ];
-        } catch (Exception $e) {
-            Log::error('SIAT Error: Failed to persist CUFD. ' . $e->getMessage());
+        if (empty($response['fechaVigencia'])) {
+            // Defensa: nunca persistir un CUFD sin vigencia.
+            Log::error('SIAT getActiveCufd: el SIAT devolvió un CUFD sin fechaVigencia.', [
+                'codigo' => $response['codigo'] ?? null,
+            ]);
             return null;
         }
+
+        // 3. Desactivar CUFD anteriores y persistir el nuevo, completo.
+        return DB::transaction(function () use ($response, $cuis) {
+            SiatCredential::where('type', 'CUFD')
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
+            return SiatCredential::create([
+                'type'         => 'cufd',
+                'environment'  => $this->environment,
+                'branch_code'  => $this->branchCode,
+                'pos_code'     => $this->posCode ?? 0,
+                'code'         => $response['codigo'],
+                'control_code' => $response['codigoControl'],
+                'issued_at'    => Carbon::now(),
+                'expires_at'   => Carbon::parse($response['fechaVigencia']),
+                'is_active'    => true,
+            ]);
+        });
     }
+
     public function peekActiveCufd(): ?SiatCredential
     {
         return SiatCredential::active()
