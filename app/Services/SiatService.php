@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\SiatCredential;
 use SoapClient;
 use SoapFault;
 use Exception;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SiatService
@@ -220,11 +222,26 @@ class SiatService
         }
     }
 
-    public function syncActivities(string $cuis)          { return $this->executeSync('sincronizarActividades', $cuis); }
-    public function syncProductsServices(string $cuis)    { return $this->executeSync('sincronizarListaProductosServicios', $cuis); }
-    public function syncUnitTypes(string $cuis)           { return $this->executeSync('sincronizarParametricaUnidadMedida', $cuis); }
-    public function syncInvoiceLegends(string $cuis)      { return $this->executeSync('sincronizarListaLeyendasFactura', $cuis); }
-    public function syncCancellationReasons(string $cuis) { return $this->executeSync('sincronizarParametricaMotivoAnulacion', $cuis); }
+    public function syncActivities(string $cuis)
+    {
+        return $this->executeSync('sincronizarActividades', $cuis);
+    }
+    public function syncProductsServices(string $cuis)
+    {
+        return $this->executeSync('sincronizarListaProductosServicios', $cuis);
+    }
+    public function syncUnitTypes(string $cuis)
+    {
+        return $this->executeSync('sincronizarParametricaUnidadMedida', $cuis);
+    }
+    public function syncInvoiceLegends(string $cuis)
+    {
+        return $this->executeSync('sincronizarListaLeyendasFactura', $cuis);
+    }
+    public function syncCancellationReasons(string $cuis)
+    {
+        return $this->executeSync('sincronizarParametricaMotivoAnulacion', $cuis);
+    }
 
     /**
      * Obtiene los motivos de anulación desde caché local (sincronizados por el comando Artisan).
@@ -506,55 +523,206 @@ class SiatService
     }
 
     // ==========================================
-    // 5. UTILITARIOS / CACHE
+    // 5. GESTIÓN PERSISTENTE DE CÓDIGOS (CUIS / CUFD)
     // ==========================================
 
     /**
-     * Obtiene el CUIS activo desde la caché.
+     * Guarda una nueva credencial de forma atómica.
+     *
+     * El flujo dentro de la transacción es crítico para no violar el índice
+     * único parcial de PostgreSQL (que solo permite UNA fila is_active = true
+     * por combinación type + environment + branch_code + pos_code):
+     *
+     *   1. Desactiva todas las credenciales vigentes que coincidan con el
+     *      'type' y la tripleta (environment, branch_code, pos_code).
+     *   2. Inserta la nueva credencial con is_active = true.
+     *
+     * @param  string         $type         'cuis' | 'cufd'
+     * @param  string         $code         Código devuelto por el SIAT
+     * @param  string|null    $controlCode  codigoControl (solo CUFD)
+     * @param  \Carbon\Carbon $issuedAt     Fecha/hora de emisión
+     * @param  \Carbon\Carbon $expiresAt    Fecha/hora de expiración
+     */
+    private function storeCredential(
+        string $type,
+        string $code,
+        ?string $controlCode,
+        $issuedAt,
+        $expiresAt
+    ): SiatCredential {
+        return DB::transaction(function () use ($type, $code, $controlCode, $issuedAt, $expiresAt) {
+            // 1. Desactivar cualquier credencial vigente de la misma tripleta.
+            SiatCredential::query()
+                ->where('type', $type)
+                ->where('environment', $this->environment)
+                ->where('branch_code', $this->branchCode)
+                ->where('pos_code', $this->posCode)
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
+            // 2. Insertar la nueva credencial activa.
+            return SiatCredential::create([
+                'type'         => $type,
+                'code'         => $code,
+                'control_code' => $controlCode,
+                'environment'  => $this->environment,
+                'branch_code'  => $this->branchCode,
+                'pos_code'     => $this->posCode,
+                'issued_at'    => $issuedAt,
+                'expires_at'   => $expiresAt,
+                'is_active'    => true,
+            ]);
+        });
+    }
+
+    /**
+     * Obtiene el CUIS activo desde la base de datos.
+     *
+     * Si no existe una credencial vigente, solicita una nueva al SIAT y la
+     * persiste de forma atómica. El CUIS tiene una vigencia legal cercana
+     * a un año; se usan 11 meses como margen de seguridad.
      */
     public function getActiveCuis(): ?string
     {
-        return Cache::remember('siat_cuis_active', now()->addMonths(11), function () {
-            $response = $this->getCuis();
-            if ($response['success']) {
-                return $response['codigo'];
-            }
-            Log::error('SIAT Error: Failed to auto-renew CUIS');
+        // 1. Buscar credencial vigente y no expirada en BD.
+        $credential = SiatCredential::active()
+            ->where('type', 'cuis')
+            ->where('environment', $this->environment)
+            ->where('branch_code', $this->branchCode)
+            ->where('pos_code', $this->posCode)
+            ->where('expires_at', '>', now())
+            ->latest('issued_at')
+            ->first();
+
+        if ($credential) {
+            return $credential->code;
+        }
+
+        // 2. No hay CUIS vigente: solicitar uno nuevo al SIAT.
+        $response = $this->getCuis();
+
+        if (!($response['success'] ?? false)) {
+            // Mantener visibilidad del motivo exacto de rechazo del SIAT.
+            $motivo    = $response['detalles'] ?? $response['mensaje'] ?? 'Razón desconocida';
+            $errorData = is_array($motivo) || is_object($motivo) ? json_encode($motivo) : $motivo;
+
+            Log::error('SIAT Error: Failed to auto-renew CUIS. Detalle SIAT: ' . $errorData);
             return null;
-        });
+        }
+
+        // 3. Persistir el nuevo CUIS de forma atómica.
+        try {
+            $credential = $this->storeCredential(
+                type: 'cuis',
+                code: $response['codigo'],
+                controlCode: null,
+                issuedAt: now(),
+                expiresAt: now()->addMonths(11),
+            );
+
+            return $credential->code;
+        } catch (Exception $e) {
+            Log::error('SIAT Error: Failed to persist CUIS. ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
-     * Obtiene el CUFD activo desde la caché (renovación automática cada 23 horas).
+     * Obtiene el CUFD activo desde la base de datos.
+     *
+     * El CUFD se renueva cada 24 horas; se usa una ventana de 23 horas como
+     * margen. Devuelve un array con 'codigo' y 'codigoControl', o null si
+     * no se pudo obtener ni renovar.
      */
     public function getActiveCufd(): ?array
     {
-        return Cache::remember('siat_cufd_active', now()->addHours(23), function () {
-            $cuis = $this->getActiveCuis();
-            if (!$cuis) {
-                return null;
-            }
+        // 1. Buscar CUFD vigente y no expirado en BD.
+        $credential = SiatCredential::active()
+            ->where('type', 'cufd')
+            ->where('environment', $this->environment)
+            ->where('branch_code', $this->branchCode)
+            ->where('pos_code', $this->posCode)
+            ->where('expires_at', '>', now())
+            ->latest('issued_at')
+            ->first();
 
-            $response = $this->getCufd($cuis);
-            if ($response['success']) {
-                return [
-                    'codigo'        => $response['codigo'],
-                    'codigoControl' => $response['codigoControl'],
-                ];
-            }
+        if ($credential) {
+            return [
+                'codigo'        => $credential->code,
+                'codigoControl' => $credential->control_code,
+            ];
+        }
 
-            Log::error('SIAT Error: Failed to auto-renew CUFD');
+        // 2. No hay CUFD vigente: se necesita un CUIS para solicitarlo.
+        $cuis = $this->getActiveCuis();
+
+        if (!$cuis) {
+            Log::error('SIAT Error: Cannot renew CUFD without an active CUIS.');
             return null;
-        });
+        }
+
+        // 3. Solicitar un nuevo CUFD al SIAT.
+        $response = $this->getCufd($cuis);
+
+        if (!($response['success'] ?? false)) {
+            // Mantener visibilidad del motivo exacto de rechazo del SIAT.
+            $motivo    = $response['detalles'] ?? $response['mensaje'] ?? 'Razón desconocida';
+            $errorData = is_array($motivo) || is_object($motivo) ? json_encode($motivo) : $motivo;
+
+            Log::error('SIAT Error: Failed to auto-renew CUFD. Detalle SIAT: ' . $errorData);
+            return null;
+        }
+
+        // 4. Persistir el nuevo CUFD de forma atómica.
+        try {
+            $credential = $this->storeCredential(
+                type: 'cufd',
+                code: $response['codigo'],
+                controlCode: $response['codigoControl'] ?? null,
+                issuedAt: now(),
+                expiresAt: now()->addHours(23),
+            );
+
+            return [
+                'codigo'        => $credential->code,
+                'codigoControl' => $credential->control_code,
+            ];
+        } catch (Exception $e) {
+            Log::error('SIAT Error: Failed to persist CUFD. ' . $e->getMessage());
+            return null;
+        }
+    }
+    public function peekActiveCufd(): ?SiatCredential
+    {
+        return SiatCredential::active()
+            ->where('type', 'cufd')
+            ->where('environment', $this->environment)
+            ->where('branch_code', $this->branchCode)
+            ->where('pos_code', $this->posCode)
+            ->where('expires_at', '>', now())
+            ->latest('issued_at')
+            ->first();
     }
 
     /**
-     * Invalida la caché de CUFD (útil cuando se detecta contingencia).
+     * Invalida la credencial CUFD vigente (útil cuando se detecta contingencia).
+     * Marca como inactiva la fila actual para forzar una renovación en la
+     * siguiente llamada a getActiveCufd().
      */
     public function invalidateCufdCache(): void
     {
-        Cache::forget('siat_cufd_active');
+        SiatCredential::query()
+            ->where('type', 'cufd')
+            ->where('environment', $this->environment)
+            ->where('branch_code', $this->branchCode)
+            ->where('pos_code', $this->posCode)
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
     }
+
+    // ==========================================
+    // 6. UTILITARIOS
+    // ==========================================
 
     /**
      * Extrae un mensaje legible desde la respuesta del SIAT.
@@ -568,7 +736,7 @@ class SiatService
         if (isset($response->mensajesList)) {
             $msg = $response->mensajesList;
             if (is_array($msg)) {
-                return collect($msg)->map(fn ($m) => $m->descripcion ?? '')->implode(' | ');
+                return collect($msg)->map(fn($m) => $m->descripcion ?? '')->implode(' | ');
             }
             return $msg->descripcion ?? json_encode($msg);
         }
