@@ -7,6 +7,7 @@ use App\Models\CashRegister;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Auth; // Agregamos esto para complacer a Intelephense
 use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 
 class CashRegisterController extends Controller
 {
@@ -17,42 +18,66 @@ class CashRegisterController extends Controller
             'opening_amount' => 'required|numeric|min:0',
         ]);
 
-        // Usamos Auth::id() (método limpio que Intelephense reconoce al 100%)
-        $hasOpenRegister = CashRegister::where('user_id', Auth::id())
-                                       ->where('status', 'ABIERTA')
-                                       ->exists();
+        $userId = Auth::id();
 
-        if ($hasOpenRegister) {
-            return back()->with('error', 'Ya tienes un turno abierto.');
+        try {
+            DB::transaction(function () use ($request, $userId) {
+                // Lock de fila estable: bloqueamos la fila del propio usuario.
+                // Esto serializa SOLO las aperturas/cierres concurrentes de ESTE
+                // usuario, sin afectar a los demás. Es un lock de grano fino.
+                DB::table('users')->where('id', $userId)->lockForUpdate()->first();
+
+                // Dentro del lock, la comprobación es segura: ninguna otra
+                // transacción del mismo usuario puede intercalarse aquí.
+                $yaTieneCaja = CashRegister::where('user_id', $userId)
+                    ->where('status', 'ABIERTA')
+                    ->exists();
+
+                if ($yaTieneCaja) {
+                    // Abortamos la transacción con una excepción de dominio.
+                    throw new \RuntimeException('Ya tienes un turno abierto.');
+                }
+
+                CashRegister::create([
+                    'user_id'        => $userId,
+                    'opening_amount' => $request->opening_amount,
+                    'status'         => 'ABIERTA',
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
-
-        // Creamos la nueva caja
-        CashRegister::create([
-            'user_id' => Auth::id(),
-            'opening_amount' => $request->opening_amount,
-            'status' => 'ABIERTA',
-        ]);
 
         return back()->with('success', 'Turno iniciado. ¡Que tengas un excelente día!');
     }
     // Función para cerrar la caja al finalizar turno
     public function close(Request $request)
     {
-        // 1. Buscamos si el usuario tiene una caja abierta
-        $activeRegister = CashRegister::where('user_id', Auth::id())
-                                      ->where('status', 'ABIERTA')
-                                      ->first();
+        $userId = Auth::id();
 
-        // 2. Si por alguna razón no tiene caja, lo devolvemos
-        if (!$activeRegister) {
-            return back()->with('error', 'No tienes ninguna caja abierta para cerrar.');
+        try {
+            DB::transaction(function () use ($userId) {
+                DB::table('users')->where('id', $userId)->lockForUpdate()->first();
+
+                $activeRegister = CashRegister::where('user_id', $userId)
+                    ->where('status', 'ABIERTA')
+                    ->first();
+
+                if (!$activeRegister) {
+                    throw new \RuntimeException('No tienes ninguna caja abierta para cerrar.');
+                }
+
+                $activeRegister->update([
+                    'status'    => 'CERRADA',
+                    'closed_at' => now(),
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        // 3. Cerramos la caja guardando la hora actual
-        $activeRegister->update([
-            'status' => 'CERRADA',
-            'closed_at' => now(),
-        ]);
+        // El logout y la invalidación de sesión van FUERA de la transacción:
+        // no son operaciones de BD contable y no deben mantener el lock abierto.
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -71,21 +96,17 @@ class CashRegisterController extends Controller
      */
     public function show(CashRegister $cashRegister)
     {
-        // 1. Todos los movimientos del turno (entradas y salidas).
         $payments = Payment::where('cash_register_id', $cashRegister->id)
             ->with('checkin.room')
             ->orderBy('payment_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // 2. Total de ingresos NETO: sum() resta los negativos solo.
         $totalIncome = (float) $payments->sum('amount');
 
-        // 3. Desglose por método de pago. Los montos negativos (devoluciones)
-        //    reducen el total del método al que pertenecen.
         $byMethod = $payments
-            ->groupBy(fn ($p) => strtoupper($p->method ?? 'SIN_METODO'))
-            ->map(fn ($group, $method) => [
+            ->groupBy(fn($p) => strtoupper($p->method ?? 'SIN_METODO'))
+            ->map(fn($group, $method) => [
                 'method'      => $method,
                 'total'       => (float) $group->sum('amount'),
                 'count'       => $group->count(),
@@ -94,17 +115,17 @@ class CashRegisterController extends Controller
             ])
             ->values();
 
-        // 4. Efectivo esperado en caja = apertura + ingresos netos en efectivo.
         $cashMovements = (float) $payments
-            ->filter(fn ($p) => strtoupper($p->method ?? '') === 'EFECTIVO')
+            ->filter(fn($p) => strtoupper($p->method ?? '') === 'EFECTIVO')
             ->sum('amount');
         $expectedCash = (float) $cashRegister->opening_amount + $cashMovements;
 
         return Inertia::render('cash-registers/show', [
-            'CashRegister'  => $cashRegister,
-            'Payments'      => $payments,
-            'TotalIncome'   => $totalIncome,
-            'ByMethod'      => $byMethod,
-            'ExpectedCash'  => $expectedCash,
+            'CashRegister' => $cashRegister,
+            'Payments'     => $payments,
+            'TotalIncome'  => $totalIncome,
+            'ByMethod'     => $byMethod,
+            'ExpectedCash' => $expectedCash,
         ]);
-    }}
+    }
+}

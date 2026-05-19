@@ -27,9 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         
         // 2. Configurar CORS manualmente aquí si no tienes el archivo config/cors.php
+        // 2. Configurar CORS manualmente aquí si no tienes el archivo config/cors.php
         $middleware->validateCsrfTokens(except: [
-            // Solo si el error persiste, puedes añadir rutas aquí para probar,
-            // pero con statefulApi() debería bastar.
+            '/login', // <- Agrega esta línea para ignorar la protección CSRF en el login
         ]);
 
         $middleware->alias([

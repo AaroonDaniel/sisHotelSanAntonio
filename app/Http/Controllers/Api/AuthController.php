@@ -43,9 +43,10 @@ class AuthController extends Controller
     }
     public function logout(Request $request)
     {
-        // El signo de interrogación (?) evita el error si no hay token (ej. si entraste por cookie)
-        $request->user()->currentAccessToken()?->delete();
-        
+        /** @var \Laravel\Sanctum\PersonalAccessToken|null $token */
+        $token = $request->user()->currentAccessToken();
+        $token?->delete();
+
         return response()->json(['message' => 'Sesión cerrada correctamente']);
     }
 }
