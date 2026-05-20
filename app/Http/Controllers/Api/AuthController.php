@@ -8,20 +8,19 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
+
 class AuthController extends Controller
 {
     public function login(Request $request)
     {
-
         $request->validate([
             'nickname' => 'required|string',
             'password' => 'required',
             'device_name' => 'required',
         ]);
 
-        $user = User::where('nickname', $request->nickname)->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        $user = User::firstWhere('nickname', $request->input('nickname'));
+        if (!$user || !Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
                 'nickname' => ['Las credenciales son incorrectas o el usuario no existe.'],
             ]);
@@ -33,7 +32,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken($request->device_name)->plainTextToken;
+        $token = $user->createToken($request->device_name, [])->plainTextToken;
 
         return response()->json([
             'message' => 'Bienvenido al sistema hotelero',
@@ -41,6 +40,7 @@ class AuthController extends Controller
             'user' => $user,
         ]);
     }
+
     public function logout(Request $request)
     {
         /** @var \Laravel\Sanctum\PersonalAccessToken|null $token */

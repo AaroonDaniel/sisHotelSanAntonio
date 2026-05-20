@@ -5,13 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\CashRegister;
 use App\Models\Payment;
-use Illuminate\Support\Facades\Auth; // Agregamos esto para complacer a Intelephense
-use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+use RuntimeException;
 
 class CashRegisterController extends Controller
 {
-    // Función para abrir la caja al iniciar turno
     public function open(Request $request)
     {
         $request->validate([
@@ -22,20 +22,17 @@ class CashRegisterController extends Controller
 
         try {
             DB::transaction(function () use ($request, $userId) {
-                // Lock de fila estable: bloqueamos la fila del propio usuario.
-                // Esto serializa SOLO las aperturas/cierres concurrentes de ESTE
-                // usuario, sin afectar a los demás. Es un lock de grano fino.
+                // Bloqueo de fila del usuario
                 DB::table('users')->where('id', $userId)->lockForUpdate()->first();
 
-                // Dentro del lock, la comprobación es segura: ninguna otra
-                // transacción del mismo usuario puede intercalarse aquí.
-                $yaTieneCaja = CashRegister::where('user_id', $userId)
+                // Usamos la clase explícita
+                $yaTieneCaja = CashRegister::query()
+                    ->where('user_id', $userId)
                     ->where('status', 'ABIERTA')
                     ->exists();
 
                 if ($yaTieneCaja) {
-                    // Abortamos la transacción con una excepción de dominio.
-                    throw new \RuntimeException('Ya tienes un turno abierto.');
+                    throw new RuntimeException('Ya tienes un turno abierto.');
                 }
 
                 CashRegister::create([
@@ -44,13 +41,13 @@ class CashRegisterController extends Controller
                     'status'         => 'ABIERTA',
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Turno iniciado. ¡Que tengas un excelente día!');
+        return back()->with('success', 'Turno iniciado.');
     }
-    // Función para cerrar la caja al finalizar turno
+
     public function close(Request $request)
     {
         $userId = Auth::id();
@@ -59,12 +56,13 @@ class CashRegisterController extends Controller
             DB::transaction(function () use ($userId) {
                 DB::table('users')->where('id', $userId)->lockForUpdate()->first();
 
-                $activeRegister = CashRegister::where('user_id', $userId)
+                $activeRegister = CashRegister::query()
+                    ->where('user_id', $userId)
                     ->where('status', 'ABIERTA')
                     ->first();
 
                 if (!$activeRegister) {
-                    throw new \RuntimeException('No tienes ninguna caja abierta para cerrar.');
+                    throw new RuntimeException('No tienes ninguna caja abierta para cerrar.');
                 }
 
                 $activeRegister->update([
@@ -72,36 +70,25 @@ class CashRegisterController extends Controller
                     'closed_at' => now(),
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        // El logout y la invalidación de sesión van FUERA de la transacción:
-        // no son operaciones de BD contable y no deben mantener el lock abierto.
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login')->with('success', 'Turno cerrado correctamente. ¡Buen trabajo!');
+        return redirect('/login')->with('success', 'Turno cerrado correctamente.');
     }
 
-    /**
-     * Hoja de caja (arqueo) de un turno.
-     *
-     * Regla contable: se suman TODOS los pagos del turno, positivos y
-     * negativos. Las devoluciones están guardadas con monto negativo, por
-     * lo que reducen tanto el total general como el total del método de
-     * pago correspondiente (si se devuelven 50 Bs en efectivo, el efectivo
-     * del turno baja 50 Bs). No se filtra por 'type' en ningún momento.
-     */
     public function show(CashRegister $cashRegister)
     {
-        $payments = Payment::where('cash_register_id', $cashRegister->id)
+        $payments = Payment::query()
+            ->where('cash_register_id', $cashRegister->id)
             ->with('checkin.room')
             ->orderBy('payment_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->get();
-
         $totalIncome = (float) $payments->sum('amount');
 
         $byMethod = $payments
@@ -118,6 +105,7 @@ class CashRegisterController extends Controller
         $cashMovements = (float) $payments
             ->filter(fn($p) => strtoupper($p->method ?? '') === 'EFECTIVO')
             ->sum('amount');
+
         $expectedCash = (float) $cashRegister->opening_amount + $cashMovements;
 
         return Inertia::render('cash-registers/show', [

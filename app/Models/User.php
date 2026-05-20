@@ -96,11 +96,17 @@ class User extends Authenticatable
     }
 
     /*Configuraxion de la bitacora de actividades*/
-     public function getActivitylogOptions(): LogOptions
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logAll()
-            ->logExcept(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])
+            ->logOnly([
+                'nickname',
+                'full_name',
+                'phone',
+                'address',
+                'shift',
+                'is_active',
+            ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('usuarios');
