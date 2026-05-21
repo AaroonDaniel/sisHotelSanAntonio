@@ -13,18 +13,17 @@ export default function CloseRegisterModal({ show, onClose }: CloseRegisterModal
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        // Hacemos el POST a tu ruta de cierre
+        
         post('/cash-registers/close', {
             preserveScroll: true,
             onSuccess: () => {
-                // Al tener éxito, cerramos el modal
+                // No necesitamos hacer nada aquí porque el 
+                // Inertia::location('/login') del controlador 
+                // tomará el control total de la navegación.
                 onClose();
-                // Nota: Como tu backend cerrará la sesión, Inertia automáticamente
-                // redirigirá al usuario al Login tras esta petición.
             },
         });
     };
-
     if (!show) return null;
 
     return (

@@ -51,33 +51,23 @@ class CashRegisterController extends Controller
     {
         $userId = Auth::id();
 
-        try {
-            DB::transaction(function () use ($userId) {
-                DB::table('users')->where('id', $userId)->lockForUpdate()->first();
+        // Lógica de BD
+        $activeRegister = CashRegister::query()
+            ->where('user_id', $userId)
+            ->where('status', 'ABIERTA')
+            ->first();
 
-                $activeRegister = CashRegister::query()
-                    ->where('user_id', $userId)
-                    ->where('status', 'ABIERTA')
-                    ->first();
-
-                if (!$activeRegister) {
-                    throw new RuntimeException('No tienes ninguna caja abierta para cerrar.');
-                }
-
-                $activeRegister->update([
-                    'status'    => 'CERRADA',
-                    'closed_at' => now(),
-                ]);
-            });
-        } catch (RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
+        if ($activeRegister) {
+            $activeRegister->update(['status' => 'CERRADA', 'closed_at' => now()]);
         }
 
-        Auth::logout();
+        \Illuminate\Support\Facades\Session::flush();
+        \Illuminate\Support\Facades\Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login')->with('success', 'Turno cerrado correctamente.');
+        // EN LUGAR DE JSON O REDIRECT, HACEMOS ESTO:
+        return Inertia::location('/login');
     }
 
     public function show(CashRegister $cashRegister)
