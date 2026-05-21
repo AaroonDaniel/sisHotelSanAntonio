@@ -22,10 +22,9 @@ class CashRegisterController extends Controller
 
         try {
             DB::transaction(function () use ($request, $userId) {
-                // Bloqueo de fila del usuario
+                // Bloqueo pesimista para evitar concurrencia del mismo usuario
                 DB::table('users')->where('id', $userId)->lockForUpdate()->first();
 
-                // Usamos la clase explícita
                 $yaTieneCaja = CashRegister::query()
                     ->where('user_id', $userId)
                     ->where('status', 'ABIERTA')
@@ -83,35 +82,53 @@ class CashRegisterController extends Controller
 
     public function show(CashRegister $cashRegister)
     {
+        // 1. Obtenemos solo los datos necesarios para renderizar la tabla visual
         $payments = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
             ->with('checkin.room')
             ->orderBy('payment_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->get();
-        $totalIncome = (float) $payments->sum('amount');
 
-        $byMethod = $payments
-            ->groupBy(fn($p) => strtoupper($p->method ?? 'SIN_METODO'))
-            ->map(fn($group, $method) => [
-                'method'      => $method,
-                'total'       => (float) $group->sum('amount'),
-                'count'       => $group->count(),
-                'refunds'     => (float) $group->where('amount', '<', 0)->sum('amount'),
-                'collections' => (float) $group->where('amount', '>=', 0)->sum('amount'),
-            ])
-            ->values();
-
-        $cashMovements = (float) $payments
-            ->filter(fn($p) => strtoupper($p->method ?? '') === 'EFECTIVO')
+        // 2. OPTIMIZACIÓN: Dejamos que la Base de Datos haga los cálculos pesados en lugar de PHP
+        $totalIncome = Payment::query()
+            ->where('cash_register_id', $cashRegister->id)
             ->sum('amount');
 
-        $expectedCash = (float) $cashRegister->opening_amount + $cashMovements;
+        $byMethodDB = Payment::query()
+            ->where('cash_register_id', $cashRegister->id)
+            ->selectRaw("
+                UPPER(COALESCE(method, 'SIN_METODO')) as method,
+                SUM(amount) as total,
+                COUNT(*) as count,
+                SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as refunds,
+                SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as collections
+            ")
+            ->groupByRaw("UPPER(COALESCE(method, 'SIN_METODO'))")
+            ->get();
+
+        // 3. Formateamos la respuesta para que la vista de React (Inertia) no note la diferencia
+        $byMethod = $byMethodDB->map(function ($group) {
+            return [
+                'method'      => $group->method,
+                'total'       => (float) $group->total,
+                'count'       => (int) $group->count,
+                'refunds'     => (float) $group->refunds,
+                'collections' => (float) $group->collections,
+            ];
+        })->values();
+
+        $cashMovements = Payment::query()
+            ->where('cash_register_id', $cashRegister->id)
+            ->whereRaw("UPPER(method) = 'EFECTIVO'")
+            ->sum('amount');
+
+        $expectedCash = (float) $cashRegister->opening_amount + (float) $cashMovements;
 
         return Inertia::render('cash-registers/show', [
             'CashRegister' => $cashRegister,
             'Payments'     => $payments,
-            'TotalIncome'  => $totalIncome,
+            'TotalIncome'  => (float) $totalIncome,
             'ByMethod'     => $byMethod,
             'ExpectedCash' => $expectedCash,
         ]);
