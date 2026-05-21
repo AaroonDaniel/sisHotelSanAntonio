@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Illuminate\Support\Facades\Cache; // <-- 1. IMPORTANTE: Importamos la clase Cache
 
 class HandleInertiaRequests extends Middleware
 {
@@ -47,18 +48,24 @@ class HandleInertiaRequests extends Middleware
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
                 ]) : null,
-                
-                'active_register' => $request->user() 
-                    ? \App\Models\CashRegister::where('user_id', $request->user()->id)
-                                              ->where('status', 'ABIERTA')
-                                              ->first() 
+
+                // 2. OPTIMIZACIÓN: Guardamos el estado de la caja en caché por 5 minutos (300 segundos).
+                // La clave de caché es única por usuario (ej. active_register_user_5)
+                'active_register' => $request->user()
+                    ? Cache::remember('active_register_user_' . $request->user()->id, 300, function () use ($request) {
+                        // Agregamos query() aquí para quitar el error del editor 👇
+                        return \App\Models\CashRegister::query()
+                            ->where('user_id', $request->user()->id)
+                            ->where('status', 'ABIERTA')
+                            ->first();
+                    })
                     : null,
             ],
-            
+
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
-                'error' => fn () => $request->session()->get('error'),
-                'auto_open_checkins' => fn () => $request->session()->get('auto_open_checkins'),
+                'success' => fn() => $request->session()->get('success'),
+                'error' => fn() => $request->session()->get('error'),
+                'auto_open_checkins' => fn() => $request->session()->get('auto_open_checkins'),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
