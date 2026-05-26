@@ -1,32 +1,31 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import {
+    AlertTriangle,
     BedDouble,
+    Briefcase,
+    Building,
     CalendarDays,
     ClipboardList,
-    FileBarChart,
-    Hotel,
-    Receipt,
-    SprayCan,
-    Users,
-    Wrench,
-    Building,
-    Layers,
-    Tag,
-    BookDown,
-    AlertTriangle,
-    X,
-    FileText,
-    Briefcase,
     Clock,
-    Wallet,
-    User,
-    Key,
-    UserCog,
     Coins,
+    FileBarChart,
+    FileText,
+    Hotel,
+    Key,
+    Layers,
+    Receipt,
+    ShieldAlert,
+    Tag,
+    User,
+    UserCog,
+    Users,
+    Wallet,
+    Wrench,
+    X,
 } from 'lucide-react';
 import { useState } from 'react';
-import axios from 'axios';
 
 // Interfaces Locales
 interface User {
@@ -36,7 +35,7 @@ interface User {
     nickname?: string;
     full_name?: string;
     roles?: string[]; // <-- Aseguramos que TypeScript sepa que vienen los roles
-    [key: string]: any; 
+    [key: string]: any;
 }
 
 interface DashboardProps {
@@ -51,7 +50,9 @@ export default function Dashboard({ auth }: DashboardProps) {
     // Extraemos los roles del usuario logueado. Si no hay, es un array vacío.
     const userRoles = auth.user?.roles || [];
     // Verificamos si tiene el rol de Admin
-    const isAdmin = userRoles.some(role => role.toLowerCase() === 'administrador');
+    const isAdmin = userRoles.some(
+        (role) => role.toLowerCase() === 'administrador',
+    );
     // --- ESTADOS PARA LA LÓGICA DE REPORTE ---
     const [loading, setLoading] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -71,26 +72,45 @@ export default function Dashboard({ auth }: DashboardProps) {
                 { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
                 { name: 'Huéspedes', icon: Users, url: '/invitados' },
                 { name: 'Horarios', icon: Clock, url: '/horarios' },
-                { name: 'Personal', icon: User, url: '/usuarios'},
-                
-                ...(isAdmin ? [
-                    { name: 'Permisos', icon: Key, url: '/permisos' },
-                    { name: 'Cargos/Roles', icon: UserCog, url: '/roles' },
-                ] : []),
+                { name: 'Personal', icon: User, url: '/usuarios' },
+
+                ...(isAdmin
+                    ? [
+                          { name: 'Permisos', icon: Key, url: '/permisos' },
+                          {
+                              name: 'Cargos/Roles',
+                              icon: UserCog,
+                              url: '/roles',
+                          },
+                      ]
+                    : []),
             ],
         },
         {
             title: 'Procesos',
             theme: 'red',
             items: [
-                { name: 'Nueva Reserva', icon: CalendarDays, url: '/admin/reservas' },
+                {
+                    name: 'Nueva Reserva',
+                    icon: CalendarDays,
+                    url: '/admin/reservas',
+                },
                 { name: 'Asignación', icon: BedDouble, url: '/checks' },
-                { name: 'Detalles de asignación', icon: Briefcase, url: '/checkindetails' },
+                {
+                    name: 'Detalles de asignación',
+                    icon: Briefcase,
+                    url: '/checkindetails',
+                },
                 { name: 'Facturación', icon: Receipt, url: '/facturacion' },
-                
+
                 { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos' },
                 { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
                 { name: 'Adelantos', icon: Coins, url: '/adelantos' },
+                {
+                    name: 'Eventos Significativos',
+                    icon: ShieldAlert,
+                    url: '/contingencias',
+                },
             ],
         },
         {
@@ -98,9 +118,17 @@ export default function Dashboard({ auth }: DashboardProps) {
             theme: 'amber',
             items: [
                 { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
-                //{ name: 'Libro Diario', icon: BookDown, url: '#' }, 
-                { name: 'Cierre de Caja', icon: Wallet, url: '/reports/financial' },
-                { name: 'Ingresos y Egresos diarios', icon: FileText, url: '/reports/financialMovement' },
+                //{ name: 'Libro Diario', icon: BookDown, url: '#' },
+                {
+                    name: 'Cierre de Caja',
+                    icon: Wallet,
+                    url: '/reports/financial',
+                },
+                {
+                    name: 'Ingresos y Egresos diarios',
+                    icon: FileText,
+                    url: '/reports/financialMovement',
+                },
             ],
         },
     ];
@@ -129,8 +157,8 @@ export default function Dashboard({ auth }: DashboardProps) {
                 setShowErrorModal(true);
             }
         } catch (error) {
-            console.error("Error validando libro diario", error);
-            alert("Error de conexión al verificar los datos.");
+            console.error('Error validando libro diario', error);
+            alert('Error de conexión al verificar los datos.');
         } finally {
             setLoading(false);
         }
@@ -143,7 +171,7 @@ export default function Dashboard({ auth }: DashboardProps) {
             router.visit(item.url);
         }
     };
-    
+
     return (
         <AuthenticatedLayout user={auth.user as any}>
             <Head title="Panel Principal" />
@@ -155,7 +183,11 @@ export default function Dashboard({ auth }: DashboardProps) {
                             Panel de Control
                         </h2>
                         <p className="mt-2 text-gray-100">
-                            Bienvenido de nuevo, <span className="font-semibold text-white dark:text-gray-100">{auth.user.name}</span>.
+                            Bienvenido de nuevo,{' '}
+                            <span className="font-semibold text-white dark:text-gray-100">
+                                {auth.user.name}
+                            </span>
+                            .
                         </p>
                     </div>
                     <div className="hidden text-right sm:block">
@@ -188,18 +220,26 @@ export default function Dashboard({ auth }: DashboardProps) {
                                     <button
                                         key={itemIndex}
                                         onClick={() => handleItemClick(item)}
-                                        disabled={loading && item.name === 'Libro Diario'}
-                                        className={`group relative flex h-28 w-full flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 p-3 text-center backdrop-blur-md transition-all duration-300 hover:z-20 hover:scale-105 hover:shadow-2xl hover:brightness-110 ${getThemeClasses(group.theme)} disabled:opacity-70 disabled:cursor-wait`}
+                                        disabled={
+                                            loading &&
+                                            item.name === 'Libro Diario'
+                                        }
+                                        className={`group relative flex h-28 w-full flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 p-3 text-center backdrop-blur-md transition-all duration-300 hover:z-20 hover:scale-105 hover:shadow-2xl hover:brightness-110 ${getThemeClasses(group.theme)} disabled:cursor-wait disabled:opacity-70`}
                                     >
                                         <div className="absolute -top-10 -right-6 h-32 w-32 rounded-full bg-white/10 blur-2xl transition-all group-hover:scale-150"></div>
-                                        
+
                                         <div className="relative z-10 mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black/20 text-white shadow-inner backdrop-blur-sm transition-transform group-hover:scale-110 group-hover:rotate-12">
-                                            <item.icon className={`h-6 w-6 ${loading && item.name === 'Libro Diario' ? 'animate-pulse' : ''}`} />
+                                            <item.icon
+                                                className={`h-6 w-6 ${loading && item.name === 'Libro Diario' ? 'animate-pulse' : ''}`}
+                                            />
                                         </div>
 
                                         <div className="relative z-10 flex flex-col justify-center">
                                             <span className="text-sm leading-tight font-bold text-white drop-shadow-md">
-                                                {loading && item.name === 'Libro Diario' ? 'Verificando...' : item.name}
+                                                {loading &&
+                                                item.name === 'Libro Diario'
+                                                    ? 'Verificando...'
+                                                    : item.name}
                                             </span>
                                         </div>
                                     </button>
@@ -212,33 +252,43 @@ export default function Dashboard({ auth }: DashboardProps) {
 
             {/* Modal de Error */}
             {showErrorModal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
+                    <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
                         <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-6 py-4">
                             <h3 className="flex items-center gap-2 text-lg font-bold text-red-700">
                                 <AlertTriangle className="h-6 w-6" />
                                 No se puede generar
                             </h3>
-                            <button onClick={() => setShowErrorModal(false)} className="rounded-full p-1 text-gray-400 hover:bg-gray-200 transition">
+                            <button
+                                onClick={() => setShowErrorModal(false)}
+                                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                            >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
-                        
+
                         <div className="p-6">
-                            <div className="text-center mb-6">
+                            <div className="mb-6 text-center">
                                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
                                     <FileText className="h-7 w-7 text-red-600" />
                                 </div>
-                                <h4 className="text-lg font-bold text-gray-800">Datos Incompletos</h4>
+                                <h4 className="text-lg font-bold text-gray-800">
+                                    Datos Incompletos
+                                </h4>
                                 <p className="mt-1 text-sm text-gray-500">
-                                    Para generar el Libro Diario, debes completar la información de los siguientes huéspedes activos:
+                                    Para generar el Libro Diario, debes
+                                    completar la información de los siguientes
+                                    huéspedes activos:
                                 </p>
                             </div>
 
                             <div className="max-h-48 overflow-y-auto rounded-xl border border-red-100 bg-red-50/50 p-3">
                                 <ul className="space-y-2">
                                     {errorDetails.map((detail, idx) => (
-                                        <li key={idx} className="flex items-center gap-2 text-sm font-medium text-red-800 bg-white p-2 rounded-lg border border-red-100 shadow-sm">
+                                        <li
+                                            key={idx}
+                                            className="flex items-center gap-2 rounded-lg border border-red-100 bg-white p-2 text-sm font-medium text-red-800 shadow-sm"
+                                        >
                                             <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                                             {detail}
                                         </li>
@@ -248,9 +298,9 @@ export default function Dashboard({ auth }: DashboardProps) {
                         </div>
 
                         <div className="flex justify-end border-t border-gray-100 bg-gray-50 px-6 py-4">
-                            <button 
-                                onClick={() => setShowErrorModal(false)} 
-                                className="rounded-xl bg-gray-800 px-6 py-2 text-sm font-bold text-white hover:bg-gray-700 transition shadow-md"
+                            <button
+                                onClick={() => setShowErrorModal(false)}
+                                className="rounded-xl bg-gray-800 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-gray-700"
                             >
                                 Entendido
                             </button>
@@ -258,7 +308,6 @@ export default function Dashboard({ auth }: DashboardProps) {
                     </div>
                 </div>
             )}
-
         </AuthenticatedLayout>
     );
 }

@@ -10,6 +10,8 @@ use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use PharData;
 
 class SiatService
 {
@@ -318,33 +320,51 @@ class SiatService
      * Reenvía un paquete de facturas que se emitieron en modo offline (contingencia).
      * Debe ejecutarse dentro de las 48 horas posteriores al cierre del evento significativo.
      */
-    public function sendOfflinePackage(string $cuis, string $cufd, string $gzipArchive, string $hashArchive, int $eventCode): array
-    {
+    public function sendOfflinePackage(
+        string $cuis,
+        string $cufd,
+        string $archiveBase64,
+        string $hashArchive,
+        int    $cantidadFacturas,
+        string $codigoRecepcionEvento
+    ): array {
         try {
             $client = $this->getSoapClient('ServicioFacturacionCompraVenta');
 
-            $params = ['SolicitudServicioRecepcionPaquete' => array_merge(
-                $this->getBaseParameters(),
-                [
-                    'codigoDocumentoSector' => 1,
-                    'codigoEmision'         => 2, // 2 = Offline
-                    'tipoFacturaDocumento'  => 1,
-                    'cuis'                  => $cuis,
-                    'cufd'                  => $cufd,
-                    'archivo'               => $gzipArchive,
-                    'fechaEnvio'            => now()->format('Y-m-d\TH:i:s.v'),
-                    'hashArchivo'           => $hashArchive,
-                    'cafc'                  => null,
-                    'codigoEvento'          => $eventCode,
-                ]
-            )];
+            $payload = array_merge($this->getBaseParameters(), [
+                'codigoDocumentoSector' => 1,
+                'codigoEmision'         => 2,                       // Offline
+                'tipoFacturaDocumento'  => 1,
+                'cuis'                  => $cuis,
+                'cufd'                  => $cufd,
+                'archivo'               => $archiveBase64,
+                'fechaEnvio'            => now()->format('Y-m-d\TH:i:s.v'),
+                'hashArchivo'           => $hashArchive,
+                'cantidadFacturas'      => $cantidadFacturas,
+                'codigoEvento'          => $codigoRecepcionEvento,  // ← código de recepción
+            ]);
 
+            // Nota: 'cafc' se OMITE intencionalmente (no aplica para
+            // contingencia por corte de internet). Si tu modalidad fuera
+            // CAFC, este método NO es el correcto.
+
+            $params   = ['SolicitudServicioRecepcionPaquete' => $payload];
             $response = $client->recepcionPaqueteFactura($params);
-            $r = $response->RespuestaServicioFacturacion ?? null;
+            $r        = $response->RespuestaServicioFacturacion ?? null;
+
+            // Validación inicial: SIAT recibió el paquete.
+            if ($r && !empty($r->transaccion)) {
+                return [
+                    'status'          => 'received',
+                    'codigoRecepcion' => $r->codigoRecepcion ?? null,
+                    'mensaje'         => 'Paquete recibido por SIAT — pendiente de validación',
+                    'raw'             => $response,
+                ];
+            }
 
             return [
-                'status'          => ($r && !empty($r->transaccion)) ? 'accepted' : 'rejected',
-                'codigoRecepcion' => $r->codigoRecepcion ?? null,
+                'status'          => 'rejected',
+                'codigoRecepcion' => null,
                 'mensaje'         => $this->extractSiatMessage($r),
                 'raw'             => $response,
             ];
@@ -667,31 +687,25 @@ class SiatService
         }
 
         if (empty($response['fechaVigencia'])) {
-            // Defensa: nunca persistir un CUFD sin vigencia.
             Log::error('SIAT getActiveCufd: el SIAT devolvió un CUFD sin fechaVigencia.', [
                 'codigo' => $response['codigo'] ?? null,
             ]);
             return null;
         }
 
-        // 3. Desactivar CUFD anteriores y persistir el nuevo, completo.
-        return DB::transaction(function () use ($response, $cuis) {
-            SiatCredential::where('type', 'CUFD')
-                ->where('is_active', true)
-                ->update(['is_active' => false]);
-
-            return SiatCredential::create([
-                'type'         => 'cufd',
-                'environment'  => $this->environment,
-                'branch_code'  => $this->branchCode,
-                'pos_code'     => $this->posCode ?? 0,
-                'code'         => $response['codigo'],
-                'control_code' => $response['codigoControl'],
-                'issued_at'    => Carbon::now(),
-                'expires_at'   => Carbon::parse($response['fechaVigencia']),
-                'is_active'    => true,
-            ]);
-        });
+        // 3. Desactivar CUFD anteriores y persistir el nuevo usando storeCredential
+        try {
+            return $this->storeCredential(
+                'cufd',
+                $response['codigo'],
+                $response['codigoControl'],
+                Carbon::now(),
+                Carbon::parse($response['fechaVigencia'])
+            );
+        } catch (\Exception $e) {
+            Log::error('SIAT Error: Fallo al persistir el nuevo CUFD de forma atómica. ' . $e->getMessage());
+            return null;
+        }
     }
 
     public function peekActiveCufd(): ?SiatCredential
@@ -744,5 +758,120 @@ class SiatService
         }
 
         return $response->codigoDescripcion ?? 'Respuesta sin mensaje';
+    }
+
+    /* Apartado de contingencia*/
+    public function buildOfflinePackage(array $invoices): array
+    {
+        if (empty($invoices)) {
+            throw new Exception('No hay facturas offline para empaquetar.');
+        }
+
+        // Workdir temporal (siempre limpiamos al final).
+        $stamp   = now()->format('Ymd_His');
+        $tarName = "paquete_offline_{$stamp}.tar";
+        $tmpDir  = storage_path("app/siat/tmp_{$stamp}");
+        $tarPath = "{$tmpDir}/{$tarName}";
+        $gzPath  = "{$tarPath}.gz";
+
+        if (!is_dir($tmpDir) && !mkdir($tmpDir, 0755, true) && !is_dir($tmpDir)) {
+            throw new Exception("No se pudo crear el directorio temporal {$tmpDir}.");
+        }
+
+        try {
+            // 1. Crear el TAR e inyectar cada XML como archivo independiente.
+            $tar = new PharData($tarPath, 0, null, \Phar::TAR);
+            foreach ($invoices as $row) {
+                $cuf  = $row['cuf']  ?? null;
+                $xml  = $row['xml']  ?? null;
+                if (!$cuf || !$xml) {
+                    throw new Exception('Cada factura offline debe traer cuf y xml.');
+                }
+                // Nombre del archivo dentro del .tar (convención del SIAT: cuf.xml).
+                $tar->addFromString("{$cuf}.xml", $xml);
+            }
+
+            // 2. Comprimir con gzip → paquete_offline_*.tar.gz
+            $tar->compress(\Phar::GZ);
+
+            // PharData::compress no elimina el .tar original.
+            unset($tar);
+            @unlink($tarPath);
+
+            if (!file_exists($gzPath)) {
+                throw new Exception('No se generó el archivo .tar.gz del paquete.');
+            }
+
+            // 3. Leer binario, calcular hash y codificar en base64 para SOAP.
+            $binary  = file_get_contents($gzPath);
+            $hash    = hash('sha256', $binary);
+            $archivo = base64_encode($binary);
+
+            return [
+                'archivo'  => $archivo,
+                'hash'     => $hash,
+                'cantidad' => count($invoices),
+            ];
+        } finally {
+            // Limpieza
+            if (file_exists($gzPath))  @unlink($gzPath);
+            if (file_exists($tarPath)) @unlink($tarPath);
+            if (is_dir($tmpDir))       @rmdir($tmpDir);
+        }
+    }
+
+    /**
+     * Segunda llamada obligatoria: confirma el procesamiento del paquete.
+     * recepcionPaqueteFactura solo RECIBE — validacionRecepcionPaquete
+     * verifica si el SIAT lo procesó correctamente.
+     *
+     * Debe ejecutarse después de sendOfflinePackage usando el codigoRecepcion
+     * devuelto por aquella. Si SIAT responde "EN_PROCESO" debe reintentarse
+     * con back-off (recomendado: 5s, 15s, 30s) hasta obtener un veredicto.
+     */
+    public function validateOfflinePackage(
+        string $cuis,
+        string $cufd,
+        string $codigoRecepcionPaquete
+    ): array {
+        try {
+            $client = $this->getSoapClient('ServicioFacturacionCompraVenta');
+
+            $params = ['SolicitudServicioValidacionRecepcionPaquete' => array_merge(
+                $this->getBaseParameters(),
+                [
+                    'codigoDocumentoSector' => 1,
+                    'codigoEmision'         => 2,
+                    'tipoFacturaDocumento'  => 1,
+                    'cuis'                  => $cuis,
+                    'cufd'                  => $cufd,
+                    'codigoRecepcion'       => $codigoRecepcionPaquete,
+                ]
+            )];
+
+            $response = $client->validacionRecepcionPaquete($params);
+            $r        = $response->RespuestaServicioFacturacion ?? null;
+
+            $codigoDescripcion = strtoupper($r->codigoDescripcion ?? '');
+
+            return [
+                'status'  => match (true) {
+                    $codigoDescripcion === 'VALIDADA'     => 'accepted',
+                    $codigoDescripcion === 'OBSERVADA'    => 'observed',
+                    $codigoDescripcion === 'RECHAZADA'    => 'rejected',
+                    $codigoDescripcion === 'EN PROCESO'   => 'processing',
+                    default                               => 'rejected',
+                },
+                'mensaje' => $this->extractSiatMessage($r),
+                'raw'     => $response,
+            ];
+        } catch (SoapFault $fault) {
+            Log::error('SIAT validateOfflinePackage Error: ' . $fault->getMessage());
+            return [
+                'status'  => $this->isNetworkFailure($fault) ? 'offline' : 'rejected',
+                'mensaje' => $fault->getMessage(),
+                'raw'     => null,
+            ];
+        }
     }
 }

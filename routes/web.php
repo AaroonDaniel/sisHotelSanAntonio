@@ -265,6 +265,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('significant-events.resend');
 
 
+    
+    Route::post('significant-events/start', [SignificantEventController::class, 'start'])->name('significant-events.start');
+    Route::post('significant-events/{event}/end', [SignificantEventController::class, 'end'])->name('significant-events.end');
+    Route::get('significant-events/{event}', [SignificantEventController::class, 'show'])->name('significant-events.show');
+    Route::post('significant-events/{event}/resend', [SignificantEventController::class, 'resendOfflineInvoices'])->name('significant-events.resend');
+
+
+
     // Auditoría de actividades
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
@@ -275,6 +283,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // ==========================================
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
 Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.confirm');
+
+Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
+Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
+
 
 // Mostrar el PDF del recibo final de reserva online
 Route::get('/reservar/recibo-publico/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt_public');

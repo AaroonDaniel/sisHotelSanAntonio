@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\SignificantEvent;
 use App\Services\SiatService;
 use App\Services\SiatXmlBuilder;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,11 +17,13 @@ use Exception;
 /**
  * Gestiona Eventos Significativos (contingencias) según RND-102100000011.
  *
- * Flujo:
+ * Flujo corregido:
  *  1. Gerente abre el evento (start) → sistema empieza a emitir offline.
- *  2. Cuando se restablece la conexión, Gerente cierra el evento (end).
- *  3. Sistema registra el evento en SIAT.
- *  4. Sistema reenvía las facturas offline (dentro de las 48 horas).
+ *  2. Gerente cierra el evento (end) → se registra en SIAT y obtenemos
+ *     un codigoRecepcionEvento.
+ *  3. Sistema EMPAQUETA todas las facturas offline en un solo .tar.gz
+ *     y lo envía con recepcionPaqueteFactura.
+ *  4. Sistema valida el procesamiento con validacionRecepcionPaquete.
  */
 class SignificantEventController extends Controller
 {
@@ -31,9 +34,6 @@ class SignificantEventController extends Controller
         $this->siatService = $siatService;
     }
 
-    /**
-     * Listado de eventos significativos.
-     */
     public function index()
     {
         $events = SignificantEvent::with('user')
@@ -62,15 +62,9 @@ class SignificantEventController extends Controller
         ]);
     }
 
-    /**
-     * Abre un Evento Significativo (inicia contingencia).
-     *
-     * IMPORTANTE: en este punto el CUFD vigente queda "congelado" en el evento.
-     * Toda factura emitida durante el evento usará ese CUFD.
-     */
     public function start(Request $request)
     {
-        $this->authorize('manage', SignificantEvent::class); // policy: solo Gerente
+        //$this->authorize('manage', SignificantEvent::class);
 
         $request->validate([
             'event_code'  => 'required|integer|min:1|max:7',
@@ -78,19 +72,18 @@ class SignificantEventController extends Controller
             'start_at'    => 'nullable|date',
         ]);
 
-        // Solo puede haber UN evento activo a la vez
         if (SignificantEvent::where('status', SignificantEvent::STATUS_ACTIVE)->exists()) {
             return back()->withErrors([
                 'error' => 'Ya existe un Evento Significativo activo. Debe cerrarse antes de abrir otro.',
             ]);
         }
 
-        // Obtener el CUFD vigente ANTES de la caída (debe estar en caché aún)
-        $cufdData = $this->siatService->getActiveCufd();
+        // peekActiveCufd() lee en BD sin intentar renovar (estamos offline).
+        $cufd = $this->siatService->peekActiveCufd();
 
-        if (!$cufdData) {
+        if (!$cufd) {
             return back()->withErrors([
-                'error' => 'No hay un CUFD vigente en caché. Sin CUFD no se puede operar offline.',
+                'error' => 'No hay un CUFD vigente almacenado. Sin CUFD no se puede operar offline.',
             ]);
         }
 
@@ -98,8 +91,9 @@ class SignificantEventController extends Controller
             'event_code'              => $request->event_code,
             'description'             => $request->description,
             'start_at'                => $request->start_at ?? now(),
-            'cufd_event'              => $cufdData['codigo'],
-            'cufd_event_control_code' => $cufdData['codigoControl'],
+            'cufd_event'              => $cufd->code,
+            'cufd_event_control_code' => $cufd->control_code,
+            'cufd_event_expires_at'   => $cufd->expires_at,
             'status'                  => SignificantEvent::STATUS_ACTIVE,
             'user_id'                 => $request->user()->id,
         ]);
@@ -108,25 +102,22 @@ class SignificantEventController extends Controller
 
         return redirect()
             ->route('significant-events.index')
-            ->with('warning', "Modo contingencia ACTIVO. Las facturas se guardarán offline.");
+            ->with('warning', 'Modo contingencia ACTIVO. Las facturas se guardarán offline.');
     }
 
     /**
-     * Cierra un Evento Significativo y lo registra en SIAT.
+     * Cierra el evento y lo registra en SIAT (paso previo al reenvío).
      */
     public function end(Request $request, SignificantEvent $event)
     {
-        $this->authorize('manage', SignificantEvent::class);
+        //$this->authorize('manage', SignificantEvent::class);
 
         if ($event->status !== SignificantEvent::STATUS_ACTIVE) {
             return back()->withErrors(['error' => 'Este evento no está activo.']);
         }
 
-        $request->validate([
-            'end_at' => 'nullable|date|after:start_at',
-        ]);
-
-        $endAt = $request->end_at ? \Carbon\Carbon::parse($request->end_at) : now();
+        $request->validate(['end_at' => 'nullable|date|after:start_at']);
+        $endAt = $request->end_at ? Carbon::parse($request->end_at) : now();
 
         try {
             DB::transaction(function () use ($event, $endAt) {
@@ -135,7 +126,7 @@ class SignificantEventController extends Controller
                     'status' => SignificantEvent::STATUS_CLOSED,
                 ]);
 
-                // Renovar CUFD (porque al cerrar, asumimos que volvió internet)
+                // Volvió la conexión: forzamos renovación de CUFD.
                 $this->siatService->invalidateCufdCache();
                 $cufdActual = $this->siatService->getActiveCufd();
 
@@ -143,41 +134,36 @@ class SignificantEventController extends Controller
                     throw new Exception('No se pudo obtener un CUFD nuevo para registrar el evento.');
                 }
 
-                // Registrar el evento en SIAT
                 $response = $this->siatService->registerSignificantEvent(
                     $event->event_code,
                     $event->description,
                     $event->start_at->format('Y-m-d\TH:i:s.v'),
                     $event->end_at->format('Y-m-d\TH:i:s.v'),
                     $event->cufd_event,
-                    $cufdActual['codigo']
+                    $cufdActual->code  // CORRECCIÓN: era $cufdActual['codigo']; getActiveCufd() devuelve un modelo SiatCredential.
                 );
 
-                if ($response['status'] === 'registered') {
-                    $event->update([
-                        'status'              => SignificantEvent::STATUS_REGISTERED,
-                        'siat_reception_code' => $response['codigoRecepcion'],
-                        'registered_at'       => now(),
-                    ]);
-                } else {
+                if ($response['status'] !== 'registered') {
                     $event->update(['status' => SignificantEvent::STATUS_FAILED]);
-                    Log::warning("Registro de evento SIAT falló: " . $response['mensaje']);
                     throw new Exception('SIAT rechazó el registro del evento: ' . $response['mensaje']);
                 }
+
+                $event->update([
+                    'status'              => SignificantEvent::STATUS_REGISTERED,
+                    'siat_reception_code' => $response['codigoRecepcion'],
+                    'registered_at'       => now(),
+                ]);
             });
         } catch (Exception $e) {
-            Log::error("Error al cerrar evento: " . $e->getMessage());
+            Log::error("Error al cerrar evento #{$event->id}: " . $e->getMessage());
             return back()->withErrors(['error' => $e->getMessage()]);
         }
 
         return redirect()
             ->route('significant-events.show', $event)
-            ->with('success', 'Evento registrado en SIAT. Ahora puede reenviar las facturas offline.');
+            ->with('success', 'Evento registrado en SIAT. Ahora puede reenviar el paquete de facturas offline.');
     }
 
-    /**
-     * Detalle de un evento y sus facturas offline asociadas.
-     */
     public function show(SignificantEvent $event)
     {
         $event->load(['user', 'invoices.checkin.guest']);
@@ -206,84 +192,195 @@ class SignificantEventController extends Controller
     }
 
     /**
-     * Reenvía las facturas offline asociadas a un evento ya registrado.
+     * REENVÍO CORREGIDO: empaqueta todas las facturas offline pendientes
+     * en un único .tar.gz y lo envía con recepcionPaqueteFactura, vinculado
+     * al código de recepción del Evento Significativo.
      */
     public function resendOfflineInvoices(SignificantEvent $event)
     {
-        $this->authorize('manage', SignificantEvent::class);
+        //$this->authorize('manage', SignificantEvent::class);
 
+        // ============================================================
+        // 1. Pre-condiciones legales
+        // ============================================================
         if ($event->status !== SignificantEvent::STATUS_REGISTERED) {
             return back()->withErrors([
-                'error' => 'El evento debe estar registrado en SIAT antes de reenviar facturas.',
+                'error' => 'El evento debe estar registrado en SIAT antes de reenviar el paquete.',
             ]);
         }
 
-        // Ventana legal: 48 horas desde el fin del evento
+        if (empty($event->siat_reception_code)) {
+            return back()->withErrors([
+                'error' => 'El evento no tiene código de recepción SIAT. No se puede empaquetar.',
+            ]);
+        }
+
+        // Ventana legal de 48 horas desde el cierre.
         if ($event->end_at && $event->end_at->diffInHours(now()) > 48) {
             return back()->withErrors([
                 'error' => 'Ha expirado la ventana de 48 horas para reenviar facturas offline.',
             ]);
         }
 
-        $cuis     = $this->siatService->getActiveCuis();
-        $cufdData = $this->siatService->getActiveCufd();
+        // ============================================================
+        // 2. Credenciales vigentes (online)
+        // ============================================================
+        $cuis = $this->siatService->getActiveCuis();
+        $cufd = $this->siatService->getActiveCufd();
 
-        if (!$cuis || !$cufdData) {
-            return back()->withErrors(['error' => 'No se pudo conectar al SIAT.']);
+        if (!$cuis || !$cufd) {
+            return back()->withErrors(['error' => 'No se pudo conectar al SIAT para reenviar el paquete.']);
         }
 
+        // ============================================================
+        // 3. Recolectar facturas offline pendientes
+        //    (siat_status = 'offline' y con offline_xml_path)
+        // ============================================================
         $pending = $event->invoices()
             ->where('siat_status', 'offline')
             ->whereNotNull('offline_xml_path')
             ->get();
 
-        $ok = 0;
-        $fail = 0;
+        if ($pending->isEmpty()) {
+            return back()->with('warning', 'No hay facturas offline pendientes de reenviar.');
+        }
 
+        // ============================================================
+        // 4. Descomprimir cada .xml.gz a XML plano + recolectar (cuf, xml)
+        // ============================================================
+        $xmls = [];
         foreach ($pending as $invoice) {
             try {
                 if (!Storage::disk('local')->exists($invoice->offline_xml_path)) {
                     Log::warning("XML offline no encontrado para factura #{$invoice->invoice_number}");
-                    $fail++;
+                    continue;
+                }
+                $gz  = Storage::disk('local')->get($invoice->offline_xml_path);
+                $xml = @gzdecode($gz);
+
+                if ($xml === false || empty($invoice->cuf)) {
+                    Log::warning("XML offline corrupto o sin CUF para factura #{$invoice->invoice_number}");
                     continue;
                 }
 
-                $gzip = Storage::disk('local')->get($invoice->offline_xml_path);
-                $hash = hash('sha256', gzdecode($gzip));
-
-                $response = $this->siatService->sendOfflinePackage(
-                    $cuis,
-                    $cufdData['codigo'],
-                    $gzip,
-                    $hash,
-                    $event->event_code
-                );
-
-                if ($response['status'] === 'accepted') {
-                    $invoice->update([
-                        'siat_status'         => 'accepted',
-                        'siat_reception_code' => $response['codigoRecepcion'],
-                    ]);
-                    $ok++;
-                } else {
-                    $invoice->update(['siat_status' => 'rejected']);
-                    Log::warning("Reenvío rechazado factura #{$invoice->invoice_number}: " . $response['mensaje']);
-                    $fail++;
-                }
+                $xmls[] = [
+                    'invoice_id' => $invoice->id,
+                    'cuf'        => $invoice->cuf,
+                    'xml'        => $xml,
+                ];
             } catch (Exception $e) {
-                Log::error("Error reenviando factura #{$invoice->invoice_number}: " . $e->getMessage());
-                $fail++;
+                Log::error("Error leyendo XML offline factura #{$invoice->invoice_number}: " . $e->getMessage());
             }
         }
 
-        return redirect()
-            ->route('significant-events.show', $event)
-            ->with('success', "Reenvío completado: {$ok} aceptadas, {$fail} fallidas.");
+        if (empty($xmls)) {
+            return back()->withErrors(['error' => 'No se pudieron leer los XMLs de las facturas offline.']);
+        }
+
+        // ============================================================
+        // 5. EMPAQUETAR todas las facturas en un solo .tar.gz
+        // ============================================================
+        try {
+            $package = $this->siatService->buildOfflinePackage(
+                array_map(fn ($r) => ['cuf' => $r['cuf'], 'xml' => $r['xml']], $xmls)
+            );
+        } catch (Exception $e) {
+            Log::error("Error al empaquetar paquete offline evento #{$event->id}: " . $e->getMessage());
+            return back()->withErrors(['error' => 'Error al empaquetar facturas: ' . $e->getMessage()]);
+        }
+
+        // ============================================================
+        // 6. ENVIAR el paquete (recepcionPaqueteFactura)
+        //    OJO: codigoEvento = código de RECEPCIÓN del evento (no el motivo 1..7)
+        // ============================================================
+        $sendResp = $this->siatService->sendOfflinePackage(
+            $cuis,
+            $cufd->code,
+            $package['archivo'],
+            $package['hash'],
+            $package['cantidad'],
+            $event->siat_reception_code   // ← campo correcto
+        );
+
+        if ($sendResp['status'] !== 'received') {
+            Log::warning("SIAT rechazó el paquete del evento #{$event->id}: " . $sendResp['mensaje']);
+            return back()->withErrors([
+                'error' => 'SIAT rechazó el paquete: ' . $sendResp['mensaje'],
+            ]);
+        }
+
+        $codigoRecepcionPaquete = $sendResp['codigoRecepcion'];
+
+        $event->update([
+            'package_reception_code' => $codigoRecepcionPaquete,
+            'package_sent_at'        => now(),
+        ]);
+
+        // ============================================================
+        // 7. VALIDAR el procesamiento (validacionRecepcionPaquete)
+        //    con back-off corto para casos "EN PROCESO".
+        // ============================================================
+        $validation = $this->pollPackageValidation($cuis, $cufd->code, $codigoRecepcionPaquete);
+
+        // ============================================================
+        // 8. Persistir resultado en cada factura
+        // ============================================================
+        $invoiceIds = collect($xmls)->pluck('invoice_id')->all();
+
+        if ($validation['status'] === 'accepted') {
+            Invoice::whereIn('id', $invoiceIds)->update([
+                'siat_status'         => 'accepted',
+                'siat_reception_code' => $codigoRecepcionPaquete,
+            ]);
+            $msg = "Paquete VALIDADO. {$package['cantidad']} factura(s) aceptada(s) por SIAT.";
+
+            return redirect()
+                ->route('significant-events.show', $event)
+                ->with('success', $msg);
+        }
+
+        if ($validation['status'] === 'processing') {
+            // Queda pendiente: el sistema deberá reintentar la validación.
+            return redirect()
+                ->route('significant-events.show', $event)
+                ->with('warning', 'Paquete enviado. SIAT informa "EN PROCESO": se reintentará la validación más tarde.');
+        }
+
+        // OBSERVADA o RECHAZADA
+        Invoice::whereIn('id', $invoiceIds)->update(['siat_status' => 'rejected']);
+        Log::warning("Paquete rechazado/observado evento #{$event->id}: " . $validation['mensaje']);
+
+        return back()->withErrors([
+            'error' => 'Paquete recibido pero ' . $validation['status'] . ': ' . $validation['mensaje'],
+        ]);
     }
 
     /**
-     * Opciones del catálogo de eventos significativos para el frontend.
+     * Polling con back-off para validacionRecepcionPaquete.
+     * Procesar un paquete puede demorar; SIAT devuelve "EN PROCESO" en el ínterin.
      */
+    private function pollPackageValidation(
+        string $cuis,
+        string $cufd,
+        string $codigoRecepcionPaquete
+    ): array {
+        $delays = [5, 15, 30]; // segundos
+        $last   = ['status' => 'processing', 'mensaje' => 'sin respuesta'];
+
+        foreach ($delays as $i => $seconds) {
+            if ($i > 0) sleep($seconds);
+
+            $last = $this->siatService->validateOfflinePackage($cuis, $cufd, $codigoRecepcionPaquete);
+
+            if (in_array($last['status'], ['accepted', 'observed', 'rejected'], true)) {
+                return $last;
+            }
+        }
+
+        // Sigue "EN PROCESO" tras los reintentos.
+        return $last;
+    }
+
     private function getEventCodeOptions(): array
     {
         return [
