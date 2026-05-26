@@ -2216,6 +2216,7 @@ class CheckinController extends Controller
 
 
     // --GENERACION DE FACTURA --
+    // generacion de Plugin para la facturacion
     public function generateCheckoutInvoice(Checkin $checkin)
     {
         try {
@@ -2500,7 +2501,14 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="factura-' . $checkin->id . '.pdf"');
-        } catch (\Exception $e) {
+        }  catch (\Exception $e) {
+            // Verifica si $nuevaFactura fue creada antes de intentar actualizarla
+            if (isset($nuevaFactura)) {
+                $activeEvent = \App\Models\SignificantEvent::where('status', 'active')->first();
+                $nuevaFactura->significant_event_id = $activeEvent ? $activeEvent->id : null;
+                $nuevaFactura->save();
+            }
+            
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }

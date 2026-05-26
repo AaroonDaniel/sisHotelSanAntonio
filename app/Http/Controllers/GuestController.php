@@ -12,7 +12,6 @@ class GuestController extends Controller
 {
     public function index()
     {
-        // Ordenamos por apellido para que la lista se vea mejor
         $guests = Guest::orderBy('full_name')->get();
         return Inertia::render('guests/index', [
             'Guests' => $guests
@@ -35,7 +34,6 @@ class GuestController extends Controller
                 'civil_status' => 'nullable|string',
                 'birth_date' => 'nullable|date',
                 'profession' => 'nullable|string',
-                //'origin' => 'nullable|string',
                 'phone' => 'nullable|string|max:20',
                 'issued_in' => 'nullable|string',
             ]);

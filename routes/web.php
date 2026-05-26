@@ -264,15 +264,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
         ->name('significant-events.resend');
 
-
-    
-    Route::post('significant-events/start', [SignificantEventController::class, 'start'])->name('significant-events.start');
-    Route::post('significant-events/{event}/end', [SignificantEventController::class, 'end'])->name('significant-events.end');
-    Route::get('significant-events/{event}', [SignificantEventController::class, 'show'])->name('significant-events.show');
-    Route::post('significant-events/{event}/resend', [SignificantEventController::class, 'resendOfflineInvoices'])->name('significant-events.resend');
-
-
-
     // Auditoría de actividades
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
