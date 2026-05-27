@@ -1,88 +1,77 @@
-import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import {
     ArrowLeft,
-    Briefcase,
-    CreditCard,
-    Pencil,
-    Plus,
+    ArrowDownRight,
+    ArrowUpRight,
     Search,
-    Trash2,
-    User as UserIcon,
+    Receipt
 } from 'lucide-react';
 import { useState } from 'react';
 
-
-// --- 1. DICCIONARIO DE TRADUCCIÓN ---
-const civilStatusTranslations: Record<string, string> = {
-    SINGLE: 'Soltero',
-    MARRIED: 'Casado',
-    DIVORCED: 'Divorciado',
-    WIDOWED: 'Viudo',
-    CONCUBINAGE: 'Concubinato',
-};
-
-const calculateAge = (dateString?: string) => {
-    if (!dateString) return null;
-    const today = new Date();
-    const birthDate = new Date(dateString);
-    if (isNaN(birthDate.getTime())) return null;
-    
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-    }
-    return age;
-};
-
-interface User {
-    auth: { user: User };
+export interface Payment {
     id: number;
-    name: string;
-}
-
-export interface Guest {
-    id: number;
-    full_name: string;
-    nationality: string;
-    identification_number: string;
-    issued_in: string;
-    civil_status: string;
-    birth_date?: string;
-    age?: number; 
-    profession: string;
-    phone?: string;
+    amount: string | number;
+    method: string;
+    type: string;
+    payment_date: string;
+    status: string;
+    user?: {
+        id: number;
+        name: string;
+        full_name?: string;
+        nickname?: string;
+    };
+    checkin?: {
+        id: number;
+        room?: {
+            name: string;
+            number: string;
+        };
+    };
 }
 
 interface Props {
     auth: { user: User };
-    Guests: Guest[];
+    // Laravel paginate() envía los datos dentro de un objeto con la propiedad "data"
+    payments: {
+        data: Payment[];
+    };
 }
 
-export default function GuestsIndex({ auth, Guests }: Props) {
+export default function PaymentHistory({ auth, payments }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
-    const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [deletingGuestId, setDeletingGuestId] = useState<number | null>(null);
 
-    const filteredGuests = Guests.filter((guest) => {
+    // Filtro básico en el cliente (para la página actual)
+    const filteredPayments = payments.data.filter((payment) => {
         const term = searchTerm.toLowerCase();
+        const receiverName = (payment.user?.full_name || payment.user?.name || '').toLowerCase();
+        
         return (
-            guest.full_name.toLowerCase().includes(term) ||
-            (guest.identification_number || '').toLowerCase().includes(term) ||
-            (guest.nationality || '').toLowerCase().includes(term)
+            payment.method?.toLowerCase().includes(term) ||
+            payment.type?.toLowerCase().includes(term) ||
+            receiverName.includes(term) ||
+            payment.amount.toString().includes(term)
         );
     });
 
-    const openCreateModal = () => { setEditingGuest(null); setIsGuestModalOpen(true); };
-    const openEditModal = (guest: Guest) => { setEditingGuest(guest); setIsGuestModalOpen(true); };
-    const openDeleteModal = (id: number) => { setDeletingGuestId(id); setIsDeleteModalOpen(true); };
+    // Formateador de fecha y hora
+    const formatDateTime = (dateString?: string) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Gestión de Huéspedes" />
+            <Head title="Historial de Pagos" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <button
                     onClick={() => window.history.back()}
@@ -95,12 +84,15 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                 </button>
 
                 <div>
-                    <h2 className="text-3xl font-bold text-white">Lista de Huéspedes</h2>
+                    <h2 className="text-3xl font-bold text-white">Historial de Transacciones</h2>
+                    <p className="mt-1 text-sm text-gray-400">
+                        Registro de todos los pagos y devoluciones procesados
+                    </p>
                 </div>
 
                 <div className="py-12">
-                    <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        {/* Header: Buscador y Botón Crear */}
+                    <div className="mx-auto w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                        {/* Header: Buscador */}
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
                             <div className="relative w-full sm:w-72">
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -110,17 +102,15 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                     type="text"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Buscar por nombre, CI..."
+                                    placeholder="Buscar por método, tipo, usuario..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
-                            <button
-                                onClick={openCreateModal}
-                                className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
-                            >
-                                <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
-                                <span>Nuevo Huésped</span>
-                            </button>
+                            
+                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-medium text-sm">
+                                <Receipt className="h-5 w-5" />
+                                Total Registros: {payments.data.length}
+                            </div>
                         </div>
 
                         {/* Tabla */}
@@ -128,38 +118,53 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">Huésped</th>
-                                        <th className="px-6 py-4">Documento</th>
-                                        <th className="px-6 py-4">Nacionalidad</th>
-                                        <th className="px-6 py-4">Edad / Civil</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4">Fecha y Hora</th>
+                                        <th className="px-6 py-4">Tipo / Método</th>
+                                        <th className="px-6 py-4">Monto</th>
+                                        <th className="px-6 py-4">Recibido por</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
-                                    {filteredGuests.length > 0 ? (
-                                        filteredGuests.map((guest) => (
-                                            <tr key={guest.id} className="transition-colors hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-bold text-gray-900">{guest.full_name}</td>
-                                                <td className="px-6 py-4">{guest.identification_number}</td>
-                                                <td className="px-6 py-4">{guest.nationality}</td>
-                                                <td className="px-6 py-4">
-                                                    {calculateAge(guest.birth_date) ?? '-'} años / {civilStatusTranslations[guest.civil_status] || guest.civil_status}
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button onClick={() => openEditModal(guest)} className="text-gray-400 transition hover:text-blue-600">
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button onClick={() => openDeleteModal(guest.id)} className="text-gray-400 transition hover:text-red-600">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
+                                    {filteredPayments.length > 0 ? (
+                                        filteredPayments.map((payment) => {
+                                            // Determinamos si es pago o devolución para el color
+                                            const isRefund = payment.type?.toLowerCase() === 'devolución' || payment.type?.toLowerCase() === 'refund';
+                                            
+                                            return (
+                                                <tr key={payment.id} className="transition-colors hover:bg-gray-50">
+                                                    <td className="px-6 py-4 font-medium text-gray-900">
+                                                        {formatDateTime(payment.payment_date)}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            {isRefund ? (
+                                                                <ArrowUpRight className="h-4 w-4 text-red-500" />
+                                                            ) : (
+                                                                <ArrowDownRight className="h-4 w-4 text-green-500" />
+                                                            )}
+                                                            <span className={`font-semibold ${isRefund ? 'text-red-700' : 'text-green-700'}`}>
+                                                                {payment.type || 'Pago'}
+                                                            </span>
+                                                            <span className="text-gray-400 mx-1">-</span>
+                                                            <span className="text-gray-600 capitalize">{payment.method}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 font-bold text-gray-900">
+                                                        Bs. {Number(payment.amount).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                                                            {payment.user?.full_name || payment.user?.nickname || payment.user?.name || 'Sistema'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
                                     ) : (
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-gray-500">No hay registros.</td>
+                                            <td colSpan={4} className="p-8 text-center text-gray-500">
+                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay transacciones registradas.'}
+                                            </td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -167,8 +172,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                         </div>
                     </div>
                 </div>
-
-                
             </div>
         </AuthenticatedLayout>
     );
