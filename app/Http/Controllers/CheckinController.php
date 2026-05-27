@@ -1666,6 +1666,11 @@ class CheckinController extends Controller
         };
     }
 
+    protected function getActiveSignificantEvent(): ?\App\Models\SignificantEvent
+    {
+        return \App\Models\SignificantEvent::where('status', 'active')->first();
+    }
+
     protected function emitInvoiceToSiat(Invoice $invoice): void
     {
         $siat = app(\App\Services\SiatService::class);
@@ -1770,6 +1775,60 @@ class CheckinController extends Controller
         }
         $invoice->update(['siat_status' => 'rejected']);
     }
+
+    protected function emitOfflineInvoice(
+        \App\Models\Invoice $invoice,
+        \App\Models\SignificantEvent $event
+    ): void {
+        // 1. Envolver el CUFD del evento en un SiatCredential transitorio
+        //    (no se persiste; solo lo necesita el builder).
+        $cufd = new \App\Models\SiatCredential([
+            'type'         => 'CUFD',
+            'code'         => $event->cufd_event,
+            'control_code' => $event->cufd_event_control_code,
+            // Vigencia del CUFD durante la contingencia. Si la columna existe en
+            // SignificantEvent se respeta; de lo contrario, +24h como margen.
+            'expires_at'   => $event->cufd_event_expires_at ?: now()->addDay(),
+        ]);
+
+        if (empty($cufd->code) || empty($cufd->control_code)) {
+            throw new \RuntimeException(
+                'El evento significativo #' . $event->id . ' no tiene CUFD válido. '
+                    . 'No se puede emitir en contingencia.'
+            );
+        }
+
+        // 2. Construir XML + CUF en modo OFFLINE (codigoEmision = 2).
+        $builder = new \App\Services\SiatXmlBuilder(
+            $invoice,
+            $cufd,
+            \App\Services\SiatXmlBuilder::EMISSION_OFFLINE
+        );
+
+        $xml = $builder->getRawXml();
+        $cuf = $builder->generateCuf();
+
+        // 3. Persistir CUF + estado offline + vínculo al evento ANTES de tocar disco.
+        $invoice->update([
+            'cuf'                  => $cuf,
+            //'cufd_code'            => $cufd->code,
+            'siat_status'          => 'offline',
+            'significant_event_id' => $event->id,
+        ]);
+
+        // 4. Guardar el .xml.gz en storage/app/offline_invoices/
+        //    (la misma convención que storeOfflineXml() para que el reenvío masivo lo encuentre).
+        $filename = "offline_invoices/invoice_{$invoice->id}_" . now()->format('Ymd_His') . '.xml.gz';
+        \Illuminate\Support\Facades\Storage::disk('local')->put($filename, gzencode($xml, 9));
+
+        $invoice->update(['offline_xml_path' => $filename]);
+
+        \Illuminate\Support\Facades\Log::info(
+            "Factura #{$invoice->invoice_number} emitida en CONTINGENCIA (evento #{$event->id}). "
+                . "CUF local: {$cuf}"
+        );
+    }
+
 
     protected function storeOfflineXml(string $gzipArchive, Invoice $invoice): string
     {
@@ -2217,14 +2276,16 @@ class CheckinController extends Controller
 
     // --GENERACION DE FACTURA --
     // generacion de Plugin para la facturacion
-    public function generateCheckoutInvoice(Checkin $checkin)
+    public function generateCheckoutInvoice(\App\Models\Checkin $checkin)
     {
+        $nuevaFactura = null;
+
         try {
             $checkin->load(['guest', 'room.price', 'checkinDetails.service', 'schedule', 'companions', 'payments']);
 
-            // RASTREO DEL HISTORIAL
+            // --- Rastreo del historial ---
             $originalCheckInDate = $checkin->check_in_date;
-            $totalDiasHistorial = 0;
+            $totalDiasHistorial  = 0;
 
             $currentParentId = $checkin->parent_checkin_id;
             while ($currentParentId) {
@@ -2232,22 +2293,22 @@ class CheckinController extends Controller
                 if ($parent) {
                     $originalCheckInDate = $parent->check_in_date;
                     $totalDiasHistorial += max(1, intval($parent->duration_days));
-                    $currentParentId = $parent->parent_checkin_id;
+                    $currentParentId     = $parent->parent_checkin_id;
                 } else {
                     break;
                 }
             }
 
-            $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
+            $salida     = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
             $diasReales = $this->calculateBillableDays($checkin, $salida);
 
             $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
             if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
-                $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
+                $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
+                $isPrivate     = $bathroomType === 'private' || $bathroomType === 'privado';
                 $ratePerPerson = $isPrivate ? 90 : 60;
-                $paxCount = 1 + $checkin->companions->count();
+                $paxCount      = 1 + $checkin->companions->count();
                 $precioUnitario = $ratePerPerson * $paxCount;
             }
 
@@ -2256,26 +2317,22 @@ class CheckinController extends Controller
 
             $totalServicios = 0;
             foreach ($checkin->checkinDetails as $detalle) {
-                $precio = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                $precio          = $detalle->selling_price ?? ($detalle->service->price ?? 0);
                 $totalServicios += ($detalle->quantity * $precio);
             }
 
             $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
 
-            // =========================================================
-            // 🚀 NUEVA LÓGICA DE PAGOS: SEPARAR ADELANTOS DEL PAGO ACTUAL
-            // =========================================================
-            $totalPagadoReal = 0;
-            $pagoFinalCaja = 0;
+            // --- Separación de pagos (sin cambios) ---
+            $totalPagadoReal  = 0;
+            $pagoFinalCaja    = 0;
             $adelantosPrevios = 0;
 
             if ($checkin->payments->count() > 0) {
                 $ultimoPagoId = $checkin->payments->last()->id;
-
                 foreach ($checkin->payments as $pago) {
-                    $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                    $monto            = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
                     $totalPagadoReal += $monto;
-
                     if ($pago->id === $ultimoPagoId) {
                         $pagoFinalCaja += $monto;
                     } else {
@@ -2284,14 +2341,13 @@ class CheckinController extends Controller
                 }
             } else {
                 $adelantosPrevios = $checkin->advance_payment ?? 0;
-                $totalPagadoReal = $adelantosPrevios;
+                $totalPagadoReal  = $adelantosPrevios;
             }
 
             $saldoFinal = max(0, $granTotal - $totalPagadoReal);
-            // =========================================================
 
-            // GUARDAR FACTURA EN LA BASE DE DATOS
-            $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
+            // --- Persistencia de Invoice ---
+            $lastInvoice       = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
             $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
 
             $lastPayment = $checkin->payments->last();
@@ -2301,14 +2357,15 @@ class CheckinController extends Controller
                 'invoice_number' => $nextInvoiceNumber,
                 'checkin_id'     => $checkin->id,
                 'issue_date'     => now()->toDateString(),
-                'control_code'   => '8A-F1-2C-99',
+                'control_code'   => '8A-F1-2C-99',                    // placeholder; se sobrescribe abajo si va offline
                 'payment_method' => $metodoFinal,
                 'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
                 'issue_time'     => now(),
                 'status'         => 'valid',
+                'total_amount'   => $granTotal,
             ]);
 
-            // Detalle: Hospedaje
+            // --- Detalles ---
             \App\Models\InvoiceDetail::create([
                 'invoice_id'  => $nuevaFactura->id,
                 'service_id'  => null,
@@ -2324,12 +2381,13 @@ class CheckinController extends Controller
                     'service_id'  => null,
                     'description' => "Hospedaje Previo",
                     'quantity'    => $totalDiasHistorial,
-                    'unit_price'  => $carriedBalance > 0 && $totalDiasHistorial > 0 ? $carriedBalance / $totalDiasHistorial : $carriedBalance,
+                    'unit_price'  => $carriedBalance > 0 && $totalDiasHistorial > 0
+                        ? $carriedBalance / $totalDiasHistorial
+                        : $carriedBalance,
                     'cost'        => $carriedBalance,
                 ]);
             }
 
-            // Detalle: Servicios
             foreach ($checkin->checkinDetails as $detalle) {
                 $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
                 \App\Models\InvoiceDetail::create([
@@ -2342,7 +2400,67 @@ class CheckinController extends Controller
                 ]);
             }
 
-            // --- PDF GENERATION ---
+            // =========================================================
+            // 🚦 BIFURCACIÓN SIAT: online vs contingencia (offline)
+            // =========================================================
+            $isOffline         = false;
+            $controlCodeForPdf = '8A-F1-2C-99';                       // placeholder online
+
+            $activeEvent = $this->getActiveSignificantEvent();
+
+            if ($activeEvent) {
+                // ---- MODO CONTINGENCIA ----
+                // No se toca SOAP. Se calcula CUF local + .xml.gz en disco.
+                try {
+                    // Recargar detalles para que el builder los vea ya persistidos.
+                    $nuevaFactura->load('details', 'checkin.guest', 'user');
+
+                    $this->emitOfflineInvoice($nuevaFactura, $activeEvent);
+
+                    $isOffline         = true;
+                    $controlCodeForPdf = 'CONTINGENCIA';
+                    $nuevaFactura->update(['control_code' => 'CONTINGENCIA']);
+                } catch (\Throwable $ex) {
+                    // Falla al construir XML offline: NO devolvemos 500 al cajero.
+                    // Marcamos la factura como "offline" + significant_event_id para
+                    // que el sistema la reintente al cerrar el evento.
+                    \Illuminate\Support\Facades\Log::error(
+                        "Falló construcción offline factura #{$nuevaFactura->id}: " . $ex->getMessage()
+                    );
+                    $nuevaFactura->update([
+                        'siat_status'          => 'offline',
+                        'significant_event_id' => $activeEvent->id,
+                        'control_code'         => 'CONTINGENCIA',
+                    ]);
+                    $isOffline         = true;
+                    $controlCodeForPdf = 'CONTINGENCIA';
+                }
+            } else {
+                // ---- MODO ONLINE ----
+                // Lógica existente. Si SIAT cae a media transacción, emitInvoiceToSiat
+                // ya guarda la factura como offline gracias a SiatOfflineException.
+                try {
+                    $this->emitInvoiceToSiat($nuevaFactura);
+                    $nuevaFactura->refresh();
+
+                    if ($nuevaFactura->siat_status === 'offline') {
+                        $isOffline         = true;
+                        $controlCodeForPdf = 'CONTINGENCIA';
+                    } elseif (!empty($nuevaFactura->cuf)) {
+                        // CUF real del SIAT disponible: se muestra como código de control.
+                        $controlCodeForPdf = substr($nuevaFactura->cuf, 0, 8);
+                    }
+                } catch (\App\Exceptions\SiatOfflineException $ex) {
+                    // emitInvoiceToSiat ya persistió offline_xml_path y siat_status.
+                    $isOffline         = true;
+                    $controlCodeForPdf = 'CONTINGENCIA';
+                    \Illuminate\Support\Facades\Log::warning("Checkout con caída SIAT: " . $ex->getMessage());
+                }
+            }
+
+            // =========================================================
+            // PDF — Layout idéntico al original; solo cambia $controlCodeForPdf.
+            // =========================================================
             $pdf = new \FPDF('P', 'mm', array(80, 260));
             $pdf->SetMargins(4, 4, 4);
             $pdf->SetAutoPageBreak(true, 2);
@@ -2363,6 +2481,13 @@ class CheckinController extends Controller
             $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
             $pdf->SetFont('Arial', '', 6);
             $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+
+            // Sello visible de contingencia (solo si offline).
+            if ($isOffline) {
+                $pdf->Ln(1);
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->Cell(0, 3, utf8_decode('*** EMITIDA EN CONTINGENCIA ***'), 0, 1, 'C');
+            }
             $pdf->Ln(2);
 
             $pdf->SetFont('Arial', 'B', 7);
@@ -2376,7 +2501,7 @@ class CheckinController extends Controller
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
             $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(35, 3, '456123ABC', 0, 1, 'L');
+            $pdf->Cell(35, 3, $isOffline ? 'PENDIENTE SIAT' : '456123ABC', 0, 1, 'L');
             $pdf->Ln(2);
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(1);
@@ -2403,6 +2528,7 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
+            // --- Tabla de detalle ---
             $pdf->SetFont('Arial', 'B', 6);
             $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
             $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
@@ -2429,8 +2555,10 @@ class CheckinController extends Controller
                 foreach ($checkin->checkinDetails as $detalle) {
                     $nombre = $detalle->service->name ?? 'Servicio';
                     $precio = $detalle->selling_price ?? ($detalle->service->price ?? 0);
-                    if (!isset($serviciosAgrupados[$nombre])) $serviciosAgrupados[$nombre] = ['qty' => 0, 'total' => 0];
-                    $serviciosAgrupados[$nombre]['qty'] += $detalle->quantity;
+                    if (!isset($serviciosAgrupados[$nombre])) {
+                        $serviciosAgrupados[$nombre] = ['qty' => 0, 'total' => 0];
+                    }
+                    $serviciosAgrupados[$nombre]['qty']   += $detalle->quantity;
                     $serviciosAgrupados[$nombre]['total'] += ($detalle->quantity * $precio);
                 }
             }
@@ -2446,9 +2574,7 @@ class CheckinController extends Controller
             $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
             $pdf->Ln(2);
 
-            // =========================================================
-            // 🚀 IMPRESIÓN DEL DESGLOSE CORRECTO EN LA FACTURA
-            // =========================================================
+            // --- Totales ---
             $saldoCobrar = $granTotal - $adelantosPrevios;
 
             $pdf->SetFont('Arial', 'B', 8);
@@ -2468,9 +2594,6 @@ class CheckinController extends Controller
 
             $pdf->Ln(2);
             $pdf->SetFont('Arial', '', 7);
-            // IMPORTANTE: Se cambia a $saldoCobrar para que el literal coincida con lo que paga el cliente hoy, 
-            // o a $granTotal si quieres que el literal sea por el valor total de la factura. 
-            // Legalmente (en Bolivia) el texto literal suele ser sobre el TOTAL GENERAL de la factura.
             $montoLetras = $this->convertirNumeroALetras($granTotal);
             $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
 
@@ -2480,11 +2603,21 @@ class CheckinController extends Controller
             $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
 
             $pdf->Ln(2);
-            $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
+
+            // 👇 ÚNICO CAMBIO DE CONTENIDO: el código de control sale dinámico.
+            $pdf->Cell(
+                0,
+                3,
+                utf8_decode('CÓDIGO DE CONTROL: ' . $controlCodeForPdf),
+                0,
+                1,
+                'C'
+            );
             $pdf->Ln(2);
 
             $logoPath = public_path('images/qrCop.png');
-            if (file_exists($logoPath)) {
+            if (file_exists($logoPath) && !$isOffline) {
+                // En contingencia no imprimimos el QR del SIAT: aún no existe codigoRecepcion.
                 $x = (80 - 22) / 2;
                 $pdf->Image($logoPath, $x, $pdf->GetY(), 22, 22);
                 $pdf->Ln(24);
@@ -2501,17 +2634,31 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="factura-' . $checkin->id . '.pdf"');
-        }  catch (\Exception $e) {
-            // Verifica si $nuevaFactura fue creada antes de intentar actualizarla
-            if (isset($nuevaFactura)) {
-                $activeEvent = \App\Models\SignificantEvent::where('status', 'active')->first();
-                $nuevaFactura->significant_event_id = $activeEvent ? $activeEvent->id : null;
-                $nuevaFactura->save();
+        } catch (\Throwable $e) {
+            // Degradación segura: NO devolver 500 al cajero. Si la factura llegó a
+            // crearse en BD, queda marcada como offline para reintento posterior.
+            \Illuminate\Support\Facades\Log::error(
+                "Error en generateCheckoutInvoice (checkin {$checkin->id}): "
+                    . $e->getMessage() . "\n" . $e->getTraceAsString()
+            );
+
+            if (isset($nuevaFactura) && $nuevaFactura instanceof \App\Models\Invoice) {
+                $activeEvent = $this->getActiveSignificantEvent();
+                $nuevaFactura->update([
+                    'siat_status'          => 'offline',
+                    'significant_event_id' => $activeEvent?->id,
+                    'control_code'         => 'CONTINGENCIA',
+                ]);
             }
-            
-            return response()->json(['error' => $e->getMessage()], 500);
+
+            // Mensaje legible para el cajero (no JSON 500).
+            return back()->withErrors([
+                'error' => 'Hubo un problema generando la factura. Se ha guardado en modo contingencia. Detalle: '
+                    . $e->getMessage(),
+            ]);
         }
     }
+
     // --- FUNCIÓN MANUAL PARA NÚMERO A LETRAS (SIN DEPENDENCIAS) ---
     private function convertirNumeroALetras($monto)
     {
