@@ -1,6 +1,7 @@
 import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
+import ReservationsPopover from '@/components/Reservationspopover';
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
@@ -12,9 +13,7 @@ import {
     Banknote,
     BedDouble,
     Brush,
-    Calendar,
     CheckCircle2,
-    Clock,
     Construction,
     FileEdit,
     FileText,
@@ -1295,88 +1294,26 @@ export default function RoomsStatus({
                                 {/* 🚦 CONTROLES SUPERIOR DERECHA */}
                                 <div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
                                     {sortedReservations.length > 0 && (
-                                        <div className="group relative flex">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    console.log(
-                                                        '=== EJECUTANDO ASIGNACIÓN ===',
-                                                    );
-                                                    console.log(
-                                                        'Agarrando a:',
-                                                        firstRes.guest,
-                                                        'ID:',
+                                        <ReservationsPopover
+                                            sortedReservations={
+                                                sortedReservations
+                                            }
+                                            firstRes={firstRes}
+                                            isToday={isToday}
+                                            activeCheckin={activeCheckin}
+                                            corpState={corpState}
+                                            onTriggerClick={() => {
+                                                if (isToday) {
+                                                    setPreselectedReservationId(
                                                         firstRes.id,
                                                     );
-                                                    if (isToday) {
-                                                        setPreselectedReservationId(
-                                                            firstRes.id,
-                                                        );
-                                                        setIsPendingModalOpen(
-                                                            true,
-                                                        );
-                                                    } else {
-                                                        setSelectedItem(
-                                                            firstRes,
-                                                        );
-                                                        setIsActionModalOpen(
-                                                            true,
-                                                        );
-                                                    }
-                                                }}
-                                                className={`flex w-9 cursor-pointer items-center justify-start overflow-hidden px-2.5 py-1.5 transition-all duration-300 ease-in-out group-hover:w-[150px] ${isToday ? 'bg-purple-600 text-white shadow-md hover:bg-purple-700' : 'bg-purple-200 text-purple-900 hover:bg-purple-300'} ${!activeCheckin && !corpState ? 'rounded-tr-lg rounded-bl-xl' : 'rounded-bl-xl border-r border-purple-300/50'}`}
-                                            >
-                                                <Calendar
-                                                    className={`h-4 w-4 shrink-0 ${isToday ? 'animate-pulse text-white' : 'text-purple-800'}`}
-                                                />
-                                                <div className="ml-2 flex items-center whitespace-nowrap opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                                                    <span
-                                                        className={`text-[10px] font-black tracking-tighter uppercase italic ${isToday ? 'text-white' : 'text-purple-900'}`}
-                                                    >
-                                                        {isToday
-                                                            ? '¡Asignar Hoy!'
-                                                            : `Res. ${firstRes.date}`}
-                                                    </span>
-                                                </div>
-                                            </button>
-
-                                            {/* 📝 PANTALLITA FLOTANTE (Popover) */}
-                                            <div className="pointer-events-none absolute top-full right-0 z-50 mt-1 hidden w-56 animate-in cursor-default rounded-xl border border-purple-200 bg-white p-3 text-left shadow-2xl zoom-in-95 fade-in group-hover:block">
-                                                <p className="pointer-events-none mb-2 flex items-center justify-between border-b border-purple-100 pb-1 text-[10px] font-black text-purple-600 uppercase">
-                                                    <span>
-                                                        <Clock className="mr-1 inline h-3 w-3" />{' '}
-                                                        Entradas
-                                                    </span>
-                                                    <span className="rounded-full bg-purple-100 px-1.5 text-purple-800">
-                                                        {
-                                                            sortedReservations.length
-                                                        }
-                                                    </span>
-                                                </p>
-                                                <div className="pointer-events-none max-h-32 space-y-2 overflow-y-auto">
-                                                    {sortedReservations.map(
-                                                        (
-                                                            res: any,
-                                                            idx: number,
-                                                        ) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="flex flex-col border-l-2 border-purple-400 pl-2"
-                                                            >
-                                                                <span
-                                                                    className={`text-[9px] font-bold ${idx === 0 && isToday ? 'animate-pulse text-red-500' : 'text-gray-500'}`}
-                                                                >
-                                                                    {res.date}
-                                                                </span>
-                                                                <span className="truncate text-[10px] leading-tight font-black text-gray-800 uppercase">
-                                                                    {res.guest}
-                                                                </span>
-                                                            </div>
-                                                        ),
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
+                                                    setIsPendingModalOpen(true);
+                                                } else {
+                                                    setSelectedItem(firstRes);
+                                                    setIsActionModalOpen(true);
+                                                }
+                                            }}
+                                        />
                                     )}
 
                                     {activeCheckin && (
