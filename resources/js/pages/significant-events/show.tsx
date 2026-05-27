@@ -200,7 +200,7 @@ export default function SignificantEventShow({ event, invoices, auth }: Props) {
                 <div className="mb-4">
                     <Link
                         href="/contingencias"
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 transition-colors hover:text-[#b3282d]"
+                        className="inline-flex items-center gap-1.5 text-base font-bold text-gray-400 transition-colors hover:text-[#b3282d]"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         Volver al listado

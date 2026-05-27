@@ -143,14 +143,14 @@ export default function SignificantEventsIndex({
                 {/* ========== ENCABEZADO ========== */}
                 <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <div className="mb-1 flex items-center gap-2 text-sm font-medium text-[#b3282d]">
+                        <div className="mb-1 flex items-center gap-2 text-base font-bold text-red-500">
                             <ShieldAlert className="h-4 w-4" />
                             Facturación SIAT
                         </div>
-                        <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+                        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                             Eventos Significativos
                         </h1>
-                        <p className="mt-1 max-w-2xl text-sm text-gray-600">
+                        <p className="mt-1 max-w-2xl text-base text-white/80">
                             Gestión de cortes de servicio. Registre el evento al inicio y
                             envíe el paquete de facturas offline al SIAT cuando se restablezca
                             la conexión.
