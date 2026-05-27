@@ -105,7 +105,7 @@ export default function Dashboard({ auth }: DashboardProps) {
 
                 { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos' },
                 { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
-                { name: 'Adelantos y Devoluciones', icon: Coins, url: '/adelantos' },
+                { name: 'Adelantos y Devoluciones', icon: Coins, url: '/historial-pagos' },
                 {
                     name: 'Eventos Significativos',
                     icon: ShieldAlert,

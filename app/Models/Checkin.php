@@ -99,7 +99,7 @@ class Checkin extends Model
     public function companions(): BelongsToMany
     {
         return $this->belongsToMany(Guest::class, 'checkin_guests')
-            ->withPivot('origin') 
+            ->withPivot('origin')
             ->withTimestamps();
     }
 
@@ -156,7 +156,7 @@ class Checkin extends Model
         return $this->hasMany(RoomTransfer::class);
     }
 
-     public function getActivitylogOptions(): LogOptions
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
@@ -165,4 +165,10 @@ class Checkin extends Model
             ->useLogName('checkins');
     }
 
+
+    public function guests()
+    {
+        // Si usas una tabla intermedia llamada checkin_guests
+        return $this->belongsToMany(Guest::class, 'checkin_guests', 'checkin_id', 'guest_id');
+    }
 }

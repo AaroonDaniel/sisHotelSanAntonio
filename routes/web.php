@@ -23,6 +23,7 @@ use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\PaymentHistoryController;
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -185,6 +186,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/historial-gastos', [ExpenseController::class, 'history'])->name('gastos.history');
     Route::put('/gastos/{expense}', [ExpenseController::class, 'update'])->name('gastos.update');
     Route::delete('/gastos/{expense}', [ExpenseController::class, 'destroy'])->name('gastos.destroy');
+
+    //Registro de pagos y devoluciones
+    Route::get('/historial-pagos', [PaymentHistoryController::class, 'index'])->name('payments.history');
 
     // Mantenimiento
     Route::get('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'index'])->name('maintenances.index');
