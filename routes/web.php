@@ -267,10 +267,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Re-enviar al SIAT TODAS las facturas offline de un evento (envío masivo)
     Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
         ->name('significant-events.resend');
+    // Re-enviar al SIAT UNA factura offline específica de un evento (envío individual)
+    Route::post(
+        '/contingencias/{event}/reintentar-registro',
+        [SignificantEventController::class, 'retryRegister']
+    )->name('significant-events.retry-register');
+
+    Route::post('/facturacion/rescatar-huerfanas', [InvoiceController::class, 'rescueOrphanedOffline'])
+    ->name('invoices.rescue-orphaned');
 
     // Auditoría de actividades
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
-
 }); // <-- Cierre del grupo autenticado
 
 // ==========================================

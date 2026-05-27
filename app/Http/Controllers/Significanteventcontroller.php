@@ -40,7 +40,7 @@ class SignificantEventController extends Controller
             ->withCount('invoices')
             ->orderBy('start_at', 'desc')
             ->get()
-            ->map(fn ($e) => [
+            ->map(fn($e) => [
                 'id'                  => $e->id,
                 'event_code'          => $e->event_code,
                 'code_label'          => $e->code_label,
@@ -108,60 +108,162 @@ class SignificantEventController extends Controller
     /**
      * Cierra el evento y lo registra en SIAT (paso previo al reenvío).
      */
-    public function end(Request $request, SignificantEvent $event)
+    public function end(\Illuminate\Http\Request $request, \App\Models\SignificantEvent $event)
     {
-        //$this->authorize('manage', SignificantEvent::class);
+        //$this->authorize('manage', \App\Models\SignificantEvent::class);
 
-        if ($event->status !== SignificantEvent::STATUS_ACTIVE) {
+        if ($event->status !== \App\Models\SignificantEvent::STATUS_ACTIVE) {
             return back()->withErrors(['error' => 'Este evento no está activo.']);
         }
 
         $request->validate(['end_at' => 'nullable|date|after:start_at']);
-        $endAt = $request->end_at ? Carbon::parse($request->end_at) : now();
+        $endAt = $request->end_at ? \Carbon\Carbon::parse($request->end_at) : now();
+
+        // PASO 1 — Cierre LOCAL (fuera de transacción, no se revierte).
+        // Esto libera la contingencia inmediatamente: el CheckinController
+        // dejará de buscar este evento como activo.
+        $event->update([
+            'end_at' => $endAt,
+            'status' => \App\Models\SignificantEvent::STATUS_CLOSED,
+        ]);
+
+        // PASO 2 — Intentar registrar en SIAT.
+        try {
+            $this->siatService->invalidateCufdCache();
+            $cufdActual = $this->siatService->getActiveCufd();
+
+            if (!$cufdActual) {
+                // No tenemos CUFD vigente (SIAT no responde a getCufd tampoco).
+                // El evento queda CLOSED, se puede reintentar luego.
+                return redirect()
+                    ->route('significant-events.show', $event)
+                    ->with(
+                        'warning',
+                        'Evento cerrado localmente. No se pudo obtener un CUFD vigente '
+                            . 'para registrarlo en SIAT — reintente desde el detalle del evento '
+                            . 'cuando SIAT responda.'
+                    );
+            }
+
+            $response = $this->siatService->registerSignificantEvent(
+                $event->event_code,
+                $event->description,
+                $event->start_at->format('Y-m-d\TH:i:s.v'),
+                $event->end_at->format('Y-m-d\TH:i:s.v'),
+                $event->cufd_event,
+                $cufdActual->code
+            );
+
+            // 3 ramas posibles:
+            switch ($response['status']) {
+                case 'registered':
+                    $event->update([
+                        'status'              => \App\Models\SignificantEvent::STATUS_REGISTERED,
+                        'siat_reception_code' => $response['codigoRecepcion'],
+                        'registered_at'       => now(),
+                    ]);
+                    return redirect()
+                        ->route('significant-events.show', $event)
+                        ->with(
+                            'success',
+                            'Evento registrado en SIAT. Ahora puede reenviar el paquete '
+                                . 'de facturas offline.'
+                        );
+
+                case 'rejected':
+                    // Rechazo legítimo del SIAT: el evento queda FAILED para
+                    // revisión manual (mal CUFD del evento, fechas inconsistentes, etc.).
+                    $event->update([
+                        'status' => \App\Models\SignificantEvent::STATUS_FAILED,
+                    ]);
+                    return back()->withErrors([
+                        'error' => 'SIAT rechazó el registro del evento: ' . $response['mensaje'],
+                    ]);
+
+                case 'offline':
+                default:
+                    // SoapFault / red caída. NO marcar como failed: el evento queda
+                    // CLOSED y puede reintentarse el registro más tarde.
+                    \Illuminate\Support\Facades\Log::warning(
+                        "Evento #{$event->id} cerrado localmente; SIAT no respondió: "
+                            . $response['mensaje']
+                    );
+                    return redirect()
+                        ->route('significant-events.show', $event)
+                        ->with(
+                            'warning',
+                            'Evento cerrado localmente. SIAT no respondió en este momento '
+                                . '— el sistema dejó de emitir offline. Reintente el registro '
+                                . 'en SIAT cuando vuelva la conexión.'
+                        );
+            }
+        } catch (\Throwable $e) {
+            // Cualquier otra excepción no prevista. NO revertimos el cierre local.
+            \Illuminate\Support\Facades\Log::error(
+                "Error inesperado al cerrar evento #{$event->id}: " . $e->getMessage()
+            );
+            return redirect()
+                ->route('significant-events.show', $event)
+                ->with(
+                    'warning',
+                    'Evento cerrado localmente. Hubo un problema comunicándose con SIAT: '
+                        . $e->getMessage()
+                );
+        }
+    }
+
+    public function retryRegister(\App\Models\SignificantEvent $event)
+    {
+        $this->authorize('manage', \App\Models\SignificantEvent::class);
+
+        if ($event->status !== \App\Models\SignificantEvent::STATUS_CLOSED) {
+            return back()->withErrors([
+                'error' => 'Solo se puede reintentar el registro de eventos en estado CLOSED.',
+            ]);
+        }
 
         try {
-            DB::transaction(function () use ($event, $endAt) {
-                $event->update([
-                    'end_at' => $endAt,
-                    'status' => SignificantEvent::STATUS_CLOSED,
+            $this->siatService->invalidateCufdCache();
+            $cufdActual = $this->siatService->getActiveCufd();
+
+            if (!$cufdActual) {
+                return back()->withErrors([
+                    'error' => 'SIAT sigue sin responder (no se obtuvo CUFD). Intente más tarde.',
                 ]);
+            }
 
-                // Volvió la conexión: forzamos renovación de CUFD.
-                $this->siatService->invalidateCufdCache();
-                $cufdActual = $this->siatService->getActiveCufd();
+            $response = $this->siatService->registerSignificantEvent(
+                $event->event_code,
+                $event->description,
+                $event->start_at->format('Y-m-d\TH:i:s.v'),
+                $event->end_at->format('Y-m-d\TH:i:s.v'),
+                $event->cufd_event,
+                $cufdActual->code
+            );
 
-                if (!$cufdActual) {
-                    throw new Exception('No se pudo obtener un CUFD nuevo para registrar el evento.');
-                }
-
-                $response = $this->siatService->registerSignificantEvent(
-                    $event->event_code,
-                    $event->description,
-                    $event->start_at->format('Y-m-d\TH:i:s.v'),
-                    $event->end_at->format('Y-m-d\TH:i:s.v'),
-                    $event->cufd_event,
-                    $cufdActual->code  // CORRECCIÓN: era $cufdActual['codigo']; getActiveCufd() devuelve un modelo SiatCredential.
-                );
-
-                if ($response['status'] !== 'registered') {
-                    $event->update(['status' => SignificantEvent::STATUS_FAILED]);
-                    throw new Exception('SIAT rechazó el registro del evento: ' . $response['mensaje']);
-                }
-
+            if ($response['status'] === 'registered') {
                 $event->update([
-                    'status'              => SignificantEvent::STATUS_REGISTERED,
+                    'status'              => \App\Models\SignificantEvent::STATUS_REGISTERED,
                     'siat_reception_code' => $response['codigoRecepcion'],
                     'registered_at'       => now(),
                 ]);
-            });
-        } catch (Exception $e) {
-            Log::error("Error al cerrar evento #{$event->id}: " . $e->getMessage());
+                return back()->with('success', 'Evento registrado en SIAT correctamente.');
+            }
+
+            if ($response['status'] === 'rejected') {
+                $event->update(['status' => \App\Models\SignificantEvent::STATUS_FAILED]);
+                return back()->withErrors([
+                    'error' => 'SIAT rechazó el registro: ' . $response['mensaje'],
+                ]);
+            }
+
+            // offline
+            return back()->withErrors([
+                'error' => 'SIAT aún no responde. Intente más tarde: ' . $response['mensaje'],
+            ]);
+        } catch (\Throwable $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }
-
-        return redirect()
-            ->route('significant-events.show', $event)
-            ->with('success', 'Evento registrado en SIAT. Ahora puede reenviar el paquete de facturas offline.');
     }
 
     public function show(SignificantEvent $event)
@@ -179,7 +281,7 @@ class SignificantEventController extends Controller
                 'siat_reception_code' => $event->siat_reception_code,
                 'user_name'           => $event->user->name,
             ],
-            'invoices' => $event->invoices->map(fn ($i) => [
+            'invoices' => $event->invoices->map(fn($i) => [
                 'id'              => $i->id,
                 'invoice_number'  => $i->invoice_number,
                 'cuf'             => $i->cuf,
@@ -282,7 +384,7 @@ class SignificantEventController extends Controller
         // ============================================================
         try {
             $package = $this->siatService->buildOfflinePackage(
-                array_map(fn ($r) => ['cuf' => $r['cuf'], 'xml' => $r['xml']], $xmls)
+                array_map(fn($r) => ['cuf' => $r['cuf'], 'xml' => $r['xml']], $xmls)
             );
         } catch (Exception $e) {
             Log::error("Error al empaquetar paquete offline evento #{$event->id}: " . $e->getMessage());

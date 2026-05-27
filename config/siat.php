@@ -21,4 +21,7 @@ return [
     'codigo_producto_sin'  => env('SIAT_PRODUCTO_SIN', '99100'),
     'unidad_medida'        => env('SIAT_UNIDAD_MEDIDA', '58'),
     'leyenda'              => env('SIAT_LEYENDA', 'Ley N° 453: El proveedor deberá entregar el producto en las modalidades y términos ofertados.'),
+    'verify_ssl'     => env('SIAT_VERIFY_SSL', true),
+    'wsdl_cache_dir' => storage_path('app/siat/wsdl'),
+    'wsdl_cache_ttl' => 3600,
 ];

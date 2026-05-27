@@ -5,11 +5,12 @@ import {
     ArrowLeft,
     Ban,
     CheckCircle2,
+    ExternalLink, // Añadimos el ícono para el enlace externo
     FileText,
+    LifeBuoy,
     Receipt,
     RefreshCw,
     Search,
-    ExternalLink // Añadimos el ícono para el enlace externo
 } from 'lucide-react';
 import { useState } from 'react';
 import VoidInvoiceModal from './VoidInvoiceModal';
@@ -25,8 +26,8 @@ interface InvoiceData {
     guest_name: string;
     room_number: string;
     user_name: string;
-    status: string;        // 'valid' | 'voided'
-    siat_status: string;   // 'pending' | 'accepted' | 'rejected' | 'offline'
+    status: string; // 'valid' | 'voided'
+    siat_status: string; // 'pending' | 'accepted' | 'rejected' | 'offline'
     is_factura: boolean;
     is_offline: boolean;
     is_voided: boolean;
@@ -38,9 +39,16 @@ interface InvoiceData {
 interface Props {
     auth: any;
     Invoices: InvoiceData[];
+    hasOrphanedOffline: boolean;
+    orphanedOfflineCount: number;
 }
 
-export default function InvoicesIndex({ auth, Invoices }: Props) {
+export default function InvoicesIndex({
+    auth,
+    Invoices,
+    hasOrphanedOffline,
+    orphanedOfflineCount,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<
         'facturas' | 'recibos' | 'ambos'
@@ -57,16 +65,44 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
     // Loading state para reenvío
     const [resendingId, setResendingId] = useState<number | null>(null);
 
+    // Loading state para rescate de huérfanas
+    const [isRescuing, setIsRescuing] = useState(false);
+
     const openVoidModal = (id: number, number: string) => {
         setInvoiceToVoid({ id, number });
         setIsVoidModalOpen(true);
     };
 
+    const handleRescueOrphans = () => {
+        const confirmMsg =
+            `Se detectaron ${orphanedOfflineCount} factura(s) offline huérfana(s) ` +
+            `(emitidas sin vincular a un Evento Significativo).\n\n` +
+            `El sistema verificará la conexión con SIAT y creará un Evento de Rescate ` +
+            `para vincular automáticamente todas estas facturas.\n\n` +
+            `Si no hay conexión, el evento se creará localmente igual.\n\n` +
+            `¿Desea continuar?`;
+
+        if (!confirm(confirmMsg)) return;
+
+        setIsRescuing(true);
+
+        router.post(
+            '/facturacion/rescatar-huerfanas',
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setIsRescuing(false),
+            },
+        );
+    };
+
     const handleResendOffline = (invoice: InvoiceData) => {
-        if (!confirm(
-            `¿Re-enviar la factura #${invoice.invoice_number} al SIAT?\n\n` +
-            `Esta operación intentará subir el XML guardado en contingencia.`
-        )) {
+        if (
+            !confirm(
+                `¿Re-enviar la factura #${invoice.invoice_number} al SIAT?\n\n` +
+                    `Esta operación intentará subir el XML guardado en contingencia.`,
+            )
+        ) {
             return;
         }
 
@@ -112,6 +148,60 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                 </button>
 
                 <div className="mb-4 flex flex-shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    {/* =========================================================
+    ALERTA DE FACTURAS OFFLINE HUÉRFANAS (RESCATE)
+    Aparece solo si hay facturas con siat_status='offline'
+    y significant_event_id = NULL
+========================================================= */}
+                    {hasOrphanedOffline && !pdfUrl && (
+                        <div className="mb-4 flex flex-col gap-3 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4">
+                                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-500 shadow-md">
+                                    <AlertTriangle className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-amber-900">
+                                        Facturas Offline Huérfanas Detectadas
+                                    </h3>
+                                    <p className="mt-1 text-sm text-amber-800">
+                                        Se encontraron{' '}
+                                        <strong className="font-extrabold">
+                                            {orphanedOfflineCount}
+                                        </strong>{' '}
+                                        factura
+                                        {orphanedOfflineCount === 1 ? '' : 's'}{' '}
+                                        emitida
+                                        {orphanedOfflineCount === 1
+                                            ? ''
+                                            : 's'}{' '}
+                                        en contingencia que no están vinculada
+                                        {orphanedOfflineCount === 1 ? '' : 's'}{' '}
+                                        a un Evento Significativo. Cree un
+                                        evento de rescate para poder reenviarlas
+                                        al SIAT.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleRescueOrphans}
+                                disabled={isRescuing}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 sm:flex-shrink-0"
+                            >
+                                {isRescuing ? (
+                                    <>
+                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                        Procesando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <LifeBuoy className="h-4 w-4" />
+                                        Crear Evento para Facturas Huérfanas
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    )}
                     <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
                         <div className="rounded-xl border border-green-100 bg-green-100 p-2">
                             <FileText className="h-8 w-8 text-green-600" />
@@ -207,7 +297,8 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                         const isFactura = invoice.is_factura;
                                         const isAnulada = invoice.is_voided;
                                         const isOffline = invoice.is_offline;
-                                        const isResending = resendingId === invoice.id;
+                                        const isResending =
+                                            resendingId === invoice.id;
 
                                         // CONSTRUCCIÓN DE LA URL DE VERIFICACIÓN SIAT
                                         // Usa config('siat.nit') si lo envías desde backend, o pon tu NIT real.
@@ -234,7 +325,10 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                                     : ''
                                                             }
                                                         >
-                                                            #{invoice.invoice_number}
+                                                            #
+                                                            {
+                                                                invoice.invoice_number
+                                                            }
                                                         </span>
                                                     </div>
                                                 </td>
@@ -248,14 +342,17 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                         ) : isOffline ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
                                                                 <AlertTriangle className="h-3 w-3" />
-                                                                Offline (Contingencia)
+                                                                Offline
+                                                                (Contingencia)
                                                             </span>
-                                                        ) : invoice.siat_status === 'rejected' ? (
+                                                        ) : invoice.siat_status ===
+                                                          'rejected' ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
                                                                 <AlertTriangle className="h-3 w-3" />
                                                                 Rechazada
                                                             </span>
-                                                        ) : invoice.siat_status === 'accepted' ? (
+                                                        ) : invoice.siat_status ===
+                                                          'accepted' ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
                                                                 <CheckCircle2 className="h-3 w-3" />
                                                                 Validada
@@ -284,7 +381,6 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                 </td>
                                                 <td className="px-6 py-3 text-right whitespace-nowrap">
                                                     <div className="flex justify-end gap-2">
-                                                        
                                                         {/* BOTÓN: VER PDF */}
                                                         <button
                                                             onClick={() =>
@@ -300,31 +396,44 @@ export default function InvoicesIndex({ auth, Invoices }: Props) {
                                                         </button>
 
                                                         {/* BOTÓN: VERIFICAR EN SIAT */}
-                                                        {isFactura && invoice.siat_status === 'accepted' && !isAnulada && (
-                                                            <a
-                                                                href={siatUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-600 hover:text-white"
-                                                                title="Verificar en Impuestos Nacionales"
-                                                            >
-                                                                <ExternalLink className="h-3.5 w-3.5" />
-                                                                Validar SIAT
-                                                            </a>
-                                                        )}
+                                                        {isFactura &&
+                                                            invoice.siat_status ===
+                                                                'accepted' &&
+                                                            !isAnulada && (
+                                                                <a
+                                                                    href={
+                                                                        siatUrl
+                                                                    }
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-600 hover:text-white"
+                                                                    title="Verificar en Impuestos Nacionales"
+                                                                >
+                                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                                    Validar SIAT
+                                                                </a>
+                                                            )}
 
                                                         {/* BOTÓN: RE-ENVIAR OFFLINE */}
                                                         {invoice.can_resend && (
                                                             <button
-                                                                onClick={() => handleResendOffline(invoice)}
-                                                                disabled={isResending}
+                                                                onClick={() =>
+                                                                    handleResendOffline(
+                                                                        invoice,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    isResending
+                                                                }
                                                                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                                                                 title="Re-enviar al SIAT"
                                                             >
                                                                 <RefreshCw
                                                                     className={`h-3.5 w-3.5 ${isResending ? 'animate-spin' : ''}`}
                                                                 />
-                                                                {isResending ? 'Enviando...' : 'Re-enviar'}
+                                                                {isResending
+                                                                    ? 'Enviando...'
+                                                                    : 'Re-enviar'}
                                                             </button>
                                                         )}
 

@@ -76,8 +76,14 @@ class InvoiceController extends Controller
                 ];
             });
 
+        $orphanedOfflineCount = Invoice::where('siat_status', 'offline')
+            ->whereNull('significant_event_id')
+            ->count();
+
         return Inertia::render('invoices/index', [
-            'Invoices' => $invoices,
+            'Invoices'             => $invoices,
+            'hasOrphanedOffline'   => $orphanedOfflineCount > 0,
+            'orphanedOfflineCount' => $orphanedOfflineCount,
         ]);
     }
 
@@ -368,6 +374,83 @@ class InvoiceController extends Controller
     {
         return redirect()->route('invoices.index')
             ->with('warning', 'Las facturas offline deben enviarse empaquetadas (Etapa VI). Esto se implementará en la siguiente fase de pruebas.');
+    }
+    public function rescueOrphanedOffline(Request $request)
+    {
+        // 1) Buscar facturas huérfanas
+        $orphans = Invoice::where('siat_status', 'offline')
+            ->whereNull('significant_event_id')
+            ->get();
+
+        if ($orphans->isEmpty()) {
+            return back()->with('info', 'No se encontraron facturas offline huérfanas para rescatar.');
+        }
+
+        // 2) Verificar conexión SIAT (informativo)
+        $siatCheck     = $this->siatService->verifyCommunication();
+        $siatOffline   = !($siatCheck['success'] ?? false);
+        $warningFlash  = null;
+
+        if ($siatOffline) {
+            $warningFlash = 'No hay conexión con SIAT. Se creará el evento localmente de todos modos para rescatar las facturas. Se registrará en SIAT al cerrar el evento.';
+            Log::warning('Rescate de huérfanas iniciado SIN conexión SIAT. Motivo: ' . ($siatCheck['message'] ?? 'desconocido'));
+        }
+
+        // 3) Validar que existe un CUFD almacenado (sin él no se puede crear el evento)
+        $cufd = $this->siatService->peekActiveCufd();
+
+        if (!$cufd) {
+            return back()->withErrors([
+                'error' => 'No hay un CUFD almacenado localmente. No es posible crear el Evento de Rescate.',
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($orphans, $cufd, $request) {
+                // 4) Crear evento de rescate. Tomamos como inicio la fecha de la
+                //    factura huérfana MÁS ANTIGUA para que el rango cubra todas.
+                $earliest = $orphans->min('issue_date') ?: now();
+
+                $event = SignificantEvent::create([
+                    'event_code'              => 7, // 7 = Otros casos de fuerza mayor (RND-102100000011)
+                    'description'             => 'Evento de RESCATE creado automáticamente para vincular '
+                        . $orphans->count()
+                        . ' factura(s) offline huérfana(s).',
+                    'start_at'                => $earliest,
+                    'cufd_event'              => $cufd->code,
+                    'cufd_event_control_code' => $cufd->control_code,
+                    'cufd_event_expires_at'   => $cufd->expires_at,
+                    'status'                  => SignificantEvent::STATUS_ACTIVE,
+                    'user_id'                 => $request->user()->id,
+                ]);
+
+                // 5) Asignar en bloque el evento a las facturas huérfanas
+                Invoice::whereIn('id', $orphans->pluck('id'))
+                    ->update(['significant_event_id' => $event->id]);
+
+                Log::info(
+                    "Evento Significativo #{$event->id} (RESCATE) creado por usuario #{$request->user()->id}. "
+                        . "Vinculó {$orphans->count()} factura(s) huérfana(s)."
+                );
+            });
+        } catch (Exception $e) {
+            Log::error('Error en rescate de facturas huérfanas: ' . $e->getMessage());
+            return back()->withErrors([
+                'error' => 'No se pudo crear el evento de rescate: ' . $e->getMessage(),
+            ]);
+        }
+
+        $successMsg = "Se rescataron {$orphans->count()} factura(s) huérfana(s) "
+            . "vinculándolas a un nuevo Evento Significativo. "
+            . "Recuerde cerrar el evento desde Contingencias cuando vuelva la conexión.";
+
+        $redirect = redirect()->route('invoices.index')->with('success', $successMsg);
+
+        if ($warningFlash) {
+            $redirect->with('warning', $warningFlash);
+        }
+
+        return $redirect;
     }
 
     // =========================================================

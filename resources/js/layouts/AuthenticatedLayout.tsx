@@ -2,6 +2,7 @@ import OpenRegisterModal from '@/components/OpenRegisterModal';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
+    CheckCircle2,
     ChevronDown,
     Hotel,
     LogOut,
@@ -27,6 +28,14 @@ export default function AuthenticatedLayout({
     user,
     children,
 }: PropsWithChildren<AuthenticatedLayoutProps>) {
+    const { flash } = usePage<{
+        flash: {
+            success?: string;
+            warning?: string;
+            error?: string;
+            info?: string;
+        };
+    }>().props;
     const { url, props } = usePage();
     const { auth }: any = props;
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
@@ -274,6 +283,24 @@ export default function AuthenticatedLayout({
                                     >
                                         Volver al sistema
                                     </button>
+
+                                    {flash?.warning && (
+                                        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                                            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                                            <p className="text-sm font-medium text-amber-900">
+                                                {flash.warning}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {flash?.success && (
+                                        <div className="mb-4 flex items-start gap-3 rounded-xl border border-green-300 bg-green-50 p-4">
+                                            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                                            <p className="text-sm font-medium text-green-900">
+                                                {flash.success}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <Link
                                         href="/reports/financial"
                                         onClick={() =>

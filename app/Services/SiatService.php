@@ -50,23 +50,98 @@ class SiatService
     /**
      * Centraliza la creación del cliente SOAP.
      */
-    private function getSoapClient(string $endpoint): SoapClient
+    private function getSoapClient(string $endpoint): \SoapClient
     {
-        $options = [
+        $url       = $this->baseUrl . $endpoint . '?wsdl';
+        $verifySsl = (bool) config('siat.verify_ssl', true);
+
+        // ============================================================
+        // 1. Pre-descarga del WSDL a disco con cURL.
+        //    Resolvemos AQUÍ los problemas de SSL / apikey / timeout
+        //    para que el SoapClient solo lea un archivo local.
+        // ============================================================
+        $cacheDir  = config('siat.wsdl_cache_dir', storage_path('app/siat/wsdl'));
+        $ttl       = (int) config('siat.wsdl_cache_ttl', 3600);
+
+        if (!is_dir($cacheDir) && !mkdir($cacheDir, 0755, true) && !is_dir($cacheDir)) {
+            throw new \SoapFault('CLIENT', "No se pudo crear el directorio de caché WSDL: {$cacheDir}");
+        }
+
+        $wsdlFile  = $cacheDir . DIRECTORY_SEPARATOR . md5($url) . '.wsdl';
+        $needsFetch = !file_exists($wsdlFile) || (time() - filemtime($wsdlFile)) > $ttl;
+
+        if ($needsFetch) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => ['apikey: TokenApi ' . $this->token],
+                CURLOPT_CONNECTTIMEOUT => $this->timeout,
+                CURLOPT_TIMEOUT        => $this->timeout * 2,
+                CURLOPT_SSL_VERIFYPEER => $verifySsl,
+                CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT      => 'sisHotelSanAntonio/1.0',
+            ]);
+
+            $body     = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr  = curl_error($ch);
+            curl_close($ch);
+
+            if ($body === false || $httpCode !== 200 || empty($body)) {
+                // Si tenemos una versión vieja en caché, usarla como fallback.
+                if (file_exists($wsdlFile)) {
+                    \Illuminate\Support\Facades\Log::warning(
+                        "WSDL no descargable ({$httpCode} {$curlErr}); usando caché previa: {$wsdlFile}"
+                    );
+                } else {
+                    throw new \SoapFault(
+                        'HTTP',
+                        "No se pudo descargar el WSDL de {$url}. "
+                            . "HTTP {$httpCode}. cURL: {$curlErr}. "
+                            . "Verifique conectividad con SIAT y el token apikey."
+                    );
+                }
+            } else {
+                file_put_contents($wsdlFile, $body);
+            }
+        }
+
+        // ============================================================
+        // 2. Contexto para las llamadas SOAP en sí (NO para el WSDL,
+        //    que ya está en disco).
+        // ============================================================
+        $context = stream_context_create([
             'http' => [
                 'header'  => "apikey: TokenApi " . $this->token,
                 'timeout' => $this->timeout,
             ],
-        ];
+            'https' => [
+                'header'  => "apikey: TokenApi " . $this->token,
+                'timeout' => $this->timeout,
+            ],
+            'ssl' => [
+                'verify_peer'      => $verifySsl,
+                'verify_peer_name' => $verifySsl,
+                'allow_self_signed' => !$verifySsl,
+            ],
+        ]);
 
-        $context = stream_context_create($options);
-
-        return new SoapClient($this->baseUrl . $endpoint . '?wsdl', [
-            'stream_context'    => $context,
-            'cache_wsdl'        => WSDL_CACHE_NONE,
-            'compression'       => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP | SOAP_COMPRESSION_DEFLATE,
-            'trace'             => true,
+        // ============================================================
+        // 3. SoapClient apuntando al ARCHIVO LOCAL del WSDL.
+        //    cache_wsdl puede quedarse en NONE porque ya tenemos
+        //    nuestra propia caché controlada arriba.
+        // ============================================================
+        return new \SoapClient($wsdlFile, [
+            'stream_context'     => $context,
+            'cache_wsdl'         => WSDL_CACHE_NONE,
+            'compression'        => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP | SOAP_COMPRESSION_DEFLATE,
+            'trace'              => true,
+            'exceptions'         => true,
             'connection_timeout' => $this->timeout,
+            'keep_alive'         => false,
+            // Ubicación real del endpoint (las llamadas siguen yendo a la URL https).
+            'location'           => $this->baseUrl . $endpoint,
         ]);
     }
 
