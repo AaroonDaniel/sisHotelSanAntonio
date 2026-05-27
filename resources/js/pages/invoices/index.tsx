@@ -5,15 +5,18 @@ import {
     ArrowLeft,
     Ban,
     CheckCircle2,
-    ExternalLink, // Añadimos el ícono para el enlace externo
+    ExternalLink,
     FileText,
     LifeBuoy,
+    Link2,
     Receipt,
     RefreshCw,
     Search,
 } from 'lucide-react';
 import { useState } from 'react';
 import VoidInvoiceModal from './VoidInvoiceModal';
+import AttachToEventModal from './AttachToEventModal';
+import RescueOrphansModal from './RescueOrphansModal';
 
 interface InvoiceData {
     id: number;
@@ -31,9 +34,15 @@ interface InvoiceData {
     is_factura: boolean;
     is_offline: boolean;
     is_voided: boolean;
+    is_orphaned: boolean;
     can_void: boolean;
     can_resend: boolean;
     total_amount?: number; // Asegúrate de enviarlo desde el backend para formar la URL
+}
+
+interface EventCodeOption {
+    value: number;
+    label: string;
 }
 
 interface Props {
@@ -41,6 +50,8 @@ interface Props {
     Invoices: InvoiceData[];
     hasOrphanedOffline: boolean;
     orphanedOfflineCount: number;
+    siatOnline: boolean;
+    eventCodes: EventCodeOption[];
 }
 
 export default function InvoicesIndex({
@@ -48,6 +59,8 @@ export default function InvoicesIndex({
     Invoices,
     hasOrphanedOffline,
     orphanedOfflineCount,
+    siatOnline,
+    eventCodes,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<
@@ -64,6 +77,21 @@ export default function InvoicesIndex({
 
     // Loading state para reenvío
     const [resendingId, setResendingId] = useState<number | null>(null);
+
+    // Modal de rescate masivo
+    const [isRescueModalOpen, setIsRescueModalOpen] = useState(false);
+
+    // Modal de acople individual
+    const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+    const [invoiceToAttach, setInvoiceToAttach] = useState<{
+        id: number;
+        number: string;
+    } | null>(null);
+
+    const openAttachModal = (id: number, number: string) => {
+        setInvoiceToAttach({ id, number });
+        setIsAttachModalOpen(true);
+    };
 
     // Loading state para rescate de huérfanas
     const [isRescuing, setIsRescuing] = useState(false);
@@ -136,7 +164,7 @@ export default function InvoicesIndex({
         <AuthenticatedLayout user={auth.user}>
             <Head title="Facturación y Recibos" />
 
-            <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+            <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-1 sm:px-6 lg:px-8">
                 <button
                     onClick={() => window.history.back()}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white"
@@ -148,60 +176,6 @@ export default function InvoicesIndex({
                 </button>
 
                 <div className="mb-4 flex flex-shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    {/* =========================================================
-    ALERTA DE FACTURAS OFFLINE HUÉRFANAS (RESCATE)
-    Aparece solo si hay facturas con siat_status='offline'
-    y significant_event_id = NULL
-========================================================= */}
-                    {hasOrphanedOffline && !pdfUrl && (
-                        <div className="mb-4 flex flex-col gap-3 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-start gap-4">
-                                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-500 shadow-md">
-                                    <AlertTriangle className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-bold text-amber-900">
-                                        Facturas Offline Huérfanas Detectadas
-                                    </h3>
-                                    <p className="mt-1 text-sm text-amber-800">
-                                        Se encontraron{' '}
-                                        <strong className="font-extrabold">
-                                            {orphanedOfflineCount}
-                                        </strong>{' '}
-                                        factura
-                                        {orphanedOfflineCount === 1 ? '' : 's'}{' '}
-                                        emitida
-                                        {orphanedOfflineCount === 1
-                                            ? ''
-                                            : 's'}{' '}
-                                        en contingencia que no están vinculada
-                                        {orphanedOfflineCount === 1 ? '' : 's'}{' '}
-                                        a un Evento Significativo. Cree un
-                                        evento de rescate para poder reenviarlas
-                                        al SIAT.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleRescueOrphans}
-                                disabled={isRescuing}
-                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 sm:flex-shrink-0"
-                            >
-                                {isRescuing ? (
-                                    <>
-                                        <RefreshCw className="h-4 w-4 animate-spin" />
-                                        Procesando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <LifeBuoy className="h-4 w-4" />
-                                        Crear Evento para Facturas Huérfanas
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    )}
                     <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
                         <div className="rounded-xl border border-green-100 bg-green-100 p-2">
                             <FileText className="h-8 w-8 text-green-600" />
@@ -225,6 +199,46 @@ export default function InvoicesIndex({
                     )}
                 </div>
 
+                {hasOrphanedOffline && (
+                        <div className="mb-4 flex flex-col gap-3 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4">
+                                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-500 shadow-md">
+                                    <AlertTriangle className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-amber-900">
+                                        Facturas Offline Huérfanas Detectadas
+                                    </h3>
+                                    <p className="mt-1 text-sm text-amber-800">
+                                        Hay{' '}
+                                        <strong className="font-extrabold">
+                                            {orphanedOfflineCount}
+                                        </strong>{' '}
+                                        factura
+                                        {orphanedOfflineCount === 1
+                                            ? ''
+                                            : 's'}{' '}
+                                        emitida
+                                        {orphanedOfflineCount === 1
+                                            ? ''
+                                            : 's'}{' '}
+                                        en contingencia sin Evento Significativo
+                                        asociado. Cree una contingencia
+                                        describiendo el motivo para poder
+                                        validarlas en SIAT.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setIsRescueModalOpen(true)}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-700 hover:shadow-lg sm:flex-shrink-0"
+                            >
+                                <LifeBuoy className="h-4 w-4" />
+                                Crear Evento para Facturas Huérfanas
+                            </button>
+                        </div>
+                    )}
                 {pdfUrl ? (
                     <div className="flex flex-1 items-center justify-center">
                         <div className="flex h-[75vh] w-full max-w-3xl animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl zoom-in-95 fade-in">
@@ -453,6 +467,22 @@ export default function InvoicesIndex({
                                                                 Anular
                                                             </button>
                                                         )}
+
+                                                        {invoice.is_orphaned && (
+                                                            <button
+                                                                onClick={() =>
+                                                                    openAttachModal(
+                                                                        invoice.id,
+                                                                        invoice.invoice_number,
+                                                                    )
+                                                                }
+                                                                title="Acoplar a una contingencia existente"
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:border-amber-400 hover:bg-amber-100"
+                                                            >
+                                                                <Link2 className="h-3.5 w-3.5" />
+                                                                Acoplar
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -483,6 +513,21 @@ export default function InvoicesIndex({
                 onClose={() => setIsVoidModalOpen(false)}
                 invoiceId={invoiceToVoid?.id || null}
                 invoiceNumber={invoiceToVoid?.number || null}
+            />
+
+            <RescueOrphansModal
+                isOpen={isRescueModalOpen}
+                onClose={() => setIsRescueModalOpen(false)}
+                orphanedCount={orphanedOfflineCount}
+                siatOnline={siatOnline}
+                eventCodes={eventCodes}
+            />
+
+            <AttachToEventModal
+                isOpen={isAttachModalOpen}
+                onClose={() => setIsAttachModalOpen(false)}
+                invoiceId={invoiceToAttach?.id ?? null}
+                invoiceNumber={invoiceToAttach?.number ?? null}
             />
         </AuthenticatedLayout>
     );

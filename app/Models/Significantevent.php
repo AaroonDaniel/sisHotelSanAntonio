@@ -76,4 +76,26 @@ class SignificantEvent extends Model
             self::CODE_FORCE_MAJEURE    => 'Fuerza Mayor',
         ][$this->event_code] ?? 'Desconocido';
     }
+
+    /**
+     * Scope: eventos que aún admiten acoplar facturas
+     * (activos o cerrados pero sin registrar en SIAT todavía).
+     */
+    public function scopeAvailableForAttach($query)
+    {
+        return $query->whereIn('status', [
+            self::STATUS_ACTIVE,
+            self::STATUS_CLOSED,
+        ])
+            ->whereNull('siat_reception_code');
+    }
+
+    /**
+     * Indica si este evento todavía admite nuevas facturas.
+     */
+    public function getAcceptsAttachmentsAttribute(): bool
+    {
+        return in_array($this->status, [self::STATUS_ACTIVE, self::STATUS_CLOSED], true)
+            && is_null($this->siat_reception_code);
+    }
 }

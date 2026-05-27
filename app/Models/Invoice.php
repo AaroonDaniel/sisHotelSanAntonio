@@ -109,4 +109,23 @@ class Invoice extends Model
     {
         return $this->belongsTo(User::class, 'voided_by_user_id');
     }
+
+    /**
+     * Facturas offline que no están vinculadas a ningún Evento Significativo.
+     * Son "huérfanas" porque no pueden enviarse al SIAT sin un evento asociado.
+     */
+    public function scopeOrphanedOffline($query)
+    {
+        return $query->where('siat_status', 'offline')
+            ->whereNull('significant_event_id');
+    }
+
+    /**
+     * Accesor: indica si esta factura es huérfana.
+     */
+    public function getIsOrphanedAttribute(): bool
+    {
+        return $this->siat_status === 'offline'
+            && is_null($this->significant_event_id);
+    }
 }

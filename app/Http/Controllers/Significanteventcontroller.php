@@ -495,4 +495,55 @@ class SignificantEventController extends Controller
             ['value' => 7, 'label' => 'Fuerza Mayor'],
         ];
     }
+
+
+    /**
+     * Devuelve (JSON) los eventos disponibles para acoplar una factura.
+     */
+    public function attachable()
+    {
+        return response()->json([
+            'events' => SignificantEvent::availableForAttach()
+                ->orderBy('start_at', 'desc')
+                ->get()
+                ->map(fn($e) => [
+                    'id'          => $e->id,
+                    'code_label'  => $e->code_label,
+                    'description' => $e->description,
+                    'start_at'    => $e->start_at->format('d/m/Y H:i'),
+                    'status'      => $e->status,
+                ]),
+        ]);
+    }
+
+    /**
+     * Acopla UNA factura huérfana a un evento existente.
+     */
+    public function attachInvoice(Request $request, SignificantEvent $event)
+    {
+        $request->validate(['invoice_id' => 'required|exists:invoices,id']);
+
+        $invoice = Invoice::findOrFail($request->invoice_id);
+
+        if (!$invoice->is_orphaned) {
+            return back()->withErrors([
+                'error' => "La factura #{$invoice->invoice_number} no es huérfana.",
+            ]);
+        }
+
+        if (!$event->accepts_attachments) {
+            return back()->withErrors([
+                'error' => 'Este evento ya no admite nuevas facturas.',
+            ]);
+        }
+
+        $invoice->update(['significant_event_id' => $event->id]);
+
+        Log::info("Factura #{$invoice->id} acoplada al evento #{$event->id}.");
+
+        return back()->with(
+            'success',
+            "Factura #{$invoice->invoice_number} acoplada a: {$event->code_label}."
+        );
+    }
 }

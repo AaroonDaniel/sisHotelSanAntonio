@@ -73,6 +73,7 @@ class InvoiceController extends Controller
                     'is_voided'       => $invoice->status === 'voided',
                     'can_void'        => $this->canBeVoided($invoice),
                     'can_resend'      => $this->canBeResent($invoice),
+                    'is_orphaned' => $invoice->siat_status === 'offline' && is_null($invoice->significant_event_id),
                 ];
             });
 
@@ -85,6 +86,15 @@ class InvoiceController extends Controller
             'hasOrphanedOffline'   => $orphanedOfflineCount > 0,
             'orphanedOfflineCount' => $orphanedOfflineCount,
         ]);
+    }
+    private function mapInvoiceForFrontend(Invoice $invoice): array
+    {
+        return [
+            'id'             => $invoice->id,
+            'invoice_number' => $invoice->invoice_number ?? 'S/N',
+            // ... el resto de campos que ya tenías ...
+            'is_orphaned'    => $invoice->is_orphaned,  // <- usa el accesor
+        ];
     }
 
     // =========================================================
@@ -727,5 +737,65 @@ class InvoiceController extends Controller
             7       => 'QR', // QR / pago digital
             default => 'EF',
         };
+    }
+
+    /**
+     * Crea un Evento Significativo (descrito por el Gerente) y vincula
+     * en bloque TODAS las facturas offline huérfanas existentes.
+     */
+    public function rescueOrphans(Request $request)
+    {
+        $request->validate([
+            'event_code'  => 'required|integer|min:1|max:7',
+            'description' => 'required|string|min:10|max:500',
+        ]);
+
+        $orphans = Invoice::orphanedOffline()->get();
+
+        if ($orphans->isEmpty()) {
+            return back()->with('info', 'No hay facturas huérfanas para rescatar.');
+        }
+
+        if (SignificantEvent::where('status', SignificantEvent::STATUS_ACTIVE)->exists()) {
+            return back()->withErrors([
+                'error' => 'Ya hay una contingencia activa. Use "Acoplar" en cada factura para vincularlas a ella.',
+            ]);
+        }
+
+        $cufd = $this->siatService->peekActiveCufd();
+        if (!$cufd) {
+            return back()->withErrors([
+                'error' => 'No hay CUFD almacenado. No es posible crear la contingencia.',
+            ]);
+        }
+
+        try {
+            $event = DB::transaction(function () use ($request, $orphans, $cufd) {
+                $event = SignificantEvent::create([
+                    'event_code'              => $request->event_code,
+                    'description'             => $request->description,
+                    'start_at'                => $orphans->min('issue_date') ?? now(),
+                    'cufd_event'              => $cufd->code,
+                    'cufd_event_control_code' => $cufd->control_code,
+                    'cufd_event_expires_at'   => $cufd->expires_at,
+                    'status'                  => SignificantEvent::STATUS_ACTIVE,
+                    'user_id'                 => $request->user()->id,
+                ]);
+
+                Invoice::whereIn('id', $orphans->pluck('id'))
+                    ->update(['significant_event_id' => $event->id]);
+
+                Log::info("Evento #{$event->id} creado para rescate. Vinculó {$orphans->count()} facturas.");
+                return $event;
+            });
+        } catch (Exception $e) {
+            Log::error('Error rescate: ' . $e->getMessage());
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        return redirect()->route('invoices.index')->with(
+            'success',
+            "Contingencia #{$event->id} creada con {$orphans->count()} factura(s) vinculadas."
+        );
     }
 }

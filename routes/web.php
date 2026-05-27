@@ -274,10 +274,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     )->name('significant-events.retry-register');
 
     Route::post('/facturacion/rescatar-huerfanas', [InvoiceController::class, 'rescueOrphanedOffline'])
-    ->name('invoices.rescue-orphaned');
+        ->name('invoices.rescue-orphaned');
 
     // Auditoría de actividades
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+
+    // Rescate masivo de huérfanas (crea evento + vincula todas)
+    Route::post('/contingencias/rescate-huerfanas', [SignificantEventController::class, 'rescueOrphans'])
+        ->name('significant-events.rescue-orphans');
+
+    // JSON: eventos disponibles para acoplar (consumido por el modal)
+    Route::get('/contingencias/disponibles-para-acople', [SignificantEventController::class, 'attachable'])
+        ->name('significant-events.attachable');
+
+    // Acoplar UNA factura a un evento existente
+    Route::post('/contingencias/{event}/acoplar-factura', [SignificantEventController::class, 'attachInvoice'])
+        ->name('significant-events.attach-invoice');
 }); // <-- Cierre del grupo autenticado
 
 // ==========================================
