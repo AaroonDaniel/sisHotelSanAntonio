@@ -25,16 +25,31 @@ class SiatUtils
         $sum  = 0;
 
         for ($i = strlen($str) - 1; $i >= 0; $i--) {
-            $sum += ($mult * (int) $str[$i]);
-            if (++$mult > $limMult) {
+            $sum += ((int) $str[$i]) * $mult;
+            $mult++;
+            if ($mult > $limMult) {
                 $mult = 2;
             }
         }
 
-        $dig = $x10 ? ((($sum * 10) % 11) % 10) : ($sum % 11);
+        if ($x10) {
+            // Variante "por 10": usada en otros documentos del SIN.
+            $dig = (($sum * 10) % 11) % 10;
+            return (string) $dig;
+        }
 
-        // En la variante estándar del CUF, $sum % 11 ∈ [0..10]. El 10 → 0 (norma SIN).
-        return $dig === 10 ? '0' : (string) $dig;
+        // Variante estándar del CUF (RND): dígito = 11 - (suma % 11)
+        $resto  = $sum % 11;
+        $digito = 11 - $resto;
+
+        if ($digito === 11) {
+            return '0';
+        }
+        if ($digito === 10) {
+            return '1';
+        }
+
+        return (string) $digito;
     }
 
     /**
@@ -92,12 +107,12 @@ class SiatUtils
         $pos          = str_pad((string) ($invoice['pos'] ?? 0), 4, '0', STR_PAD_LEFT);
 
         $base = $nit . $date . $branch . $modality . $emissionType
-              . $invoiceType . $sectorDoc . $number . $pos;
+            . $invoiceType . $sectorDoc . $number . $pos;
 
         if (strlen($base) !== 53) {
             throw new Exception(
                 'Cadena base del CUF inválida: se esperaban 53 dígitos, se obtuvieron '
-                . strlen($base) . " ({$base})"
+                    . strlen($base) . " ({$base})"
             );
         }
 
@@ -130,7 +145,7 @@ class SiatUtils
         if ($issuedAt->greaterThan($vigencia)) {
             throw new Exception(
                 'El CUFD venció el ' . $vigencia->toDateTimeString()
-                . '. Debe renovarse antes de emitir la factura.'
+                    . '. Debe renovarse antes de emitir la factura.'
             );
         }
     }

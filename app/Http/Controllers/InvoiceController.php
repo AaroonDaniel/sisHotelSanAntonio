@@ -482,97 +482,209 @@ class InvoiceController extends Controller
 
     public function downloadTicket(Invoice $invoice)
     {
-        $invoice->load(['details', 'checkin.guest', 'user']);
+        $invoice->load(['details.service', 'checkin.guest', 'checkin.payments', 'user']);
+        $checkin = $invoice->checkin;
 
-        // 1. QR del SIAT
+        $isOffline = $invoice->siat_status === 'offline';
+
+        $controlCodeForPdf = $isOffline
+            ? 'CONTINGENCIA'
+            : (!empty($invoice->cuf)
+                ? substr($invoice->cuf, 0, 8)
+                : ($invoice->control_code ?? '-'));
+
+        // --- RASTREO HISTÓRICO PARA FECHA DE INGRESO ---
+        $originalCheckInDate = $checkin->check_in_date ?? now();
+        if ($checkin) {
+            $currentParentId = $checkin->parent_checkin_id;
+            while ($currentParentId) {
+                $parent = \App\Models\Checkin::find($currentParentId);
+                if ($parent) {
+                    $originalCheckInDate = $parent->check_in_date;
+                    $currentParentId     = $parent->parent_checkin_id;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // --- CÁLCULO DE TOTALES ---
+        $granTotal = (float) $invoice->total_amount;
+        $adelantosPrevios = 0;
+
+        if ($checkin && $checkin->payments->count() > 0) {
+            $ultimoPagoId = $checkin->payments->last()->id;
+            foreach ($checkin->payments as $pago) {
+                $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                if ($pago->id !== $ultimoPagoId) {
+                    $adelantosPrevios += $monto;
+                }
+            }
+        }
+        $saldoCobrar = $granTotal - $adelantosPrevios;
+
+        // ============================================================
+        // INICIO DEL PDF (Diseño igual al del Checkout)
+        // ============================================================
+        $pdf = new Fpdf('P', 'mm', array(80, 260));
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(true, 2);
+        $pdf->AddPage();
+
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 6);
+        $pdf->Cell(0, 3, 'No. Punto de Venta 0', 0, 1, 'C');
+        $pdf->Cell(0, 3, 'Calle 9 - Potosi', 0, 1, 'C');
+        $pdf->Cell(0, 3, utf8_decode('Teléfono: 70461010'), 0, 1, 'C');
+        $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
+        $pdf->Ln(2);
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 6);
+        $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+
+        if ($isOffline) {
+            $pdf->Ln(1);
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(0, 3, utf8_decode('*** EMITIDA EN CONTINGENCIA ***'), 0, 1, 'C');
+        }
+        $pdf->Ln(2);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(30, 3, 'NIT:', 0, 0, 'R');
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(35, 3, config('siat.nit', '3327479013'), 0, 1, 'L');
+        
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(30, 3, utf8_decode('FACTURA N°:'), 0, 0, 'R');
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(35, 3, str_pad($invoice->invoice_number, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
+        
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
+        $pdf->SetFont('Arial', '', 7);
+        // Si no tiene código de recepción aún (ej. offline), muestra pendiente.
+        $codAuth = $isOffline ? 'PENDIENTE SIAT' : ($invoice->siat_reception_code ?? $invoice->cuf ?? '456123ABC');
+        
+        // Acortamos el texto si es muy largo para que no desborde (el CUF es inmenso)
+        if (strlen($codAuth) > 25 && !$isOffline) {
+             $pdf->MultiCell(42, 3, $codAuth, 0, 'L');
+        } else {
+             $pdf->Cell(35, 3, $codAuth, 0, 1, 'L');
+        }
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Fecha Emision:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, \Carbon\Carbon::parse($invoice->issue_time ?? now())->format('d/m/Y H:i:s'), 0, 1);
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Nom/Razon:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->MultiCell(0, 4, utf8_decode($invoice->customer_name ?? optional($checkin->guest)->full_name), 0, 'L');
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $invoice->customer_nit ?? optional($checkin->guest)->identification_number ?? '0', 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(20, 4, 'Ingreso:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, \Carbon\Carbon::parse($originalCheckInDate)->format('d/m/Y H:i'), 0, 1);
+
+        $pdf->Ln(1);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // --- TABLA DE DETALLE ---
+        $pdf->SetFont('Arial', 'B', 6);
+        $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
+        $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
+        $pdf->Cell(12, 3, 'P.UNIT', 0, 0, 'R');
+        $pdf->Cell(17, 3, 'SUBTOT', 0, 1, 'R');
+        $pdf->Ln(3);
+
+        $pdf->SetFont('Arial', '', 6);
+
+        foreach ($invoice->details as $detail) {
+            $pdf->Cell(35, 3, utf8_decode(substr($detail->description, 0, 22)), 0, 0, 'L');
+            $pdf->Cell(8, 3, (int) $detail->quantity, 0, 0, 'C');
+            $pdf->Cell(12, 3, number_format($detail->unit_price, 2), 0, 0, 'R');
+            $pdf->Cell(17, 3, number_format($detail->cost, 2), 0, 1, 'R');
+        }
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // --- TOTALES ---
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(50, 4, 'TOTAL GENERAL Bs:', 0, 0, 'R');
+        $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
+
+        $pdf->SetFont('Arial', '', 7);
+        if ($adelantosPrevios > 0) {
+            $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
+            $pdf->Cell(22, 4, number_format($adelantosPrevios, 2), 0, 1, 'R');
+        }
+
+        $pdf->Ln(1);
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell(50, 5, 'TOTAL A PAGAR Bs:', 0, 0, 'R');
+        $pdf->Cell(22, 5, number_format($saldoCobrar, 2), 0, 1, 'R');
+
+        $pdf->Ln(2);
+        $pdf->SetFont('Arial', '', 7);
+        
+        // Instanciamos el controller viejo solo para usar su funcion conversora
+        $checkinCtrl = app(\App\Http\Controllers\CheckinController::class);
+        $montoLetras = $this->invokeConvertirNumeroALetras($granTotal); // Usamos un helper interno
+        $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
+
+        $pdf->Ln(2);
+        $pdf->SetFont('Arial', 'B', 6);
+        $pdf->Cell(35, 3, utf8_decode('IMPORTE BASE CRÉDITO FISCAL:'), 0, 0, 'L');
+        $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: ' . $controlCodeForPdf), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // QR Dinámico del SIAT
         $qrContent = "https://pilotosiat.impuestos.gob.bo/consulta/QR?nit=" . config('siat.nit') .
             "&cuf=" . $invoice->cuf . "&numero=" . $invoice->invoice_number . "&t=" . $invoice->total_amount;
 
         $qrFilename = "qr_temp_{$invoice->id}.png";
         $qrPath = storage_path("app/public/{$qrFilename}");
+        
         // QrCode::format('png')->size(150)->margin(0)->generate($qrContent, $qrPath);
+        // Si no tienes activado el generador en este controller, carga el logo base:
+        $logoPath = public_path('images/qrCop.png');
 
-        // 2. FPDF
-        $pdf = new Fpdf('P', 'mm', [80, 250]);
-        $pdf->AddPage();
-        $pdf->SetMargins(4, 5, 4);
-        $pdf->SetAutoPageBreak(true, 5);
+        if (file_exists($logoPath) && !$isOffline) {
+            $x = (80 - 22) / 2;
+            $pdf->Image($logoPath, $x, $pdf->GetY(), 22, 22);
+            $pdf->Ln(24);
+        } else {
+            $pdf->Ln(24);
+        }
 
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(0, 5, utf8_decode('HOTEL SAN ANTONIO'), 0, 1, 'C');
-        $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, utf8_decode('NIT: ' . config('siat.nit', '000000000')), 0, 1, 'C');
-        $pdf->Cell(0, 4, utf8_decode('FACTURA N°: ' . $invoice->invoice_number), 0, 1, 'C');
-        $pdf->Cell(0, 4, utf8_decode('Cód. Autorización (CUF):'), 0, 1, 'C');
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->MultiCell(0, 3, $invoice->cuf, 0, 'C');
-        $pdf->Ln(3);
-
-        $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(15, 4, 'Fecha:', 0, 0);
-        $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, $invoice->issue_date->format('d/m/Y') . ' ' . $invoice->issue_time->format('H:i'), 0, 1);
-        $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(15, 4, utf8_decode('Señor(es):'), 0, 0);
-        $pdf->SetFont('Arial', '', 8);
-        $pdf->MultiCell(0, 4, utf8_decode($invoice->customer_name), 0, 'L');
-        $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(15, 4, 'NIT/CI:', 0, 0);
-        $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, $invoice->customer_nit, 0, 1);
-        $pdf->Ln(2);
-        $pdf->Cell(0, 0, '', 'T', 1);
-        $pdf->Ln(2);
-
-        $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(45, 4, 'Detalle', 0, 0, 'L');
-        $pdf->Cell(10, 4, 'Cant.', 0, 0, 'C');
-        $pdf->Cell(17, 4, 'Subt.', 0, 1, 'R');
-        $pdf->Cell(0, 0, '', 'T', 1);
+        $pdf->SetFont('Arial', 'B', 5);
+        $pdf->MultiCell(0, 2.5, utf8_decode('"ESTA FACTURA CONTRIBUYE AL DESARROLLO DEL PAÍS, EL USO ILÍCITO SERÁ SANCIONADO PENALMENTE DE ACUERDO A LEY"'), 0, 'C');
         $pdf->Ln(1);
+        $pdf->SetFont('Arial', '', 5);
+        $pdf->MultiCell(0, 2.5, utf8_decode('Ley N° 453: Tienes derecho a recibir información correcta, veraz, oportuna y completa sobre las características y contenidos de los productos que compras.'), 0, 'C');
 
-        $pdf->SetFont('Arial', '', 8);
-        foreach ($invoice->details as $item) {
-            $x = $pdf->GetX();
-            $y = $pdf->GetY();
-            $pdf->MultiCell(45, 4, utf8_decode($item->description), 0, 'L');
-            $newY = $pdf->GetY();
-            $pdf->SetXY($x + 45, $y);
-            $pdf->Cell(10, 4, number_format($item->quantity, 0), 0, 0, 'C');
-            $pdf->Cell(17, 4, number_format($item->cost, 2), 0, 1, 'R');
-            $pdf->SetY($newY + 1);
-        }
-
-        $pdf->Cell(0, 0, '', 'T', 1);
-        $pdf->Ln(2);
-
-        $pdf->SetFont('Arial', 'B', 9);
-        $pdf->Cell(45, 5, 'TOTAL Bs.', 0, 0, 'R');
-        $pdf->Cell(27, 5, number_format($invoice->total_amount, 2), 0, 1, 'R');
-        $pdf->Ln(3);
-
-        $pdf->SetFont('Arial', '', 7);
-        if ($invoice->siat_status === 'offline') {
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->MultiCell(0, 3, utf8_decode('Este documento es la Representación Gráfica de un Documento Fiscal Digital emitido fuera de línea.'), 0, 'C');
-            $pdf->Ln(2);
-            $pdf->SetFont('Arial', '', 7);
-        }
-
-        $pdf->MultiCell(0, 3, utf8_decode(config('siat.leyenda', 'Ley N° 453: El proveedor deberá entregar el producto en las modalidades y términos ofertados.')), 0, 'C');
-        $pdf->Ln(3);
-
-        if (file_exists($qrPath)) {
-            $x_qr = ($pdf->GetPageWidth() - 30) / 2;
-            $pdf->Image($qrPath, $x_qr, $pdf->GetY(), 30, 30, 'PNG');
-            $pdf->Ln(32);
-            unlink($qrPath);
-        }
-
-        $pdf->Cell(0, 4, utf8_decode('¡Gracias por su preferencia!'), 0, 1, 'C');
-
-        $pdf->Output('I', "factura_{$invoice->invoice_number}.pdf");
-        exit;
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="factura-' . $invoice->invoice_number . '.pdf"');
     }
 
     // =========================================================
@@ -797,5 +909,49 @@ class InvoiceController extends Controller
             'success',
             "Contingencia #{$event->id} creada con {$orphans->count()} factura(s) vinculadas."
         );
+    }
+    // --- FUNCIÓN MANUAL PARA NÚMERO A LETRAS ---
+    private function invokeConvertirNumeroALetras($monto)
+    {
+        $monto = floatval($monto);
+        $entero = floor($monto);
+        $centavos = round(($monto - $entero) * 100);
+        $letras = $this->enteroALetras($entero);
+        return ucfirst($letras) . ' ' . str_pad($centavos, 2, '0', STR_PAD_LEFT) . '/100 Bolivianos';
+    }
+
+    private function enteroALetras($num)
+    {
+        if ($num == 0) return 'cero';
+        $unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+        $decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+        $diez_y = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve'];
+        $veinti = ['veinte', 'veintiuno', 'veintidos', 'veintitres', 'veinticuatro', 'veinticinco', 'veintiseis', 'veintisiete', 'veintiocho', 'veintinueve'];
+        $centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+        if ($num < 10) return $unidades[$num];
+        if ($num < 20) return $diez_y[$num - 10];
+        if ($num < 30) return $veinti[$num - 20];
+        if ($num < 100) {
+            $d = (int) floor($num / 10);
+            $u = $num % 10;
+            return $decenas[$d] . ($u > 0 ? ' y ' . $unidades[$u] : '');
+        }
+        if ($num == 100) return 'cien';
+        if ($num < 1000) {
+            $c = (int) floor($num / 100);
+            $resto = $num % 100;
+            return $centenas[$c] . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
+        }
+        if ($num == 1000) return 'mil';
+        if ($num < 2000) {
+            return 'mil ' . $this->enteroALetras($num % 1000);
+        }
+        if ($num < 1000000) {
+            $m = (int) floor($num / 1000);
+            $resto = $num % 1000;
+            $miles = ($m == 1) ? 'mil' : $this->enteroALetras($m) . ' mil';
+            return $miles . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
+        }
+        return 'numero grande';
     }
 }
