@@ -1983,7 +1983,7 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
-                                    {
+                                    
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -2024,9 +2024,9 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
-                                    }
-
                                     
+
+                                   
 
                                     {/* INPUT DE PROFESIÓN ACTUALIZADO */}
                                     {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
@@ -3190,24 +3190,58 @@ export default function CheckinModal({
                                 {/* SECCIÓN DE SERVICIOS ACTUALIZADA */}
                                 <div>
                                     <div className="flex flex-wrap gap-2">
-                                        {/* 1. BOTÓN GARAJE (Dinámico: Se conecta a la BD) */}
+                                        {/* 1. BOTÓN GARAJE (Dinámico, con control de capacidad)
+                                            Reglas:
+                                            - El servicio Garaje tiene capacidad (campo `quantity`).
+                                            - El backend envía `quantity_used` = espacios ocupados por
+                                              check-ins activos.
+                                            - Si quedan 0 espacios y este check-in NO lo tiene seleccionado,
+                                              el botón se pone rojo y queda DESHABILITADO (bloqueo total).
+                                            - Si el check-in actual SÍ tiene el garaje, sigue activo para
+                                              que el recepcionista pueda quitarlo. */}
                                         {availableServices
                                             .filter((s: any) =>
                                                 s.name
                                                     .toUpperCase()
                                                     .includes('GARAJE'),
-                                            ) // Solo mostramos Garaje
+                                            )
                                             .map((srv: any) => {
                                                 const srvId = String(srv.id);
                                                 const active =
                                                     data.selected_services.includes(
                                                         srvId,
                                                     );
+                                                const capacity = Number(srv.quantity ?? 0);
+                                                const used = Number(srv.quantity_used ?? 0);
+                                                const remaining = Math.max(0, capacity - used);
+                                                // Bloqueado: ya no hay espacios Y el check-in actual
+                                                // no tiene el garaje (no debe poder agregarlo).
+                                                const blocked = !active && remaining <= 0;
+
+                                                let btnClass: string;
+                                                if (blocked) {
+                                                    btnClass =
+                                                        'border-red-500 bg-red-100 font-bold text-red-700 cursor-not-allowed';
+                                                } else if (active) {
+                                                    btnClass =
+                                                        'border-green-500 bg-green-100 font-bold text-green-700';
+                                                } else {
+                                                    btnClass =
+                                                        'border border-gray-400 bg-white text-gray-600 hover:border-gray-500';
+                                                }
+
                                                 return (
                                                     <button
                                                         key={srv.id}
                                                         type="button"
+                                                        disabled={blocked}
+                                                        title={
+                                                            blocked
+                                                                ? 'Parqueo completo: no quedan espacios disponibles'
+                                                                : `${remaining} de ${capacity} espacio${capacity === 1 ? '' : 's'} disponible${remaining === 1 ? '' : 's'}`
+                                                        }
                                                         onClick={() => {
+                                                            if (blocked) return;
                                                             const newServs =
                                                                 active
                                                                     ? data.selected_services.filter(
@@ -3226,16 +3260,19 @@ export default function CheckinModal({
                                                                 newServs,
                                                             );
                                                         }}
-                                                        className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
-                                                            active
-                                                                ? 'border-green-500 bg-green-100 font-bold text-green-700' // Estilo Activo
-                                                                : 'border border-gray-400 bg-white text-gray-600 hover:border-gray-500' // Estilo Inactivo
-                                                        }`}
+                                                        className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${btnClass}`}
                                                     >
                                                         {active && (
                                                             <CheckCircle2 className="h-3 w-3" />
                                                         )}
                                                         {srv.name}
+                                                        {/* Contador de disponibilidad: solo se muestra
+                                                            si el servicio tiene capacidad definida */}
+                                                        {capacity > 0 && (
+                                                            <span className={`ml-1 text-[10px] ${blocked ? 'text-red-600' : 'text-gray-500'}`}>
+                                                                ({remaining}/{capacity})
+                                                            </span>
+                                                        )}
                                                     </button>
                                                 );
                                             })}

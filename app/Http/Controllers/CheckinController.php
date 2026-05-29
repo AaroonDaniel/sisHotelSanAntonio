@@ -537,6 +537,19 @@ class CheckinController extends Controller
 
             // --- SERVICIOS ---
             if ($request->has('selected_services')) {
+                // 🔒 Validación de capacidad para servicios limitados (Garaje, etc.)
+                //
+                // Antes de asociar los servicios al check-in, verificamos que
+                // cualquier servicio con `quantity > 0` (capacidad limitada) aún
+                // tenga espacio. Esto evita que dos recepcionistas asignen el
+                // último garaje al mismo tiempo (race condition).
+                //
+                // El lockForUpdate sobre el servicio serializa la verificación.
+                $this->validarCapacidadServicios(
+                    $request->selected_services,
+                    $checkin->id
+                );
+
                 $checkin->services()->sync($request->selected_services);
             }
 
@@ -3278,5 +3291,46 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf');
         });
+    }
+
+    /**
+     * Valida que los servicios con capacidad limitada (ej. Garaje con quantity=12)
+     * aún tengan espacios disponibles antes de asignarlos a un check-in.
+     *
+     * @param  array  $selectedServiceIds  IDs de servicios que se quieren asignar.
+     * @param  int|null  $excludeCheckinId  Check-in actual (para no contarse a sí mismo en updates).
+     * @throws \RuntimeException si algún servicio limitado ya no tiene capacidad.
+     */
+    protected function validarCapacidadServicios(array $selectedServiceIds, ?int $excludeCheckinId = null): void
+    {
+        if (empty($selectedServiceIds)) {
+            return;
+        }
+
+        // Bloqueamos las filas de los servicios involucrados hasta el commit
+        // de la transacción del store. Si otra petición concurrente intenta
+        // lo mismo, esperará y revalidará después.
+        $servicios = \App\Models\Service::whereIn('id', $selectedServiceIds)
+            ->where('quantity', '>', 0) // Solo nos interesan los limitados
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($servicios as $servicio) {
+            // Contamos uso actual EXCLUYENDO al check-in que se está editando
+            $usados = (int) \DB::table('checkin_details')
+                ->where('service_id', $servicio->id)
+                ->when($excludeCheckinId, fn ($q) => $q->where('checkin_id', '!=', $excludeCheckinId))
+                ->whereIn('checkin_id', function ($q) {
+                    $q->select('id')->from('checkins')->where('status', 'activo');
+                })
+                ->sum('quantity');
+
+            if ($usados >= (int) $servicio->quantity) {
+                throw new \RuntimeException(
+                    "Ya no hay espacios disponibles para el servicio '{$servicio->name}'. "
+                    . "Capacidad: {$servicio->quantity}, en uso: {$usados}."
+                );
+            }
+        }
     }
 }

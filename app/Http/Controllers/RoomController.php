@@ -241,13 +241,36 @@ class RoomController
         })->values();
 
 
+        // Servicios con capacidad limitada (ej. Garaje).
+        //
+        // Para cada servicio anotamos cuántas unidades están "ocupadas"
+        // por check-ins activos (status='activo'). Así el frontend puede:
+        //  - mostrar al recepcionista cuántos espacios quedan libres,
+        //  - deshabilitar el botón cuando se agoten,
+        //  - aplicar la regla del campo `quantity` (capacidad total).
+        //
+        // Caso típico: Garaje con quantity=12. Si hay 5 check-ins activos
+        // con el servicio Garaje, quedan 7 disponibles.
+        //
+        // Nota: la tabla pivote es checkin_details (no checkin_service) y
+        // tiene su propia columna quantity, por eso sumamos en vez de contar.
+        $services = \App\Models\Service::all()->map(function ($service) {
+            $service->quantity_used = (int) \DB::table('checkin_details')
+                ->where('service_id', $service->id)
+                ->whereIn('checkin_id', function ($q) {
+                    $q->select('id')->from('checkins')->where('status', 'activo');
+                })
+                ->sum('quantity');
+            return $service;
+        });
+
         return \Inertia\Inertia::render('rooms/status', [
             'Rooms'        => $rooms,
             'Checkins'     => $activeCheckins,
             'availableRooms' => $availableRooms,
             'occupiedRooms' => $occupiedRooms,
             'Guests'       => \App\Models\Guest::all(),
-            'services'     => \App\Models\Service::all(),
+            'services'     => $services,
             'Blocks'       => \App\Models\Block::all(),
             'RoomTypes'    => \App\Models\RoomType::all(),
             'Schedules'    => \App\Models\Schedule::where('is_active', true)->get(),

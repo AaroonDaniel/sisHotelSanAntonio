@@ -241,41 +241,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // MÓDULO DE CONTINGENCIA SIAT (EVENTOS SIGNIFICATIVOS)
     // ==========================================
 
-    // Listado de eventos de contingencia
+    // ============== CONTINGENCIA SIAT (EVENTOS SIGNIFICATIVOS) ==============
+    //
+    // ⚠️ IMPORTANTE: ORDEN DE LAS RUTAS.
+    // Laravel matchea las rutas en el ORDEN en que están declaradas. Las rutas
+    // estáticas (segmentos literales como "disponibles-para-acople" o
+    // "estado/actual") SIEMPRE deben declararse ANTES que las rutas con
+    // parámetros tipo {event}. De lo contrario, Laravel tratará la palabra
+    // como un ID y disparará un error de tipo bigint en PostgreSQL.
+    //
+    // Ejemplo del bug que esto previene:
+    //   GET /contingencias/disponibles-para-acople
+    //   -> si "{event}" estuviera primero, Laravel intentaría:
+    //      SELECT * FROM significant_events WHERE id = 'disponibles-para-acople'
+    //      -> 22P02 Invalid text representation for type bigint
+
+    // --- RUTAS ESTÁTICAS (van PRIMERO) -----------------------------------
     Route::get('/contingencias', [SignificantEventController::class, 'index'])
         ->name('significant-events.index');
 
     // Estado actual: ¿hay un evento activo ahora mismo?
-    // (lo consulta la UI para mostrar el banner "MODO OFFLINE ACTIVO")
     Route::get('/contingencias/estado/actual', [SignificantEventController::class, 'currentStatus'])
         ->name('significant-events.current');
 
     // Abrir un evento significativo (entra en modo contingencia / offline)
     Route::post('/contingencias/iniciar', [SignificantEventController::class, 'start'])
         ->name('significant-events.start');
-
-    // Detalle de un evento de contingencia
-    Route::get('/contingencias/{event}', [SignificantEventController::class, 'show'])
-        ->name('significant-events.show');
-
-    // Cerrar un evento significativo (vuelve a modo online)
-    Route::post('/contingencias/{event}/finalizar', [SignificantEventController::class, 'end'])
-        ->name('significant-events.end');
-
-    // Re-enviar al SIAT TODAS las facturas offline de un evento (envío masivo)
-    Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
-        ->name('significant-events.resend');
-    // Re-enviar al SIAT UNA factura offline específica de un evento (envío individual)
-    Route::post(
-        '/contingencias/{event}/reintentar-registro',
-        [SignificantEventController::class, 'retryRegister']
-    )->name('significant-events.retry-register');
-
-    Route::post('/facturacion/rescatar-huerfanas', [InvoiceController::class, 'rescueOrphanedOffline'])
-        ->name('invoices.rescue-orphaned');
-
-    // Auditoría de actividades
-    Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
     // Rescate masivo de huérfanas (crea evento + vincula todas)
     Route::post('/contingencias/rescate-huerfanas', [SignificantEventController::class, 'rescueOrphans'])
@@ -285,9 +276,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/contingencias/disponibles-para-acople', [SignificantEventController::class, 'attachable'])
         ->name('significant-events.attachable');
 
-    // Acoplar UNA factura a un evento existente
+    // --- RUTAS CON {event} (van DESPUÉS) ---------------------------------
+    Route::get('/contingencias/{event}', [SignificantEventController::class, 'show'])
+        ->name('significant-events.show');
+
+    Route::post('/contingencias/{event}/finalizar', [SignificantEventController::class, 'end'])
+        ->name('significant-events.end');
+
+    Route::post('/contingencias/{event}/reenviar', [SignificantEventController::class, 'resendOfflineInvoices'])
+        ->name('significant-events.resend');
+
+    Route::post(
+        '/contingencias/{event}/reintentar-registro',
+        [SignificantEventController::class, 'retryRegister']
+    )->name('significant-events.retry-register');
+
     Route::post('/contingencias/{event}/acoplar-factura', [SignificantEventController::class, 'attachInvoice'])
         ->name('significant-events.attach-invoice');
+
+    // --- OTROS endpoints relacionados ------------------------------------
+    Route::post('/facturacion/rescatar-huerfanas', [InvoiceController::class, 'rescueOrphanedOffline'])
+        ->name('invoices.rescue-orphaned');
+
+    // Auditoría de actividades
+    Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 }); // <-- Cierre del grupo autenticado
 
 // ==========================================
