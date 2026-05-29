@@ -103,13 +103,7 @@ export default function DashboardKpis({
 }: Props) {
     return (
         <section className="mb-8 space-y-6">
-            {/* Encabezado */}
-            <div>
-                <h2 className="text-2xl font-bold text-white">Panel Gerencial</h2>
-                <p className="text-sm text-gray-100">
-                    Indicadores clave consolidados en tiempo real
-                </p>
-            </div>
+            
  
             {/* Fila de KPIs (tarjetas) */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

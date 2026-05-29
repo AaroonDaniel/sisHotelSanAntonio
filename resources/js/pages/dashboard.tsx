@@ -226,20 +226,37 @@ export default function Dashboard({
         <AuthenticatedLayout user={auth.user as any}>
             <Head title="Panel Principal" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Header con Bienvenida */}
+                {/* Header dinámico:
+                    - vista 'menu'  -> "Panel de Control" + bienvenida al usuario
+                    - vista 'panel' -> "Panel Gerencial" + descripción de KPIs
+                    Esto evita que aparezca "Bienvenido de nuevo" cuando
+                    el usuario ya está mirando indicadores. */}
                 <div className="mb-2 flex items-end justify-between">
                     <div className="flex items-end gap-4">
                         <div>
-                            <h2 className="text-3xl font-bold text-white">
-                                Panel de Control
-                            </h2>
-                            <p className="mt-2 text-gray-100">
-                                Bienvenido de nuevo,{' '}
-                                <span className="font-semibold text-white dark:text-gray-100">
-                                    {auth.user.name}
-                                </span>
-                                .
-                            </p>
+                            {vista === 'menu' ? (
+                                <>
+                                    <h2 className="text-3xl font-bold text-white">
+                                        Panel de Control
+                                    </h2>
+                                    <p className="mt-2 text-gray-100">
+                                        Bienvenido de nuevo,{' '}
+                                        <span className="font-semibold text-white dark:text-gray-100">
+                                            {auth.user.name}
+                                        </span>
+                                        .
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <h2 className="text-3xl font-bold text-white">
+                                        Panel Gerencial
+                                    </h2>
+                                    <p className="mt-2 text-gray-100">
+                                        Indicadores clave consolidados en tiempo real
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         {/* Botón toggle de vista: solo visible para Gerencia.

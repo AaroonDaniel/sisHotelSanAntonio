@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Eye, FileClock, Link, ShieldCheck } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { ArrowLeft, Eye, FileClock, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -129,14 +129,15 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
             <Head title="Auditoría y Bitácora" />
 
             <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+                {/* Botón Volver al Dashboard */}
                 <button
-                    onClick={() => router.visit('/rooms/status')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white"
+                    onClick={() => router.visit('/dashboard')}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white"
                 >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 group-hover:border-gray-500 group-hover:bg-gray-700">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-600 bg-gray-700 transition group-hover:border-gray-400 group-hover:bg-gray-600">
                         <ArrowLeft className="h-4 w-4" />
                     </div>
-                    <span>Volver</span>
+                    <span>Volver al Panel de Control</span>
                 </button>
 
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -240,22 +241,28 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                     </Table>
                 </Card>
 
-                {/* Paginación */}
+                {/* Paginación
+                    NOTA IMPORTANTE: 'Link' ahora se importa de '@inertiajs/react'
+                    (antes estaba importado de 'lucide-react' por error, lo que
+                    renderizaba un ICONO en lugar de un enlace y por eso solo
+                    se veían los círculos vacíos sin números de página).
+                */}
                 {logs.links.length > 3 && (
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-1">
                         {logs.links.map((link, index) => (
                             <Link
                                 key={index}
                                 href={link.url ?? '#'}
-                                className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                                preserveScroll
+                                preserveState
+                                className={`inline-flex min-w-[2.25rem] items-center justify-center rounded-lg px-3 py-1.5 text-sm transition ${
                                     link.active
-                                        ? 'bg-indigo-600 font-bold text-white'
+                                        ? 'bg-indigo-600 font-bold text-white shadow-md hover:bg-indigo-700'
                                         : link.url
-                                          ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                          : 'cursor-not-allowed border border-gray-800 bg-gray-900 text-gray-600'
+                                          ? 'border border-gray-300 bg-white text-gray-700 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700'
+                                          : 'cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400'
                                 }`}
                             >
-                                {/* 👇 AQUÍ ESTÁ LA MAGIA 👇 */}
                                 <span
                                     dangerouslySetInnerHTML={{
                                         __html: link.label,
@@ -288,7 +295,7 @@ function ChangeDetailDialog({ log, onClose }: ChangeDetailDialogProps) {
     const { old, attributes } = log.properties;
 
     return (
-        <Dialog open={!!log} onOpenChange={(open) => !open && onClose()}>
+        <Dialog open={!!log} onOpenChange={(open: boolean) => !open && onClose()}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
