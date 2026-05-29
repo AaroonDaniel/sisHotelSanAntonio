@@ -15,6 +15,8 @@ import {
     Hotel,
     Key,
     Layers,
+    LayoutDashboard,
+    LayoutGrid,
     Receipt,
     ShieldAlert,
     Tag,
@@ -28,6 +30,7 @@ import {
 import { useState } from 'react';
 import { Can } from '@/components/can';
 import { useCan } from '@/hooks/use-can';
+import DashboardKpis from '@/components/dashboard-kpis';
 
 // Interfaces Locales
 interface User {
@@ -40,14 +43,49 @@ interface User {
     [key: string]: any;
 }
 
+// Tipos de los datos del dashboard que vienen del DashboardController
+interface DashboardKpisData {
+    porcentaje_ocupacion: number;
+    habitaciones_total: number;
+    habitaciones_ocupadas: number;
+    habitaciones_libres: number;
+    habitaciones_reservadas: number;
+    habitaciones_limpieza: number;
+    habitaciones_mantenim: number;
+    ingresos_hoy: number;
+    devoluciones_hoy: number;
+    egresos_hoy: number;
+    neto_hoy: number;
+    ingresos_mes: number;
+    egresos_mes: number;
+    checkins_activos: number;
+    reservas_pendientes: number;
+    caja_abierta: boolean;
+    caja_apertura_monto: number | null;
+}
+
 interface DashboardProps {
     auth: {
         user: User;
         roles?: string[];
     };
+    // Props opcionales: solo llegan cuando el backend las envía (rol Gerencia).
+    // Si el usuario es Recepcionista no se usan y no rompen nada.
+    kpis?: DashboardKpisData;
+    ingresosMes?: Array<{ fecha: string; ingresos: number; egresos: number }>;
+    ocupacionTipo?: Array<{ nombre: string; total: number; ocupadas: number; libres: number; porcentaje: number }>;
+    rankingTipos?: Array<{ nombre: string; total: number }>;
+    pagosMetodo?: Array<{ metodo: string; total: number }>;
 }
 
-export default function Dashboard({ auth }: DashboardProps) {
+export default function Dashboard({
+    auth,
+    kpis,
+    ingresosMes,
+    ocupacionTipo,
+    rankingTipos,
+    pagosMetodo,
+}: DashboardProps) {
     // --- LÓGICA DE SEGURIDAD (ROLES) ---
     // Extraemos los roles del usuario logueado. Si no hay, es un array vacío.
     const userRoles = auth.user?.roles || [];
@@ -55,10 +93,20 @@ export default function Dashboard({ auth }: DashboardProps) {
     const isAdmin = userRoles.some(
         (role) => role.toLowerCase() === 'administrador',
     );
+    // Gerencia = Administrador o Gerente General (ven KPIs y reportes)
+    const isGerencia =
+        isAdmin ||
+        userRoles.some((r) => r.toLowerCase() === 'gerente general');
     // --- ESTADOS PARA LA LÓGICA DE REPORTE ---
     const [loading, setLoading] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorDetails, setErrorDetails] = useState<string[]>([]);
+
+    // Toggle de vista del dashboard: 'menu' = grid de iconos (Parámetros/Procesos/Reportes),
+    // 'panel' = panel gerencial con KPIs y gráficos.
+    // Por defecto inicia en 'menu' para no alterar el comportamiento existente.
+    // Solo es relevante para Gerencia; los demás roles solo ven el menú.
+    const [vista, setVista] = useState<'menu' | 'panel'>('menu');
 
     // --- DEFINICIÓN DE MÓDULOS (AHORA ADENTRO PARA QUE LEA LOS ROLES) ---
     const hotelModules = [
@@ -180,18 +228,50 @@ export default function Dashboard({ auth }: DashboardProps) {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* Header con Bienvenida */}
                 <div className="mb-2 flex items-end justify-between">
-                    <div>
-                        <h2 className="text-3xl font-bold text-white">
-                            Panel de Control
-                        </h2>
-                        <p className="mt-2 text-gray-100">
-                            Bienvenido de nuevo,{' '}
-                            <span className="font-semibold text-white dark:text-gray-100">
-                                {auth.user.name}
-                            </span>
-                            .
-                        </p>
+                    <div className="flex items-end gap-4">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">
+                                Panel de Control
+                            </h2>
+                            <p className="mt-2 text-gray-100">
+                                Bienvenido de nuevo,{' '}
+                                <span className="font-semibold text-white dark:text-gray-100">
+                                    {auth.user.name}
+                                </span>
+                                .
+                            </p>
+                        </div>
+
+                        {/* Botón toggle de vista: solo visible para Gerencia.
+                            Alterna entre menú de iconos y panel gerencial con KPIs. */}
+                        {isGerencia && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setVista(vista === 'menu' ? 'panel' : 'menu')
+                                }
+                                className="mb-1 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2 focus:ring-offset-gray-900"
+                                title={
+                                    vista === 'menu'
+                                        ? 'Ver Panel Gerencial con KPIs'
+                                        : 'Volver al menú de módulos'
+                                }
+                            >
+                                {vista === 'menu' ? (
+                                    <>
+                                        <LayoutDashboard className="h-4 w-4" />
+                                        Panel Gerencial
+                                    </>
+                                ) : (
+                                    <>
+                                        <LayoutGrid className="h-4 w-4" />
+                                        Ver Módulos
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
+
                     <div className="hidden text-right sm:block">
                         <p className="text-sm text-gray-400">
                             Fecha del Sistema
@@ -202,7 +282,23 @@ export default function Dashboard({ auth }: DashboardProps) {
                     </div>
                 </div>
 
-                {/* Grid Principal */}
+                {/* ============== VISTA: PANEL GERENCIAL ==============
+                    Se muestra cuando Gerencia presiona el botón verde.
+                    Cierra HU-12 y Escenario 12 de la Tabla 4.23. */}
+                {isGerencia && vista === 'panel' && kpis && (
+                    <DashboardKpis
+                        kpis={kpis}
+                        ingresosMes={ingresosMes ?? []}
+                        ocupacionTipo={ocupacionTipo ?? []}
+                        rankingTipos={rankingTipos ?? []}
+                        pagosMetodo={pagosMetodo ?? []}
+                    />
+                )}
+
+                {/* ============== VISTA: MENÚ DE MÓDULOS ==============
+                    Vista por defecto. Recepcionistas siempre la ven.
+                    Gerencia la ve hasta que pulsa el toggle. */}
+                {vista === 'menu' && (
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
                     {hotelModules.map((group, groupIndex) => (
                         <div key={groupIndex} className="flex flex-col gap-6">
@@ -250,6 +346,7 @@ export default function Dashboard({ auth }: DashboardProps) {
                         </div>
                     ))}
                 </div>
+                )}
             </div>
 
             {/* Modal de Error */}
