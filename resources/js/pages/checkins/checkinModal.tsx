@@ -1983,7 +1983,7 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
-                                    {/*}
+                                    {
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -2024,69 +2024,9 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
-                                    {*/}
+                                    }
 
-                                    <div className="flex-1">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Año Nac.
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="block w-full rounded-xl border border-gray-400 px-3 py-2 text-sm text-black focus:border-green-500 focus:ring-green-500"
-                                            value={
-                                                currentPerson.birth_date
-                                                    ? currentPerson.birth_date.substring(
-                                                          0,
-                                                          4,
-                                                      )
-                                                    : ''
-                                            }
-                                            disabled={isReadOnly}
-                                            onChange={(e) => {
-                                                // Extraer solo hasta 4 números
-                                                const year = e.target.value
-                                                    .replace(/\D/g, '')
-                                                    .substring(0, 4);
-
-                                                if (year.length === 4) {
-                                                    // Si ya escribió los 4 dígitos, guardamos la fecha completa "YYYY-01-01"
-                                                    handleFieldChange(
-                                                        'birth_date',
-                                                        `${year}-01-01`,
-                                                    );
-                                                } else if (year.length > 0) {
-                                                    // Mientras escribe, mantenemos el valor temporal
-                                                    handleFieldChange(
-                                                        'birth_date',
-                                                        year,
-                                                    );
-                                                } else {
-                                                    // Si borra el campo, limpiamos la fecha
-                                                    handleFieldChange(
-                                                        'birth_date',
-                                                        '',
-                                                    );
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                // TAB hacia adelante (pasa a Profesión)
-                                                if (
-                                                    e.key === 'Tab' &&
-                                                    !e.shiftKey
-                                                ) {
-                                                    e.preventDefault();
-                                                    professionRef.current?.focus();
-                                                }
-                                            }}
-                                            maxLength={4}
-                                        />
-                                        <span className="pl-1 text-xs font-bold text-gray-700">
-                                            {/* Mostrar edad calculada o estática */}
-                                            {displayAge
-                                                ? `Edad: ${displayAge}`
-                                                : ''}
-                                        </span>
-                                    </div>
+                                    
 
                                     {/* INPUT DE PROFESIÓN ACTUALIZADO */}
                                     {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}

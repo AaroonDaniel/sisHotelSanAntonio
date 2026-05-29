@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowDownCircle,
+    ArrowLeft,
     ArrowUpCircle,
     CalendarDays,
     FileText,
@@ -238,6 +239,17 @@ export default function ReportsIndex({
                 {/* ============================================= */}
                 {/* CABECERA: Selector de fecha                   */}
                 {/* ============================================= */}
+
+                {/* Botón Volver */}
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
                 <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                         <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-600">
