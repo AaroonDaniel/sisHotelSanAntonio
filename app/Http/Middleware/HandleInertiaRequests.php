@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use Illuminate\Support\Facades\Cache; // <-- 1. IMPORTANTE: Importamos la clase Cache
+use Illuminate\Support\Facades\Cache;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -37,25 +37,36 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        [$message, $author] = str(\Illuminate\Foundation\Inspiring::quotes()->random())->explode('-');
+        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+
+        $user = $request->user();
 
         return [
             ...parent::share($request),
-            'name' => config('app.name'),
+            'name'  => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
+
             'auth' => [
-                'user' => $request->user() ? array_merge($request->user()->toArray(), [
-                    'roles' => $request->user()->getRoleNames(),
-                    'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                'user' => $user ? array_merge($user->toArray(), [
+                    // Cacheamos roles 5 min por usuario
+                    'roles' => Cache::remember(
+                        "user_roles_{$user->id}",
+                        300,
+                        fn () => $user->getRoleNames()->toArray()
+                    ),
+                    // Cacheamos permisos 5 min por usuario
+                    'permissions' => Cache::remember(
+                        "user_permissions_{$user->id}",
+                        300,
+                        fn () => $user->getAllPermissions()->pluck('name')->toArray()
+                    ),
                 ]) : null,
 
-                // 2. OPTIMIZACIÓN: Guardamos el estado de la caja en caché por 5 minutos (300 segundos).
-                // La clave de caché es única por usuario (ej. active_register_user_5)
-                'active_register' => $request->user()
-                    ? Cache::remember('active_register_user_' . $request->user()->id, 300, function () use ($request) {
-                        // Agregamos query() aquí para quitar el error del editor 👇
+                // Estado de caja (ya lo tenías cacheado, sin cambios)
+                'active_register' => $user
+                    ? Cache::remember('active_register_user_' . $user->id, 300, function () use ($user) {
                         return \App\Models\CashRegister::query()
-                            ->where('user_id', $request->user()->id)
+                            ->where('user_id', $user->id)
                             ->where('status', 'ABIERTA')
                             ->first();
                     })
@@ -63,11 +74,13 @@ class HandleInertiaRequests extends Middleware
             ],
 
             'flash' => [
-                'success' => fn() => $request->session()->get('success'),
-                'error' => fn() => $request->session()->get('error'),
-                'auto_open_checkins' => fn() => $request->session()->get('auto_open_checkins'),
+                'success'            => fn () => $request->session()->get('success'),
+                'error'              => fn () => $request->session()->get('error'),
+                'auto_open_checkins' => fn () => $request->session()->get('auto_open_checkins'),
             ],
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+
+            'sidebarOpen' => ! $request->hasCookie('sidebar_state')
+                || $request->cookie('sidebar_state') === 'true',
         ];
     }
 }

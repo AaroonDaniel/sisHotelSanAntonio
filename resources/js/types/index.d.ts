@@ -1,8 +1,10 @@
+// resources/js/types/index.d.ts
 import { InertiaLinkProps } from '@inertiajs/react';
 import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
-    user: User;
+    user: User | null;
+    active_register?: unknown;
 }
 
 export interface BreadcrumbItem {
@@ -20,6 +22,9 @@ export interface NavItem {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    permission?: string;           // 1 permiso requerido
+    anyPermission?: string[];      // o al menos uno de estos
+    role?: string;                 // o un rol específico
 }
 
 export interface SharedData {
@@ -40,5 +45,7 @@ export interface User {
     two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
-    [key: string]: unknown; // This allows for additional properties...
+    roles: string[];
+    permissions: string[];
+    [key: string]: unknown;
 }

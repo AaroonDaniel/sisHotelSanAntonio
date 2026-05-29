@@ -1,3 +1,4 @@
+// resources/js/components/app-sidebar.tsx
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -12,30 +13,143 @@ import {
 } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-// Añadimos los íconos Users y Receipt para los nuevos módulos
-import { BookOpen, Folder, LayoutGrid, Users, Receipt, ShieldCheck } from 'lucide-react';
+import {
+    BookOpen,
+    Folder,
+    LayoutGrid,
+    Users,
+    Receipt,
+    ShieldCheck,
+    BedDouble,
+    CalendarCheck,
+    ClipboardList,
+    DoorOpen,
+    FileText,
+    AlertTriangle,
+    BarChart3,
+    Wallet,
+    Building2,
+    Layers,
+    DollarSign,
+    KeyRound,
+    UserCog,
+} from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
+    // === COMÚN (visible para cualquier usuario autenticado) ===
     {
         title: 'Dashboard',
-        href: '/dashboard', // <-- Ruta corregida
+        href: '/dashboard',
         icon: LayoutGrid,
     },
+
+    // === ADMINISTRADOR ===
     {
         title: 'Usuarios',
-        href: '/users',     // <-- Nuevo enlace al CRUD de Usuarios
+        href: '/usuarios',
         icon: Users,
+        permission: 'usuarios.ver',
     },
     {
-        title: 'Gastos',
-        href: '/expenses',  // <-- Preparado para el módulo de Gastos
-        icon: Receipt,
+        title: 'Roles',
+        href: '/roles',
+        icon: UserCog,
+        permission: 'roles.gestionar',
+    },
+    {
+        title: 'Permisos',
+        href: '/permisos',
+        icon: KeyRound,
+        permission: 'permisos.gestionar',
+    },
+    {
+        title: 'Bloques',
+        href: '/bloques',
+        icon: Building2,
+        permission: 'bloques.gestionar',
+    },
+    {
+        title: 'Pisos',
+        href: '/pisos',
+        icon: Layers,
+        permission: 'pisos.gestionar',
+    },
+    {
+        title: 'Tipos de habitación',
+        href: '/tipohabitacion',
+        icon: BedDouble,
+        permission: 'tipos_habitaciones.gestionar',
+    },
+    {
+        title: 'Precios',
+        href: '/precios',
+        icon: DollarSign,
+        permission: 'precios.gestionar',
     },
     {
         title: 'Auditoría',
         href: '/auditoria',
         icon: ShieldCheck,
+        role: 'administrador',
+    },
+
+    // === RECEPCIONISTA ===
+    {
+        title: 'Huéspedes',
+        href: '/invitados',
+        icon: Users,
+        anyPermission: ['huespedes.buscar', 'huespedes.ver'],
+    },
+    {
+        title: 'Reservas',
+        href: '/reservas',
+        icon: CalendarCheck,
+        anyPermission: ['reservas.crear', 'reservas.ver_todos'],
+    },
+    {
+        title: 'Check-in / Check-out',
+        href: '/checks',
+        icon: ClipboardList,
+        anyPermission: ['checkin.realizar', 'checkins.ver_todos'],
+    },
+    {
+        title: 'Estado de habitaciones',
+        href: '/status',
+        icon: DoorOpen,
+        anyPermission: ['habitaciones.estado_actual', 'habitaciones.cambiar_estado'],
+    },
+
+    // === GERENTE ===
+    {
+        title: 'Reportes',
+        href: '/reports',
+        icon: BarChart3,
+        anyPermission: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas'],
+    },
+    {
+        title: 'Gastos',
+        href: '/gastos',
+        icon: Receipt,
+        permission: 'gastos.ver',
+    },
+    {
+        title: 'Historial de pagos',
+        href: '/historial-pagos',
+        icon: Wallet,
+        permission: 'huespedes.historial',
+    },
+    {
+        title: 'Facturación',
+        href: '/facturacion',
+        icon: FileText,
+        anyPermission: ['checkout.realizar', 'anulaciones.autorizar'],
+    },
+    {
+        title: 'Contingencias SIAT',
+        href: '/contingencias',
+        icon: AlertTriangle,
+        permission: 'anulaciones.autorizar',
     },
 ];
 
@@ -59,8 +173,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            {/* <-- Ruta corregida aquí también --> */}
-                            <Link href={'/dashboard'} prefetch> 
+                            <Link href={'/dashboard'} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
@@ -69,6 +182,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
+                {/* NavMain hace el filtrado por permisos */}
                 <NavMain items={mainNavItems} />
             </SidebarContent>
 

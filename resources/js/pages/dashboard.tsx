@@ -26,6 +26,8 @@ import {
     X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Can } from '@/components/can';
+import { useCan } from '@/hooks/use-can';
 
 // Interfaces Locales
 interface User {
