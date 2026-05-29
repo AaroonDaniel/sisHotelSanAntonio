@@ -200,7 +200,11 @@ class OnlineBookingController extends Controller
                 );
 
                 $totalAmount = $totalPrecioNoche * $validated['duration_days'];
-                $advanceAmount = $totalAmount * 0.5;
+                // Pago anticipado: 20% del total. Política del Hotel San Antonio:
+                // el usuario debe abonar al menos el 20% para que la reserva quede
+                // formalizada. Este valor se muestra al usuario en paymentSummary.tsx
+                // antes de confirmar la transferencia/QR.
+                $advanceAmount = $totalAmount * 0.2;
 
                 // 3. Crear la Reserva
                 $reservation = Reservation::create([
