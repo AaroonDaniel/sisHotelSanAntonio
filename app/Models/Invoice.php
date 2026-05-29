@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Invoice extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     /**
      * Campos asignables en masa.
@@ -127,5 +129,14 @@ class Invoice extends Model
     {
         return $this->siat_status === 'offline'
             && is_null($this->significant_event_id);
+    }
+
+    public function getActivitylogOptions(): LogOptions 
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('invoice');
     }
 }

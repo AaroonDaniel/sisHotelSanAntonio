@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Reservation extends Model
 {
+    use LogsActivity;
     protected $appends = ['advance_payment'];
     protected $fillable = [
         'user_id',
@@ -55,6 +58,14 @@ class Reservation extends Model
         $arrival = \Carbon\Carbon::parse($this->arrival_date)->startOfDay();
         
         return $arrival->isBefore($today) && in_array($this->status, ['pendiente', 'confirmada']);
+    }
+    public function getActivitylogOptions(): LogOptions 
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('reservation');
     }
 
 }

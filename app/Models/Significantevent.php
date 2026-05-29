@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 /**
  * SignificantEvent
@@ -15,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class SignificantEvent extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     // Códigos del catálogo SIAT
     public const CODE_INTERNET_OUTAGE   = 1;
@@ -97,5 +99,14 @@ class SignificantEvent extends Model
     {
         return in_array($this->status, [self::STATUS_ACTIVE, self::STATUS_CLOSED], true)
             && is_null($this->siat_reception_code);
+    }
+
+    public function getActivitylogOptions(): LogOptions 
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('significant_event');
     }
 }

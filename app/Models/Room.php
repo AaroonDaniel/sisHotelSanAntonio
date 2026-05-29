@@ -8,10 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 use App\Traits\AutoUpperCase;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Room extends Model
 {
-    use AutoUpperCase;
+    use AutoUpperCase, LogsActivity;
 
     protected $fillable = [
         'number',
@@ -97,5 +99,14 @@ class Room extends Model
     public function checkinDetails(): HasMany
     {
         return $this->hasMany(CheckinDetail::class);
+    }
+
+    public function getActivitylogOptions(): LogOptions 
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('room');
     }
 }

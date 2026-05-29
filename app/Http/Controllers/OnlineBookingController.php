@@ -6,6 +6,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Reservation;
 use App\Models\Guest;
+use App\Models\User;
 use App\Models\ReservationDetail;
 use App\Models\Payment;
 use Illuminate\Http\Request;
@@ -203,7 +204,7 @@ class OnlineBookingController extends Controller
 
                 // 3. Crear la Reserva
                 $reservation = Reservation::create([
-                    'user_id'       => 1,
+                    'user_id'       => User::where('nickname', 'sistema_web')->value('id'),
                     'guest_id'      => $guest->id,
                     'guest_count'   => $validated['guests'],
                     'arrival_date'  => $validated['check_in'],
@@ -239,7 +240,7 @@ class OnlineBookingController extends Controller
 
                // 👇 6. REGISTRAMOS EL PAGO (Campo por campo para evitar bloqueos de seguridad) 👇
                 $payment = new Payment();
-                $payment->user_id = 1; // Asignamos al Administrador por defecto
+                $payment->user_id = User::where('nickname', 'sistema_web')->value('id'); // Usuario del sistema web
                 $payment->reservation_id = $reservation->id;
                 $payment->amount = $advanceAmount;
                 $payment->method = 'Transferencia';
