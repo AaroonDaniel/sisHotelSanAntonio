@@ -27,16 +27,16 @@ class ReportController extends Controller
             ->where('created_at', '<=', $targetDateEnd)
             ->where(function ($query) use ($targetDateEnd) {
                 $query->whereRaw('LOWER(status) = ?', ['activo'])
-                      ->orWhere(function ($sub) use ($targetDateEnd) {
-                          $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
-                              ->where('updated_at', '>', $targetDateEnd);
-                      });
+                    ->orWhere(function ($sub) use ($targetDateEnd) {
+                        $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
+                            ->where('updated_at', '>', $targetDateEnd);
+                    });
             })->get();
 
         $entrantes = collect();
         $quedantes = collect();
 
-        $isDataMissing = function($value) {
+        $isDataMissing = function ($value) {
             if (is_null($value)) return true;
             $cleanValue = trim((string) $value);
             if (in_array(strtoupper($cleanValue), ['', '-', 'S/N', 'N/A', 'SIN DATO'])) return true;
@@ -98,13 +98,13 @@ class ReportController extends Controller
         $salientes = collect();
         $checkinsFinalizadosHoy = Checkin::with(['guest', 'companions', 'room'])
             ->whereRaw('LOWER(status) = ?', ['finalizado'])
-            ->whereBetween('updated_at', [$targetDateStart, $targetDateEnd]) 
+            ->whereBetween('updated_at', [$targetDateStart, $targetDateEnd])
             ->get();
 
         foreach ($checkinsFinalizadosHoy as $cf) {
             $formatSaliente = function ($person, $role) use ($cf, $isDataMissing) {
                 if (!$person) return null;
-                
+
                 $missingFields = [];
                 if ($isDataMissing($person->full_name)) $missingFields[] = 'Nombre';
                 if ($isDataMissing($person->birth_date)) $missingFields[] = 'Edad';
@@ -207,7 +207,7 @@ class ReportController extends Controller
             'Salientes'  => $salientes->sortBy('room_number')->values()->all(),
             'TargetDate' => $targetDate,
             'DailyBook'  => $dailyBook,
-            'BookSummary'=> [
+            'BookSummary' => [
                 'ingresos'     => round($ingresosHoy, 2),
                 'egresos'      => round($egresosHoy, 2),
                 'devoluciones' => round($devolucionesHoy, 2),
@@ -233,10 +233,10 @@ class ReportController extends Controller
                 ->where('created_at', '<=', $targetDateEnd)
                 ->where(function ($query) use ($targetDateEnd) {
                     $query->whereRaw('LOWER(status) = ?', ['activo'])
-                          ->orWhere(function ($sub) use ($targetDateEnd) {
-                              $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
-                                  ->where('updated_at', '>', $targetDateEnd);
-                          });
+                        ->orWhere(function ($sub) use ($targetDateEnd) {
+                            $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
+                                ->where('updated_at', '>', $targetDateEnd);
+                        });
                 })
                 ->with('room')->orderBy('created_at', 'desc')->first();
 
@@ -245,10 +245,10 @@ class ReportController extends Controller
                 $checkinAcomp = Checkin::where('created_at', '<=', $targetDateEnd)
                     ->where(function ($query) use ($targetDateEnd) {
                         $query->whereRaw('LOWER(status) = ?', ['activo'])
-                              ->orWhere(function ($sub) use ($targetDateEnd) {
-                                  $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
-                                      ->where('updated_at', '>', $targetDateEnd);
-                              });
+                            ->orWhere(function ($sub) use ($targetDateEnd) {
+                                $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
+                                    ->where('updated_at', '>', $targetDateEnd);
+                            });
                     })
                     ->whereHas('companions', function ($q) use ($guest) {
                         $q->where('guests.id', $guest->id);
@@ -261,7 +261,7 @@ class ReportController extends Controller
             if ($actualCheckin) {
                 $guest->room_number = $actualCheckin->room ? $actualCheckin->room->number : '-';
                 $guest->origin = $actualCheckin->origin;
-                
+
                 $checkinDateStr = Carbon::parse($actualCheckin->created_at)->toDateString();
                 if ($checkinDateStr === $targetDate) {
                     $entrantes->push($guest);
@@ -270,14 +270,14 @@ class ReportController extends Controller
                 }
             }
         }
-        
+
         $entrantes = $entrantes->sortBy('room_number');
         $quedantes = $quedantes->sortBy('room_number');
 
         $salientes = collect();
         $checkinsFinalizadosHoy = Checkin::with(['guest', 'companions', 'room'])
             ->whereRaw('LOWER(status) = ?', ['finalizado'])
-            ->whereBetween('updated_at', [$targetDateStart, $targetDateEnd]) 
+            ->whereBetween('updated_at', [$targetDateStart, $targetDateEnd])
             ->get();
 
         foreach ($checkinsFinalizadosHoy as $cf) {
@@ -316,9 +316,9 @@ class ReportController extends Controller
             }
         };
 
-        $pdf->fechaStr = $fechaStr; 
-        $pdf->SetMargins(10, 10, 10); 
-        $pdf->SetAutoPageBreak(true, 40); 
+        $pdf->fechaStr = $fechaStr;
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 40);
         $pdf->AddPage();
 
         $logoPath = public_path('images/logocaramahotelera.png');
@@ -355,18 +355,18 @@ class ReportController extends Controller
 
         $pdf->SetFont('Courier', 'B', 6);
         $pdf->SetLineWidth(0.2);
-        
+
         $w = [48, 8, 20, 20, 18, 24, 28, 20, 10];
         $headers = ['NOMBRES Y APELLIDOS', 'EDAD', 'NACIONALIDAD', 'PROFESION', 'ESTADO', 'PROCEDENCIA', 'C.I./PASAPORTE', 'OTORGADO', 'HAB'];
 
-       $pdf->SetX(10);
+        $pdf->SetX(10);
         for ($i = 0; $i < count($headers); $i++) {
             $pdf->Cell($w[$i], 6, utf8_decode($headers[$i]), 1, 0, 'C');
         }
         $pdf->Ln();
 
         // 1. FUNCIÓN PARA IMPRIMIR TÍTULO DE SECCIÓN (¡Esta era la que faltaba!)
-        $imprimirCabeceraSeccion = function($titulo) use ($pdf, $w) {
+        $imprimirCabeceraSeccion = function ($titulo) use ($pdf, $w) {
             $pdf->SetX(10);
             $pdf->SetFont('Courier', 'B', 9);
             $pdf->Cell($w[0], 6, utf8_decode($titulo), 'LR', 0, 'L');
@@ -377,7 +377,7 @@ class ReportController extends Controller
         };
 
         // 2. FUNCIÓN PARA IMPRIMIR FILA CON PUNTOS
-        $imprimirFilaVacia = function() use ($pdf, $w) {
+        $imprimirFilaVacia = function () use ($pdf, $w) {
             $pdf->SetX(10);
             $pdf->SetFont('Courier', '', 7);
             $pdf->Cell($w[0], 5, '.......................', 'LR', 0, 'L');
@@ -388,11 +388,11 @@ class ReportController extends Controller
         };
 
         // 3. FUNCIÓN PARA IMPRIMIR HUÉSPEDES
-        $imprimirFila = function($persona) use ($pdf, $w) {
+        $imprimirFila = function ($persona) use ($pdf, $w) {
             $edad = $persona->birth_date ? Carbon::parse($persona->birth_date)->age : '-';
             $estadoCivilFull = $persona->civil_status ?? '-';
             $letra = strtoupper(substr($estadoCivilFull, 0, 1));
-            
+
             if (in_array($letra, ['M', 'C'])) $textoEstado = 'CASADO';
             elseif ($letra == 'S') $textoEstado = 'SOLTERO';
             elseif (in_array($letra, ['W', 'V'])) $textoEstado = 'VIUDO';
@@ -407,7 +407,7 @@ class ReportController extends Controller
             $pdf->SetX(10);
             $h = 5;
             $pdf->SetFont('Courier', '', 7);
-            
+
             $pdf->Cell($w[0], $h, utf8_decode(substr(trim($persona->full_name), 0, 26)), 'LR', 0, 'L');
             $pdf->Cell($w[1], $h, $edad, 'LR', 0, 'C');
             $pdf->Cell($w[2], $h, utf8_decode($nationality), 'LR', 0, 'C');
@@ -416,7 +416,7 @@ class ReportController extends Controller
             $pdf->Cell($w[5], $h, utf8_decode($origin), 'LR', 0, 'L');
             $pdf->Cell($w[6], $h, substr(trim($persona->identification_number ?? ''), 0, 15), 'LR', 0, 'C');
             $pdf->Cell($w[7], $h, utf8_decode($issued_in), 'LR', 0, 'C');
-            $pdf->Cell($w[8], $h, $persona->room_number, 'LR', 0, 'C'); 
+            $pdf->Cell($w[8], $h, $persona->room_number, 'LR', 0, 'C');
             $pdf->Ln();
         };
 
@@ -461,7 +461,7 @@ class ReportController extends Controller
     {
         return response()->json(['can_generate' => true]);
     }
-    
+
     public function financialIndex(Request $request)
     {
         $startDate = $request->query('start_date', now()->toDateString());
@@ -584,8 +584,12 @@ class ReportController extends Controller
 
         $payments = $query->orderBy('created_at')->get();
 
-        $efectivoPayments = $payments->filter(function($p) { return strtoupper($p->method) === 'EFECTIVO'; });
-        $qrPayments = $payments->filter(function($p) { return strtoupper($p->method) !== 'EFECTIVO'; });
+        $efectivoPayments = $payments->filter(function ($p) {
+            return strtoupper($p->method) === 'EFECTIVO';
+        });
+        $qrPayments = $payments->filter(function ($p) {
+            return strtoupper($p->method) !== 'EFECTIVO';
+        });
 
         $expensesQuery = Expense::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
         if ($userId !== 'todos') $expensesQuery->where('user_id', $userId);
@@ -598,9 +602,9 @@ class ReportController extends Controller
 
         $pdf = new \FPDF('P', 'mm', 'Letter');
         $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 30); 
+        $pdf->SetAutoPageBreak(true, 30);
         $pdf->AddPage();
-        
+
         $pdf->SetFont('Arial', 'B', 15);
         $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
         $pdf->SetFont('Arial', 'B', 12);
@@ -623,7 +627,7 @@ class ReportController extends Controller
 
         if ($efectivoPayments->isNotEmpty()) {
             $pdf->SetFont('Arial', 'B', 10);
-            $pdf->SetFillColor(210, 255, 210); 
+            $pdf->SetFillColor(210, 255, 210);
             $pdf->Cell(0, 6, utf8_decode(' INGRESOS EN EFECTIVO'), 1, 1, 'L', true);
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->SetFillColor(240, 240, 240);
@@ -656,7 +660,7 @@ class ReportController extends Controller
 
         if ($qrPayments->isNotEmpty()) {
             $pdf->SetFont('Arial', 'B', 10);
-            $pdf->SetFillColor(210, 235, 255); 
+            $pdf->SetFillColor(210, 235, 255);
             $pdf->Cell(0, 6, utf8_decode(' INGRESOS POR QR Y TRANSFERENCIAS BANCARIAS'), 1, 1, 'L', true);
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->SetFillColor(240, 240, 240);
@@ -690,13 +694,13 @@ class ReportController extends Controller
 
         if ($gastos->isNotEmpty() && $recordType !== 'bancos') {
             $pdf->SetFont('Arial', 'B', 10);
-            $pdf->SetFillColor(255, 210, 200); 
+            $pdf->SetFillColor(255, 210, 200);
             $pdf->Cell(0, 6, utf8_decode(' DETALLE DE GASTOS / EGRESOS (Descontados de Caja Física)'), 1, 1, 'L', true);
             $pdf->SetFont('Arial', 'B', 8);
             $pdf->SetFillColor(240, 240, 240);
             $pdf->Cell(20, 5, 'Hora', 1, 0, 'C', true);
             $pdf->Cell(140, 5, utf8_decode('Descripción / Concepto del Gasto'), 1, 0, 'L', true);
-            $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true); 
+            $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
             $pdf->SetFont('Arial', '', 8);
             foreach ($gastos as $g) {
                 $pdf->Cell(20, 5, $g->created_at->format('H:i'), 1, 0, 'C');
@@ -704,7 +708,7 @@ class ReportController extends Controller
                 $pdf->Cell(25, 5, number_format($g->amount, 2), 1, 1, 'R');
             }
             $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(160, 5, 'TOTAL GASTOS:', 1, 0, 'R'); 
+            $pdf->Cell(160, 5, 'TOTAL GASTOS:', 1, 0, 'R');
             $pdf->Cell(25, 5, number_format($totalGastos, 2), 1, 1, 'R');
             $pdf->Ln(4);
         }
@@ -714,7 +718,7 @@ class ReportController extends Controller
         $pdf->Cell(0, 6, utf8_decode('RESUMEN FINAL DE LIQUIDACIÓN'), 0, 1, 'C');
         $pdf->Ln(2);
         $pdf->SetFont('Arial', '', 10);
-        
+
         if ($recordType === 'efectivo' || $recordType === 'ambos') {
             $pdf->Cell(136, 6, utf8_decode('(+) Monto Inicial de Apertura de Caja:'), 0, 0, 'R');
             $pdf->Cell(50, 6, number_format($totalApertura, 2) . ' Bs', 0, 1, 'R');
@@ -727,7 +731,7 @@ class ReportController extends Controller
             $efectivoNeto = $totalApertura + $granTotalEfectivo - $totalGastos;
             $pdf->Ln(2);
             $pdf->SetFont('Arial', 'B', 12);
-            $pdf->SetFillColor(210, 255, 210); 
+            $pdf->SetFillColor(210, 255, 210);
             $pdf->Cell(106, 8, '', 0, 0);
             $pdf->Cell(50, 8, utf8_decode('EFECTIVO EN CAJA:'), 1, 0, 'R', true);
             $pdf->Cell(40, 8, number_format($efectivoNeto, 2) . ' Bs', 1, 1, 'R', true);
@@ -736,7 +740,7 @@ class ReportController extends Controller
         if ($recordType === 'bancos' || $recordType === 'ambos') {
             $pdf->Ln(2);
             $pdf->SetFont('Arial', 'B', 11);
-            $pdf->SetFillColor(210, 235, 255); 
+            $pdf->SetFillColor(210, 235, 255);
             $pdf->Cell(106, 7, '', 0, 0);
             $pdf->Cell(50, 7, utf8_decode('TOTAL EN BANCOS (QR):'), 1, 0, 'R', true);
             $pdf->Cell(40, 7, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R', true);
@@ -754,7 +758,7 @@ class ReportController extends Controller
             ->header('Content-Disposition', 'inline; filename="cierre-caja-' . $startDate . '.pdf"');
     }
 
-    public function generateFinancialReportExcel(Request $request)
+    public function generateFinancialReportCsv(Request $request)
     {
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate = $request->query('end_date', now()->toDateString());
@@ -778,10 +782,10 @@ class ReportController extends Controller
 
         $columns = ['Fecha', 'Hora', 'Cajero', 'Habitacion', 'Huesped', 'Metodo', 'Banco/QR', 'Tipo', 'Monto (Bs)'];
 
-        $callback = function() use($payments, $columns) {
+        $callback = function () use ($payments, $columns) {
             $file = fopen('php://output', 'w');
             fputs($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
-            fputcsv($file, $columns, ';'); 
+            fputcsv($file, $columns, ';');
             $granTotal = 0;
 
             foreach ($payments as $p) {
@@ -818,7 +822,7 @@ class ReportController extends Controller
         // 📒 LIBRO DIARIO (Punto 7.9) — Movimientos del día en curso
         // ============================================================
         $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd]) 
+            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
             ->get()
             ->map(function ($p) {
                 $monto = (float) $p->amount; // las devoluciones ya vienen negativas
@@ -874,7 +878,7 @@ class ReportController extends Controller
         return Inertia::render('reports/financialMovement', [
             'TargetDate' => $targetDate,
             'DailyBook'  => $dailyBook,
-            'BookSummary'=> [
+            'BookSummary' => [
                 'ingresos'     => round($ingresosHoy, 2),
                 'egresos'      => round($egresosHoy, 2),
                 'devoluciones' => round($devolucionesHoy, 2),

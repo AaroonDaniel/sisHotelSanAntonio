@@ -153,9 +153,54 @@ class ReservationController extends Controller
                 ]);
 
                 if (!empty($request->details)) {
+                    // 🔒 PREVENCIÓN DE OVERBOOKING POR CONCURRENCIA (RNF-04 / Escenario 3, Tabla 4.23)
+                    //
+                    // Cuando se asigna una habitación específica al crear la reserva,
+                    // existe una carrera potencial entre dos recepcionistas (o entre
+                    // recepción y el portal web) reservando la misma habitación para
+                    // fechas que se solapen. La validación de disponibilidad previa
+                    // (checkAvailability) NO toma lock; entre esa consulta y este INSERT
+                    // otra petición puede haberse colado.
+                    //
+                    // Solución: por cada detalle con habitación específica,
+                    //   (1) tomamos lock pesimista sobre la fila de rooms,
+                    //   (2) revalidamos cruces de reservas DENTRO del lock,
+                    //   (3) recién entonces creamos el detalle.
+                    //
+                    // Esto cierra el Escenario 3 de la Tabla 4.23: "El sistema impide
+                    // el overbooking mediante el control transaccional de PostgreSQL".
+                    $arrivalDate   = $request->arrival_date;
+                    $durationDays  = (int) $request->duration_days;
+                    $departureDate = date('Y-m-d', strtotime("{$arrivalDate} +{$durationDays} days"));
+
                     foreach ($request->details as $detail) {
                         $roomId = $detail['room_id'] ?? null;
 
+                        if ($roomId) {
+                            // (1) Lock pesimista sobre la habitación
+                            $room = \App\Models\Room::where('id', $roomId)->lockForUpdate()->first();
+
+                            if (!$room) {
+                                throw new \RuntimeException("La habitación #{$roomId} ya no existe.");
+                            }
+
+                            // (2) Revalidar cruces de fecha DENTRO del lock
+                            $conflicto = \App\Models\ReservationDetail::where('room_id', $roomId)
+                                ->whereHas('reservation', function ($q) use ($arrivalDate, $departureDate) {
+                                    $q->where('arrival_date', '<', $departureDate)
+                                      ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$arrivalDate])
+                                      ->whereIn('status', ['pendiente', 'confirmada']);
+                                })
+                                ->exists();
+
+                            if ($conflicto) {
+                                throw new \RuntimeException(
+                                    "La habitación #{$room->number} ya fue reservada para las fechas seleccionadas."
+                                );
+                            }
+                        }
+
+                        // (3) Insertar el detalle (con o sin habitación específica)
                         \App\Models\ReservationDetail::create([
                             'reservation_id' => $reservation->id,
                             'room_id' => $roomId,

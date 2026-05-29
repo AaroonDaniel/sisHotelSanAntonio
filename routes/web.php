@@ -171,7 +171,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Cierre de caja
     Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial');
     Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
-    Route::get('/reports/financial/excel', [ReportController::class, 'generateFinancialReportExcel'])->name('reports.financialExcel');
+    Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv');
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
