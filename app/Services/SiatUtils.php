@@ -10,9 +10,17 @@ use Exception;
 class SiatUtils
 {
     /**
-     * Algoritmo Módulo 11 para obtener el dígito verificador (norma SIN).
+     * Algoritmo Módulo 11 para obtener el dígito verificador del CUF (norma SIN).
      *
      * Para el CUF se invoca con: numDig=1, limMult=9, x10=false.
+     *
+     * ⚠️ IMPORTANTE — confirmado empíricamente contra el SIAT (mayo 2026):
+     * el dígito verificador del CUF se calcula como `suma % 11` DIRECTAMENTE,
+     * NO como `11 - (suma % 11)` que es la variante más común del módulo 11.
+     *
+     * Verificación: el SIAT rechazó tres facturas seguidas (40, 41, 42) y en
+     * los tres casos se cumplió que:  verificador_que_calculábamos + verificador_esperado_SIAT = 11
+     * lo cual demuestra que estábamos aplicando la resta y el SIAT no.
      *
      * @param string $str      Cadena numérica base.
      * @param int    $numDig   Cantidad de dígitos verificadores a calcular (1 para CUF).
@@ -38,18 +46,16 @@ class SiatUtils
             return (string) $dig;
         }
 
-        // Variante estándar del CUF (RND): dígito = 11 - (suma % 11)
-        $resto  = $sum % 11;
-        $digito = 11 - $resto;
+        // Variante CUF según SIAT: el dígito verificador es directamente `suma % 11`.
+        // Cuando el resto da 10 (valor no representable en un solo dígito decimal),
+        // se sustituye por 0.
+        $resto = $sum % 11;
 
-        if ($digito === 11) {
+        if ($resto >= 10) {
             return '0';
         }
-        if ($digito === 10) {
-            return '1';
-        }
 
-        return (string) $digito;
+        return (string) $resto;
     }
 
     /**

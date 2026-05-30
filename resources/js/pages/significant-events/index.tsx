@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
+    ArrowLeft,
     CheckCircle2,
     ChevronRight,
     FileText,
@@ -140,6 +141,15 @@ export default function SignificantEventsIndex({
             <Head title="Contingencias SIAT" />
 
             <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+                <button
+                    onClick={() => window.history.back()}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
                 {/* ========== ENCABEZADO ========== */}
                 <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
