@@ -19,7 +19,7 @@ export default function VoidInvoiceModal({ isOpen, onClose, invoiceId, invoiceNu
         if (!invoiceId) return;
 
         // Enviamos la petición POST a la ruta que creamos en Laravel
-        post(`/invoices/${invoiceId}/void`, {
+        post(`/facturacion/${invoiceId}/anular`, {
             onSuccess: () => {
                 reset();
                 onClose();

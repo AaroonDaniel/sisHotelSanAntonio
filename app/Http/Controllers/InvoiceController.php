@@ -141,6 +141,10 @@ class InvoiceController extends Controller
             'checkin_id'          => 'required|exists:checkins,id',
             'payment_method_code' => 'required|integer',
             'additional_discount' => 'nullable|numeric|min:0',
+            // Datos del cliente editables (opcionales). Si vienen, sobrescriben los del huésped.
+            // Útil cuando el cliente factura a nombre de otra persona/empresa.
+            'customer_name'       => 'nullable|string|max:255',
+            'customer_nit'        => 'nullable|string|max:30',
         ]);
 
         // -----------------------------------------------------
@@ -173,13 +177,49 @@ class InvoiceController extends Controller
                     ->latest('start_at')
                     ->first();
 
+                // ============== DATOS DEL CLIENTE (normativa SIN) ==============
+                //
+                // Prioridad:
+                //   1. Si el frontend mandó customer_name / customer_nit, usarlos.
+                //   2. Si no, tomarlos del huésped del checkin.
+                //   3. Si después de eso quedan vacíos:
+                //      - total ≤ Bs 1.000  → S/N + NIT 0 (válido por norma)
+                //      - total >  Bs 1.000 → BLOQUEAR (la norma exige nominatividad real)
+                //
+                // Esto evita que la factura termine con NIT vacío o null, y que el PDF
+                // muestre "0" sin que el sistema haya aplicado la regla del Bs 1.000.
+
+                $rawName = trim((string) ($request->input('customer_name') ?? $checkin->guest->full_name ?? ''));
+                $rawNit  = trim((string) ($request->input('customer_nit') ?? $checkin->guest->identification_number ?? ''));
+
+                $customerName = strtoupper($rawName);
+                $customerNit  = $rawNit;
+
+                // Regla del Bs 1.000: si no hay datos reales y el monto lo supera, bloqueamos.
+                $isAnonymous = ($customerNit === '' || $customerNit === '0'
+                    || $customerName === '' || $customerName === 'S/N' || $customerName === 'SIN NOMBRE');
+
+                if ($isAnonymous && $totalAmount > 1000) {
+                    throw new Exception(
+                        "El monto total (Bs " . number_format($totalAmount, 2) . ") supera Bs 1.000. " .
+                        "La normativa SIN exige nombre y NIT/CI reales del comprador. " .
+                        "Complete los datos del huésped antes de emitir la factura."
+                    );
+                }
+
+                // Si está vacío y el monto es ≤ 1.000, aplicamos la regla S/N + NIT 0.
+                if ($isAnonymous) {
+                    $customerName = $customerName ?: 'S/N';
+                    $customerNit  = $customerNit ?: '0';
+                }
+
                 $invoice = Invoice::create([
                     'checkin_id'           => $checkin->id,
                     'invoice_number'       => (Invoice::max('invoice_number') ?? 0) + 1,
                     'control_code'         => '-',
                     'payment_method'       => $this->paymentCodeToAcronym((int) $request->payment_method_code),
-                    'customer_name'        => strtoupper($checkin->guest->full_name),
-                    'customer_nit'         => $checkin->guest->identification_number,
+                    'customer_name'        => $customerName,
+                    'customer_nit'         => $customerNit,
                     'issue_date'           => now()->format('Y-m-d'),
                     'issue_time'           => now(),
                     'user_id'              => $request->user()->id,
@@ -289,9 +329,11 @@ class InvoiceController extends Controller
                 return back()->withErrors(['error' => 'No hay CUIS/CUFD vigente para anular.']);
             }
 
+            // getActiveCufd() retorna un modelo SiatCredential (no un array).
+            // El campo es ->code, no ['codigo'].
             $resp = $this->siatService->voidInvoice(
                 $cuis,
-                $cufdData['codigo'],
+                $cufdData->code,
                 $invoice->cuf,
                 (int) $request->input('void_reason_code')
             );
@@ -320,11 +362,57 @@ class InvoiceController extends Controller
             }
 
             Log::warning("Anulación rechazada para factura {$invoice->id}: " . ($resp['mensaje'] ?? ''));
-            return back()->withErrors(['error' => 'El SIAT rechazó la anulación: ' . ($resp['mensaje'] ?? 'sin mensaje')]);
+
+            // Detectar respuestas de timeout/503/conectividad y dar mensaje amigable
+            $mensaje = $resp['mensaje'] ?? '';
+            if ($this->isSiatUnavailableMessage($mensaje)) {
+                return back()->withErrors([
+                    'error' => 'El SIAT no respondió a tiempo (servicio temporalmente no disponible). '
+                             . 'Espere unos minutos e intente anular nuevamente. La factura sigue VÁLIDA.',
+                ]);
+            }
+
+            return back()->withErrors(['error' => 'El SIAT rechazó la anulación: ' . ($mensaje ?: 'sin mensaje')]);
         } catch (\Throwable $e) {
             Log::error("Error en anulación de factura {$invoice->id}: " . $e->getMessage());
+
+            // Mensajes amigables para fallos de conectividad
+            if ($this->isSiatUnavailableMessage($e->getMessage())) {
+                return back()->withErrors([
+                    'error' => 'El SIAT no respondió a tiempo (servicio temporalmente no disponible). '
+                             . 'Espere unos minutos e intente anular nuevamente. La factura sigue VÁLIDA.',
+                ]);
+            }
+
             return back()->withErrors(['error' => 'Error al anular: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Determina si un mensaje de error indica caída/lentitud del SIAT.
+     * Se usa para devolver mensajes amigables al usuario en vez de stack traces técnicos.
+     */
+    protected function isSiatUnavailableMessage(string $message): bool
+    {
+        if ($message === '') return false;
+        $patterns = [
+            '503',
+            'Service Temporarily Unavailable',
+            'Service Unavailable',
+            'TimeoutException',
+            'Request timeout',
+            'connection timed out',
+            'cURL error 28',     // libcurl: operación expiró
+            'cURL error 7',      // libcurl: no se pudo conectar
+            'Could not connect',
+            'no se pudo descargar el WSDL',
+        ];
+        foreach ($patterns as $needle) {
+            if (stripos($message, $needle) !== false) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -342,7 +430,7 @@ class InvoiceController extends Controller
 
             $response = $this->siatService->reverseVoidInvoice(
                 $cuis,
-                $cufdData['codigo'],
+                $cufdData->code,
                 $invoice->cuf
             );
 
@@ -739,8 +827,8 @@ class InvoiceController extends Controller
         $hash        = hash('sha256', $xmlString);
 
         $invoice->update([
-            'cuf'          => $cuf,
-            'control_code' => $cufd->code,  // El CUFD se guarda en la columna control_code (única que existe en la BD)
+            'cuf'       => $cuf,
+            'cufd_code' => $cufd->code,
         ]);
 
         // --- CASO A: contingencia activa -> guardar offline directamente ---
@@ -961,22 +1049,12 @@ class InvoiceController extends Controller
 
     /**
      * Revalida una factura RECHAZADA u OFFLINE reenviándola al SIAT.
-     *
-     * Regla normativa (RND-102100000011): "En caso de rechazo del archivo XML,
-     * el archivo rechazado no quedará almacenado en la base de datos de la
-     * Administración Tributaria". Por lo tanto:
-     *  - Se reusa el MISMO invoice_number.
-     *  - Se recalcula CUF (nueva marca de tiempo + CUFD vigente).
-     *  - Se REENVÍA al SIAT.
-     *  - NO se tocan datos del cliente (esos están bien; lo que falló fue técnico).
-     *
-     * Estados permitidos:
-     *  - siat_status='rejected'  → corregir y reintentar
-     *  - siat_status='offline'   → reintento manual desde el listado
+     * - Mismo invoice_number
+     * - CUF recalculado con timestamp actual
+     * - Datos del cliente intactos
      */
     public function revalidate(Invoice $invoice)
     {
-        // Solo permitido para rechazadas u offline; no anuladas ni ya aceptadas
         if (!in_array($invoice->siat_status, ['rejected', 'offline'])) {
             return back()->withErrors([
                 'error' => "Solo se pueden revalidar facturas rechazadas u offline. Estado actual: {$invoice->siat_status}.",
@@ -990,15 +1068,12 @@ class InvoiceController extends Controller
         }
 
         try {
-            // Limpiamos motivo de rechazo previo y reenviamos
             $invoice->update([
                 'siat_status'           => 'pending',
                 'siat_rejection_reason' => null,
             ]);
 
-            // emitToSiat() recalculará el CUF con timestamp actual y nuevo CUFD
             $this->emitToSiat($invoice);
-
             $invoice->refresh();
 
             $msg = match ($invoice->siat_status) {
@@ -1020,27 +1095,11 @@ class InvoiceController extends Controller
     }
 
     /**
-     * Corrige una factura ANULADA emitiendo una NUEVA factura desde cero.
-     *
-     * Regla normativa: la factura anulada queda inhabilitada para siempre.
-     * Si los datos estaban mal (nombre/NIT), se debe emitir otra factura
-     * independiente con los datos correctos. La original NO se toca.
-     *
-     * Payload:
-     *   customer_name : string (corregido)
-     *   customer_nit  : string (corregido)
-     *
-     * Lo que hace:
-     *  1. Valida que la factura origen esté ANULADA.
-     *  2. Aplica regla SIN del Bs 1.000: si total > 1.000, no permite NIT='0'
-     *     ni nombre='S/N' (debe ser nominal).
-     *  3. Clona los datos (items, montos, método de pago, checkin_id) en una
-     *     factura NUEVA con nuevo invoice_number, nuevo timestamp y nuevo CUF.
-     *  4. Reemite al SIAT.
+     * Corrige factura ANULADA: crea una nueva con nombre/NIT editados.
+     * La original queda anulada (normativa SIN: no se reutiliza).
      */
     public function correctAndReissue(Request $request, Invoice $invoice)
     {
-        // 1. Solo facturas anuladas pueden corregirse así
         if ($invoice->status !== 'voided') {
             return back()->withErrors([
                 'error' => 'Solo facturas anuladas pueden corregirse. Use "Revalidar" para rechazos.',
@@ -1055,20 +1114,18 @@ class InvoiceController extends Controller
         $newName = strtoupper(trim($validated['customer_name']));
         $newNit  = trim($validated['customer_nit']);
 
-        // 2. Regla del Bs 1.000 (RND-102100000011, art. sobre nominatividad)
+        // Regla SIN del Bs 1.000
         $total = (float) $invoice->total_amount;
         $isAnonymous = ($newNit === '0' || $newName === 'S/N' || $newName === 'SIN NOMBRE' || $newName === '');
 
         if ($total > 1000 && $isAnonymous) {
             return back()->withErrors([
-                'error' => "El monto total (Bs {$total}) supera Bs 1.000. La normativa exige nombre y NIT/CI reales del comprador (no se permite 'S/N' ni NIT '0').",
+                'error' => "El monto total (Bs {$total}) supera Bs 1.000. La normativa exige nombre y NIT/CI reales.",
             ]);
         }
 
-        // 3. Crear factura NUEVA clonando los datos relevantes
         try {
             $newInvoice = DB::transaction(function () use ($invoice, $newName, $newNit) {
-
                 $activeEvent = SignificantEvent::where('status', SignificantEvent::STATUS_ACTIVE)
                     ->latest('start_at')
                     ->first();
@@ -1092,7 +1149,6 @@ class InvoiceController extends Controller
                     'significant_event_id' => $activeEvent?->id,
                 ]);
 
-                // Clonamos cada detalle (líneas de hospedaje y servicios)
                 foreach ($invoice->details as $detail) {
                     $newInvoice->details()->create([
                         'description' => $detail->description,
@@ -1109,7 +1165,6 @@ class InvoiceController extends Controller
             return back()->withErrors(['error' => 'Error al crear la factura corregida: ' . $e->getMessage()]);
         }
 
-        // 4. Enviar al SIAT
         try {
             $this->emitToSiat($newInvoice);
         } catch (SiatOfflineException $e) {

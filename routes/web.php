@@ -233,13 +233,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/facturacion/{invoice}/resend-offline', [InvoiceController::class, 'resendOffline'])
         ->name('invoices.resend-offline');
 
-    // 4b. Revalidar factura RECHAZADA u OFFLINE
-    //     Reusa el mismo invoice_number pero genera CUF nuevo y reenvía al SIAT.
+    // Revalidar factura RECHAZADA u OFFLINE (mismo invoice_number, nuevo CUF).
     Route::post('/facturacion/{invoice}/revalidar', [InvoiceController::class, 'revalidate'])
         ->name('invoices.revalidate');
 
-    // 4c. Corregir y emitir NUEVA factura cuando la original fue ANULADA
-    //     Crea factura nueva desde cero con datos corregidos (nombre/NIT).
+    // Corregir y emitir NUEVA factura cuando la original fue ANULADA.
     Route::post('/facturacion/{invoice}/corregir-reemitir', [InvoiceController::class, 'correctAndReissue'])
         ->name('invoices.correct-reissue');
 
