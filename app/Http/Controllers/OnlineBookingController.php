@@ -80,10 +80,23 @@ class OnlineBookingController extends Controller
 
             // 3. FORMATEO ANTI-ERRORES PARA REACT
             $availableRoomTypes = $availableRoomTypes->map(function ($type) {
+                // Imagen representativa del tipo: tomamos la imagen de la PRIMERA
+                // habitación disponible que tenga image_path. Si ninguna tiene,
+                // el frontend mostrará el placeholder "Sin Imagen".
+                //
+                // Las rutas se guardan como "rooms/abc.jpg" en image_path, así que
+                // las publicamos a través del symlink storage→public con asset().
+                $firstWithImage = $type->rooms->first(function ($room) {
+                    return !empty($room->image_path);
+                });
+                $imageUrl = $firstWithImage
+                    ? asset('storage/' . ltrim($firstWithImage->image_path, '/'))
+                    : null;
+
                 return [
                     'id' => $type->id,
                     'name' => $type->name,
-                    'image' => null,
+                    'image' => $imageUrl,
 
                     'rooms' => $type->rooms->map(function ($room) use ($type) {
 
