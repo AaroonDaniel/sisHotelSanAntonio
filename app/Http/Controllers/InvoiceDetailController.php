@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
-class InvoiceController extends Controller
+class InvoiceDetailController extends Controller
 {
     // ... (El método previewCheckout se mantiene igual que antes) ...
     // En InvoiceController.php

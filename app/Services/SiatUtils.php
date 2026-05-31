@@ -46,13 +46,21 @@ class SiatUtils
             return (string) $dig;
         }
 
-        // Variante CUF según SIAT: el dígito verificador es directamente `suma % 11`.
-        // Cuando el resto da 10 (valor no representable en un solo dígito decimal),
-        // se sustituye por 0.
+        // Variante CUF del SIAT (Bolivia, RND-102100000011):
+        //
+        //   verificador = suma % 11
+        //
+        // Casos especiales (descubiertos empíricamente contra el SIAT):
+        //   - resto = 10 → "1"  (no "0" como dicen algunas referencias)
+        //   - resto en 0..9 → ese mismo dígito
+        //
+        // El caso resto=10 ocurre en ~9% de las facturas y antes lo manejábamos
+        // mal: devolvíamos "0" y el SIAT rechazaba con CUF inválido cuyo último
+        // hex difería en una unidad.
         $resto = $sum % 11;
 
-        if ($resto >= 10) {
-            return '0';
+        if ($resto === 10) {
+            return '1';
         }
 
         return (string) $resto;
