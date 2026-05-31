@@ -5,12 +5,14 @@ import {
     ArrowLeft,
     Ban,
     CheckCircle2,
+    Edit3,
     ExternalLink,
     FileText,
     LifeBuoy,
     Link2,
     Receipt,
     RefreshCw,
+    RotateCw,
     Search,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -78,6 +80,15 @@ export default function InvoicesIndex({
     // Loading state para reenvío
     const [resendingId, setResendingId] = useState<number | null>(null);
 
+    // Loading state para revalidación
+    const [revalidatingId, setRevalidatingId] = useState<number | null>(null);
+
+    // Modal de corrección (anulada → nueva factura con datos editados)
+    const [correctingInvoice, setCorrectingInvoice] = useState<InvoiceData | null>(null);
+    const [correctName, setCorrectName] = useState('');
+    const [correctNit, setCorrectNit] = useState('');
+    const [correctSubmitting, setCorrectSubmitting] = useState(false);
+
     // Modal de rescate masivo
     const [isRescueModalOpen, setIsRescueModalOpen] = useState(false);
 
@@ -142,6 +153,83 @@ export default function InvoicesIndex({
             {
                 preserveScroll: true,
                 onFinish: () => setResendingId(null),
+            },
+        );
+    };
+
+    // Revalidar factura RECHAZADA u OFFLINE:
+    // misma factura, mismo invoice_number, pero se recalcula CUF y se reenvía al SIAT.
+    const handleRevalidate = (invoice: InvoiceData) => {
+        if (
+            !confirm(
+                `¿Revalidar la factura #${invoice.invoice_number}?\n\n` +
+                    `Se generará un nuevo CUF con la fecha/hora actual y se reenviará al SIAT.\n` +
+                    `Los datos del cliente y los montos no se modifican.`,
+            )
+        ) {
+            return;
+        }
+
+        setRevalidatingId(invoice.id);
+
+        router.post(
+            `/facturacion/${invoice.id}/revalidar`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setRevalidatingId(null),
+            },
+        );
+    };
+
+    // Abrir modal de corrección para una factura ANULADA.
+    // Permite editar SOLO nombre + NIT antes de crear la factura nueva.
+    const openCorrectModal = (invoice: InvoiceData) => {
+        setCorrectingInvoice(invoice);
+        // Pre-cargamos lo que tenía la factura anulada para que el usuario solo edite lo necesario
+        setCorrectName((invoice as any).customer_name ?? invoice.guest_name ?? '');
+        setCorrectNit((invoice as any).customer_nit ?? '');
+    };
+
+    const closeCorrectModal = () => {
+        setCorrectingInvoice(null);
+        setCorrectName('');
+        setCorrectNit('');
+    };
+
+    const submitCorrectReissue = () => {
+        if (!correctingInvoice) return;
+
+        const name = correctName.trim().toUpperCase();
+        const nit  = correctNit.trim();
+
+        if (name === '' || nit === '') {
+            alert('Debe llenar nombre y NIT/CI.');
+            return;
+        }
+
+        // Validación cliente Bs 1.000 (el backend la repite, pero damos feedback inmediato)
+        const total = correctingInvoice.total_amount ?? 0;
+        const anonymous = nit === '0' || name === 'S/N' || name === 'SIN NOMBRE';
+        if (total > 1000 && anonymous) {
+            alert(
+                `El monto total (Bs ${total.toFixed(2)}) supera Bs 1.000.\n\n` +
+                    `La normativa SIN exige nombre y NIT/CI reales del comprador.\n` +
+                    `No se permite "S/N" ni NIT "0" para montos mayores a Bs 1.000.`,
+            );
+            return;
+        }
+
+        setCorrectSubmitting(true);
+        router.post(
+            `/facturacion/${correctingInvoice.id}/corregir-reemitir`,
+            { customer_name: name, customer_nit: nit },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setCorrectSubmitting(false);
+                    closeCorrectModal();
+                },
             },
         );
     };
@@ -451,6 +539,40 @@ export default function InvoicesIndex({
                                                             </button>
                                                         )}
 
+                                                        {/* BOTÓN: REVALIDAR (RECHAZADA u OFFLINE)
+                                                            Reusa mismo invoice_number, recalcula CUF, reenvía al SIAT.
+                                                            Los datos del cliente no se tocan (eso lo cubre "Corregir y emitir nueva"). */}
+                                                        {(invoice.siat_status === 'rejected' || invoice.siat_status === 'offline') &&
+                                                            invoice.status !== 'voided' && (
+                                                                <button
+                                                                    onClick={() => handleRevalidate(invoice)}
+                                                                    disabled={revalidatingId === invoice.id}
+                                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 text-xs font-bold text-yellow-700 hover:bg-yellow-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    title="Recalcular CUF y reenviar al SIAT"
+                                                                >
+                                                                    <RotateCw
+                                                                        className={`h-3.5 w-3.5 ${revalidatingId === invoice.id ? 'animate-spin' : ''}`}
+                                                                    />
+                                                                    {revalidatingId === invoice.id
+                                                                        ? 'Revalidando...'
+                                                                        : 'Revalidar'}
+                                                                </button>
+                                                            )}
+
+                                                        {/* BOTÓN: CORREGIR Y EMITIR NUEVA (ANULADA)
+                                                            La normativa SIN no permite editar una factura anulada.
+                                                            Esta acción crea una NUEVA factura desde cero con los datos corregidos. */}
+                                                        {invoice.status === 'voided' && (
+                                                            <button
+                                                                onClick={() => openCorrectModal(invoice)}
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white"
+                                                                title="Crear nueva factura con datos corregidos (nombre/NIT)"
+                                                            >
+                                                                <Edit3 className="h-3.5 w-3.5" />
+                                                                Corregir y Emitir Nueva
+                                                            </button>
+                                                        )}
+
                                                         {/* BOTÓN: ANULAR */}
                                                         {invoice.can_void && (
                                                             <button
@@ -529,6 +651,107 @@ export default function InvoicesIndex({
                 invoiceId={invoiceToAttach?.id ?? null}
                 invoiceNumber={invoiceToAttach?.number ?? null}
             />
+
+            {/* ===================================================================
+                MODAL: Corregir factura anulada → emitir factura nueva
+                Solo aparece cuando el usuario presiona "Corregir y Emitir Nueva"
+                en una factura cuyo status='voided'. Permite editar SOLO nombre y
+                NIT (la normativa SIN no permite reutilizar facturas anuladas).
+                =================================================================== */}
+            {correctingInvoice && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    onClick={closeCorrectModal}
+                >
+                    <div
+                        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-4 flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                                <Edit3 className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                    Corregir y Emitir Nueva Factura
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                    Factura anulada #{correctingInvoice.invoice_number} · Bs{' '}
+                                    {(correctingInvoice.total_amount ?? 0).toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                            <p className="font-semibold">Importante</p>
+                            <p className="mt-1">
+                                La normativa SIN no permite editar una factura anulada. Al guardar, se
+                                creará una <span className="font-bold">NUEVA factura</span> con los datos
+                                corregidos, nuevo CUF y nuevo número correlativo. La factura
+                                anulada se mantiene como está.
+                            </p>
+                        </div>
+
+                        {/* Alerta condicional: Bs > 1.000 + datos anónimos */}
+                        {(correctingInvoice.total_amount ?? 0) > 1000 && (
+                            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                                <p className="font-semibold">⚠ Monto superior a Bs 1.000</p>
+                                <p className="mt-1">
+                                    Esta factura supera Bs 1.000. La normativa exige nombre y NIT/CI
+                                    reales (no se permite "S/N" ni NIT "0").
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-gray-700">
+                                    Señor(es) — Nombre o Razón Social
+                                </label>
+                                <input
+                                    type="text"
+                                    value={correctName}
+                                    onChange={(e) => setCorrectName(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Nombre completo o Razón Social"
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-gray-700">
+                                    NIT / CI
+                                </label>
+                                <input
+                                    type="text"
+                                    value={correctNit}
+                                    onChange={(e) => setCorrectNit(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Ej: 1234567 o 9876543012"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeCorrectModal}
+                                disabled={correctSubmitting}
+                                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={submitCorrectReissue}
+                                disabled={correctSubmitting}
+                                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <RotateCw className={`h-4 w-4 ${correctSubmitting ? 'animate-spin' : ''}`} />
+                                {correctSubmitting ? 'Emitiendo...' : 'Emitir Nueva Factura'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

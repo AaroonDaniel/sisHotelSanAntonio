@@ -739,8 +739,8 @@ class InvoiceController extends Controller
         $hash        = hash('sha256', $xmlString);
 
         $invoice->update([
-            'cuf'       => $cuf,
-            'cufd_code' => $cufd->code,
+            'cuf'          => $cuf,
+            'control_code' => $cufd->code,  // El CUFD se guarda en la columna control_code (única que existe en la BD)
         ]);
 
         // --- CASO A: contingencia activa -> guardar offline directamente ---
@@ -953,5 +953,181 @@ class InvoiceController extends Controller
             return $miles . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
         }
         return 'numero grande';
+    }
+
+    // =========================================================
+    //  REVALIDACIÓN Y CORRECCIÓN DE FACTURAS (post-SIAT)
+    // =========================================================
+
+    /**
+     * Revalida una factura RECHAZADA u OFFLINE reenviándola al SIAT.
+     *
+     * Regla normativa (RND-102100000011): "En caso de rechazo del archivo XML,
+     * el archivo rechazado no quedará almacenado en la base de datos de la
+     * Administración Tributaria". Por lo tanto:
+     *  - Se reusa el MISMO invoice_number.
+     *  - Se recalcula CUF (nueva marca de tiempo + CUFD vigente).
+     *  - Se REENVÍA al SIAT.
+     *  - NO se tocan datos del cliente (esos están bien; lo que falló fue técnico).
+     *
+     * Estados permitidos:
+     *  - siat_status='rejected'  → corregir y reintentar
+     *  - siat_status='offline'   → reintento manual desde el listado
+     */
+    public function revalidate(Invoice $invoice)
+    {
+        // Solo permitido para rechazadas u offline; no anuladas ni ya aceptadas
+        if (!in_array($invoice->siat_status, ['rejected', 'offline'])) {
+            return back()->withErrors([
+                'error' => "Solo se pueden revalidar facturas rechazadas u offline. Estado actual: {$invoice->siat_status}.",
+            ]);
+        }
+
+        if ($invoice->status === 'voided') {
+            return back()->withErrors([
+                'error' => 'Una factura anulada no se revalida. Use "Corregir y Emitir Nueva".',
+            ]);
+        }
+
+        try {
+            // Limpiamos motivo de rechazo previo y reenviamos
+            $invoice->update([
+                'siat_status'           => 'pending',
+                'siat_rejection_reason' => null,
+            ]);
+
+            // emitToSiat() recalculará el CUF con timestamp actual y nuevo CUFD
+            $this->emitToSiat($invoice);
+
+            $invoice->refresh();
+
+            $msg = match ($invoice->siat_status) {
+                'accepted' => "Factura #{$invoice->invoice_number} revalidada y aceptada por SIAT.",
+                'offline'  => "Factura #{$invoice->invoice_number} guardada en modo offline (SIAT inaccesible).",
+                'rejected' => "El SIAT volvió a rechazar la factura: {$invoice->siat_rejection_reason}",
+                default    => "Factura #{$invoice->invoice_number} reenviada.",
+            };
+
+            return back()->with('success', $msg);
+        } catch (SiatOfflineException $e) {
+            Log::warning("Revalidación factura #{$invoice->invoice_number} cayó offline: " . $e->getMessage());
+            $invoice->update(['siat_status' => 'offline']);
+            return back()->with('warning', 'Revalidación en modo offline (SIAT inaccesible).');
+        } catch (\Throwable $e) {
+            Log::error("Error revalidando factura #{$invoice->id}: " . $e->getMessage());
+            return back()->withErrors(['error' => 'Error al revalidar: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Corrige una factura ANULADA emitiendo una NUEVA factura desde cero.
+     *
+     * Regla normativa: la factura anulada queda inhabilitada para siempre.
+     * Si los datos estaban mal (nombre/NIT), se debe emitir otra factura
+     * independiente con los datos correctos. La original NO se toca.
+     *
+     * Payload:
+     *   customer_name : string (corregido)
+     *   customer_nit  : string (corregido)
+     *
+     * Lo que hace:
+     *  1. Valida que la factura origen esté ANULADA.
+     *  2. Aplica regla SIN del Bs 1.000: si total > 1.000, no permite NIT='0'
+     *     ni nombre='S/N' (debe ser nominal).
+     *  3. Clona los datos (items, montos, método de pago, checkin_id) en una
+     *     factura NUEVA con nuevo invoice_number, nuevo timestamp y nuevo CUF.
+     *  4. Reemite al SIAT.
+     */
+    public function correctAndReissue(Request $request, Invoice $invoice)
+    {
+        // 1. Solo facturas anuladas pueden corregirse así
+        if ($invoice->status !== 'voided') {
+            return back()->withErrors([
+                'error' => 'Solo facturas anuladas pueden corregirse. Use "Revalidar" para rechazos.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'customer_name' => 'required|string|max:255',
+            'customer_nit'  => 'required|string|max:30',
+        ]);
+
+        $newName = strtoupper(trim($validated['customer_name']));
+        $newNit  = trim($validated['customer_nit']);
+
+        // 2. Regla del Bs 1.000 (RND-102100000011, art. sobre nominatividad)
+        $total = (float) $invoice->total_amount;
+        $isAnonymous = ($newNit === '0' || $newName === 'S/N' || $newName === 'SIN NOMBRE' || $newName === '');
+
+        if ($total > 1000 && $isAnonymous) {
+            return back()->withErrors([
+                'error' => "El monto total (Bs {$total}) supera Bs 1.000. La normativa exige nombre y NIT/CI reales del comprador (no se permite 'S/N' ni NIT '0').",
+            ]);
+        }
+
+        // 3. Crear factura NUEVA clonando los datos relevantes
+        try {
+            $newInvoice = DB::transaction(function () use ($invoice, $newName, $newNit) {
+
+                $activeEvent = SignificantEvent::where('status', SignificantEvent::STATUS_ACTIVE)
+                    ->latest('start_at')
+                    ->first();
+
+                $newInvoice = Invoice::create([
+                    'checkin_id'           => $invoice->checkin_id,
+                    'invoice_number'       => (Invoice::max('invoice_number') ?? 0) + 1,
+                    'control_code'         => '-',
+                    'payment_method'       => $invoice->payment_method,
+                    'payment_method_code'  => $invoice->payment_method_code,
+                    'customer_name'        => $newName,
+                    'customer_nit'         => $newNit,
+                    'issue_date'           => now()->format('Y-m-d'),
+                    'issue_time'           => now(),
+                    'user_id'              => request()->user()->id,
+                    'total_amount'         => $invoice->total_amount,
+                    'additional_discount'  => $invoice->additional_discount,
+                    'total_subject_to_vat' => $invoice->total_subject_to_vat,
+                    'status'               => 'valid',
+                    'siat_status'          => 'pending',
+                    'significant_event_id' => $activeEvent?->id,
+                ]);
+
+                // Clonamos cada detalle (líneas de hospedaje y servicios)
+                foreach ($invoice->details as $detail) {
+                    $newInvoice->details()->create([
+                        'description' => $detail->description,
+                        'quantity'    => $detail->quantity,
+                        'unit_price'  => $detail->unit_price,
+                        'cost'        => $detail->cost,
+                    ]);
+                }
+
+                return $newInvoice;
+            });
+        } catch (\Throwable $e) {
+            Log::error("Error clonando factura para corrección (origen #{$invoice->id}): " . $e->getMessage());
+            return back()->withErrors(['error' => 'Error al crear la factura corregida: ' . $e->getMessage()]);
+        }
+
+        // 4. Enviar al SIAT
+        try {
+            $this->emitToSiat($newInvoice);
+        } catch (SiatOfflineException $e) {
+            Log::warning("Factura corregida #{$newInvoice->invoice_number} cayó offline: " . $e->getMessage());
+            $newInvoice->update(['siat_status' => 'offline']);
+        } catch (\Throwable $e) {
+            Log::error("Error emitiendo factura corregida #{$newInvoice->id}: " . $e->getMessage());
+        }
+
+        $newInvoice->refresh();
+
+        $msg = match ($newInvoice->siat_status) {
+            'accepted' => "Nueva factura #{$newInvoice->invoice_number} generada y aceptada por SIAT (reemplaza a #{$invoice->invoice_number} anulada).",
+            'offline'  => "Nueva factura #{$newInvoice->invoice_number} guardada en modo offline.",
+            'rejected' => "Nueva factura #{$newInvoice->invoice_number} fue rechazada por SIAT: {$newInvoice->siat_rejection_reason}",
+            default    => "Nueva factura #{$newInvoice->invoice_number} emitida.",
+        };
+
+        return redirect()->route('invoices.index')->with('success', $msg);
     }
 }

@@ -35,11 +35,10 @@ class Invoice extends Model
         'total_subject_to_vat',
 
         // Códigos del documento (legacy + SIAT)
-        'control_code',          // siempre "-" en facturación electrónica
+        'control_code',          // CUFD usado al emitir (la BD solo tiene esta columna)
         'payment_method',        // EF / QR / TC / TR (acrónimo para caja)
         'payment_method_code',   // Catálogo SIAT: 1=EF, 7=QR, 2=TC, 6=TR
         'cuf',                   // Código Único de Facturación
-        'cufd_code',             // CUFD usado al emitir
         'siat_reception_code',   // Código de recepción devuelto por SIAT
 
         // Estados
