@@ -58,7 +58,7 @@ class ReservationController extends Controller
                 'guest_id' => 'required_if:is_new_guest,false',
                 'new_guest_name' => 'required_if:is_new_guest,true',
                 'guest_count' => 'required|integer|min:1',
-                'arrival_date' => 'required|date',
+                'arrival_date' => 'required|date|after_or_equal:today',
                 'duration_days' => 'required|integer|min:1',
 
                 'payment_type' => 'required|string',
@@ -78,6 +78,18 @@ class ReservationController extends Controller
                 'details.*.requested_bathroom' => 'nullable',
                 'details.*.price_id' => 'nullable',
                 'details.*.price' => 'nullable|numeric',
+            ], [
+                'arrival_date.after_or_equal' => 'No se aceptan fechas anteriores a la fecha de hoy.',
+                'arrival_date.required' => 'Debe indicar la fecha de llegada.',
+                'arrival_date.date' => 'La fecha de llegada no es válida.',
+                'duration_days.required' => 'Debe indicar la cantidad de noches.',
+                'duration_days.min' => 'La estadía debe ser de al menos 1 noche.',
+                'details.required' => 'Debe asignar al menos una habitación a la reserva.',
+                'details.min' => 'Debe asignar al menos una habitación a la reserva.',
+                'guest_id.required_if' => 'Debe seleccionar un huésped.',
+                'new_guest_name.required_if' => 'Debe ingresar el nombre del nuevo huésped.',
+                'guest_count.min' => 'Debe haber al menos 1 huésped.',
+                'payment_type.required' => 'Debe seleccionar un método de pago.',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ Falló validación:', $e->errors());
@@ -241,9 +253,16 @@ class ReservationController extends Controller
             });
 
             return redirect()->back()->with('success', 'Reserva registrada correctamente');
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Error de base de datos: NO mostramos el SQL al usuario, solo un mensaje interno.
+            \Illuminate\Support\Facades\Log::error("❌ Error SQL en reserva: " . $e->getMessage());
+            return redirect()->back()->withErrors([
+                'error' => 'Ocurrió un error interno al guardar la reserva. Intente nuevamente o contacte al administrador.'
+            ]);
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("❌ Error en BD: " . $e->getMessage());
-            return redirect()->back()->withErrors(['error' => 'Error al guardar: ' . $e->getMessage()]);
+            // Errores de negocio (ej. habitación ya reservada): estos SÍ son útiles para el usuario.
+            \Illuminate\Support\Facades\Log::error("❌ Error en reserva: " . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
     }
 

@@ -2,6 +2,7 @@ import { useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
+    AlertTriangle,
     Banknote,
     BedDouble,
     Building2,
@@ -197,7 +198,9 @@ export default function ReservationModal({
         'ambos' | 'private' | 'shared'
     >('ambos');
 
-    
+    // Toast de error (rojo) para datos mal llenados o errores internos.
+    const [errorToast, setErrorToast] = useState<string | null>(null);
+
 
     // Función Inteligente para Delegaciones Rápidas
     // Función Inteligente para Delegaciones Rápidas (Con Lógica 50/50)
@@ -670,8 +673,19 @@ export default function ReservationModal({
         const options = {
             preserveScroll: true,
             onSuccess: () => {
+                setErrorToast(null);
                 reset();
                 onClose();
+            },
+            onError: (errs: Record<string, string>) => {
+                // Muestra el primer error como toast rojo (datos mal llenados o error interno).
+                const primer = Object.values(errs)[0];
+                setErrorToast(
+                    typeof primer === 'string'
+                        ? primer
+                        : 'Revise los datos del formulario.',
+                );
+                setTimeout(() => setErrorToast(null), 6000);
             },
         };
 
@@ -706,6 +720,32 @@ export default function ReservationModal({
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm fade-in">
+            {errorToast && (
+                <div className="pointer-events-none fixed top-24 right-8 z-[100] flex flex-row items-start justify-end gap-4">
+                    <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-red-300 bg-red-50 p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-full bg-red-200 p-2 text-red-700 shadow-sm">
+                                <AlertTriangle className="h-5 w-5 animate-pulse" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-sm font-bold text-red-800">
+                                    Reserva Bloqueada
+                                </h3>
+                                <p className="mt-1 text-xs leading-tight font-semibold text-red-600">
+                                    {errorToast}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setErrorToast(null)}
+                                className="text-red-400 transition-colors hover:text-red-700"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="flex h-[80vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                     <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
@@ -792,6 +832,7 @@ export default function ReservationModal({
                                     <input
                                         type="date"
                                         value={data.arrival_date}
+                                        min={new Date().toISOString().split('T')[0]}
                                         onChange={(e) =>
                                             setData(
                                                 'arrival_date',
@@ -802,39 +843,72 @@ export default function ReservationModal({
                                     />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                    <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
                                         Noches
                                     </label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={data.duration_days}
-                                        onChange={(e) =>
-                                            setData(
-                                                'duration_days',
-                                                Number(e.target.value),
-                                            )
-                                        }
-                                        className="[&::-webkit-outer-spin-button] w-full rounded-xl border border-gray-400 py-1.5 text-center text-sm font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
-                                        Cantidad de Personas
-                                    </label>
-                                    <div className="relative">
-                                        <Users className="absolute top-2 left-3 h-4 w-4 text-blue-500" />
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={data.guest_count}
-                                            onChange={(e) =>
-                                                handleGuestCountChange(
-                                                    e.target.value,
+                                    <div className="flex items-center justify-center gap-3 rounded-xl border border-gray-400 py-1">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setData(
+                                                    'duration_days',
+                                                    Math.max(1, Number(data.duration_days) - 1),
                                                 )
                                             }
-                                            className="[&::-webkit-outer-spin-button] w-full rounded-xl border-blue-300 bg-blue-50 py-1.5 pl-9 text-lg font-black text-blue-900 focus:border-blue-500 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none"
-                                        />
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-lg font-bold text-gray-700 transition hover:bg-gray-200"
+                                        >
+                                            −
+                                        </button>
+                                        <span className="w-10 text-center text-xl font-black text-gray-800">
+                                            {data.duration_days}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setData(
+                                                    'duration_days',
+                                                    Number(data.duration_days) + 1,
+                                                )
+                                            }
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-green-100 text-lg font-bold text-green-700 transition hover:bg-green-200"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
+                                        Cantidad de Personas
+                                    </label>
+                                    <div className="flex items-center justify-center gap-4 rounded-xl border border-blue-300 bg-blue-50 py-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                handleGuestCountChange(
+                                                    String(Math.max(1, (Number(data.guest_count) || 1) - 1)),
+                                                )
+                                            }
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
+                                        >
+                                            −
+                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <Users className="h-5 w-5 text-blue-500" />
+                                            <span className="w-10 text-center text-2xl font-black text-blue-900">
+                                                {data.guest_count || 1}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                handleGuestCountChange(
+                                                    String((Number(data.guest_count) || 1) + 1),
+                                                )
+                                            }
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
+                                        >
+                                            +
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -879,19 +953,25 @@ export default function ReservationModal({
                                     <label className="mb-1 block text-[10px] font-bold text-gray-600 uppercase">
                                         Adelanto General (Bs)
                                     </label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.5"
-                                        value={data.advance_payment}
-                                        onChange={(e) =>
-                                            setData(
-                                                'advance_payment',
-                                                Number(e.target.value),
-                                            )
-                                        }
-                                        className="text-md [&::-webkit-outer-spin-button] w-full rounded-xl border border-gray-400 py-1.5 text-center font-black text-gray-700 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
+                                    <div className="relative">
+                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-bold text-gray-400">
+                                            Bs
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.5"
+                                            value={data.advance_payment}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'advance_payment',
+                                                    Number(e.target.value),
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            className="block w-full rounded-xl border-2 border-gray-300 bg-white py-2 pr-3 pl-10 text-center text-base font-black text-gray-900 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        />
+                                    </div>
                                 </div>
                             )}
 
