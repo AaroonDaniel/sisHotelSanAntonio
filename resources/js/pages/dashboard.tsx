@@ -178,7 +178,7 @@ export default function Dashboard({
             title: 'Reportes',
             theme: 'amber',
             items: [
-                { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports', anyPerm: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas'] },
+                { name: 'Parte Diario', icon: FileBarChart, url: '/reports', anyPerm: ['reportes.parte_diario'] },
                 {
                     name: 'Cierre de Caja',
                     icon: Wallet,

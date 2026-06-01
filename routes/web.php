@@ -169,14 +169,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/reservas/{id}/assign-rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assign');
 
     //Reportes
-    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-    Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf');
-    Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement');
-    //Cierre de caja
-    Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial');
-    Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf');
-    Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv');
-    Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily');
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index')->middleware('permission:reportes.parte_diario');
+    Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf')->middleware('permission:reportes.parte_diario');
+    Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily')->middleware('permission:reportes.parte_diario');
+    Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial')->middleware('permission:reportes.cierre_caja');
+    Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf')->middleware('permission:reportes.cierre_caja');
+    Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
+    Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement')->middleware('permission:reportes.financiero');
+
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
     Route::get('/cash-registers/{cashRegister}', [CashRegisterController::class, 'show'])->name('cash-registers.show');
