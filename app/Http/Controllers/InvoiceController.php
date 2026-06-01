@@ -420,10 +420,8 @@ class InvoiceController extends Controller
      */
     public function reverseVoid(Request $request, Invoice $invoice)
     {
-        if ($invoice->status !== 'voided' && $invoice->siat_status !== 'rejected') {
-            return back()->withErrors([
-                'error' => 'Solo facturas anuladas o rechazadas pueden corregirse.',
-            ]);
+        if ($invoice->status !== 'voided') {
+            return back()->withErrors(['error' => 'La factura no está anulada.']);
         }
 
         try {
@@ -1102,9 +1100,9 @@ class InvoiceController extends Controller
      */
     public function correctAndReissue(Request $request, Invoice $invoice)
     {
-        if ($invoice->status !== 'voided') {
+        if ($invoice->status !== 'voided' && $invoice->siat_status !== 'rejected') {
             return back()->withErrors([
-                'error' => 'Solo facturas anuladas pueden corregirse. Use "Revalidar" para rechazos.',
+                'error' => 'Solo facturas anuladas o rechazadas pueden corregirse.',
             ]);
         }
 

@@ -2670,6 +2670,12 @@ class CheckinController extends Controller
             }
         }
 
+        // 🛡️ BLINDAJE: la salida nunca puede ser anterior al ingreso (p. ej.
+        // fechas mal cargadas en pruebas). Evita noches/montos negativos: mínimo 1.
+        if ($fechaSalidaReal->copy()->startOfDay()->lt($ingreso->copy()->startOfDay())) {
+            return 1;
+        }
+
         // =========================================================
         // 🚀 CASO A: SI SE PRESIONÓ EL BOTÓN DE TOLERANCIA
         // =========================================================

@@ -1802,12 +1802,14 @@ function CheckoutConfirmationModal({
     // =========================================================================
 
     // 1. Creamos una variable 100% segura para los días
-    const diasEstadia = displayData?.duration_days || 1;
+    const diasEstadia = Math.max(1, displayData?.duration_days || 1);
 
-    const hospedajeFinal =
+    const hospedajeFinal = Math.max(
+        0,
         rebajaConfirmada !== null
             ? rebajaConfirmada
-            : displayData?.accommodation_total || 0;
+            : displayData?.accommodation_total || 0,
+    );
 
     // 2. Usamos la variable segura (sin signos de exclamación)
     const precioUnitarioFinal =
@@ -2252,7 +2254,10 @@ function CheckoutConfirmationModal({
                                                     <span className="font-bold">
                                                         Permanencia:
                                                     </span>{' '}
-                                                    {displayData.duration_days}{' '}
+                                                    {Math.max(
+                                                        0,
+                                                        displayData.duration_days,
+                                                    )}{' '}
                                                     noche(s)
                                                 </div>
                                                 <div></div>
