@@ -1,7 +1,7 @@
 import { useForm } from '@inertiajs/react';
 import { AlertCircle, Loader2, Receipt, Save, X } from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
-
+import { useCan } from '@/hooks/use-can';
 interface Expense {
     id: number;
     description: string;
@@ -18,7 +18,9 @@ export default function ExpenseModal({
     show,
     onClose,
     expenseToEdit,
+
 }: ExpenseModalProps) {
+    const { hasRole } = useCan();
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({
             description: '',

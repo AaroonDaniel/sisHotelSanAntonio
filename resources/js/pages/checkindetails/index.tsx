@@ -1,5 +1,6 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import {
     ArrowLeft,
     BedDouble,
@@ -65,6 +66,7 @@ export default function CheckinDetailsIndex({
     checkins,
     services,
 }: Props) {
+    const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
@@ -272,6 +274,7 @@ export default function CheckinDetailsIndex({
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
+{hasRole('administrador') && (
                                                         <button
                                                             onClick={() =>
                                                                 openDeleteModal(
@@ -283,6 +286,7 @@ export default function CheckinDetailsIndex({
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
+)}
                                                     </div>
                                                 </td>
                                             </tr>

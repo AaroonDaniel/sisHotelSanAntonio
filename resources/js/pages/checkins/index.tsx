@@ -1,5 +1,6 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import {
     ArrowLeft,
     BedDouble,
@@ -97,6 +98,7 @@ export default function CheckinsIndex({
     Schedules,
     RoomTypes
 }: Props) {
+    const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
@@ -356,8 +358,8 @@ export default function CheckinsIndex({
                             <Pencil className="h-4 w-4" />
                         </button>
 
-                        {/* Botón Borrar Registro (SOLO TITULAR) */}
-                        {isTitular && (
+                        {/* Botón Borrar Registro (SOLO ADMIN) */}
+                        {isTitular && hasRole('administrador') && (
                             <button
                                 onClick={() => openDeleteModal(checkin.id)}
                                 className="text-gray-400 transition hover:text-red-600"

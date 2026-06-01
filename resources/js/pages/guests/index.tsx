@@ -1,10 +1,10 @@
+import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import {
     ArrowLeft,
     Briefcase,
     CreditCard,
-    MapPin,
     Pencil,
     Plus,
     Search,
@@ -30,7 +30,7 @@ const calculateAge = (dateString?: string) => {
     const today = new Date();
     const birthDate = new Date(dateString);
     if (isNaN(birthDate.getTime())) return null;
-    
+
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
@@ -57,7 +57,7 @@ export interface Guest {
     issued_in: string;
     civil_status: string;
     birth_date?: string;
-    age?: number; 
+    age?: number;
     profession: string;
     origin?: string;
     phone?: string;
@@ -69,6 +69,7 @@ interface Props {
 }
 
 export default function GuestsIndex({ auth, Guests }: Props) {
+    const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
@@ -85,7 +86,8 @@ export default function GuestsIndex({ auth, Guests }: Props) {
         return (
             fullName.includes(term) ||
             idNumber.includes(term) ||
-            (guest.nationality && guest.nationality.toLowerCase().includes(term)) ||
+            (guest.nationality &&
+                guest.nationality.toLowerCase().includes(term)) ||
             (guest.profession && guest.profession.toLowerCase().includes(term))
         );
     });
@@ -110,7 +112,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Huéspedes" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                
                 {/* Botón Volver */}
                 <button
                     onClick={() => window.history.back()}
@@ -130,7 +131,6 @@ export default function GuestsIndex({ auth, Guests }: Props) {
 
                 <div className="py-12">
                     <div className="mx-auto w-fit overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        
                         {/* Header: Buscador y Botón */}
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 bg-white p-6 sm:flex-row sm:items-center">
                             <div className="relative w-full sm:w-72">
@@ -140,7 +140,9 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar por nombre, CI..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
@@ -161,10 +163,16 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                     <tr>
                                         <th className="px-6 py-4">Huésped</th>
                                         <th className="px-6 py-4">Documento</th>
-                                        <th className="px-6 py-4">Nacionalidad</th>
-                                        <th className="px-6 py-4">Edad / Civil</th>
+                                        <th className="px-6 py-4">
+                                            Nacionalidad
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Edad / Civil
+                                        </th>
                                         <th className="px-6 py-4">Telefono</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
@@ -172,7 +180,9 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                         filteredGuests.map((guest) => {
                                             //
                                             // Si guest.age existe, úsalo. Si no, calcúlalo desde birth_date.
-                                            const ageToDisplay = guest.age ?? calculateAge(guest.birth_date);
+                                            const ageToDisplay =
+                                                guest.age ??
+                                                calculateAge(guest.birth_date);
 
                                             return (
                                                 <tr
@@ -187,11 +197,14 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                             </div>
                                                             <div>
                                                                 <div className="font-bold text-gray-900">
-                                                                    {guest.full_name}
+                                                                    {
+                                                                        guest.full_name
+                                                                    }
                                                                 </div>
                                                                 <div className="flex items-center gap-1 text-xs text-gray-500">
                                                                     <Briefcase className="h-3 w-3" />
-                                                                    {guest.profession || 'Sin profesión'}
+                                                                    {guest.profession ||
+                                                                        'Sin profesión'}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -202,10 +215,14 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-1 font-mono font-medium text-gray-900">
                                                                 <CreditCard className="h-3 w-3 text-gray-400" />
-                                                                {guest.identification_number}
+                                                                {
+                                                                    guest.identification_number
+                                                                }
                                                             </div>
                                                             <span className="text-xs text-gray-500">
-                                                                Exp: {guest.issued_in || '-'}
+                                                                Exp:{' '}
+                                                                {guest.issued_in ||
+                                                                    '-'}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -213,18 +230,29 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                     {/* Columna: Origen y Nacionalidad */}
                                                     <td className="px-6 py-4">
                                                         <div className="flex flex-col">
-                                                            <span className="font-medium text-gray-900">{guest.nationality}</span>
+                                                            <span className="font-medium text-gray-900">
+                                                                {
+                                                                    guest.nationality
+                                                                }
+                                                            </span>
                                                         </div>
                                                     </td>
 
                                                     {/* Columna: Edad y Estado Civil */}
                                                     <td className="px-6 py-4">
                                                         <div className="text-sm text-gray-900">
-                                                            {ageToDisplay != null ? `${ageToDisplay} años` : '-'}
+                                                            {ageToDisplay !=
+                                                            null
+                                                                ? `${ageToDisplay} años`
+                                                                : '-'}
                                                         </div>
                                                         <div className="text-xs text-gray-500 capitalize">
-                                                            {guest.civil_status 
-                                                                ? (civilStatusTranslations[guest.civil_status] || guest.civil_status)
+                                                            {guest.civil_status
+                                                                ? civilStatusTranslations[
+                                                                      guest
+                                                                          .civil_status
+                                                                  ] ||
+                                                                  guest.civil_status
                                                                 : '-'}
                                                         </div>
                                                     </td>
@@ -240,19 +268,31 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                                     <td className="px-6 py-4 text-right">
                                                         <div className="flex justify-end gap-2">
                                                             <button
-                                                                onClick={() => openEditModal(guest)}
+                                                                onClick={() =>
+                                                                    openEditModal(
+                                                                        guest,
+                                                                    )
+                                                                }
                                                                 className="text-gray-400 transition hover:text-blue-600"
                                                                 title="Editar"
                                                             >
                                                                 <Pencil className="h-4 w-4" />
                                                             </button>
-                                                            <button
-                                                                onClick={() => openDeleteModal(guest.id)}
-                                                                className="text-gray-400 transition hover:text-red-600"
-                                                                title="Eliminar"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
+                                                            {hasRole(
+                                                                'administrador',
+                                                            ) && (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        openDeleteModal(
+                                                                            guest.id,
+                                                                        )
+                                                                    }
+                                                                    className="text-gray-400 transition hover:text-red-600"
+                                                                    title="Eliminar"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -260,8 +300,13 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay huéspedes registrados.'}
+                                            <td
+                                                colSpan={5}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay huéspedes registrados.'}
                                             </td>
                                         </tr>
                                     )}
@@ -280,7 +325,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                 <DeleteModal
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
-                    guestId={deletingGuestId} 
+                    guestId={deletingGuestId}
                 />
             </div>
         </AuthenticatedLayout>

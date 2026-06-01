@@ -1,6 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import axios from 'axios';
 import {
+    AlertTriangle,
     BedDouble,
     Car,
     CheckCircle2,
@@ -74,6 +76,9 @@ export default function DetailModal({
     const [quickFilter, setQuickFilter] = useState<'ALL' | 'DESAYUNO' | 'GARAJE'>('ALL');
     const [recentlyAdded, setRecentlyAdded] = useState<AddedItem[]>([]);
     const [editingDbId, setEditingDbId] = useState<number | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    const { hasRole } = useCan();
 
     useEffect(() => {
         if (show) {
@@ -176,18 +181,29 @@ export default function DetailModal({
     };
 
     const handleDeleteItem = (dbId: number) => {
-        if (!confirm('¿Eliminar este servicio de la cuenta?')) return;
+        // Abre el modal de confirmación en vez del confirm() del navegador.
+        setConfirmDeleteId(dbId);
+    };
 
+    const executeDelete = () => {
+        const dbId = confirmDeleteId;
+        if (dbId === null) return;
+
+        setDeleting(true);
         router.delete(`/checkin-details/${dbId}`, {
             preserveScroll: true,
             onSuccess: () => {
                 setRecentlyAdded((prev) =>
                     prev.filter((item) => item.dbId !== dbId),
                 );
-                router.reload({ only: ['checkins', 'Rooms'] }); // <-- Recarga tras eliminar
+                router.reload({ only: ['checkins', 'Rooms'] });
+                setConfirmDeleteId(null);
+                setDeleting(false);
             },
             onError: () => {
                 alert('No se pudo eliminar el servicio.');
+                setConfirmDeleteId(null);
+                setDeleting(false);
             },
         });
     };
@@ -295,6 +311,7 @@ export default function DetailModal({
                                                     <span className="font-mono text-sm font-bold text-green-600">
                                                         {(item.quantity * item.price).toFixed(2)}
                                                     </span>
+                                                    {hasRole('administrador') && (
                                                     <button 
                                                         type="button"
                                                         onClick={() => handleDeleteItem(item.dbId)}
@@ -303,6 +320,7 @@ export default function DetailModal({
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))
@@ -461,6 +479,51 @@ export default function DetailModal({
                     </div>
                 </form>
             </div>
+
+            {/* Modal de confirmación para eliminar un consumo (estilo DeleteModal) */}
+            {confirmDeleteId !== null && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
+                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-6 text-center">
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+                                <AlertTriangle className="h-8 w-8" />
+                            </div>
+                            <h3 className="mb-2 text-xl font-bold text-gray-800">
+                                ¿Eliminar este servicio de la cuenta?
+                            </h3>
+                            <p className="text-gray-500">
+                                Esta acción no se puede deshacer. El consumo se
+                                quitará permanentemente del folio del huésped.
+                            </p>
+
+                            <div className="mt-8 flex justify-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={executeDelete}
+                                    disabled={deleting}
+                                    className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95 disabled:opacity-50"
+                                >
+                                    {deleting ? (
+                                        'Eliminando...'
+                                    ) : (
+                                        <>
+                                            <Trash2 className="h-4 w-4" /> Sí,
+                                            eliminar
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

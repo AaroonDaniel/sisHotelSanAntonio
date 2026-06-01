@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import {
     ArrowLeft,
     Calendar,
@@ -112,6 +113,7 @@ export default function ReservationsIndex({
     Guests,
     Rooms,
 }: Props) {
+    const { hasRole } = useCan();
     const [view, setView] = useState<ViewMode>('table');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
@@ -384,6 +386,7 @@ export default function ReservationsIndex({
                                                             </button>
                                                         )}
 
+{hasRole('administrador') && (
                                                         <button
                                                             onClick={() => openDeleteModal(res.id)}
                                                             className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
@@ -391,6 +394,7 @@ export default function ReservationsIndex({
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
+)}
                                                     </div>
                                                 </td>
                                             </tr>

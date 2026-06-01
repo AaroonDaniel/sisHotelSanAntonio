@@ -1,5 +1,6 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import {
     ArrowLeft,
     Clock,
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export default function ExpensesIndex({ auth, gastos }: Props) {
+    const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados de Modales
@@ -171,6 +173,7 @@ export default function ExpensesIndex({ auth, gastos }: Props) {
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
+{hasRole('administrador') && (
                                                         <button
                                                             onClick={() => openDeleteModal(gasto.id)}
                                                             className="text-gray-400 transition hover:text-red-600"
@@ -178,6 +181,7 @@ export default function ExpensesIndex({ auth, gastos }: Props) {
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
+)}
                                                     </div>
                                                 </td>
                                             </tr>

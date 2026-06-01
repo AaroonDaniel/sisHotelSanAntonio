@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
+import { useCan } from '@/hooks/use-can';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -19,6 +20,7 @@ import DeleteModal from './deleteModal';
 import MaintenanceModal from './maintenanceModal';
 
 export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
+    const { hasRole } = useCan();
     // --- ESTADO PARA EL BUSCADOR ---
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -200,6 +202,7 @@ export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
                                                         )}
 
                                                         {/* Botón Editar */}
+{hasRole('administrador') && (
                                                         <button
                                                             onClick={() =>
                                                                 setModalData({
@@ -212,8 +215,10 @@ export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
+)}
 
                                                         {/* Botón Eliminar */}
+{hasRole('administrador') && (
                                                         <button
                                                             onClick={() =>
                                                                 setDeleteId(
@@ -225,6 +230,7 @@ export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
+)}
                                                     </div>
                                                 </td>
                                             </tr>
