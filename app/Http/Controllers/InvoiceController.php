@@ -420,8 +420,10 @@ class InvoiceController extends Controller
      */
     public function reverseVoid(Request $request, Invoice $invoice)
     {
-        if ($invoice->status !== 'voided') {
-            return back()->withErrors(['error' => 'La factura no está anulada.']);
+        if ($invoice->status !== 'voided' && $invoice->siat_status !== 'rejected') {
+            return back()->withErrors([
+                'error' => 'Solo facturas anuladas o rechazadas pueden corregirse.',
+            ]);
         }
 
         try {
@@ -1175,6 +1177,15 @@ class InvoiceController extends Controller
         }
 
         $newInvoice->refresh();
+
+        // Si la factura de origen estaba RECHAZADA (no anulada), la dejamos
+        // marcada como anulada para que quede "muerta" y no se reutilice.
+        if ($invoice->status !== 'voided') {
+            $invoice->update([
+                'status'     => 'voided',
+                'voided_at'  => now(),
+            ]);
+        }
 
         $msg = match ($newInvoice->siat_status) {
             'accepted' => "Nueva factura #{$newInvoice->invoice_number} generada y aceptada por SIAT (reemplaza a #{$invoice->invoice_number} anulada).",

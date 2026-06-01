@@ -3263,15 +3263,36 @@ export default function CheckinModal({
                                                 );
                                             })}
 
-                                        {/* 2. BOTÓN DESAYUNO (Estático: Siempre activo visualmente) */}
-                                        <button
-                                            type="button"
-                                            disabled={true} // No se puede quitar clickeando
-                                            className="flex cursor-default items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
-                                        >
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            DESAYUNO
-                                        </button>
+                                       {/* 2. DESAYUNO: incluido solo si la habitación es PRIVADA. */}
+                                        {(() => {
+                                            const rawBath =
+                                                (currentRoom as any)?.price
+                                                    ?.bathroom_type ||
+                                                (currentRoom as any)?.room_type
+                                                    ?.bathroom_type;
+                                            const esPrivada =
+                                                String(rawBath || '').toUpperCase() ===
+                                                'PRIVATE';
+
+                                            return esPrivada ? (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    className="flex cursor-default items-center gap-1 rounded-full border border-green-500 bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
+                                                >
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    DESAYUNO INCLUIDO
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    className="flex cursor-default items-center gap-1 rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-xs font-bold text-gray-500"
+                                                >
+                                                    SIN DESAYUNO (HAB. COMPARTIDA)
+                                                </button>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                                 <div className="mt-2 text-center text-base font-medium text-gray-800"></div>

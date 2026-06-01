@@ -427,29 +427,34 @@ export default function InvoicesIndex({
                                                         isAnulada ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
                                                                 <Ban className="h-3 w-3" />
-                                                                Anulada
+                                                                905 Anulada
                                                             </span>
                                                         ) : isOffline ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
                                                                 <AlertTriangle className="h-3 w-3" />
-                                                                Offline
-                                                                (Contingencia)
+                                                                901 Pendiente (Offline)
                                                             </span>
                                                         ) : invoice.siat_status ===
                                                           'rejected' ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
                                                                 <AlertTriangle className="h-3 w-3" />
-                                                                Rechazada
+                                                                902 Rechazada
+                                                            </span>
+                                                        ) : invoice.siat_status ===
+                                                          'observed' ? (
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-700">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                904 Observada
                                                             </span>
                                                         ) : invoice.siat_status ===
                                                           'accepted' ? (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
                                                                 <CheckCircle2 className="h-3 w-3" />
-                                                                Validada
+                                                                908 Validada
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
-                                                                Pendiente
+                                                                901 Pendiente
                                                             </span>
                                                         )
                                                     ) : (
@@ -528,8 +533,8 @@ export default function InvoicesIndex({
                                                         )}
 
                                                         {/* BOTÓN: REVALIDAR (rechazada u offline) */}
-                                                        {(invoice.siat_status === 'rejected' || invoice.siat_status === 'offline') &&
-                                                            invoice.status !== 'voided' && (
+                                                        
+                                                        {(invoice.status === 'voided' || invoice.siat_status === 'rejected') && (
                                                                 <button
                                                                     onClick={() => handleRevalidate(invoice)}
                                                                     disabled={revalidatingId === invoice.id}
