@@ -630,10 +630,17 @@ class InvoiceController extends Controller
         $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
         $pdf->Ln(2);
 
+        $esFactura = !empty($invoice->cuf);
         $pdf->SetFont('Arial', 'B', 8);
-        $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
-        $pdf->SetFont('Arial', '', 6);
-        $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+        if ($esFactura) {
+            $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 6);
+            $pdf->Cell(0, 3, '(Con Derecho a Credito Fiscal)', 0, 1, 'C');
+        } else {
+            $pdf->Cell(0, 4, 'RECIBO', 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 6);
+            $pdf->Cell(0, 3, 'Documento sin valor fiscal', 0, 1, 'C');
+        }
 
         if ($isOffline) {
             $pdf->Ln(1);
@@ -680,7 +687,11 @@ class InvoiceController extends Controller
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
         $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $invoice->customer_nit ?? optional($checkin->guest)->identification_number ?? '0', 0, 1);
+        $nitCli = $invoice->customer_nit;
+        if (empty($nitCli) || $nitCli === '0') {
+            $nitCli = optional($checkin->guest)->identification_number ?: '0';
+        }
+        $pdf->Cell(0, 4, $nitCli, 0, 1);
 
         $pdf->SetFont('Arial', 'B', 7);
         $pdf->Cell(20, 4, 'Ingreso:', 0, 0);
