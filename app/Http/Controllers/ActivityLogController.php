@@ -30,6 +30,8 @@ class ActivityLogController extends Controller
                     // 👇 Aquí está la corrección: usamos full_name o nickname
                     ? ['id' => $activity->causer->id, 'name' => $activity->causer->full_name ?? $activity->causer->nickname ?? 'Usuario']
                     : null,
+                'ip'           => $activity->properties['ip'] ?? null,
+                'role'         => $activity->properties['role'] ?? null,
                 'properties'   => [
                     'old'        => $activity->properties['old'] ?? null,
                     'attributes' => $activity->properties['attributes'] ?? null,

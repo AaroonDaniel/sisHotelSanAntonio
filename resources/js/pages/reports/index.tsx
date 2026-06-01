@@ -305,8 +305,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                         <p className="text-xs text-emerald-600 font-medium mt-1">{selectedIds.length} Huéspedes seleccionados</p>
                                     </div>
 
-                                    {(auth as any).active_register && (
-                                        <div className="flex items-center gap-2 xl:ml-auto">
+                                    <div className="flex items-center gap-2 xl:ml-auto">
                                             <button
                                                 onClick={handleGenerateManual}
                                                 disabled={selectedIds.length === 0}
@@ -328,7 +327,6 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                                 <Zap className="h-4 w-4" /> Todo Automático
                                             </button>
                                         </div>
-                                    )}
                                 </div>
 
                                 <div className="flex-1 bg-white pb-4">

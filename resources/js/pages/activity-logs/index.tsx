@@ -43,6 +43,8 @@ interface ActivityLog {
     subject_id: number | null;
     event: ActivityEvent | null;
     causer: ActivityCauser | null;
+    ip: string | null;
+    role: string | null;
     properties: ActivityProperties;
     created_at: string | null;
 }
@@ -164,10 +166,16 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                     Usuario
                                 </TableHead>
                                 <TableHead className="text-xs font-bold text-gray-600 uppercase">
+                                    Rol
+                                </TableHead>
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Acción
                                 </TableHead>
                                 <TableHead className="text-xs font-bold text-gray-600 uppercase">
                                     Módulo
+                                </TableHead>
+                                <TableHead className="text-xs font-bold text-gray-600 uppercase">
+                                    IP
                                 </TableHead>
                                 <TableHead className="text-right text-xs font-bold text-gray-600 uppercase">
                                     Detalles
@@ -179,7 +187,7 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                             {logs.data.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={5}
+                                        colSpan={7}
                                         className="py-12 text-center text-sm text-gray-500"
                                     >
                                         <FileClock className="mx-auto mb-2 h-8 w-8 text-gray-300" />
@@ -205,6 +213,20 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                             </span>
                                         )}
                                     </TableCell>
+                                    <TableCell className="text-sm text-gray-700">
+                                        {log.role ? (
+                                            <Badge
+                                                variant="outline"
+                                                className="border-gray-200 bg-gray-100 text-gray-700 capitalize"
+                                            >
+                                                {log.role}
+                                            </Badge>
+                                        ) : (
+                                            <span className="text-gray-400">
+                                                —
+                                            </span>
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         <Badge
                                             variant="outline"
@@ -225,6 +247,9 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
                                                 #{log.subject_id}
                                             </span>
                                         )}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-sm text-gray-600">
+                                        {log.ip ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <button

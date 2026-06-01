@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Auth;
+use Spatie\Activitylog\Models\Activity;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +21,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // 🕵️ AUDITORÍA: cada registro de actividad guarda también la IP
+        // desde donde se hizo el cambio y el ROL del usuario responsable.
+        Activity::saving(function (Activity $activity) {
+            $props = collect($activity->properties ?? []);
+
+            // IP de origen
+            $ip = request()?->ip();
+
+            // Rol del usuario que hizo el cambio
+            $rol = null;
+            $user = Auth::user();
+            if ($user && method_exists($user, 'getRoleNames')) {
+                $rol = $user->getRoleNames()->first();
+            }
+
+            $activity->properties = $props->merge([
+                'ip'   => $ip,
+                'role' => $rol,
+            ]);
+        });
     }
 }
