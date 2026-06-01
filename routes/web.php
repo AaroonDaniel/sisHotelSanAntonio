@@ -42,6 +42,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/user/profile', [UserProfileController::class, 'update'])->name('user.profile.update');
     Route::patch('/user/password', [UserProfileController::class, 'updatePassword'])->name('user.profile.password');
 
+
+    Route::get('/cambiar-clave-obligatorio', [\App\Http\Controllers\Auth\ForcePasswordChangeController::class, 'show'])->name('password.force');
+    Route::put('/cambiar-clave-obligatorio', [\App\Http\Controllers\Auth\ForcePasswordChangeController::class, 'update'])->name('password.force.update');
+
     // Bloques
     Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
     Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');

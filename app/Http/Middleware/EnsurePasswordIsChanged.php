@@ -17,7 +17,7 @@ class EnsurePasswordIsChanged
             $emitida = $user->password_changed_at ?? $user->created_at;
             $fechaLimite = $emitida->copy()->addDays(2);
 
-            // Pasaron los 2 días sin cambiarla -> desactivar y cerrar sesión.
+            // Pasaron 2 días sin cambiarla -> desactivar y cerrar sesión.
             if (now()->greaterThanOrEqualTo($fechaLimite)) {
                 $user->update(['is_active' => false]);
                 \Illuminate\Support\Facades\Cache::forget('active_users');
@@ -31,15 +31,12 @@ class EnsurePasswordIsChanged
                 );
             }
 
-            // Dentro del plazo: solo notifica (no bloquea).
-            $enPantallaPassword = $request->routeIs('user-password.edit', 'user-password.update')
-                || $request->is('settings/password');
+            // Dentro del plazo: redirección OBLIGATORIA a la pantalla intermedia.
+            $permitida = $request->routeIs('password.force', 'password.force.update', 'logout')
+                || $request->is('logout');
 
-            if (! $enPantallaPassword) {
-                $request->session()->flash(
-                    'warning',
-                    'Debe cambiar su contraseña antes del ' . $fechaLimite->format('d/m/Y H:i') . ' o su cuenta se desactivará.'
-                );
+            if (! $permitida) {
+                return redirect()->route('password.force');
             }
         }
 

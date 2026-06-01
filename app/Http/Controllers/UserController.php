@@ -38,11 +38,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
-            'is_active' => true,
-            'must_change_password' => true,
-            'password_changed_at' => now(),
-            'role' => 'required|string|exists:roles,name', // Validamos que el rol exista
+            'role' => 'required|string|exists:roles,name',
         ]);
 
         // CORRECCIÓN: Asignamos el resultado a la variable $user
@@ -52,9 +48,10 @@ class UserController extends Controller
             'phone' => $request->phone,
             'address' => $request->address,
             'shift' => $request->shift,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
             'is_active' => true,
-            'must_change_password' => true, // Forzamos el cambio de contraseña en el primer login
+            'must_change_password' => true,
+            'password_changed_at' => now(),
         ]);
 
         // Ahora sí podemos asignarle el rol

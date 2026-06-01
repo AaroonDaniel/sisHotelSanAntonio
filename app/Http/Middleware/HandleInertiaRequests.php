@@ -52,13 +52,13 @@ class HandleInertiaRequests extends Middleware
                     'roles' => Cache::remember(
                         "user_roles_{$user->id}",
                         300,
-                        fn () => $user->getRoleNames()->toArray()
+                        fn() => $user->getRoleNames()->toArray()
                     ),
                     // Cacheamos permisos 5 min por usuario
                     'permissions' => Cache::remember(
                         "user_permissions_{$user->id}",
                         300,
-                        fn () => $user->getAllPermissions()->pluck('name')->toArray()
+                        fn() => $user->getAllPermissions()->pluck('name')->toArray()
                     ),
                 ]) : null,
 
@@ -74,9 +74,9 @@ class HandleInertiaRequests extends Middleware
             ],
 
             'flash' => [
-                'success'            => fn () => $request->session()->get('success'),
-                'error'              => fn () => $request->session()->get('error'),
-                'auto_open_checkins' => fn () => $request->session()->get('auto_open_checkins'),
+                'success'            => fn() => $request->session()->get('success'),
+                'error'              => fn() => $request->session()->get('error'),
+                'warning'            => fn() => $request->session()->get('warning'),
             ],
 
             'sidebarOpen' => ! $request->hasCookie('sidebar_state')
