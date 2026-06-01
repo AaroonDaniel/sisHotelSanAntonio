@@ -38,7 +38,10 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()],
+            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
+            'is_active' => true,
+            'must_change_password' => true,
+            'password_changed_at' => now(),
             'role' => 'required|string|exists:roles,name', // Validamos que el rol exista
         ]);
 
@@ -49,7 +52,7 @@ class UserController extends Controller
             'phone' => $request->phone,
             'address' => $request->address,
             'shift' => $request->shift,
-            'password' => Hash::make($request->password), 
+            'password' => Hash::make($request->password),
             'is_active' => true,
             'must_change_password' => true, // Forzamos el cambio de contraseña en el primer login
         ]);
@@ -58,7 +61,7 @@ class UserController extends Controller
         if ($request->role) {
             $user->assignRole($request->role);
         }
-        
+
         return redirect()->back()->with('success', 'Usuario creado correctamente.');
     }
 
@@ -72,7 +75,7 @@ class UserController extends Controller
             'full_name' => 'required|string|max:255',
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
-            'shift' => 'required|string|max:50', 
+            'shift' => 'required|string|max:50',
             'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()],
             'role' => 'required|string|exists:roles,name', // Validamos el rol
         ]);
@@ -89,7 +92,8 @@ class UserController extends Controller
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
-            $data['must_change_password'] = true; // Forzamos el cambio de contraseña en el próximo login
+            $data['must_change_password'] = true;
+            $data['password_changed_at'] = now();
         }
 
         $user->update($data);
@@ -97,7 +101,7 @@ class UserController extends Controller
         // CORRECCIÓN: Sincronizamos el nuevo rol del usuario
         if ($request->role) {
             // syncRoles borra el rol viejo y le pone el nuevo
-            $user->syncRoles([$request->role]); 
+            $user->syncRoles([$request->role]);
         }
 
         return redirect()->back()->with('success', 'Usuario actualizado correctamente.');

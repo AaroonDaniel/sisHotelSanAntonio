@@ -33,6 +33,8 @@ class User extends Authenticatable
         'shift',
         'password',
         'is_active',
+        'must_change_password',
+        'password_changed_at',
     ];
 
     /**
@@ -57,14 +59,14 @@ class User extends Authenticatable
     protected function name(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->full_name ?? $this->nickname ?? 'Usuario',
+            get: fn() => $this->full_name ?? $this->nickname ?? 'Usuario',
         );
     }
 
     protected function email(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->nickname, // Retornamos el nickname donde pida email
+            get: fn() => $this->nickname, // Retornamos el nickname donde pida email
         );
     }
 
@@ -74,14 +76,18 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
+            'password_changed_at' => 'datetime',
         ];
     }
 
-    public function reservations(): HasMany {
+    public function reservations(): HasMany
+    {
         return $this->hasMany(Reservation::class);
     }
 
-    public function invoices(): HasMany {
+    public function invoices(): HasMany
+    {
         return $this->hasMany(Invoice::class);
     }
 
@@ -112,9 +118,3 @@ class User extends Authenticatable
             ->useLogName('usuarios');
     }
 }
-
-
-
-
-
-

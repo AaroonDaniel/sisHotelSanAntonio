@@ -14,21 +14,32 @@ class EnsurePasswordIsChanged
         $user = Auth::user();
 
         if ($user && $user->must_change_password) {
-            $rutasPermitidas = [
-                'user-password.edit',
-                'user-password.update',
-                'logout',
-            ];
+            $emitida = $user->password_changed_at ?? $user->created_at;
+            $fechaLimite = $emitida->copy()->addDays(2);
 
-            $esRutaPermitida = $request->routeIs($rutasPermitidas)
-                || $request->is('settings/password')
-                || $request->is('logout')
-                || $request->is('two-factor*');
+            // Pasaron los 2 días sin cambiarla -> desactivar y cerrar sesión.
+            if (now()->greaterThanOrEqualTo($fechaLimite)) {
+                $user->update(['is_active' => false]);
+                \Illuminate\Support\Facades\Cache::forget('active_users');
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
 
-            if (! $esRutaPermitida) {
-                return redirect()
-                    ->route('user-password.edit')
-                    ->with('warning', 'Por seguridad, debe cambiar su contraseña antes de continuar.');
+                return redirect()->route('login')->with(
+                    'status',
+                    'Su cuenta fue desactivada por no cambiar la contraseña en 2 días. Contacte al administrador.'
+                );
+            }
+
+            // Dentro del plazo: solo notifica (no bloquea).
+            $enPantallaPassword = $request->routeIs('user-password.edit', 'user-password.update')
+                || $request->is('settings/password');
+
+            if (! $enPantallaPassword) {
+                $request->session()->flash(
+                    'warning',
+                    'Debe cambiar su contraseña antes del ' . $fechaLimite->format('d/m/Y H:i') . ' o su cuenta se desactivará.'
+                );
             }
         }
 
