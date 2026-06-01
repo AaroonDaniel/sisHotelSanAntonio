@@ -1,4 +1,10 @@
 import ToleranceModal from '@/components/ToleranceModal';
+import {
+    NACIONALIDADES,
+    DEPARTAMENTOS_BOLIVIA,
+    esExtranjero,
+    paisDe,
+} from '@/lib/catalogos';
 import { router, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -279,6 +285,10 @@ export default function CheckinModal({
     // Estado de para la Asig corporativa
     const [isCustomFrequency, setIsCustomFrequency] = useState(false);
 
+    // Autocompletado de nacionalidad (texto visible + mostrar lista).
+    const [natInput, setNatInput] = useState('');
+    const [showNat, setShowNat] = useState(false);
+
     // Estado para manejar la alerta de huesped ocupado
     const [guestConflictError, setGuestConflictError] = useState<string | null>(
         null,
@@ -536,6 +546,7 @@ export default function CheckinModal({
             clearErrors(); // Limpiamos errores previos
             setIsToleranceApplied(false);
             // 1. Calculamos la HORA ACTUAL EXACTA
+
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             const currentDateTimeISO = now.toISOString().slice(0, 16);
@@ -848,9 +859,11 @@ export default function CheckinModal({
 
         const newCalculatedPrice = computeAdjustedPrice(data.room_id, totalP);
 
-        // BUGFIX: el ajuste por ocupación es AUTOMÁTICO. Ya no depende de
-        // `auto_adjust_price`. El recepcionista ve subir/bajar el precio en
-        // vivo al agregar o quitar un huésped.
+        // Solo ajustamos el precio por ocupación cuando el recepcionista
+        // ACTIVA "Ajuste de precio". Sin marcarlo, no se toca automáticamente
+        // (evita la confusión de ver 220 -> 120 -> 100 al asignar).
+        if (!data.auto_adjust_price) return;
+
         if (
             newCalculatedPrice > 0 &&
             Number(data.agreed_price) !== newCalculatedPrice
@@ -861,6 +874,7 @@ export default function CheckinModal({
         data.companions?.length,
         data.room_id,
         data.type,
+        data.auto_adjust_price,
         show,
     ]);
 
@@ -884,12 +898,12 @@ export default function CheckinModal({
         // Solo si el modal se está mostrando (show = true)
         // Y NO estamos editando una asignación existente (es nueva)
         if (show && !checkinToEdit) {
-            const now = new Date();
-            // Ajuste para obtener la hora local correcta en formato ISO (YYYY-MM-DDTHH:mm)
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            const currentDateTime = now.toISOString().slice(0, 16);
+            const currentDateTime = new Date()
+                .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+                .replace(' ', 'T')
+                .slice(0, 16);
 
-            // Actualizamos el formulario con la hora exacta de AHORA
+            // Actualizamos el formulario con la hora exacta de AHORA (Bolivia)
             setData('check_in_date', currentDateTime);
         }
     }, [show, checkinToEdit]); // Se dispara cada vez que 'show' cambia
@@ -946,6 +960,12 @@ export default function CheckinModal({
             setDisplayAge('');
         }
     }, [currentPerson.birth_date, currentIndex]);
+
+    // Sincroniza el texto visible de nacionalidad al cambiar de persona.
+    useEffect(() => {
+        setNatInput(currentPerson.nationality || '');
+        setShowNat(false);
+    }, [currentIndex, currentPerson.nationality]);
 
     // Auto Focus enfocar a la caja de texto del nombre completo
     // =========================================================
@@ -1266,6 +1286,21 @@ export default function CheckinModal({
             }
         }
         // =========================================================
+
+        // =========================================================
+        // 🛑 CANDADO: EL TITULAR DEBE SER MAYOR DE EDAD (18+)
+        // Un menor no puede ser el responsable de la asignación.
+        // (Los acompañantes sí pueden ser menores, junto a un adulto.)
+        // =========================================================
+        if (data.birth_date) {
+            const edadTitular = Number(calculateAge(data.birth_date));
+            if (!isNaN(edadTitular) && edadTitular < 18) {
+                setGuestConflictError(
+                    'El titular debe ser mayor de edad (18 años o más). Un menor no puede ser el responsable de la habitación. Registre al adulto como titular y al menor como acompañante.',
+                );
+                return; // 🛑 No deja procesar la asignación.
+            }
+        }
 
         console.log('-> ✅ CANDADOS SUPERADOS. Ejecutando executeSubmit()...');
         executeSubmit();
@@ -1817,136 +1852,86 @@ export default function CheckinModal({
                                     />
                                 </div>
                                 <div
-                                    className="relative"
+                                    className="relative order-2"
                                     ref={issuedInDropdownRef}
                                 >
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Expedido
                                     </label>
-                                    <div className="relative">
+                                    {esExtranjero(currentPerson.nationality) ? (
                                         <input
-                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
-                                            value={
-                                                currentPerson.issued_in || ''
-                                            }
-                                            disabled={isReadOnly}
-                                            autoComplete="off"
-                                            onChange={(e) =>
-                                                handleIssuedInInput(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            onFocus={() => {
-                                                // Mostramos sugerencias si ya hay algo escrito
-                                                if (
-                                                    (
-                                                        currentPerson.issued_in ||
-                                                        ''
-                                                    ).length > 0
-                                                ) {
-                                                    setIsIssuedInDropdownOpen(
-                                                        true,
-                                                    );
-                                                    searchIssuedIn(
-                                                        currentPerson.issued_in as string,
-                                                    );
-                                                }
-                                            }}
-                                            onBlur={() => {
-                                                setTimeout(() => {
-                                                    setIsIssuedInDropdownOpen(
-                                                        false,
-                                                    );
-                                                }, 200); // Retraso vital para poder hacer clic en la lista
-                                            }}
+                                            className="w-full cursor-not-allowed rounded-lg border border-gray-400 bg-gray-100 px-3 py-2 text-sm text-gray-500 uppercase"
+                                            value={currentPerson.issued_in || ''}
+                                            disabled
+                                            readOnly
+                                            title="Pasaporte: expedido en su pais"
                                         />
-
-                                        {/* Dropdown de sugerencias */}
-                                        {isIssuedInDropdownOpen &&
-                                            issuedInSuggestions.length > 0 && (
-                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                    {issuedInSuggestions.map(
-                                                        (item, index) => (
-                                                            <div
-                                                                key={index}
-                                                                onClick={() => {
-                                                                    handleFieldChange(
-                                                                        'issued_in',
-                                                                        item,
-                                                                    );
-                                                                    setIsIssuedInDropdownOpen(
-                                                                        false,
-                                                                    );
-                                                                }}
-                                                                className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
-                                                            >
-                                                                {item}
-                                                            </div>
-                                                        ),
-                                                    )}
-                                                </div>
-                                            )}
-                                    </div>
+                                    ) : (
+                                        <select
+                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                            value={currentPerson.issued_in || ''}
+                                            disabled={isReadOnly}
+                                            onChange={(e) =>
+                                                handleFieldChange('issued_in', e.target.value)
+                                            }
+                                        >
+                                            <option value="">Seleccione...</option>
+                                            {DEPARTAMENTOS_BOLIVIA.map((d) => (
+                                                <option key={d} value={d}>
+                                                    {d}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
-                                <div className="relative" ref={nationalityRef}>
+                                <div className="relative order-1" ref={nationalityRef}>
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Nacionalidad
                                     </label>
                                     <input
                                         className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase"
-                                        value={currentPerson.nationality}
+                                        value={natInput}
                                         disabled={isReadOnly}
-                                        onChange={(e) =>
-                                            updateNationalityAndPhone(
-                                                e.target.value,
-                                            )
-                                        }
+                                        placeholder="Escriba un pais..."
+                                        autoComplete="off"
                                         onFocus={() => {
-                                            // 1. Si el texto dice exactamente BOLIVIANA, lo vaciamos al hacer clic
-                                            if (
-                                                currentPerson.nationality ===
-                                                'BOLIVIANA'
-                                            ) {
-                                                updateNationalityAndPhone('');
-                                            }
-                                            // Mostramos las sugerencias de países
-                                            setShowCountrySuggestions(true);
+                                            setNatInput('');
+                                            setShowNat(true);
                                         }}
-                                        onBlur={(e) => {
-                                            // 2. Usamos un pequeño retraso de 200ms. Esto es MUY IMPORTANTE
-                                            // para que si el usuario da clic en la lista de sugerencias, no se cierre antes de tiempo.
+                                        onChange={(e) => {
+                                            setNatInput(e.target.value.toUpperCase());
+                                            setShowNat(true);
+                                        }}
+                                        onBlur={() => {
                                             setTimeout(() => {
-                                                // Si el usuario se fue de la caja y la dejó vacía, restauramos BOLIVIANA
-                                                if (
-                                                    !e.target.value ||
-                                                    e.target.value.trim() === ''
-                                                ) {
-                                                    updateNationalityAndPhone(
-                                                        'BOLIVIANA',
-                                                    );
-                                                }
-                                                setShowCountrySuggestions(
-                                                    false,
-                                                );
+                                                setShowNat(false);
+                                                setNatInput(currentPerson.nationality || '');
                                             }, 200);
                                         }}
                                     />
-                                    {showCountrySuggestions && (
-                                        <div className="absolute z-10 mt-1 max-h-32 w-full overflow-y-auto rounded-md border bg-white shadow-lg">
-                                            {filteredCountries.map((c) => (
+                                    {showNat && (
+                                        <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg">
+                                            {NACIONALIDADES.filter((n) => {
+                                                const q = natInput.trim();
+                                                if (!q) return true;
+                                                return n.includes(q) || paisDe(n).includes(q);
+                                            }).map((n) => (
                                                 <div
-                                                    key={c}
-                                                    onClick={() => {
-                                                        updateNationalityAndPhone(
-                                                            c,
-                                                        );
-                                                        setShowCountrySuggestions(
-                                                            false,
-                                                        );
+                                                    key={n}
+                                                    onMouseDown={() => {
+                                                        handleFieldChange('nationality', n);
+                                                        if (esExtranjero(n)) {
+                                                            handleFieldChange('issued_in', paisDe(n));
+                                                        } else {
+                                                            handleFieldChange('issued_in', '');
+                                                        }
+                                                        setNatInput(n);
+                                                        setShowNat(false);
                                                     }}
-                                                    className="cursor-pointer px-2 py-1 text-xs font-medium text-gray-900 hover:bg-gray-100" // Added text-gray-900 and font-medium
+                                                    className="flex cursor-pointer justify-between px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50"
                                                 >
-                                                    {c}
+                                                    <span>{n}</span>
+                                                    <span className="text-gray-400">{paisDe(n)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1992,6 +1977,7 @@ export default function CheckinModal({
                                             type="date"
                                             className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
                                             value={currentPerson.birth_date}
+                                            max={new Date().toISOString().split('T')[0]}
                                             disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(

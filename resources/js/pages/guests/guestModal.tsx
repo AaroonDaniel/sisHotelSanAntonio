@@ -11,6 +11,12 @@ import {
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
+import {
+    NACIONALIDADES,
+    DEPARTAMENTOS_BOLIVIA,
+    PROFESIONES,
+    esExtranjero,
+} from '@/lib/catalogos';
 
 // --- Lista para el autocompletado ---
 const countries = [
@@ -340,36 +346,36 @@ export default function GuestModal({
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Flag className="h-4 w-4 text-gray-400" />
                                 </div>
-                                <input
-                                    type="text"
+                                <select
                                     value={data.nationality}
-                                    onChange={handleNationalityChange}
-                                    onFocus={() =>
-                                        data.nationality &&
-                                        setShowSuggestions(true)
-                                    }
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setData('nationality', value);
+                                        // Extranjero -> "Expedido en" = su país (pasaporte).
+                                        // Boliviano  -> se limpia para elegir departamento.
+                                        if (esExtranjero(value)) {
+                                            setData('issued_in', value);
+                                        } else {
+                                            setData('issued_in', '');
+                                        }
+                                    }}
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500"
-                                    placeholder="BOLIVIANA"
-                                    autoComplete="off"
-                                />
-                                {showSuggestions &&
-                                    filteredCountries.length > 0 && (
-                                        <div className="absolute z-10 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                                            {filteredCountries.map((c, i) => (
-                                                <div
-                                                    key={i}
-                                                    onClick={() =>
-                                                        handleSelectNationality(
-                                                            c,
-                                                        )
-                                                    }
-                                                    className="cursor-pointer px-4 py-2 text-sm text-black hover:bg-green-50 hover:text-green-700"
-                                                >
-                                                    {c}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    {data.nationality &&
+                                        !NACIONALIDADES.includes(
+                                            data.nationality,
+                                        ) && (
+                                            <option value={data.nationality}>
+                                                {data.nationality}
+                                            </option>
+                                        )}
+                                    {NACIONALIDADES.map((c) => (
+                                        <option key={c} value={c}>
+                                            {c}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             {errors.nationality && (
                                 <p className="mt-1 text-xs font-bold text-red-500">
@@ -418,18 +424,32 @@ export default function GuestModal({
                                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                         <MapPin className="h-4 w-4 text-gray-400" />
                                     </div>
-                                    <input
-                                        type="text"
-                                        value={data.issued_in}
-                                        onChange={(e) =>
-                                            setData(
-                                                'issued_in',
-                                                e.target.value.toUpperCase(),
-                                            )
-                                        }
-                                        className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500"
-                                        placeholder="LP"
-                                    />
+                                    {esExtranjero(data.nationality) ? (
+                                        // Extranjero: pasaporte expedido en su país. Bloqueado.
+                                        <input
+                                            type="text"
+                                            value={data.issued_in || ''}
+                                            disabled
+                                            readOnly
+                                            className="block w-full cursor-not-allowed rounded-xl border-gray-200 bg-gray-100 py-2.5 pl-10 text-sm text-gray-500 uppercase"
+                                        />
+                                    ) : (
+                                        // Boliviano: CI expedida en un departamento.
+                                        <select
+                                            value={data.issued_in}
+                                            onChange={(e) =>
+                                                setData('issued_in', e.target.value)
+                                            }
+                                            className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500"
+                                        >
+                                            <option value="">Seleccione...</option>
+                                            {DEPARTAMENTOS_BOLIVIA.map((d) => (
+                                                <option key={d} value={d}>
+                                                    {d}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                                 {errors.issued_in && (
                                     <p className="mt-1 text-xs font-bold text-red-500">
@@ -446,6 +466,7 @@ export default function GuestModal({
                                     <input
                                         type="date"
                                         value={data.birth_date}
+                                        max={new Date().toISOString().split('T')[0]}
                                         onChange={(e) =>
                                             setData(
                                                 'birth_date',
@@ -505,18 +526,20 @@ export default function GuestModal({
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Briefcase className="h-4 w-4 text-gray-400" />
                                 </div>
-                                <input
-                                    type="text"
+                                <select
                                     value={data.profession}
                                     onChange={(e) =>
-                                        setData(
-                                            'profession',
-                                            e.target.value.toUpperCase(),
-                                        )
+                                        setData('profession', e.target.value)
                                     }
                                     className="block w-full rounded-xl border-gray-200 py-2.5 pl-10 text-sm text-black uppercase focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Ingeniero"
-                                />
+                                >
+                                    <option value="">Seleccione...</option>
+                                    {PROFESIONES.map((p) => (
+                                        <option key={p} value={p}>
+                                            {p}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             {errors.profession && (
                                 <p className="mt-1 text-xs font-bold text-red-500">

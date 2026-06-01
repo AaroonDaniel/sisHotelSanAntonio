@@ -38,6 +38,17 @@ class GuestController extends Controller
                 'issued_in' => 'nullable|string',
             ]);
 
+            // 🧠 Validación lógica (pasaporte vs CI, edad vs profesión).
+            $erroresCoherencia = \App\Support\GuestValidation::coherenceErrors([
+                'nationality' => $request->input('nationality'),
+                'issued_in'   => $request->input('issued_in'),
+                'profession'  => $request->input('profession'),
+                'birth_date'  => $request->input('birth_date'),
+            ]);
+            if (! empty($erroresCoherencia)) {
+                return redirect()->back()->withErrors($erroresCoherencia)->withInput();
+            }
+
             // Preparar datos para la búsqueda y guardado
             $fullName = strtoupper($request->full_name);
             $birthDate = $request->birth_date;
@@ -150,6 +161,17 @@ class GuestController extends Controller
             //'origin' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:20',
         ]);
+
+        // 🧠 Validación lógica (pasaporte vs CI, edad vs profesión).
+        $erroresCoherencia = \App\Support\GuestValidation::coherenceErrors([
+            'nationality' => $request->input('nationality'),
+            'issued_in'   => $request->input('issued_in'),
+            'profession'  => $request->input('profession'),
+            'birth_date'  => $request->input('birth_date'),
+        ]);
+        if (! empty($erroresCoherencia)) {
+            return redirect()->back()->withErrors($erroresCoherencia)->withInput();
+        }
 
         if ($request->filled('birth_date')) {
             $fecha = trim($request->birth_date);
