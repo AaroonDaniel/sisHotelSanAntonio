@@ -7,6 +7,7 @@ use Spatie\Permission\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
@@ -37,7 +38,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => 'required|string|min:8',
+            'password' => ['required', 'string', 'min:8', Password::default()],
             'role' => 'required|string|exists:roles,name', // Validamos que el rol exista
         ]);
 
@@ -50,6 +51,7 @@ class UserController extends Controller
             'shift' => $request->shift,
             'password' => Hash::make($request->password), 
             'is_active' => true,
+            'must_change_password' => true, // Forzamos el cambio de contraseña en el primer login
         ]);
 
         // Ahora sí podemos asignarle el rol
@@ -87,6 +89,7 @@ class UserController extends Controller
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
+            $data['must_change_password'] = true; // Forzamos el cambio de contraseña en el próximo login
         }
 
         $user->update($data);
