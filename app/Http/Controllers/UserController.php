@@ -38,7 +38,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => ['required', 'string', 'min:8', Password::default()],
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()],
             'role' => 'required|string|exists:roles,name', // Validamos que el rol exista
         ]);
 
@@ -73,7 +73,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50', 
-            'password' => 'nullable|string|min:8',
+            'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()],
             'role' => 'required|string|exists:roles,name', // Validamos el rol
         ]);
 
