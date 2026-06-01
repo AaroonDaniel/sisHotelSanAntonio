@@ -35,7 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index'])->name('Inicio');
 
     //Usuarios
-    Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy']);
+    Route::resource('usuarios', UserController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('permission:usuarios.ver');
 
     //Perfil de Usuario
     Route::get('/user/profile', [UserProfileController::class, 'edit'])->name('user.profile.edit');
@@ -47,7 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/cambiar-clave-obligatorio', [\App\Http\Controllers\Auth\ForcePasswordChangeController::class, 'update'])->name('password.force.update');
 
     // Bloques
-    Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index');
+    Route::get('/bloques', [BlockController::class, 'index'])->name('blocks.index')->middleware('permission:bloques.gestionar');
     Route::get('/bloques/crear', [BlockController::class, 'create'])->name('blocks.create');
     Route::post('/bloques', [BlockController::class, 'store'])->name('blocks.store');
     Route::put('/bloques/{block}', [BlockController::class, 'update'])->name('blocks.update');
@@ -55,14 +55,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/bloques/{block}/toggle', [BlockController::class, 'toggleStatus'])->name('blocks.toggle');
 
     //Pisos
-    Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index');
+    Route::get('/pisos', [FloorController::class, 'index'])->name('floors.index')->middleware('permission:pisos.gestionar');
     Route::post('/pisos', [FloorController::class, 'store'])->name('floors.store');
     Route::put('/pisos/{floor}', [FloorController::class, 'update'])->name('floors.update');
     Route::delete('/pisos/{floor}', [FloorController::class, 'destroy'])->name('floors.destroy');
     Route::patch('/pisos/{floor}/toggle', [FloorController::class, 'toggleStatus'])->name('floors.toggle');
 
     //Tipos de Habitaciones
-    Route::get('/tipohabitacion', [RoomTypeController::class, 'index'])->name('room_types.index');
+    Route::get('/tipohabitacion', [RoomTypeController::class, 'index'])->name('room_types.index')->middleware('permission:tipos_habitaciones.gestionar');
     Route::get('/tipohabitacion/crear', [RoomTypeController::class, 'create'])->name('room_types.create');
     Route::post('/tipohabitacion', [RoomTypeController::class, 'store'])->name('room_types.store');
     Route::put('/tipohabitacion/{roomType}', [RoomTypeController::class, 'update'])->name('room_types.update');
@@ -71,7 +71,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/status', [RoomController::class, 'status'])->name('rooms.status');
 
     //Tipos de precios habitaciones
-    Route::get('/precios', [PriceController::class, 'index'])->name('prices.index');
+    Route::get('/precios', [PriceController::class, 'index'])->name('prices.index')->middleware('permission:precios.gestionar');
     Route::get('/precios/crear', [PriceController::class, 'create'])->name('prices.create');
     Route::post('/precios', [PriceController::class, 'store'])->name('prices.store');
     Route::put('/precios/{price}', [PriceController::class, 'update'])->name('prices.update');
@@ -79,7 +79,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/precios/{price}/toggle', [PriceController::class, 'toggleStatus'])->name('prices.toggle');
 
     //Habitaciones
-    Route::get('/habitaciones', [RoomController::class, 'index'])->name('rooms.index');
+    Route::get('/habitaciones', [RoomController::class, 'index'])->name('rooms.index')->middleware('role:administrador');
     Route::get('/habitaciones/crear', [RoomController::class, 'create'])->name('rooms.create');
     Route::post('/habitaciones', [RoomController::class, 'store'])->name('rooms.store');
     Route::put('/habitaciones/{room}', [RoomController::class, 'update'])->name('rooms.update');
@@ -98,7 +98,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/invitados/{guest}/toggle', [GuestController::class, 'toggleStatus'])->name('guests.toggle');
 
     //Servicios
-    Route::get('/servicios', [ServiceController::class, 'index'])->name('services.index');
+    Route::get('/servicios', [ServiceController::class, 'index'])->name('services.index')->middleware('role:administrador');
     Route::get('/servicios/crear', [ServiceController::class, 'create'])->name('services.create');
     Route::post('/servicios', [ServiceController::class, 'store'])->name('services.store');
     Route::put('/servicios/{service}', [ServiceController::class, 'update'])->name('services.update');
@@ -153,7 +153,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/checkin-details/{checkin_id}', [CheckinDetailController::class, 'listByCheckin']);
 
     // Horarios
-    Route::get('/horarios', [ScheduleController::class, 'index'])->name('schedules.index');
+    Route::get('/horarios', [ScheduleController::class, 'index'])->name('schedules.index')->middleware('role:administrador');
     Route::post('/horarios', [ScheduleController::class, 'store'])->name('schedules.store');
     Route::put('/horarios/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
     Route::delete('/horarios/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
@@ -199,13 +199,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/mantenimientos/{maintenance}', [App\Http\Controllers\MaintenanceController::class, 'destroy'])->name('maintenances.destroy');
 
     //Roles
-    Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+    Route::get('/roles', [RoleController::class, 'index'])->name('roles.index')->middleware('permission:roles.gestionar');
     Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
     Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
 
     //Permisos
-    Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index');
+    Route::get('/permisos', [PermissionController::class, 'index'])->name('permissions.index')->middleware('permission:permisos.gestionar');
     Route::post('/permisos', [PermissionController::class, 'store'])->name('permissions.store');
     Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
     Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
@@ -270,6 +270,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // --- RUTAS ESTÁTICAS (van PRIMERO) -----------------------------------
     Route::get('/contingencias', [SignificantEventController::class, 'index'])
+        ->middleware('permission:anulaciones.autorizar')
         ->name('significant-events.index');
 
     // Estado actual: ¿hay un evento activo ahora mismo?
@@ -311,7 +312,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('invoices.rescue-orphaned');
 
     // Auditoría de actividades
-    Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+    Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index')->middleware('permission:auditoria.ver');
 }); // <-- Cierre del grupo autenticado
 
 // ==========================================

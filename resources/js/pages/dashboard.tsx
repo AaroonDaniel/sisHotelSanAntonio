@@ -93,10 +93,18 @@ export default function Dashboard({
     const isAdmin = userRoles.some(
         (role) => role.toLowerCase() === 'administrador',
     );
-    // Gerencia = Administrador o Gerente General (ven KPIs y reportes)
+    // Gerencia = Administrador o Gerente (ven KPIs y reportes)
     const isGerencia =
         isAdmin ||
-        userRoles.some((r) => r.toLowerCase() === 'gerente general');
+        userRoles.some((r) => r.toLowerCase() === 'gerente');
+    // Helpers de permisos para mostrar/ocultar módulos del menú
+    const { can, canAny } = useCan();
+    const puedeVer = (item: any): boolean => {
+        if (item.adminOnly) return isAdmin;
+        if (item.anyPerm) return canAny(item.anyPerm);
+        if (item.perm) return can(item.perm);
+        return true;
+    };
     // --- ESTADOS PARA LA LÓGICA DE REPORTE ---
     const [loading, setLoading] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -114,15 +122,15 @@ export default function Dashboard({
             title: 'Parámetros',
             theme: 'blue',
             items: [
-                { name: 'Bloques', icon: Building, url: '/bloques' },
-                { name: 'Pisos', icon: Layers, url: '/pisos' },
-                { name: 'Tipos Hab.', icon: BedDouble, url: '/tipohabitacion' },
-                { name: 'Precios', icon: Tag, url: '/precios' },
-                { name: 'Habitaciones', icon: Hotel, url: '/habitaciones' },
-                { name: 'Servicios', icon: ClipboardList, url: '/servicios' },
-                { name: 'Huéspedes', icon: Users, url: '/invitados' },
-                { name: 'Horarios', icon: Clock, url: '/horarios' },
-                { name: 'Personal', icon: User, url: '/usuarios' },
+                { name: 'Bloques', icon: Building, url: '/bloques', perm: 'bloques.gestionar' },
+                { name: 'Pisos', icon: Layers, url: '/pisos', perm: 'pisos.gestionar' },
+                { name: 'Tipos Hab.', icon: BedDouble, url: '/tipohabitacion', perm: 'tipos_habitaciones.gestionar' },
+                { name: 'Precios', icon: Tag, url: '/precios', perm: 'precios.gestionar' },
+                { name: 'Habitaciones', icon: Hotel, url: '/habitaciones', adminOnly: true },
+                { name: 'Servicios', icon: ClipboardList, url: '/servicios', adminOnly: true },
+                { name: 'Huéspedes', icon: Users, url: '/invitados', anyPerm: ['huespedes.ver', 'huespedes.buscar'] },
+                { name: 'Horarios', icon: Clock, url: '/horarios', adminOnly: true },
+                { name: 'Personal', icon: User, url: '/usuarios', perm: 'usuarios.ver' },
 
                 ...(isAdmin
                     ? [
@@ -144,22 +152,25 @@ export default function Dashboard({
                     name: 'Nueva Reserva',
                     icon: CalendarDays,
                     url: '/admin/reservas',
+                    anyPerm: ['reservas.crear', 'reservas.ver_todos'],
                 },
-                { name: 'Asignación', icon: BedDouble, url: '/checks' },
+                { name: 'Asignación', icon: BedDouble, url: '/checks', anyPerm: ['checkin.realizar', 'checkins.ver_todos'] },
                 {
                     name: 'Detalles de asignación',
                     icon: Briefcase,
                     url: '/checkindetails',
+                    anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
                 },
-                { name: 'Facturación', icon: Receipt, url: '/facturacion' },
+                { name: 'Facturación', icon: Receipt, url: '/facturacion', anyPerm: ['facturar.emitir', 'checkout.realizar', 'anulaciones.autorizar'] },
 
-                { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos' },
-                { name: 'Gastos', icon: FileText, url: '/historial-gastos' },
-                { name: 'Adelantos y Devoluciones', icon: Coins, url: '/historial-pagos' },
+                { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos', anyPerm: ['mantenimiento.notificar_averia'] },
+                { name: 'Gastos', icon: FileText, url: '/historial-gastos', anyPerm: ['gastos.ver', 'gastos.registrar', 'gastos.aprobar'] },
+                { name: 'Adelantos y Devoluciones', icon: Coins, url: '/historial-pagos', anyPerm: ['caja.registrar_pago', 'huespedes.historial'] },
                 {
                     name: 'Eventos Significativos',
                     icon: ShieldAlert,
                     url: '/contingencias',
+                    anyPerm: ['auditoria.ver', 'anulaciones.autorizar'],
                 },
             ],
         },
@@ -167,21 +178,24 @@ export default function Dashboard({
             title: 'Reportes',
             theme: 'amber',
             items: [
-                { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports' },
-                //{ name: 'Libro Diario', icon: BookDown, url: '#' },
+                { name: 'Reporte Gral.', icon: FileBarChart, url: '/reports', anyPerm: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas'] },
                 {
                     name: 'Cierre de Caja',
                     icon: Wallet,
                     url: '/reports/financial',
+                    anyPerm: ['reportes.cierre_caja'],
                 },
                 {
                     name: 'Ingresos y Egresos diarios',
                     icon: FileText,
                     url: '/reports/financialMovement',
+                    anyPerm: ['reportes.financiero', 'reportes.ventas'],
                 },
             ],
         },
-    ];
+    ]
+        .map((group) => ({ ...group, items: group.items.filter(puedeVer) }))
+        .filter((group) => group.items.length > 0);
 
     const getThemeClasses = (theme: string) => {
         switch (theme) {

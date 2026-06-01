@@ -41,5 +41,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // 403 (sin permisos) -> pantalla propia "Acceso denegado" en vez de la fea de Laravel.
+        $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $e, \Illuminate\Http\Request $request) {
+            if ($response->getStatusCode() === 403 && ! $request->expectsJson()) {
+                return \Inertia\Inertia::render('errors/Forbidden')
+                    ->toResponse($request)
+                    ->setStatusCode(403);
+            }
+            return $response;
+        });
     })->create();

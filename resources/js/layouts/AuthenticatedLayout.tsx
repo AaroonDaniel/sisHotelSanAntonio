@@ -145,6 +145,7 @@ export default function AuthenticatedLayout({
                                 >
                                     Gastos
                                 </Link>
+                                {auth?.user?.permissions?.includes('auditoria.ver') && (
                                 <Link
                                     href="/auditoria"
                                     className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
@@ -155,6 +156,7 @@ export default function AuthenticatedLayout({
                                 >
                                     Auditoría
                                 </Link>
+                                )}
                             </div>
                         </div>
 
