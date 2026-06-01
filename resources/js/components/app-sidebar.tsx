@@ -42,6 +42,7 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
+        permission: 'dashboard.ver',
     },
 
     // === ADMINISTRADOR ===
@@ -91,7 +92,7 @@ const mainNavItems: NavItem[] = [
         title: 'Auditoría',
         href: '/auditoria',
         icon: ShieldCheck,
-        role: 'administrador',
+        permission: 'auditoria.ver',
     },
 
     // === RECEPCIONISTA ===
@@ -125,13 +126,13 @@ const mainNavItems: NavItem[] = [
         title: 'Reportes',
         href: '/reports',
         icon: BarChart3,
-        anyPermission: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas'],
+        anyPermission: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas', 'reportes.parte_diario', 'reportes.cierre_caja'],
     },
     {
         title: 'Gastos',
         href: '/gastos',
         icon: Receipt,
-        permission: 'gastos.ver',
+        anyPermission: ['gastos.ver', 'gastos.registrar'],
     },
     {
         title: 'Historial de pagos',

@@ -37,12 +37,23 @@ class RoleAndPermissionSeeder extends Seeder
         // ── 2) Crear permisos que faltan según la lista del tutor ──
         $extra = [
             'reportes.parte_diario',
+            'reportes.cierre_caja',
             'facturas.ver_todas',
             'dashboard.ver',
             'huespedes.ver_todos',
+            'auditoria.ver',
         ];
         foreach ($extra as $p) {
             Permission::findOrCreate($p, 'web');
+        }
+
+        // Corregir el permiso de precios mal escrito (precios.gestioanr -> precios.gestionar)
+        $typo = Permission::where('name', 'precios.gestioanr')->first();
+        if ($typo) {
+            $typo->name = 'precios.gestionar';
+            $typo->save();
+        } else {
+            Permission::findOrCreate('precios.gestionar', 'web');
         }
 
         // ── 3) Roles base ──
@@ -58,20 +69,21 @@ class RoleAndPermissionSeeder extends Seeder
             'habitaciones.cambiar_estado', 'mantenimiento.notificar_averia',
             'caja.abrir', 'caja.cerrar', 'caja.registrar_pago',
             'gastos.registrar', 'facturar.emitir', 'recibos.imprimir',
-            'reportes.parte_diario',
+            'reportes.parte_diario', 'reportes.cierre_caja',
         ]);
 
         // ── 5) GERENTE (supervisión / solo lectura) ──
         $gerente->syncPermissions([
             'dashboard.ver',
             'reportes.financiero', 'reportes.ocupacion', 'reportes.ventas',
-            'reportes.parte_diario',
+            'reportes.parte_diario', 'reportes.cierre_caja',
             'huespedes.ver', 'huespedes.historial', 'huespedes.ver_todos',
             'reservas.ver_todos', 'checkins.ver_todos',
             'caja.ver_todo', 'facturas.ver_todas',
             'gastos.ver', 'gastos.aprobar',
             'anulaciones.autorizar',
             'habitaciones.estado_actual',
+            'auditoria.ver',
         ]);
 
         // ── 6) ADMINISTRADOR: TODOS los permisos (+ Gate::before del provider) ──
