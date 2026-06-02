@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
+    AlertTriangle,
     ArrowLeft,
     Briefcase,
     CalendarDays,
@@ -12,6 +13,7 @@ import {
     MapPin,
     Phone,
     User,
+    X,
 } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -65,6 +67,20 @@ export default function GuestDetailsForm({
     onBack,
 }: any) {
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [blockToast, setBlockToast] = useState<string | null>(null);
+
+    // Calcula la edad exacta a partir de la fecha de nacimiento.
+    const calculateAge = (fechaNac?: string): number => {
+        if (!fechaNac) return 0;
+        const hoy = new Date();
+        const nacimiento = new Date(fechaNac);
+        let edad = hoy.getFullYear() - nacimiento.getFullYear();
+        const m = hoy.getMonth() - nacimiento.getMonth();
+        if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) {
+            edad--;
+        }
+        return edad;
+    };
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -90,19 +106,27 @@ export default function GuestDetailsForm({
     };
 
     const handleContinue = () => {
-        const civilStatus = bookingData.civil_status || 'SINGLE';
-        let newErrors: Record<string, string> = {};
+    const civilStatus = bookingData.civil_status || 'SINGLE';
+    let newErrors: Record<string, string> = {};
 
-        // Validaciones obligatorias usando los nombres exactos de la BD
-        if (!bookingData.full_name)
-            newErrors.full_name = 'Tiene que completar este campo.';
-        if (!bookingData.identification_number)
-            newErrors.identification_number = 'Tiene que completar este campo.';
-        if (!bookingData.issued_in)
-            newErrors.issued_in =
-                'Indique dónde se expidió su documento (Ej: LP, SC).';
-        if (!bookingData.birth_date)
-            newErrors.birth_date = 'La fecha de nacimiento es obligatoria.';
+    // 1. Detectar si es boliviano o extranjero
+    const nacionalidadActual = (bookingData.nationality || '').toUpperCase();
+    const esBoliviano = nacionalidadActual === 'BOLIVIANA' || nacionalidadActual === '';
+
+    // Validaciones obligatorias
+    if (!bookingData.full_name)
+        newErrors.full_name = 'Tiene que completar este campo.';
+    if (!bookingData.identification_number)
+        newErrors.identification_number = 'Tiene que completar este campo.';
+        
+    // 🌟 SOLO EXIGIR EXPEDIDO SI ES BOLIVIANO
+    if (esBoliviano && !bookingData.issued_in) {
+        newErrors.issued_in = 'Indique dónde se expidió su documento (Ej: LP, SC).';
+    }
+
+    if (!bookingData.birth_date)
+        newErrors.birth_date = 'La fecha de nacimiento es obligatoria.';
+    // ... resto de tus validaciones (phone, nationality, profession, email)
         if (!bookingData.phone)
             newErrors.phone = 'Tiene que completar este campo.';
         if (!bookingData.nationality)
@@ -126,6 +150,32 @@ export default function GuestDetailsForm({
             return;
         }
 
+        // 🛑 BLOQUEO: el titular de la reserva debe ser mayor de edad.
+        const edad = calculateAge(bookingData.birth_date);
+        if (edad < 18) {
+            setErrors({
+                ...newErrors,
+                birth_date: 'El titular debe ser mayor de edad.',
+            });
+            setBlockToast(
+                'No se permite hacer esta reserva: Debe ser mayor de edad (18+).',
+            );
+            return;
+        }
+
+        // 🛑 BLOQUEO: datos evidentemente falsos (nombre demasiado corto / no real).
+        const nombreLimpio = (bookingData.full_name || '').trim();
+        if (nombreLimpio.length < 3 || !/[a-zA-ZÁÉÍÓÚÑáéíóúñ]/.test(nombreLimpio)) {
+            setErrors({
+                ...newErrors,
+                full_name: 'Ingrese un nombre real válido.',
+            });
+            setBlockToast(
+                'No se permite hacer esta reserva: los datos del titular no son válidos.',
+            );
+            return;
+        }
+
         setBookingData({ ...bookingData, civil_status: civilStatus });
         onNext();
     };
@@ -135,6 +185,32 @@ export default function GuestDetailsForm({
 
     return (
         <div className="mx-auto w-full max-w-4xl">
+            {/* Toast rojo de reserva bloqueada (menor de edad / datos falsos) */}
+            {blockToast && (
+                <div className="fixed top-24 right-8 z-[100] w-[360px] max-w-[90vw] animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-start gap-3 rounded-2xl border-2 border-red-300 bg-white p-4 shadow-2xl">
+                        <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 animate-pulse items-center justify-center rounded-full bg-red-100 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-bold text-red-700">
+                                Reserva Bloqueada
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-600">
+                                {blockToast}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setBlockToast(null)}
+                            className="text-gray-400 transition hover:text-gray-700"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="mb-6 flex items-center">
                 <Button
                     variant="ghost"
@@ -204,24 +280,27 @@ export default function GuestDetailsForm({
                             </div>
 
                             <div className="space-y-2 sm:w-1/3">
-                                <label className="flex items-center text-sm font-semibold text-gray-700">
-                                    <MapPin className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
-                                    Expedido *
-                                </label>
-                                <Input
-                                    type="text"
-                                    name="issued_in"
-                                    value={bookingData.issued_in || ''}
-                                    onChange={handleChange}
-                                    placeholder="Ej: LP"
-                                    className={`h-11 border-gray-300 uppercase ${errors.issued_in ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
-                                />
-                                {errors.issued_in && (
-                                    <p className="mt-1 text-xs font-medium text-red-500">
-                                        {errors.issued_in}
-                                    </p>
-                                )}
-                            </div>
+    <label className="flex items-center text-sm font-semibold text-gray-700">
+        <MapPin className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+        Expedido {(bookingData.nationality || 'BOLIVIANA').toUpperCase() === 'BOLIVIANA' ? '*' : ''}
+    </label>
+    <Input
+        type="text"
+        name="issued_in"
+        value={bookingData.issued_in || ''}
+        onChange={handleChange}
+        placeholder={(bookingData.nationality || 'BOLIVIANA').toUpperCase() === 'BOLIVIANA' ? "Ej: LP" : "No aplica"}
+        disabled={(bookingData.nationality || 'BOLIVIANA').toUpperCase() !== 'BOLIVIANA'}
+        className={`h-11 border-gray-300 uppercase disabled:bg-gray-100 disabled:text-gray-400 ${
+            errors.issued_in ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'
+        }`}
+    />
+    {errors.issued_in && (
+        <p className="mt-1 text-xs font-medium text-red-500">
+            {errors.issued_in}
+        </p>
+    )}
+</div>
                         </div>
 
                         {/* Fecha de Nacimiento */}
