@@ -15,7 +15,13 @@ import {
     User,
     X,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import {
+    NACIONALIDADES,
+    DEPARTAMENTOS_BOLIVIA,
+    esExtranjero,
+    paisDe,
+} from '@/lib/catalogos';
 
 // ==========================================
 // 📚 LISTAS DE AUTOCOMPLETADO
@@ -68,6 +74,23 @@ export default function GuestDetailsForm({
 }: any) {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [blockToast, setBlockToast] = useState<string | null>(null);
+    const [natInput, setNatInput] = useState<string>(
+        bookingData?.nationality || '',
+    );
+    const [showNat, setShowNat] = useState(false);
+
+    // El toast de bloqueo desaparece solo a los 8 segundos.
+    useEffect(() => {
+        if (!blockToast) return;
+        const t = setTimeout(() => setBlockToast(null), 8000);
+        return () => clearTimeout(t);
+    }, [blockToast]);
+
+    // Helper para setear un campo del formulario y limpiar su error.
+    const setField = (name: string, value: string) => {
+        setBookingData({ ...bookingData, [name]: value });
+        if (errors[name]) setErrors({ ...errors, [name]: '' });
+    };
 
     // Calcula la edad exacta a partir de la fecha de nacimiento.
     const calculateAge = (fechaNac?: string): number => {
@@ -109,9 +132,9 @@ export default function GuestDetailsForm({
     const civilStatus = bookingData.civil_status || 'SINGLE';
     let newErrors: Record<string, string> = {};
 
-    // 1. Detectar si es boliviano o extranjero
-    const nacionalidadActual = (bookingData.nationality || '').toUpperCase();
-    const esBoliviano = nacionalidadActual === 'BOLIVIANA' || nacionalidadActual === '';
+    // 1. Detectar si es boliviano o extranjero (usa el catálogo, igual que el check-in)
+    const esBoliviano =
+        !!bookingData.nationality && !esExtranjero(bookingData.nationality);
 
     // Validaciones obligatorias
     if (!bookingData.full_name)
@@ -255,52 +278,27 @@ export default function GuestDetailsForm({
                             )}
                         </div>
 
-                        {/* CI y Expedido (Misma Fila en Pantallas Grandes) */}
-                        <div className="flex flex-col gap-4 sm:flex-row md:col-span-2">
-                            <div className="flex-1 space-y-2">
-                                <label className="flex items-center text-sm font-semibold text-gray-700">
-                                    <CreditCard className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
-                                    N° Documento (CI/Pasaporte) *
-                                </label>
-                                <Input
-                                    type="text"
-                                    name="identification_number"
-                                    value={
-                                        bookingData.identification_number || ''
-                                    }
-                                    onChange={handleChange}
-                                    placeholder="Ej: 12345678"
-                                    className={`h-11 border-gray-300 ${errors.identification_number ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
-                                />
-                                {errors.identification_number && (
-                                    <p className="mt-1 text-xs font-medium text-red-500">
-                                        {errors.identification_number}
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="space-y-2 sm:w-1/3">
-    <label className="flex items-center text-sm font-semibold text-gray-700">
-        <MapPin className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
-        Expedido {(bookingData.nationality || 'BOLIVIANA').toUpperCase() === 'BOLIVIANA' ? '*' : ''}
-    </label>
-    <Input
-        type="text"
-        name="issued_in"
-        value={bookingData.issued_in || ''}
-        onChange={handleChange}
-        placeholder={(bookingData.nationality || 'BOLIVIANA').toUpperCase() === 'BOLIVIANA' ? "Ej: LP" : "No aplica"}
-        disabled={(bookingData.nationality || 'BOLIVIANA').toUpperCase() !== 'BOLIVIANA'}
-        className={`h-11 border-gray-300 uppercase disabled:bg-gray-100 disabled:text-gray-400 ${
-            errors.issued_in ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'
-        }`}
-    />
-    {errors.issued_in && (
-        <p className="mt-1 text-xs font-medium text-red-500">
-            {errors.issued_in}
-        </p>
-    )}
-</div>
+                        {/* N° Documento */}
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="flex items-center text-sm font-semibold text-gray-700">
+                                <CreditCard className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                N° Documento (CI/Pasaporte) *
+                            </label>
+                            <Input
+                                type="text"
+                                name="identification_number"
+                                value={
+                                    bookingData.identification_number || ''
+                                }
+                                onChange={handleChange}
+                                placeholder="Ej: 12345678"
+                                className={`h-11 border-gray-300 ${errors.identification_number ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
+                            />
+                            {errors.identification_number && (
+                                <p className="mt-1 text-xs font-medium text-red-500">
+                                    {errors.identification_number}
+                                </p>
+                            )}
                         </div>
 
                         {/* Fecha de Nacimiento */}
@@ -344,32 +342,122 @@ export default function GuestDetailsForm({
                             )}
                         </div>
 
-                        {/* ================= DATOS COMPLEMENTARIOS CON AUTOCOMPLETADO ================= */}
-                        <div className="space-y-2">
-                            <label className="flex items-center text-sm font-semibold text-gray-700">
-                                <Globe className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
-                                Nacionalidad *
-                            </label>
-                            <Input
-                                type="text"
-                                name="nationality"
-                                list="nacionalidades"
-                                value={bookingData.nationality || ''}
-                                onChange={handleChange}
-                                placeholder="Ej: BOLIVIANA"
-                                className={`h-11 border-gray-300 uppercase ${errors.nationality ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
-                                autoComplete="off"
-                            />
-                            <datalist id="nacionalidades">
-                                {NATIONALITIES.map((nac, index) => (
-                                    <option key={`nac-${index}`} value={nac} />
-                                ))}
-                            </datalist>
-                            {errors.nationality && (
-                                <p className="mt-1 text-xs font-medium text-red-500">
-                                    {errors.nationality}
-                                </p>
-                            )}
+                        {/* ====== NACIONALIDAD (combobox) + EXPEDIDO (condicional) ====== */}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            {/* Nacionalidad PRIMERO */}
+                            <div className="relative space-y-2">
+                                <label className="flex items-center text-sm font-semibold text-gray-700">
+                                    <Globe className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                    Nacionalidad *
+                                </label>
+                                <Input
+                                    type="text"
+                                    value={natInput}
+                                    placeholder="Escriba un país..."
+                                    autoComplete="off"
+                                    onFocus={() => {
+                                        setNatInput('');
+                                        setShowNat(true);
+                                    }}
+                                    onChange={(e) => {
+                                        setNatInput(e.target.value.toUpperCase());
+                                        setShowNat(true);
+                                    }}
+                                    onBlur={() => {
+                                        setTimeout(() => {
+                                            setShowNat(false);
+                                            setNatInput(
+                                                bookingData.nationality || '',
+                                            );
+                                        }, 200);
+                                    }}
+                                    className={`h-11 border-gray-300 uppercase ${errors.nationality ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
+                                />
+                                {showNat && (
+                                    <div className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg">
+                                        {NACIONALIDADES.filter((n) => {
+                                            const q = natInput.trim();
+                                            if (!q) return true;
+                                            return (
+                                                n.includes(q) ||
+                                                paisDe(n).includes(q)
+                                            );
+                                        }).map((n) => (
+                                            <div
+                                                key={n}
+                                                onMouseDown={() => {
+                                                    const foreign =
+                                                        esExtranjero(n);
+                                                    setBookingData({
+                                                        ...bookingData,
+                                                        nationality: n,
+                                                        issued_in: foreign
+                                                            ? paisDe(n)
+                                                            : '',
+                                                    });
+                                                    setErrors({
+                                                        ...errors,
+                                                        nationality: '',
+                                                        issued_in: '',
+                                                    });
+                                                    setNatInput(n);
+                                                    setShowNat(false);
+                                                }}
+                                                className="flex cursor-pointer justify-between px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50"
+                                            >
+                                                <span>{n}</span>
+                                                <span className="text-gray-400">
+                                                    {paisDe(n)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {errors.nationality && (
+                                    <p className="mt-1 text-xs font-medium text-red-500">
+                                        {errors.nationality}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Expedido DESPUÉS, según nacionalidad */}
+                            <div className="space-y-2">
+                                <label className="flex items-center text-sm font-semibold text-gray-700">
+                                    <MapPin className="mr-2 h-4 w-4 text-[#b3282d]" />{' '}
+                                    Expedido {!esExtranjero(bookingData.nationality) ? '*' : ''}
+                                </label>
+                                {esExtranjero(bookingData.nationality) ? (
+                                    <Input
+                                        type="text"
+                                        value={bookingData.issued_in || ''}
+                                        disabled
+                                        readOnly
+                                        title="Pasaporte: expedido en su país"
+                                        className="h-11 border-gray-300 bg-gray-100 uppercase text-gray-500"
+                                    />
+                                ) : (
+                                    <select
+                                        name="issued_in"
+                                        value={bookingData.issued_in || ''}
+                                        onChange={(e) =>
+                                            setField('issued_in', e.target.value)
+                                        }
+                                        className={`h-11 w-full rounded-md border bg-white px-3 text-sm uppercase ${errors.issued_in ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        {DEPARTAMENTOS_BOLIVIA.map((d) => (
+                                            <option key={d} value={d}>
+                                                {d}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                {errors.issued_in && (
+                                    <p className="mt-1 text-xs font-medium text-red-500">
+                                        {errors.issued_in}
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         <div className="space-y-2">

@@ -2840,7 +2840,7 @@ export default function CheckinModal({
                                                 e.target.value,
                                             )
                                         }
-                                        disabled={isReadOnly}
+                                        disabled={true}
                                         // Clases actualizadas para coincidir con el diseño de Fecha Nac.
                                         className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100"
                                     />

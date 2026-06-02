@@ -79,7 +79,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             <nav className="bg-white shadow-md fixed w-full top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16 items-center">
-                        <div className="text-3xl font-bold text-[#b3282d] italic">
+                        <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#b3282d] italic">
                             <button onClick={() => scrollToSection('inicio')} >Hotel San Antonio</button>
                         </div>
                         <div className="hidden md:flex space-x-8">
@@ -112,7 +112,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             <section id="servicios" className="py-16 bg-white">
                 <div className="max-w-7xl mx-auto px-4 text-center">
                     <h2 className="text-3xl font-bold text-[#1e3a5f] mb-8">Nuestros Servicios</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
                         <div className="p-6 border border-gray-100 rounded-sm shadow-sm hover:shadow-md transition-shadow">
                             <div className="w-12 h-12 bg-red-50 text-[#b3282d] rounded-full flex items-center justify-center mx-auto mb-4">📶</div>
                             <h3 className="font-semibold text-gray-800">Wi-Fi Rápido</h3>
@@ -141,10 +141,10 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             <section id="reservar" className="py-16 flex-1">
                 <div className="max-w-5xl mx-auto px-4">
                     
-                    <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-8">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-4 sm:p-6 lg:p-8">
                         
                         {/* EL STEPPER VISUAL */}
-                        <div className="relative mb-12 flex justify-between items-center w-full max-w-3xl mx-auto">
+                        <div className="relative mb-8 sm:mb-12 flex justify-between items-center w-full max-w-3xl mx-auto">
                             <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-300 -z-10 transform -translate-y-1/2"></div>
                             
                             {steps.map((step) => {
@@ -153,8 +153,8 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                 const isPassed = currentStep > step.id;
 
                                 return (
-                                    <div key={step.id} className="flex flex-col items-center bg-white px-4">
-                                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-2 transition-colors duration-300
+                                    <div key={step.id} className="flex flex-col items-center bg-white px-1.5 sm:px-4">
+                                        <div className={`h-12 w-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-2 transition-colors duration-300
                                             ${isActive 
                                                 ? 'bg-[#b3282d] text-white border-[3px] border-dashed border-[#b3282d] ring-4 ring-white' 
                                                 : isPassed
@@ -162,9 +162,9 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                                     : 'bg-white text-gray-400 border-2 border-dotted border-gray-400'
                                             }`}
                                         >
-                                            <Icon className="w-7 h-7" />
+                                            <Icon className="h-5 w-5 sm:w-7 sm:h-7" />
                                         </div>
-                                        <span className={`text-sm font-medium ${isActive ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+                                        <span className={`text-center text-[11px] leading-tight sm:text-sm font-medium ${isActive ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
                                             {step.label}
                                         </span>
                                     </div>
