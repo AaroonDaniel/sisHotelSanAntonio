@@ -200,8 +200,8 @@ class ReservationController extends Controller
                             $conflicto = \App\Models\ReservationDetail::where('room_id', $roomId)
                                 ->whereHas('reservation', function ($q) use ($arrivalDate, $departureDate) {
                                     $q->where('arrival_date', '<', $departureDate)
-                                      ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$arrivalDate])
-                                      ->whereIn('status', ['pendiente', 'confirmada']);
+                                        ->whereRaw("arrival_date + (duration_days * INTERVAL '1 day') > ?", [$arrivalDate])
+                                        ->whereIn('status', ['pendiente', 'confirmada']);
                                 })
                                 ->exists();
 
@@ -332,17 +332,22 @@ class ReservationController extends Controller
                         Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
                     }
 
-                    if ($primerCheckinId && $reservation->advance_payment > 0) {
-                        $pagos = Payment::where('reservation_id', $reservation->id)->get();
+                    $pagos = Payment::where('reservation_id', $reservation->id)->get();
+
+                    if ($primerCheckinId && $pagos->isNotEmpty()) {
                         foreach ($pagos as $pago) {
                             $pago->update([
-                                'checkin_id' => $primerCheckinId,
-                                'reservation_id' => null
+                                'checkin_id'     => $primerCheckinId,
+                                'reservation_id' => null,
                             ]);
                         }
 
-                        $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
-                        Log::info("Adelanto de pagos transferido al Check-in Principal ID: {$primerCheckinId}.");
+                        $totalPagos = $pagos->sum('amount');
+
+                        // 👇 ESTO ES LO QUE FALTABA: persistir el adelanto en el check-in principal
+                        Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+
+                        Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
                 }
 

@@ -2898,18 +2898,20 @@ class CheckinController extends Controller
             }
 
             // Trasladamos el pago (Adelanto)
-            if ($primerCheckinId && $reservation->advance_payment > 0) {
-                $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
+            $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
+
+            if ($primerCheckinId && $pagos->isNotEmpty()) {
                 foreach ($pagos as $pago) {
                     $pago->update([
-                        'checkin_id' => $primerCheckinId,
-                        'reservation_id' => null
+                        'checkin_id'     => $primerCheckinId,
+                        'reservation_id' => null,
                     ]);
                 }
 
-                // Actualizamos el total acumulado
-                $totalPagos = $pagos->sum('amount') > 0 ? $pagos->sum('amount') : $reservation->advance_payment;
-                \App\Models\Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+                $totalPagos = $pagos->sum('amount');
+
+                \App\Models\Checkin::where('id', $primerCheckinId)
+                    ->update(['advance_payment' => $totalPagos]);
             }
 
             // Marcamos la reserva original como completada
@@ -3336,7 +3338,7 @@ class CheckinController extends Controller
             // Contamos uso actual EXCLUYENDO al check-in que se está editando
             $usados = (int) \DB::table('checkin_details')
                 ->where('service_id', $servicio->id)
-                ->when($excludeCheckinId, fn ($q) => $q->where('checkin_id', '!=', $excludeCheckinId))
+                ->when($excludeCheckinId, fn($q) => $q->where('checkin_id', '!=', $excludeCheckinId))
                 ->whereIn('checkin_id', function ($q) {
                     $q->select('id')->from('checkins')->where('status', 'activo');
                 })
@@ -3345,7 +3347,7 @@ class CheckinController extends Controller
             if ($usados >= (int) $servicio->quantity) {
                 throw new \RuntimeException(
                     "Ya no hay espacios disponibles para el servicio '{$servicio->name}'. "
-                    . "Capacidad: {$servicio->quantity}, en uso: {$usados}."
+                        . "Capacidad: {$servicio->quantity}, en uso: {$usados}."
                 );
             }
         }

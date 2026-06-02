@@ -39,9 +39,23 @@ class RoomController
             // 3. Re-indexamos los valores para que el Frontend lo reciba como un Array limpio
             ->values();
 
-        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
+        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType', 'payments'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
-            ->get();
+            ->get()
+            ->map(function ($reservation) {
+                // Sumamos los pagos reales (ignoramos los rechazados por si acaso)
+                $pagosValidos = $reservation->payments->where('status', '!=', 'RECHAZADO');
+
+                // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
+                $reservation->advance_payment = $pagosValidos->sum('amount');
+
+                // Método real: tomamos el del primer pago; si no hay, el de la reserva
+                $reservation->payment_type = optional($pagosValidos->first())->method
+                    ?? $reservation->payment_type
+                    ?? 'EFECTIVO';
+
+                return $reservation;
+            });
 
         return Inertia::render('rooms/index', [
             'Rooms' => $rooms,
@@ -133,14 +147,12 @@ class RoomController
                 Storage::disk('public')->delete($room->image_path);
             }
             $validated['image_path'] = $request->file('image')->store('rooms', 'public');
-            
         } elseif (array_key_exists('image', $validated) && is_null($validated['image'])) {
             // 2. El usuario QUITÓ la imagen a propósito (envió image = null)
             if ($room->image_path) {
                 Storage::disk('public')->delete($room->image_path);
             }
             $validated['image_path'] = null;
-            
         } else {
             // 3. No se tocó el campo de imagen en absoluto
             unset($validated['image']);
@@ -227,9 +239,23 @@ class RoomController
             ->get();
 
         // 3. Reservas pendientes
-        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType'])
+        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType', 'payments'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
-            ->get();
+            ->get()
+            ->map(function ($reservation) {
+                // Sumamos los pagos reales (ignoramos los rechazados por si acaso)
+                $pagosValidos = $reservation->payments->where('status', '!=', 'RECHAZADO');
+
+                // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
+                $reservation->advance_payment = $pagosValidos->sum('amount');
+
+                // Método real: tomamos el del primer pago; si no hay, el de la reserva
+                $reservation->payment_type = optional($pagosValidos->first())->method
+                    ?? $reservation->payment_type
+                    ?? 'EFECTIVO';
+
+                return $reservation;
+            });
 
         // 4. Separamos las habitaciones para el Modal de Transferencia
         $availableRooms = $rooms->filter(function ($room) {
