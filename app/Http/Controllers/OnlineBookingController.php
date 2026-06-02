@@ -14,6 +14,9 @@ use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ReservationReceiptMail;
+use App\Models\ReservationGuest;
 
 class OnlineBookingController extends Controller
 {
@@ -323,6 +326,14 @@ class OnlineBookingController extends Controller
                 return $reservation->id; // Retornamos el ID
             });
 
+            // 📧 Enviar el recibo en PDF al correo del huésped (si falla,
+            //    NO rompemos la reserva: solo lo registramos en el log).
+            try {
+                $this->enviarReciboReserva($reservationId, $validated['guest_email']);
+            } catch (\Throwable $mailEx) {
+                Log::warning("No se pudo enviar el recibo por correo (reserva {$reservationId}): " . $mailEx->getMessage());
+            }
+
             // 👇 REDIRIGIMOS AL NUEVO CONTROLADOR DEL RECIBO 👇
             return redirect('/reservar/recibo/' . $reservationId);
 
@@ -346,5 +357,136 @@ class OnlineBookingController extends Controller
         return Inertia::render('booking/Receipt', [
             'reservation' => $reservation
         ]);
+    }
+
+    /**
+     * Carga la reserva, genera el PDF del recibo y lo envía por correo.
+     */
+    private function enviarReciboReserva(int $reservationId, string $email): void
+    {
+        $reservation = Reservation::with([
+            'guest',
+            'details.room.roomType',
+            'payments',
+        ])->findOrFail($reservationId);
+
+        $pdfData = $this->construirPdfReciboReserva($reservation);
+        $guestName = $reservation->guest->full_name ?? 'Huesped';
+
+        Mail::to($email)->send(
+            new ReservationReceiptMail($guestName, $reservation->id, $pdfData)
+        );
+
+        Log::info("📧 Recibo enviado por correo a {$email} (reserva {$reservation->id}).");
+    }
+
+    /**
+     * Construye el PDF del recibo de la reserva (rollo 80mm) y lo devuelve
+     * como string para adjuntarlo al correo.
+     */
+    private function construirPdfReciboReserva(Reservation $reservation): string
+    {
+        $pdf = new \FPDF('P', 'mm', array(80, 200));
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(true, 2);
+        $pdf->AddPage();
+
+        // Cabecera
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 6);
+        $pdf->Cell(0, 3, 'Potosi - Bolivia', 0, 1, 'C');
+        $pdf->Cell(0, 3, utf8_decode('Tel. 77700000'), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(0, 4, 'RECIBO DE RESERVA', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 6);
+        $pdf->Cell(0, 3, 'Documento sin valor fiscal', 0, 1, 'C');
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // Datos de la reserva
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Reserva N:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, '#' . $reservation->id, 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Fecha:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, \Carbon\Carbon::now()->format('d/m/Y H:i'), 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Huesped:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->MultiCell(0, 4, utf8_decode($reservation->guest->full_name ?? '-'), 0, 'L');
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'CI/NIT:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, $reservation->guest->identification_number ?? '-', 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Llegada:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, \Carbon\Carbon::parse($reservation->arrival_date)->format('d/m/Y'), 0, 1);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(25, 4, 'Noches:', 0, 0);
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(0, 4, (int) $reservation->duration_days, 0, 1);
+
+        $pdf->Ln(1);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        // Habitaciones
+        $pdf->SetFont('Arial', 'B', 6);
+        $pdf->Cell(40, 3, 'HABITACION', 0, 0, 'L');
+        $pdf->Cell(30, 3, 'PRECIO/NOCHE', 0, 1, 'R');
+        $pdf->SetFont('Arial', '', 6);
+
+        $totalNoche = 0;
+        foreach ($reservation->details as $det) {
+            $num = $det->room->number ?? ('#' . $det->room_id);
+            $precio = (float) ($det->price ?? 0);
+            $totalNoche += $precio;
+            $pdf->Cell(40, 3, utf8_decode('Hab. ' . $num), 0, 0, 'L');
+            $pdf->Cell(30, 3, number_format($precio, 2) . ' Bs', 0, 1, 'R');
+        }
+
+        $totalEstadia = $totalNoche * (int) $reservation->duration_days;
+
+        // Pago(s) anticipado(s) registrados
+        $anticipo = 0;
+        foreach ($reservation->payments as $p) {
+            $anticipo += (float) $p->amount;
+        }
+
+        $pdf->Ln(2);
+        $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
+        $pdf->Ln(2);
+
+        $pdf->SetFont('Arial', 'B', 7);
+        $pdf->Cell(45, 4, 'TOTAL ESTADIA Bs:', 0, 0, 'R');
+        $pdf->Cell(25, 4, number_format($totalEstadia, 2), 0, 1, 'R');
+
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->Cell(45, 4, 'Pago anticipado:', 0, 0, 'R');
+        $pdf->Cell(25, 4, number_format($anticipo, 2), 0, 1, 'R');
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(45, 5, 'SALDO PENDIENTE Bs:', 0, 0, 'R');
+        $pdf->Cell(25, 5, number_format(max(0, $totalEstadia - $anticipo), 2), 0, 1, 'R');
+
+        $pdf->Ln(3);
+        $pdf->SetFont('Arial', '', 6);
+        $pdf->MultiCell(0, 3, utf8_decode('Su reserva esta en proceso de verificacion. Una vez confirmado el pago, quedara formalizada.'), 0, 'C');
+
+        return $pdf->Output('S');
     }
 }
