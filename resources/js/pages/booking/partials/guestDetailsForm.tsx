@@ -210,7 +210,7 @@ export default function GuestDetailsForm({
         <div className="mx-auto w-full max-w-4xl">
             {/* Toast rojo de reserva bloqueada (menor de edad / datos falsos) */}
             {blockToast && (
-                <div className="fixed top-24 right-8 z-[100] w-[360px] max-w-[90vw] animate-in fade-in slide-in-from-top-2">
+                <div className="fixed top-20 right-4 left-4 z-[100] w-auto sm:top-24 sm:right-8 sm:left-auto sm:w-[360px] animate-in fade-in slide-in-from-top-2">
                     <div className="flex items-start gap-3 rounded-2xl border-2 border-red-300 bg-white p-4 shadow-2xl">
                         <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 animate-pulse items-center justify-center rounded-full bg-red-100 text-red-600">
                             <AlertTriangle className="h-5 w-5" />
@@ -234,16 +234,19 @@ export default function GuestDetailsForm({
                 </div>
             )}
 
-            <div className="mb-6 flex items-center">
+            <div className="mb-6 flex flex-col items-start gap-1 sm:flex-row sm:items-center">
                 <Button
                     variant="ghost"
                     onClick={onBack}
-                    className="mr-2 px-2 text-gray-500 hover:text-gray-800"
+                    className="-ml-2 px-2 text-gray-500 hover:text-gray-800 sm:mr-2 sm:ml-0"
                 >
-                    <ArrowLeft className="mr-2 h-5 w-5" /> Volver a selección de
-                    habitaciones
+                    <ArrowLeft className="mr-2 h-5 w-5" />
+                    <span className="sm:hidden">Volver</span>
+                    <span className="hidden sm:inline">
+                        Volver a selección de habitaciones
+                    </span>
                 </Button>
-                <h2 className="text-2xl font-bold text-[#1e3a5f]">
+                <h2 className="text-xl font-bold text-[#1e3a5f] sm:text-2xl">
                     Datos del Titular de la Reserva
                 </h2>
             </div>

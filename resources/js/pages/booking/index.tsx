@@ -72,7 +72,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
     ];
 
     return (
-        <div className="min-h-screen bg-[#f3f4f6] font-sans scroll-smooth flex flex-col">
+        <div className="min-h-screen w-full overflow-x-hidden bg-[#f3f4f6] font-sans scroll-smooth flex flex-col">
             <Head title="Hotel San Antonio - Reservas" />
 
             {/* NAVBAR (Menú Básico) */}
@@ -97,7 +97,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             {/* SECCIÓN INICIO (Hero) */}
             <section id="inicio" className="pt-24 pb-12 bg-[#b3282d] text-white text-center">
                 <div className="max-w-4xl mx-auto px-4 mt-8">
-                    <h1 className="text-4xl md:text-5xl font-bold mb-4">Bienvenido a tu descanso ideal</h1>
+                    <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-4 break-words">Bienvenido a tu descanso ideal</h1>
                     <p className="text-lg text-red-100 mb-8">Disfruta de la mejor estadía con nosotros. Comodidad, seguridad y el mejor servicio a tu disposición.</p>
                     <Button 
                         onClick={() => scrollToSection('reservar')} 
