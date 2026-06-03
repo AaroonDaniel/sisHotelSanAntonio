@@ -52,7 +52,7 @@ class MaintenanceController extends Controller
             'photo_path'  => $photoPath,
         ]);
 
-        Room::where('id', $request->room_id)->update(['status' => 'Mantenimiento']);
+        Room::where('id', $request->room_id)->update(['status' => 'MANTENIMIENTO']);
 
         return back()->with('success', 'Falla reportada. Habitación bloqueada por mantenimiento.');
     }

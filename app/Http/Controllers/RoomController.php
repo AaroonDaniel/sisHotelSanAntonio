@@ -334,7 +334,7 @@ class RoomController
         ]);
 
         // 5. Cambiar el estado de la habitación para que ya no se pueda vender
-        $room->update(['status' => 'Mantenimiento']);
+        $room->update(['status' => 'MANTENIMIENTO']);
 
         // 6. Recargar la página
         return redirect()->back()->with('success', 'Habitación bloqueada y daño reportado exitosamente.');
@@ -355,7 +355,7 @@ class RoomController
         }
 
         // 3. Cambiamos la habitación a estado Limpieza (porque el técnico ensució)
-        $room->update(['status' => 'Limpieza']);
+        $room->update(['status' => 'LIMPIEZA']);
 
         return redirect()->back()->with('success', 'Mantenimiento terminado. La habitación ha pasado a Limpieza.');
     }
