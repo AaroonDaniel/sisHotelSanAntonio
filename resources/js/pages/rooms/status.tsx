@@ -2102,7 +2102,12 @@ function CheckoutConfirmationModal({
 
     const handleCloseFinal = () => {
         onClose();
-        if (pdfUrl) window.location.reload();
+        if (pdfUrl) {
+            // Liberamos el blob del PDF para no dejar memoria colgada
+            window.URL.revokeObjectURL(pdfUrl);
+            // Recarga SOLO los datos que cambiaron, sin refrescar toda la pantalla
+            router.reload({ only: ['Rooms', 'Checkins'] });
+        }
     };
 
     // Agrupación visual de servicios

@@ -11,7 +11,7 @@ import {
     Users, // <-- IMPORTANTE: Importamos el icono Users
     X,
 } from 'lucide-react';
-import { PropsWithChildren, useState } from 'react';
+import { PropsWithChildren, useEffect, useState } from 'react';
 
 // Definición de Tipos Globales
 export interface User {
@@ -42,6 +42,16 @@ export default function AuthenticatedLayout({
         useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+
+    // --- Toast global de flash (visible en TODAS las páginas) ---
+    const [flashVisible, setFlashVisible] = useState(false);
+    useEffect(() => {
+        if (flash?.success || flash?.warning || flash?.error) {
+            setFlashVisible(true);
+            const t = setTimeout(() => setFlashVisible(false), 4000);
+            return () => clearTimeout(t);
+        }
+    }, [flash?.success, flash?.warning, flash?.error]);
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
@@ -255,6 +265,36 @@ export default function AuthenticatedLayout({
             <main className="relative z-10 py-10">
                 {children}
                 <OpenRegisterModal />
+
+                {/* --- Toast global de flash: visible en TODAS las páginas --- */}
+                {flashVisible && (
+                    <div className="fixed bottom-6 right-6 z-[80] w-full max-w-sm animate-in space-y-3 slide-in-from-bottom-4">
+                        {flash?.success && (
+                            <div className="flex items-start gap-3 rounded-xl border border-green-300 bg-green-50 p-4 shadow-lg">
+                                <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                                <p className="text-sm font-medium text-green-900">
+                                    {flash.success}
+                                </p>
+                            </div>
+                        )}
+                        {flash?.warning && (
+                            <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-lg">
+                                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                                <p className="text-sm font-medium text-amber-900">
+                                    {flash.warning}
+                                </p>
+                            </div>
+                        )}
+                        {flash?.error && (
+                            <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 shadow-lg">
+                                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+                                <p className="text-sm font-medium text-red-900">
+                                    {flash.error}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {showLogoutWarning && (
                     <div className="fixed inset-0 z-[9999] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
                         <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
@@ -285,23 +325,6 @@ export default function AuthenticatedLayout({
                                     >
                                         Volver al sistema
                                     </button>
-
-                                    {flash?.warning && (
-                                        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-                                            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-                                            <p className="text-sm font-medium text-amber-900">
-                                                {flash.warning}
-                                            </p>
-                                        </div>
-                                    )}
-                                    {flash?.success && (
-                                        <div className="mb-4 flex items-start gap-3 rounded-xl border border-green-300 bg-green-50 p-4">
-                                            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
-                                            <p className="text-sm font-medium text-green-900">
-                                                {flash.success}
-                                            </p>
-                                        </div>
-                                    )}
 
                                     <Link
                                         href="/reports/financial"

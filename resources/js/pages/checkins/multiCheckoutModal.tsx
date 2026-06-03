@@ -12,7 +12,7 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
+import { router } from '@inertiajs/react';
 interface Props {
     show: boolean;
     selectedRoomIds: number[];
@@ -76,7 +76,7 @@ export default function MultiCheckoutModal({
     useEffect(() => {
         // Ya sea que el modal se abra o se cierre, reseteamos absolutamente todo
         setExpandedRooms([]);
-        
+
         // Limpiar Descuentos
         setMostrarDescuento(false);
         setRebaja('');
@@ -88,7 +88,7 @@ export default function MultiCheckoutModal({
         setMontoEfectivo('');
         setMontoQR('');
         setBancoMixto(null);
-        
+
         // Limpiar Estados de Carga o PDF
         setPdfUrl(null);
         setProcessing(false);
@@ -388,7 +388,7 @@ export default function MultiCheckoutModal({
         }
         setPdfUrl(null);
         onClose();
-        window.location.reload();
+        router.reload({ only: ['Rooms', 'Checkins'] }); // antes: window.location.reload()
     };
 
     if (!show || selectedRoomIds.length === 0) return null;
@@ -498,7 +498,7 @@ export default function MultiCheckoutModal({
 
                                 {/* BLOQUE REBAJA MÚLTIPLE (COLORES ROJOS) */}
                                 {metodoPago !== 'ambos' && (
-                                    <div className="mb-4 mt-2 flex w-full justify-end">
+                                    <div className="mt-2 mb-4 flex w-full justify-end">
                                         {!mostrarDescuento ? (
                                             <button
                                                 type="button"
@@ -528,7 +528,8 @@ export default function MultiCheckoutModal({
                                                 </button>
 
                                                 <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
-                                                    Nuevo Total Hospedaje General (Bs)
+                                                    Nuevo Total Hospedaje
+                                                    General (Bs)
                                                 </label>
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <input
@@ -610,7 +611,7 @@ export default function MultiCheckoutModal({
                                             onClick={() =>
                                                 setTipoDocumento('factura')
                                             }
-                                            className={`hidden flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
+                                            className={`flex hidden flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             <div
                                                 className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'factura' ? 'border-green-500' : 'border-gray-300'}`}
@@ -1186,10 +1187,19 @@ export default function MultiCheckoutModal({
                                                             {/* 6. SALDO TOTAL DE LA HABITACIÓN */}
                                                             <div className="mx-2 mt-3 flex items-center justify-between rounded-xl bg-red-500 p-4 text-white shadow-lg">
                                                                 <span className="text-xs font-bold tracking-wider uppercase">
-                                                                    Saldo Pendiente (Hab{' '}{item.roomNumber})
+                                                                    Saldo
+                                                                    Pendiente
+                                                                    (Hab{' '}
+                                                                    {
+                                                                        item.roomNumber
+                                                                    }
+                                                                    )
                                                                 </span>
                                                                 <span className="text-xl font-black">
-                                                                    {item.totalHabitacion.toFixed(2)} Bs
+                                                                    {item.totalHabitacion.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1205,10 +1215,16 @@ export default function MultiCheckoutModal({
                                             {rebajaConfirmada !== null && (
                                                 <div className="mb-3 flex justify-between border-b border-dashed border-red-200 pb-2 text-sm">
                                                     <span className="font-bold text-red-500 uppercase">
-                                                        - Descuento Gral. Hospedaje:
+                                                        - Descuento Gral.
+                                                        Hospedaje:
                                                     </span>
                                                     <span className="font-bold text-red-500">
-                                                        -{(totalHospedajeGeneral - rebajaConfirmada).toFixed(2)} Bs
+                                                        -
+                                                        {(
+                                                            totalHospedajeGeneral -
+                                                            rebajaConfirmada
+                                                        ).toFixed(2)}{' '}
+                                                        Bs
                                                     </span>
                                                 </div>
                                             )}
@@ -1217,11 +1233,13 @@ export default function MultiCheckoutModal({
                                                     Total a Cobrar:
                                                 </span>
                                                 <span className="text-2xl font-black text-red-600">
-                                                    {saldoPendienteFinal.toFixed(2)} Bs
+                                                    {saldoPendienteFinal.toFixed(
+                                                        2,
+                                                    )}{' '}
+                                                    Bs
                                                 </span>
                                             </div>
                                         </div>
-
                                     </div>
                                 </div>
                             </div>
