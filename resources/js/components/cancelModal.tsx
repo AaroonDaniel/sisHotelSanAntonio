@@ -6,9 +6,10 @@ interface CancelModalProps {
     show: boolean;
     onClose: () => void;
     actionUrl: string | null;
+    onSuccess?: () => void; // Nueva prop para manejar el éxito de la acción
 }
 
-export default function CancelModal({ show, onClose, actionUrl }: CancelModalProps) {
+export default function CancelModal({ show, onClose, actionUrl, onSuccess }: CancelModalProps) {
     // Enviamos el estado como 'cancelado'
     const { put, processing } = useForm({ status: 'cancelado' });
 
@@ -17,7 +18,12 @@ export default function CancelModal({ show, onClose, actionUrl }: CancelModalPro
         if (actionUrl) {
             put(actionUrl, {
                 preserveScroll: true,
-                onSuccess: () => onClose(),
+                onSuccess: () => {
+                    onClose();
+                    if (onSuccess) {
+                        onSuccess();
+                    }
+                },
             });
         }
     };
