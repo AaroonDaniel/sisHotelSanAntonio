@@ -5,6 +5,7 @@ import {
     CheckCircle2,
     ChevronDown,
     Hotel,
+    Info,
     LogOut,
     Menu,
     User as UserIcon,
@@ -46,12 +47,12 @@ export default function AuthenticatedLayout({
     // --- Toast global de flash (visible en TODAS las páginas) ---
     const [flashVisible, setFlashVisible] = useState(false);
     useEffect(() => {
-        if (flash?.success || flash?.warning || flash?.error) {
+        if (flash?.success || flash?.warning || flash?.error || flash?.info) {
             setFlashVisible(true);
             const t = setTimeout(() => setFlashVisible(false), 4000);
             return () => clearTimeout(t);
         }
-    }, [flash?.success, flash?.warning, flash?.error]);
+    }, [flash?.success, flash?.warning, flash?.error, flash?.info]);
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
@@ -290,6 +291,14 @@ export default function AuthenticatedLayout({
                                 <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
                                 <p className="text-sm font-medium text-red-900">
                                     {flash.error}
+                                </p>
+                            </div>
+                        )}
+                        {flash?.info && (
+                            <div className="flex items-start gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 shadow-lg">
+                                <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+                                <p className="text-sm font-medium text-blue-900">
+                                    {flash.info}
                                 </p>
                             </div>
                         )}

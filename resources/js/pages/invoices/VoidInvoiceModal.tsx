@@ -107,7 +107,7 @@ export default function VoidInvoiceModal({
                     </h3>
                     <button
                         onClick={handleClose}
-                        className="text-gray-400 transition-colors hover:text-gray-600"
+                        className="text-gray-800 transition-colors hover:text-gray-600"
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -153,7 +153,7 @@ export default function VoidInvoiceModal({
                                         Number(e.target.value),
                                     )
                                 }
-                                className="w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                                className="w-full rounded-xl border-gray-900 text-gray-900 text-bold shadow-base focus:border-red-500 focus:ring-red-500"
                                 disabled={processing}
                             >
                                 <option value={1}>1 - Factura mal emitida</option>

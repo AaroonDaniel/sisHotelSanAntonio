@@ -478,7 +478,15 @@ class SiatService
             $response = $client->anulacionFactura($params);
             $r = $response->RespuestaServicioFacturacion ?? null;
 
-            if ($r && !empty($r->transaccion) && ($r->codigoDescripcion ?? '') === 'ANULADA') {
+            // DESPUÉS — acepta ANULADA y "ANULACION CONFIRMADA"
+            $descripcion = strtoupper(trim((string) ($r->codigoDescripcion ?? '')));
+
+            // El SIAT confirma con transaccion=true. Según el ambiente la descripción
+            // llega como "ANULADA" o "ANULACION CONFIRMADA".
+            if (
+                $r && !empty($r->transaccion)
+                && (str_contains($descripcion, 'CONFIRMADA') || str_contains($descripcion, 'ANULAD'))
+            ) {
                 return [
                     'status'  => 'voided',
                     'mensaje' => 'Factura anulada correctamente',
