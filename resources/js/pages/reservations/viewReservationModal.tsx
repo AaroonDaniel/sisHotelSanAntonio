@@ -1,4 +1,6 @@
+import ApprovePaymentModal from '@/components/approvePaymentModal';
 import CancelModal from '@/components/cancelModal';
+import RejectPaymentModal from '@/components/rejectPaymentModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
@@ -46,7 +48,8 @@ export default function ViewReservationModal({
 
     // 👇 Estado para la vista de Verificación de Pago Online 👇
     const [verifyingOnlineRes, setVerifyingOnlineRes] = useState<any>(null);
-
+    const [approvingResId, setApprovingResId] = useState<number | null>(null);
+    const [rejectingResId, setRejectingResId] = useState<number | null>(null);
     // Estados para tu CancelModal
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [cancelingReservationId, setCancelingReservationId] = useState<
@@ -202,8 +205,10 @@ export default function ViewReservationModal({
                                                 alt="Comprobante"
                                                 className="max-h-[500px] w-full rounded object-contain"
                                                 onError={(e) => {
-                                                    e.currentTarget.src =
-                                                        '/images/placeholder.png';
+                                                    e.currentTarget.onerror =
+                                                        null; // 👈 corta el bucle
+                                                    e.currentTarget.style.display =
+                                                        'none';
                                                 }}
                                             />
                                             <a
@@ -227,47 +232,21 @@ export default function ViewReservationModal({
 
                                 <div className="mt-8 flex gap-4">
                                     <button
-                                        onClick={() => {
-                                            if (
-                                                confirm(
-                                                    '¿Rechazar comprobante? La reserva será cancelada y las habitaciones liberadas.',
-                                                )
-                                            ) {
-                                                router.post(
-                                                    `/admin/reservas/${verifyingOnlineRes.id}/rechazar-pago`,
-                                                    {},
-                                                    {
-                                                        onSuccess: () =>
-                                                            setVerifyingOnlineRes(
-                                                                null,
-                                                            ),
-                                                    },
-                                                );
-                                            }
-                                        }}
+                                        onClick={() =>
+                                            setRejectingResId(
+                                                verifyingOnlineRes.id,
+                                            )
+                                        }
                                         className="w-1/2 rounded-2xl border-2 border-red-100 bg-white py-4 text-sm font-black tracking-wider text-red-600 uppercase shadow-sm transition-all hover:border-red-200 hover:bg-red-50 active:scale-95"
                                     >
                                         ❌ Rechazar (Falso/Inválido)
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            if (
-                                                confirm(
-                                                    "¿Aprobar pago? La reserva pasará a 'Pendientes de Habitación'.",
-                                                )
-                                            ) {
-                                                router.post(
-                                                    `/admin/reservas/${verifyingOnlineRes.id}/aprobar-pago`,
-                                                    {},
-                                                    {
-                                                        onSuccess: () =>
-                                                            setVerifyingOnlineRes(
-                                                                null,
-                                                            ),
-                                                    },
-                                                );
-                                            }
-                                        }}
+                                        onClick={() =>
+                                            setApprovingResId(
+                                                verifyingOnlineRes.id,
+                                            )
+                                        }
                                         className="w-1/2 rounded-2xl bg-blue-600 py-4 text-sm font-black tracking-wider text-white uppercase shadow-lg transition-all hover:bg-blue-500 active:scale-95"
                                     >
                                         ✓ Aprobar Comprobante
@@ -277,6 +256,19 @@ export default function ViewReservationModal({
                         </div>
                     </div>
                 </div>
+
+                <ApprovePaymentModal
+                    show={approvingResId !== null}
+                    reservationId={approvingResId}
+                    onClose={() => setApprovingResId(null)}
+                    onSuccess={() => setVerifyingOnlineRes(null)}
+                />
+                <RejectPaymentModal
+                    show={rejectingResId !== null}
+                    reservationId={rejectingResId}
+                    onClose={() => setRejectingResId(null)}
+                    onSuccess={() => setVerifyingOnlineRes(null)}
+                />
             </AuthenticatedLayout>
         );
     }
@@ -284,14 +276,17 @@ export default function ViewReservationModal({
     // ==========================================
     // 🛏️ VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
     // ==========================================
-    // ==========================================
-    // 🛏️ VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
-    // ==========================================
     if (confirmingStayRes) {
-        
         // 👇 1. CALCULAMOS EL ADELANTO REAL DESDE LA TABLA DE PAGOS 👇
-        const advancePaid = confirmingStayRes.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
-        const paymentMethod = confirmingStayRes.payments?.[0]?.method || confirmingStayRes.payment_type || 'Transferencia';
+        const advancePaid =
+            confirmingStayRes.payments?.reduce(
+                (sum: number, p: any) => sum + (Number(p.amount) || 0),
+                0,
+            ) || 0;
+        const paymentMethod =
+            confirmingStayRes.payments?.[0]?.method ||
+            confirmingStayRes.payment_type ||
+            'Transferencia';
 
         return (
             <AuthenticatedLayout user={auth.user}>
@@ -397,9 +392,9 @@ export default function ViewReservationModal({
                                                                 'private'
                                                                     ? '🚿 PRIVADO'
                                                                     : det.requested_bathroom ===
-                                                                      'compartido_sindesayuno'
-                                                                    ? '🚽 COMP. S/D'
-                                                                    : '🚽 COMP. C/D'}
+                                                                        'compartido_sindesayuno'
+                                                                      ? '🚽 COMP. S/D'
+                                                                      : '🚽 COMP. C/D'}
                                                             </span>
                                                         )}
                                                     </div>

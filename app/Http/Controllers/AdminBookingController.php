@@ -66,7 +66,7 @@ class AdminBookingController extends Controller
                 // 3. Liberar las habitaciones para que vuelvan a estar disponibles
                 foreach ($reservation->details as $detail) {
                     if ($detail->room_id) {
-                        Room::where('id', $detail->room_id)->update(['status' => 'DISPONIBLE']);
+                        Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
                     }
                 }
                 

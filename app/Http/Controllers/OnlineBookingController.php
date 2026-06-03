@@ -315,7 +315,7 @@ class OnlineBookingController extends Controller
                 $payment->amount = $advanceAmount;
                 $payment->method = 'Transferencia';
                 $payment->voucher_path = $voucherPath;
-                $payment->type = 'ingreso';
+                $payment->type = 'ADELANTO';
                 $payment->status = 'PENDIENTE_VERIFICACION';
                 
                 // Guardamos el registro en la base de datos
