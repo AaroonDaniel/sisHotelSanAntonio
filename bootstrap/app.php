@@ -60,10 +60,17 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($request->header('X-Inertia')) {
                 // 303 para que Inertia rehaga la visita con GET tras un DELETE/PUT.
-                return back()->with('db_error', $mensaje)->setStatusCode(303);
+                // El nonce único garantiza que el modal reaparezca CADA vez,
+                // aunque el mensaje de error sea idéntico al anterior.
+                return back()
+                    ->with('db_error', $mensaje)
+                    ->with('db_error_nonce', (string) \Illuminate\Support\Str::uuid())
+                    ->setStatusCode(303);
             }
 
-            return back()->with('db_error', $mensaje);
+            return back()
+                ->with('db_error', $mensaje)
+                ->with('db_error_nonce', (string) \Illuminate\Support\Str::uuid());
         });
 
         // 403 (sin permisos) -> pantalla propia "Acceso denegado" en vez de la fea de Laravel.

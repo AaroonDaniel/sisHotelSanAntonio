@@ -36,6 +36,7 @@ export default function AuthenticatedLayout({
             error?: string;
             info?: string;
             db_error?: string;
+            db_error_nonce?: string;
         };
     }>().props;
     const { url, props } = usePage();
@@ -59,7 +60,8 @@ export default function AuthenticatedLayout({
     const [dbError, setDbError] = useState<string | null>(null);
     useEffect(() => {
         if (flash?.db_error) setDbError(flash.db_error);
-    }, [flash?.db_error]);
+        // Depende del nonce: así reaparece aunque el mensaje sea idéntico.
+    }, [flash?.db_error_nonce]);
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 

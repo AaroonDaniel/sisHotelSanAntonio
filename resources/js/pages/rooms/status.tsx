@@ -1101,7 +1101,7 @@ export default function RoomsStatus({
                         {/* PRIMERA FILA: Controles de Filtros */}
                         {/* Eliminamos 'justify-end' para evitar el corte izquierdo, usamos 'xl:ml-auto' en el primer botón */}
                         <div className="flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-2">
-                            {(auth as any).active_register && (
+                            
                                 <button
                                     onClick={handleOpenQuickPreview}
                                     // MAGIA AQUÍ: w-auto y xl:ml-auto empujan toda la fila a la derecha sin cortarla
@@ -1111,8 +1111,7 @@ export default function RoomsStatus({
                                     <FileText className="h-5 w-5" />
                                     Vista Previa
                                 </button>
-                            )}
-
+                    
                             {/* Selector de Tipo de Habitación (Reducido a w-32) */}
                             <div
                                 className={`relative shrink-0 ${(auth as any).active_register ? '' : 'xl:ml-auto'}`}

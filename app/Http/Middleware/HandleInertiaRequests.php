@@ -79,6 +79,7 @@ class HandleInertiaRequests extends Middleware
                 'warning'            => fn() => $request->session()->get('warning'),
                 'info'               => fn() => $request->session()->get('info'),
                 'db_error'           => fn() => $request->session()->get('db_error'),
+                'db_error_nonce'     => fn() => $request->session()->get('db_error_nonce'),
             ],
 
             'sidebarOpen' => ! $request->hasCookie('sidebar_state')
