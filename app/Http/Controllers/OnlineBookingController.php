@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ReservationReceiptMail;
 use App\Models\ReservationGuest;
+use App\Rules\TurnstileToken;
 
 class OnlineBookingController extends Controller
 {
@@ -170,6 +171,7 @@ class OnlineBookingController extends Controller
             'selectedRooms.*.price_id'       => 'nullable|exists:prices,id',
             'selectedRooms.*.room_type_id'   => 'nullable|exists:room_types,id',
             'payment_voucher'    => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120', 
+            'cf-turnstile-response' => ['required', new TurnstileToken()],
         ]);
 
         $capacidadTotalCarrito = 0;
