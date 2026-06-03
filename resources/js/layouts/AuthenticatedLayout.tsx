@@ -35,6 +35,7 @@ export default function AuthenticatedLayout({
             warning?: string;
             error?: string;
             info?: string;
+            db_error?: string;
         };
     }>().props;
     const { url, props } = usePage();
@@ -53,6 +54,12 @@ export default function AuthenticatedLayout({
             return () => clearTimeout(t);
         }
     }, [flash?.success, flash?.warning, flash?.error, flash?.info]);
+
+    // --- Modal de "Operación no permitida" (errores SQL / integridad) ---
+    const [dbError, setDbError] = useState<string | null>(null);
+    useEffect(() => {
+        if (flash?.db_error) setDbError(flash.db_error);
+    }, [flash?.db_error]);
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
@@ -302,6 +309,33 @@ export default function AuthenticatedLayout({
                                 </p>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* --- Modal: Operación no permitida (errores SQL / integridad) --- */}
+                {dbError && (
+                    <div className="fixed inset-0 z-[9999] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
+                        <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
+                            <div className="p-6 text-center">
+                                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+                                    <AlertTriangle className="h-8 w-8" />
+                                </div>
+                                <h3 className="mb-2 text-xl font-bold text-gray-800">
+                                    Operación no permitida
+                                </h3>
+                                <p className="text-base leading-relaxed text-gray-600">
+                                    {dbError}
+                                </p>
+                                <div className="mt-8 flex justify-center">
+                                    <button
+                                        onClick={() => setDbError(null)}
+                                        className="rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95"
+                                    >
+                                        Entendido
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
                 {showLogoutWarning && (

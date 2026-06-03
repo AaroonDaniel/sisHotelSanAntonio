@@ -41,6 +41,31 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Errores SQL (integridad referencial, etc.) -> NO mostramos el SQL al
+        // usuario. Registramos el detalle internamente y devolvemos un mensaje
+        // amigable que el frontend mostrará como modal "Operación no permitida".
+        $exceptions->render(function (\Illuminate\Database\QueryException $e, \Illuminate\Http\Request $request) {
+            \Illuminate\Support\Facades\Log::error('Error SQL capturado: ' . $e->getMessage(), [
+                'sql'  => $e->getSql(),
+                'url'  => $request->fullUrl(),
+                'user' => optional($request->user())->id,
+            ]);
+
+            // SQLSTATE 23000 = violación de integridad (p. ej. llave foránea).
+            $esIntegridad = ($e->errorInfo[0] ?? null) === '23000';
+
+            $mensaje = $esIntegridad
+                ? 'No se permite esta operación: el registro está vinculado a otros datos del sistema, por lo que no puede eliminarse ni modificarse.'
+                : 'No se pudo completar el proceso por un error en la base de datos. Intente nuevamente o contacte al administrador.';
+
+            if ($request->header('X-Inertia')) {
+                // 303 para que Inertia rehaga la visita con GET tras un DELETE/PUT.
+                return back()->with('db_error', $mensaje)->setStatusCode(303);
+            }
+
+            return back()->with('db_error', $mensaje);
+        });
+
         // 403 (sin permisos) -> pantalla propia "Acceso denegado" en vez de la fea de Laravel.
         $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $e, \Illuminate\Http\Request $request) {
             if ($response->getStatusCode() === 403 && ! $request->expectsJson()) {
