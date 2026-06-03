@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, useForm } from '@inertiajs/react'; // 👈 1. Importamos useForm
+import { Head, useForm ,usePage } from '@inertiajs/react'; // 👈 1. Importamos useForm
 import { CalendarDays, BedDouble, Users, DollarSign, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -10,6 +10,8 @@ import GuestDetailsForm from './partials/guestDetailsForm';
 import PaymentSummary from './partials/paymentSummary';
 
 export default function BookingIndex({ availableRoomTypes = [], filters = {} }: any) {
+
+    const { turnsSiteKey } = usePage().props as any;
     // Estado del Stepper
     const [currentStep, setCurrentStep] = useState(1);
     
@@ -179,6 +181,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     bookingData={bookingData} 
                                     setBookingData={setBookingData} 
                                     onNext={nextStep} 
+                                    turnstileSiteKey={turnsSiteKey} 
                                 />
                             )}
 
