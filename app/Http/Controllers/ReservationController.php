@@ -280,7 +280,7 @@ class ReservationController extends Controller
                 // --- 1. SI CANCELAN LA RESERVA ---
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
                     $reservation->update([
-                        'status' => 'cancelada',
+                        'status' => 'cancelado',
                         'cancellation_date' => now() // ✅ MÓDULO 2: Registra la fecha y hora exacta
                     ]);
                     foreach ($reservation->details as $detail) {

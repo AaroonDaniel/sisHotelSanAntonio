@@ -10,7 +10,7 @@ interface ConfirmModalProps {
 
 export default function ConfirmModal({ show, onClose, actionUrl }: ConfirmModalProps) {
     // Enviamos el estado como 'confirmado'
-    const { put, processing } = useForm({ status: 'confirmado' });
+    const { put, processing } = useForm({ status: 'confirmada' });
 
     const [rebaja, serRebaja] = useState('');
 
