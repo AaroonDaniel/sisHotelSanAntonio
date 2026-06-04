@@ -42,7 +42,6 @@ export interface User {
     avatar?: string;
     shift: string;
     email_verified_at: string | null;
-    two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
     roles: string[];
