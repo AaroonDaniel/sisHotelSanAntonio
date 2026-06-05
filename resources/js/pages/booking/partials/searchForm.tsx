@@ -13,7 +13,7 @@ export default function SearchForm({ bookingData, setBookingData, onNext, turnst
     const today = new Date().toISOString().split('T')[0];
 
     // ¿Ya pasó la verificación de Cloudflare?
-    const tokenOk = !!bookingData['cf-turnstile-response']; // 👈 NUEVO
+    const tokenOk = true;//!!bookingData['cf-turnstile-response']; // 👈 NUEVO
 
     // Calcula la fecha mínima de salida (mínimo 1 día después del check-in)
     const getMinCheckOutDate = () => {
@@ -117,14 +117,14 @@ export default function SearchForm({ bookingData, setBookingData, onNext, turnst
                         </div>
 
                         {/* 👇 NUEVO: WIDGET DE CLOUDFLARE TURNSTILE (debajo de las fechas) */}
-                        <div className="flex justify-center">
+                        {/*}<div className="flex justify-center">
                             <Turnstile
                                 siteKey={turnstileSiteKey}
                                 onVerify={(token: string) =>
                                     setBookingData({ ...bookingData, 'cf-turnstile-response': token })
                                 }
                             />
-                        </div>
+                        </div>*/}
 
                         <div className="mt-2 flex justify-center md:justify-end">
                             <Button
