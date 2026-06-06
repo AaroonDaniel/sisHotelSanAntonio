@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
-import { Hotel, Lock, User as UserIcon } from 'lucide-react';
-import { useEffect } from 'react';
+import { Eye, EyeOff, Hotel, Lock, User as UserIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function Login() {
     // Reemplazamos los useState manuales por el hook useForm nativo de Inertia
@@ -8,6 +8,9 @@ export default function Login() {
         nickname: '',
         password: '',
     });
+
+    // Estado para mostrar/ocultar la contraseña (toggle reutilizable)
+    const [showPassword, setShowPassword] = useState(false);
 
     // Limpiamos la contraseña por seguridad si el componente se desmonta
     useEffect(() => {
@@ -25,6 +28,21 @@ export default function Login() {
     return (
         <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gray-900 font-sans text-gray-100 selection:bg-red-500 selection:text-white">
             <Head title="Acceso Hotel" />
+
+            {/* Oculta el ícono nativo de revelar/limpiar del navegador (Edge/Chrome/IE) */}
+            <style>{`
+                .password-input::-ms-reveal,
+                .password-input::-ms-clear {
+                    display: none !important;
+                }
+                .password-input::-webkit-credentials-auto-fill-button,
+                .password-input::-webkit-strong-password-auto-fill-button,
+                .password-input::-webkit-caps-lock-indicator {
+                    visibility: hidden !important;
+                    display: none !important;
+                    pointer-events: none !important;
+                }
+            `}</style>
 
             {/* FONDO AMBIENTAL (Mantenido del original) */}
             <div
@@ -73,7 +91,7 @@ export default function Login() {
                                     name="nickname"
                                     value={data.nickname}
                                     onChange={(e) => setData('nickname', e.target.value)}
-                                    className={`block w-full rounded-lg border bg-gray-800/50 py-3 pl-10 pr-4 text-white placeholder-gray-500 transition-all focus:ring-1 sm:text-sm ${
+                                    className={`block w-full rounded-lg border bg-gray-800/50 py-3 pl-10 pr-4 text-white placeholder-gray-400 transition-all focus:ring-1 sm:text-sm ${
                                         errors.nickname 
                                         ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
                                         : 'border-gray-600 focus:border-red-500 focus:ring-red-500'
@@ -105,11 +123,11 @@ export default function Login() {
                                 </div>
                                 <input
                                     id="password"
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     name="password"
                                     value={data.password}
                                     onChange={(e) => setData('password', e.target.value)}
-                                    className={`block w-full rounded-lg border bg-gray-800/50 py-3 pl-10 pr-4 text-white placeholder-gray-500 transition-all focus:ring-1 sm:text-sm ${
+                                    className={`password-input block w-full rounded-lg border bg-gray-800/50 py-3 pl-10 pr-10 text-white placeholder-gray-400 transition-all focus:ring-1 sm:text-sm ${
                                         errors.password 
                                         ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
                                         : 'border-gray-600 focus:border-red-500 focus:ring-red-500'
@@ -117,6 +135,15 @@ export default function Login() {
                                     placeholder="••••••••"
                                     autoComplete="current-password"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-red-500 focus:outline-none"
+                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                    tabIndex={-1}
+                                >
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
                             {errors.password && (
                                 <p className="mt-2 text-sm font-medium text-red-400">
@@ -164,7 +191,7 @@ export default function Login() {
                 
                 {/* Footer */}
                 <div className="mt-8 text-center text-xs text-gray-400">
-                    &copy; {new Date().getFullYear()} Hotel San Antonio - Sistema Interno
+                    &copy; {new Date().getFullYear()} CodigoGM
                 </div>
             </div>
         </div>
