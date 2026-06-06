@@ -4,13 +4,27 @@ import { router } from '@inertiajs/react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Search, CalendarDays, Users, ArrowRight } from 'lucide-react';
+
+import {  Search, CalendarDays, Users, ArrowRight, Minus, Plus  } from 'lucide-react';
 import Turnstile from '@/components/Turnstile'; // 👈 NUEVO
 
 export default function SearchForm({ bookingData, setBookingData, onNext, turnstileSiteKey }: any) {
 
     // Obtenemos la fecha actual para bloquear fechas pasadas en el calendario
     const today = new Date().toISOString().split('T')[0];
+
+    // Contador de huéspedes (máximo interno, no se muestra)
+    const MIN_GUESTS = 1;
+    const MAX_GUESTS = 20;
+    const guests = bookingData.guests || MIN_GUESTS;
+
+    const incrementGuests = () => {
+        setBookingData({ ...bookingData, guests: Math.min(guests + 1, MAX_GUESTS) });
+    };
+
+    const decrementGuests = () => {
+        setBookingData({ ...bookingData, guests: Math.max(guests - 1, MIN_GUESTS) });
+    };
 
     // ¿Ya pasó la verificación de Cloudflare?
     const tokenOk = true;//!!bookingData['cf-turnstile-response']; // 👈 NUEVO
@@ -104,15 +118,29 @@ export default function SearchForm({ bookingData, setBookingData, onNext, turnst
                                 <Label className="text-gray-600 text-sm font-semibold flex items-center">
                                     <Users className="w-4 h-4 mr-1 text-[#1e3a5f]" /> Huéspedes
                                 </Label>
-                                <Input
-                                    type="number"
-                                    required
-                                    min="1"
-                                    max="10"
-                                    className="rounded-sm h-12 text-gray-700 w-full text-base focus:ring-[#1e3a5f]"
-                                    value={bookingData.guests || 1}
-                                    onChange={(e) => setBookingData({...bookingData, guests: parseInt(e.target.value) || 1})}
-                                />
+                                <div className="flex items-center h-12 rounded-sm border border-input overflow-hidden bg-white">
+                                    <button
+                                        type="button"
+                                        onClick={decrementGuests}
+                                        disabled={guests <= MIN_GUESTS}
+                                        aria-label="Disminuir huéspedes"
+                                        className="h-full px-4 flex items-center justify-center text-[#1e3a5f] hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Minus className="w-4 h-4" />
+                                    </button>
+                                    <div className="flex-1 text-center text-base font-semibold text-gray-700 select-none">
+                                        {guests}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={incrementGuests}
+                                        disabled={guests >= MAX_GUESTS}
+                                        aria-label="Aumentar huéspedes"
+                                        className="h-full px-4 flex items-center justify-center text-[#b3282d] hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
