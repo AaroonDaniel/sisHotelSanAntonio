@@ -24,7 +24,6 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
-
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -172,6 +171,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index')->middleware('permission:reportes.parte_diario');
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf')->middleware('permission:reportes.parte_diario');
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily')->middleware('permission:reportes.parte_diario');
+    Route::get('/reports/history', [ReportController::class, 'history'])->name('reports.history')->middleware('permission:reportes.parte_diario');
     Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
@@ -180,6 +180,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
     Route::get('/cash-registers/{cashRegister}', [CashRegisterController::class, 'show'])->name('cash-registers.show');
+
 
 
     //Gastos
@@ -327,5 +328,11 @@ Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booki
 
 // Mostrar el PDF del recibo final de reserva online
 Route::get('/reservar/recibo-publico/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt_public');
+
+Route::get('/storage/{path}', function (string $path) {
+    abort_unless(Storage::disk('public')->exists($path), 404);
+    return Storage::disk('public')->response($path);
+})->where('path', '.*')->name('storage.public');
+ 
 
 require __DIR__ . '/settings.php';

@@ -474,7 +474,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                             onClick={() => setModalDate(null)}
                         >
                             <div
-                                className="flex h-[92vh] w-[92vw] max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                                className="flex h-[80vh] w-[92vw] max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50 px-6 py-4">
