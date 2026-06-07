@@ -222,10 +222,14 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                             <span className="text-sm font-black tracking-widest text-emerald-300">Nº {numeroSerie}</span>
                         </div>
                         <button
-                            onClick={openHistory}
+                            onClick={() => (viewMode === 'history' ? setViewMode('generator') : openHistory())}
                             className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 shadow-sm transition hover:bg-emerald-500/20"
                         >
-                            <History className="h-4 w-4" /> Historial
+                            {viewMode === 'history' ? (
+                                <><ArrowLeft className="h-4 w-4" /> Volver a Reportes</>
+                            ) : (
+                                <><History className="h-4 w-4" /> Historial</>
+                            )}
                         </button>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-white/10 p-2 pr-4 backdrop-blur-md shadow-md border border-white/5">
