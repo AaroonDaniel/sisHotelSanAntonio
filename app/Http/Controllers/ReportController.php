@@ -218,7 +218,10 @@ class ReportController extends Controller
 
     public function generateGuestsReportPdf(Request $request)
     {
-        $ids = explode(',', $request->query('ids', ''));
+        $idsParam = $request->query('ids', '');
+        $ids = ($request->boolean('auto') || $idsParam === '')
+            ? $this->guestIdsForDate($request->query('date', now()->toDateString()))
+            : explode(',', $idsParam);
         $targetDate = $request->query('date', now()->toDateString());
         $targetDateStart = Carbon::parse($targetDate)->startOfDay();
         $targetDateEnd = Carbon::parse($targetDate)->endOfDay();
@@ -885,5 +888,44 @@ class ReportController extends Controller
                 'neto'         => round($totalNeto, 2),
             ],
         ]);
+    }
+
+    private function guestIdsForDate(string $date): array
+    {
+        $end = Carbon::parse($date)->endOfDay();
+
+        $checkins = Checkin::with('companions:id')
+            ->where('created_at', '<=', $end)
+            ->where(function ($q) use ($end) {
+                $q->whereRaw('LOWER(status) = ?', ['activo'])
+                    ->orWhere(function ($s) use ($end) {
+                        $s->whereRaw('LOWER(status) = ?', ['finalizado'])
+                            ->where('updated_at', '>', $end);
+                    });
+            })->get();
+
+        $ids = collect();
+        foreach ($checkins as $ck) {
+            if ($ck->guest_id) $ids->push($ck->guest_id);
+            foreach ($ck->companions as $c) $ids->push($c->id);
+        }
+
+        return $ids->unique()->values()->all();
+    }
+
+    public function history(Request $request)
+    {
+        $days = min((int) $request->query('days', 60), 180);
+
+        $rows = [];
+        for ($i = 0; $i < $days; $i++) {
+            $date  = now()->subDays($i)->toDateString();
+            $total = count($this->guestIdsForDate($date));
+            if ($total > 0) {
+                $rows[] = ['date' => $date, 'total' => $total];
+            }
+        }
+
+        return response()->json($rows);
     }
 }

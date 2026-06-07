@@ -1,16 +1,19 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { 
-    ArrowLeft, 
-    CheckSquare, 
-    Printer, 
-    Search, 
-    Square, 
+import {
+    ArrowLeft,
+    CheckSquare,
+    Printer,
+    Search,
+    Square,
     ArrowRightCircle,
     UserCheck,
     FileText,
     Calendar,
-    Zap
+    Zap,
+    History,
+    Eye,
+    X
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -41,7 +44,7 @@ interface Props {
     Entrantes: Guest[];
     Quedantes: Guest[];
     Salientes: Guest[];
-    TargetDate: string; 
+    TargetDate: string;
 }
 
 const civilStatusTranslations: Record<string, string> = {
@@ -57,6 +60,30 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState(TargetDate || new Date().toISOString().split('T')[0]);
 
+    // --- HISTORIAL DE PARTES DIARIOS ---
+    const [viewMode, setViewMode] = useState<'generator' | 'history'>('generator');
+    const [history, setHistory] = useState<{ date: string; total: number }[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [modalDate, setModalDate] = useState<string | null>(null);
+
+    const formatDate = (iso: string) => {
+        const [yy, mm, dd] = iso.split('-');
+        return `${dd}/${mm}/${yy}`;
+    };
+
+    const openHistory = async () => {
+        setViewMode('history');
+        setLoadingHistory(true);
+        try {
+            const res = await fetch('/reports/history', { headers: { Accept: 'application/json' } });
+            setHistory(await res.json());
+        } catch {
+            setHistory([]);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
     // Calcular Correlativo
     const baseDate = new Date(2026, 3, 18);
     const [y, m, d] = selectedDate.split('-');
@@ -68,7 +95,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = e.target.value;
         setSelectedDate(newDate);
-        setSelectedIds([]); 
+        setSelectedIds([]);
         setPdfUrl(null);
         router.get('/reports', { date: newDate }, { preserveState: true, preserveScroll: true });
     };
@@ -89,7 +116,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
 
     // Lista total para la vista previa
     const allGuests = [...Entrantes, ...Quedantes, ...Salientes];
-    
+
     // Filtro para vista previa de derecha
     const selectedEntrantes = Entrantes.filter((g) => selectedIds.includes(g.id));
     const selectedQuedantes = Quedantes.filter((g) => selectedIds.includes(g.id));
@@ -110,7 +137,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
             ...filteredQuedantes.map(g => g.id),
             ...filteredSalientes.map(g => g.id)
         ];
-        
+
         const allSelected = allVisibleIds.every((id) => selectedIds.includes(id));
 
         if (allSelected) {
@@ -124,7 +151,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
         }
     };
 
-    const isAllSelected = totalFiltered > 0 && 
+    const isAllSelected = totalFiltered > 0 &&
         [...filteredEntrantes, ...filteredQuedantes, ...filteredSalientes].every(g => selectedIds.includes(g.id));
 
     // ACCIÓN: Generar PDF Manual (Solo los chequeados)
@@ -194,6 +221,12 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                         <div className="flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1.5 shadow-sm">
                             <span className="text-sm font-black tracking-widest text-emerald-300">Nº {numeroSerie}</span>
                         </div>
+                        <button
+                            onClick={openHistory}
+                            className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 shadow-sm transition hover:bg-emerald-500/20"
+                        >
+                            <History className="h-4 w-4" /> Historial
+                        </button>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-white/10 p-2 pr-4 backdrop-blur-md shadow-md border border-white/5">
                         <Calendar className="h-5 w-5 text-emerald-400 ml-2" />
@@ -208,8 +241,60 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                 </div>
 
                 <div className="py-6">
-                    {pdfUrl ? (
-                        <div className="flex h-[calc(100vh-10rem)] -mt-6 w-full animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
+                    {viewMode === 'history' ? (
+                        /* ===================== VISTA HISTORIAL ===================== */
+                        <div className="animate-in fade-in duration-200">
+                            <div className="mb-4 flex items-center justify-between">
+                                <h3 className="flex items-center gap-2 text-lg font-bold text-white">
+                                    <History className="h-5 w-5 text-emerald-400" /> Historial de Partes Diarios
+                                </h3>
+                                <button
+                                    onClick={() => setViewMode('generator')}
+                                    className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
+                                >
+                                    <ArrowLeft className="h-4 w-4" /> Volver al Generador
+                                </button>
+                            </div>
+
+                            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 text-gray-600">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left font-bold">Fecha del Reporte</th>
+                                            <th className="px-6 py-3 text-center font-bold">Huéspedes</th>
+                                            <th className="px-6 py-3 text-right font-bold">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {loadingHistory ? (
+                                            <tr><td colSpan={3} className="px-6 py-10 text-center text-gray-400">Cargando historial...</td></tr>
+                                        ) : history.length === 0 ? (
+                                            <tr><td colSpan={3} className="px-6 py-10 text-center text-gray-400">No hay reportes en el periodo.</td></tr>
+                                        ) : (
+                                            history.map((h) => (
+                                                <tr key={h.date} className="transition-colors hover:bg-emerald-50/40">
+                                                    <td className="px-6 py-4 font-semibold text-gray-800">{formatDate(h.date)}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{h.total}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={() => setModalDate(h.date)}
+                                                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                                                        >
+                                                            <Eye className="h-4 w-4" /> Ver detalles
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : pdfUrl ? (
+                        /* ===================== VISTA PREVIA PDF ===================== */
+                        <div className="flex h-[calc(100vh-15rem)] -mt-6 w-full animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
                             <div className="flex flex-col items-center justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-6 py-4 sm:flex-row">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-900">
                                     <div className="rounded-lg bg-emerald-100 p-1.5 text-emerald-600">
@@ -230,6 +315,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                             </div>
                         </div>
                     ) : (
+                        /* ===================== VISTA SELECCIÓN ===================== */
                         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                             {/* COLUMNA IZQUIERDA (SELECCIÓN) */}
                             <div className="lg:col-span-5 flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
@@ -315,7 +401,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                             >
                                                 <Printer className="h-4 w-4" /> Selección Manual
                                             </button>
-                                            
+
                                             {/* EL NUEVO BOTÓN AUTOMÁTICO */}
                                             <button
                                                 onClick={handleGenerateAuto}
@@ -376,6 +462,35 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                             <p className="text-xs mt-1">Haga click en "Todo Automático" o seleccione huéspedes.</p>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===================== MODAL VER DETALLES ===================== */}
+                    {modalDate && (
+                        <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                            onClick={() => setModalDate(null)}
+                        >
+                            <div
+                                className="flex h-[92vh] w-[92vw] max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50 px-6 py-4">
+                                    <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-900">
+                                        <FileText className="h-5 w-5" /> Parte Diario — {formatDate(modalDate)}
+                                    </h2>
+                                    <button onClick={() => setModalDate(null)} className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100">
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-hidden bg-gray-200/40 p-2">
+                                    <iframe
+                                        src={`/reports/generate-pdf?date=${modalDate}&auto=1&t=${Date.now()}`}
+                                        className="h-full w-full rounded border border-gray-300 bg-white"
+                                        title="Parte Diario"
+                                    />
                                 </div>
                             </div>
                         </div>
