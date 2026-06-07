@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head,router, Link, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -142,7 +142,7 @@ export default function SignificantEventsIndex({
 
             <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
                 <button
-                    onClick={() => window.history.back()}
+                    onClick={() => router.visit('/dashboard')}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">

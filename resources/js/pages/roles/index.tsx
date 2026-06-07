@@ -51,7 +51,7 @@ export default function RolesIndex({ auth, roles, permissions }: Props) {
             <Head title="Gestión de Cargos y Roles" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <button
-                    onClick={() => window.history.back()}
+                    onClick={() => router.visit('/dashboard')}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">

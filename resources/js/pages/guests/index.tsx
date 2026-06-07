@@ -1,6 +1,6 @@
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     Briefcase,
@@ -114,7 +114,7 @@ export default function GuestsIndex({ auth, Guests }: Props) {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* Botón Volver */}
                 <button
-                    onClick={() => window.history.back()}
+                    onClick={() => router.visit('/dashboard')}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
@@ -331,3 +331,4 @@ export default function GuestsIndex({ auth, Guests }: Props) {
         </AuthenticatedLayout>
     );
 }
+

@@ -76,7 +76,7 @@ export default function FinancialReport({ auth, Filters }: Props) {
                 {/* ENCABEZADO: Título y Volver */}
                 <div className="mb-4 flex-shrink-0">
                     <button 
-                        onClick={() => window.history.back()} 
+                        onClick={() => router.visit('/dashboard')} 
                         className="group flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-white transition-colors mb-4"
                     >
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 transition-all group-hover:bg-gray-700">

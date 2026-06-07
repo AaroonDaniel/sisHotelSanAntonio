@@ -459,7 +459,7 @@ export default function ViewReservationModal({
 
             <div className="mx-auto max-w-[1500px] space-y-6 px-4 pt-6 pb-12 sm:px-8 lg:px-16 xl:px-20">
                 <button
-                    onClick={() => window.history.back()}
+                    onClick={() => router.visit('/dashboard')}
                     className="group mb-4 flex items-center gap-1 text-base font-medium text-gray-400 transition-colors hover:text-white"
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
@@ -918,3 +918,4 @@ export default function ViewReservationModal({
         </AuthenticatedLayout>
     );
 }
+
