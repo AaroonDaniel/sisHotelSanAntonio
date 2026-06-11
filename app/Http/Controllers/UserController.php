@@ -48,7 +48,7 @@ class UserController extends Controller
             'phone' => $request->phone,
             'address' => $request->address,
             'shift' => $request->shift,
-            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
+            'password' => Hash::make($passwordInicial = \Illuminate\Support\Str::random(12)),
             'is_active' => true,
             'must_change_password' => true,
             'password_changed_at' => now(),
@@ -59,7 +59,7 @@ class UserController extends Controller
             $user->assignRole($request->role);
         }
 
-        return redirect()->back()->with('success', 'Usuario creado correctamente.');
+        return redirect()->back()->with('success', "Usuario creado correctamente. Contraseña temporal: {$passwordInicial} (deberá cambiarla al iniciar sesión).");
     }
 
     /**
