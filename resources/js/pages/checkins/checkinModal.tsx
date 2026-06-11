@@ -1,8 +1,8 @@
 import ToleranceModal from '@/components/ToleranceModal';
 import {
-    NACIONALIDADES,
     DEPARTAMENTOS_BOLIVIA,
     esExtranjero,
+    NACIONALIDADES,
     paisDe,
 } from '@/lib/catalogos';
 import { router, useForm } from '@inertiajs/react';
@@ -1861,7 +1861,9 @@ export default function CheckinModal({
                                     {esExtranjero(currentPerson.nationality) ? (
                                         <input
                                             className="w-full cursor-not-allowed rounded-lg border border-gray-400 bg-gray-100 px-3 py-2 text-sm text-gray-500 uppercase"
-                                            value={currentPerson.issued_in || ''}
+                                            value={
+                                                currentPerson.issued_in || ''
+                                            }
                                             disabled
                                             readOnly
                                             title="Pasaporte: expedido en su pais"
@@ -1869,13 +1871,20 @@ export default function CheckinModal({
                                     ) : (
                                         <select
                                             className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
-                                            value={currentPerson.issued_in || ''}
+                                            value={
+                                                currentPerson.issued_in || ''
+                                            }
                                             disabled={isReadOnly}
                                             onChange={(e) =>
-                                                handleFieldChange('issued_in', e.target.value)
+                                                handleFieldChange(
+                                                    'issued_in',
+                                                    e.target.value,
+                                                )
                                             }
                                         >
-                                            <option value="">Seleccione...</option>
+                                            <option value="">
+                                                Seleccione...
+                                            </option>
                                             {DEPARTAMENTOS_BOLIVIA.map((d) => (
                                                 <option key={d} value={d}>
                                                     {d}
@@ -1884,7 +1893,10 @@ export default function CheckinModal({
                                         </select>
                                     )}
                                 </div>
-                                <div className="relative order-1" ref={nationalityRef}>
+                                <div
+                                    className="relative order-1"
+                                    ref={nationalityRef}
+                                >
                                     <label className="text-xs font-bold text-gray-500 uppercase">
                                         Nacionalidad
                                     </label>
@@ -1899,13 +1911,18 @@ export default function CheckinModal({
                                             setShowNat(true);
                                         }}
                                         onChange={(e) => {
-                                            setNatInput(e.target.value.toUpperCase());
+                                            setNatInput(
+                                                e.target.value.toUpperCase(),
+                                            );
                                             setShowNat(true);
                                         }}
                                         onBlur={() => {
                                             setTimeout(() => {
                                                 setShowNat(false);
-                                                setNatInput(currentPerson.nationality || '');
+                                                setNatInput(
+                                                    currentPerson.nationality ||
+                                                        '',
+                                                );
                                             }, 200);
                                         }}
                                     />
@@ -1914,16 +1931,28 @@ export default function CheckinModal({
                                             {NACIONALIDADES.filter((n) => {
                                                 const q = natInput.trim();
                                                 if (!q) return true;
-                                                return n.includes(q) || paisDe(n).includes(q);
+                                                return (
+                                                    n.includes(q) ||
+                                                    paisDe(n).includes(q)
+                                                );
                                             }).map((n) => (
                                                 <div
                                                     key={n}
                                                     onMouseDown={() => {
-                                                        handleFieldChange('nationality', n);
+                                                        handleFieldChange(
+                                                            'nationality',
+                                                            n,
+                                                        );
                                                         if (esExtranjero(n)) {
-                                                            handleFieldChange('issued_in', paisDe(n));
+                                                            handleFieldChange(
+                                                                'issued_in',
+                                                                paisDe(n),
+                                                            );
                                                         } else {
-                                                            handleFieldChange('issued_in', '');
+                                                            handleFieldChange(
+                                                                'issued_in',
+                                                                '',
+                                                            );
                                                         }
                                                         setNatInput(n);
                                                         setShowNat(false);
@@ -1931,7 +1960,9 @@ export default function CheckinModal({
                                                     className="flex cursor-pointer justify-between px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50"
                                                 >
                                                     <span>{n}</span>
-                                                    <span className="text-gray-400">{paisDe(n)}</span>
+                                                    <span className="text-gray-400">
+                                                        {paisDe(n)}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1968,7 +1999,6 @@ export default function CheckinModal({
                                     </select>
                                 </div>
                                 <div className="col-span-2 flex gap-2">
-                                    
                                     <div className="flex-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Fecha Nac.
@@ -1977,7 +2007,11 @@ export default function CheckinModal({
                                             type="date"
                                             className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
                                             value={currentPerson.birth_date}
-                                            max={new Date().toISOString().split('T')[0]}
+                                            max={
+                                                new Date()
+                                                    .toISOString()
+                                                    .split('T')[0]
+                                            }
                                             disabled={isReadOnly}
                                             onChange={(e) =>
                                                 handleFieldChange(
@@ -2010,9 +2044,6 @@ export default function CheckinModal({
                                                 : ''}
                                         </span>
                                     </div>
-                                    
-
-                                   
 
                                     {/* INPUT DE PROFESIÓN ACTUALIZADO */}
                                     {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
@@ -2541,25 +2572,62 @@ export default function CheckinModal({
                                                 </label>
 
                                                 {/* Controles de Frecuencia que aparecen AL LADO */}
-                                                {data.type === 'corporativo' && (
+                                                {data.type ===
+                                                    'corporativo' && (
                                                     <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
                                                         {/* 1. SELECTOR RÁPIDO */}
                                                         <select
                                                             className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
                                                             // Si el número en la caja es 1, 7, 15 o 30, el select lo muestra. Si escriben otro número a mano, el select muestra "OTRO"
-                                                            value={[1, 7, 15, 30].includes(Number(data.corporate_days)) ? String(data.corporate_days) : 'OTRO'}
+                                                            value={
+                                                                [
+                                                                    1, 7, 15,
+                                                                    30,
+                                                                ].includes(
+                                                                    Number(
+                                                                        data.corporate_days,
+                                                                    ),
+                                                                )
+                                                                    ? String(
+                                                                          data.corporate_days,
+                                                                      )
+                                                                    : 'OTRO'
+                                                            }
                                                             onChange={(e) => {
-                                                                if (e.target.value !== 'OTRO') {
-                                                                    setData('corporate_days', Number(e.target.value));
+                                                                if (
+                                                                    e.target
+                                                                        .value !==
+                                                                    'OTRO'
+                                                                ) {
+                                                                    setData(
+                                                                        'corporate_days',
+                                                                        Number(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        ),
+                                                                    );
                                                                 }
                                                             }}
-                                                            disabled={isReadOnly}
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
                                                         >
-                                                            <option value="1">1 día</option>
-                                                            <option value="7">7 días</option>
-                                                            <option value="15">15 días</option>
-                                                            <option value="30">30 días</option>
-                                                            <option value="OTRO">Otro</option>
+                                                            <option value="1">
+                                                                1 día
+                                                            </option>
+                                                            <option value="7">
+                                                                7 días
+                                                            </option>
+                                                            <option value="15">
+                                                                15 días
+                                                            </option>
+                                                            <option value="30">
+                                                                30 días
+                                                            </option>
+                                                            <option value="OTRO">
+                                                                Otro
+                                                            </option>
                                                         </select>
 
                                                         {/* 2. CAJA DE TEXTO (SIEMPRE VISIBLE) */}
@@ -2568,12 +2636,28 @@ export default function CheckinModal({
                                                             min="1"
                                                             className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm font-black text-black shadow-inner focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                             placeholder="Días"
-                                                            value={data.corporate_days === 0 ? '' : data.corporate_days}
-                                                            onChange={(e) =>
-                                                                setData('corporate_days', Number(e.target.value))
+                                                            value={
+                                                                data.corporate_days ===
+                                                                0
+                                                                    ? ''
+                                                                    : data.corporate_days
                                                             }
-                                                            disabled={isReadOnly}
-                                                            required={data.type === 'corporativo'}
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'corporate_days',
+                                                                    Number(
+                                                                        e.target
+                                                                            .value,
+                                                                    ),
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
+                                                            required={
+                                                                data.type ===
+                                                                'corporativo'
+                                                            }
                                                         />
                                                     </div>
                                                 )}
@@ -2591,10 +2675,16 @@ export default function CheckinModal({
                                                     r.id === initialRoomId,
                                             );
 
-                                            const originalPrice = Number(selectedRoom?.price?.amount || 0);
+                                            const originalPrice = Number(
+                                                selectedRoom?.price?.amount ||
+                                                    0,
+                                            );
                                             // 🔥 NUEVO: Calculamos la base corporativa estricta (Precio normal menos 20 Bs)
-                                            const corporateBasePrice = Math.max(0, originalPrice - 20);
-                                            
+                                            const corporateBasePrice = Math.max(
+                                                0,
+                                                originalPrice - 20,
+                                            );
+
                                             let finalPrice = originalPrice;
 
                                             // ==========================================
@@ -2602,9 +2692,18 @@ export default function CheckinModal({
                                             // ==========================================
                                             if (data.type !== 'estandar') {
                                                 // Permitimos que sea 0 al borrar la caja para que no salte el precio
-                                                finalPrice = data.agreed_price !== '' ? Number(data.agreed_price) : 0;
-                                            } else if (Number(data.agreed_price) > 0) {
-                                                finalPrice = Number(data.agreed_price);
+                                                finalPrice =
+                                                    data.agreed_price !== ''
+                                                        ? Number(
+                                                              data.agreed_price,
+                                                          )
+                                                        : 0;
+                                            } else if (
+                                                Number(data.agreed_price) > 0
+                                            ) {
+                                                finalPrice = Number(
+                                                    data.agreed_price,
+                                                );
                                             }
 
                                             const isAutoAdjusted =
@@ -2630,7 +2729,10 @@ export default function CheckinModal({
 
                                             // Si es un grupo especial, el total sugerido a cobrar AHORA MISMO es en base a su frecuencia
                                             if (data.type !== 'estandar') {
-                                                noches = Number(data.corporate_days) || 1;
+                                                noches =
+                                                    Number(
+                                                        data.corporate_days,
+                                                    ) || 1;
                                                 tituloTotal = `Cobro (cada ${noches} días)`;
                                             }
 
@@ -2660,7 +2762,8 @@ export default function CheckinModal({
                                                                         ).toFixed(
                                                                             2,
                                                                         )}{' '}
-                                                                        Bs / noche
+                                                                        Bs /
+                                                                        noche
                                                                     </span>
                                                                     {/* 🚦 Delta: cuánto sube/baja la tarifa */}
                                                                     {data.type ===
@@ -2702,7 +2805,8 @@ export default function CheckinModal({
                                                                         ).toFixed(
                                                                             2,
                                                                         )}{' '}
-                                                                        Bs / noche
+                                                                        Bs /
+                                                                        noche
                                                                     </span>
                                                                     <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
                                                                         {
@@ -2722,34 +2826,70 @@ export default function CheckinModal({
                                                         </span>
 
                                                         {/* 🌟 AQUÍ ESTÁ EL CAMBIO: LÍMITE STRICTO MENOS 20 BS 🌟 */}
-                                                        {data.type !== 'estandar' ? (
+                                                        {data.type !==
+                                                        'estandar' ? (
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <input
                                                                     type="number"
                                                                     step="0.10"
                                                                     min="0"
                                                                     // El límite máximo es estrictamente el Precio Corporativo (-20Bs) x Noches
-                                                                    max={Number((originalPrice * noches).toFixed(2))}
+                                                                    max={Number(
+                                                                        (
+                                                                            originalPrice *
+                                                                            noches
+                                                                        ).toFixed(
+                                                                            2,
+                                                                        ),
+                                                                    )}
                                                                     value={
-                                                                        total > 0
-                                                                            ? Number(total.toFixed(2))
+                                                                        total >
+                                                                        0
+                                                                            ? Number(
+                                                                                  total.toFixed(
+                                                                                      2,
+                                                                                  ),
+                                                                              )
                                                                             : ''
                                                                     }
-                                                                    onChange={(e) => {
-                                                                        const inputVal = Number(e.target.value);
-                                                                        
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const inputVal =
+                                                                            Number(
+                                                                                e
+                                                                                    .target
+                                                                                    .value,
+                                                                            );
+
                                                                         // Definimos el tope máximo estricto (-20 Bs)
-                                                                       const maxTotal = originalPrice * noches;
-                                                                        
+                                                                        const maxTotal =
+                                                                            originalPrice *
+                                                                            noches;
+
                                                                         // Si intenta cobrar MÁS del tope, lo bloquea en el precio corporativo base (-20)
-                                                                        const clampedTotal = inputVal > maxTotal ? maxTotal : inputVal;
+                                                                        const clampedTotal =
+                                                                            inputVal >
+                                                                            maxTotal
+                                                                                ? maxTotal
+                                                                                : inputVal;
 
                                                                         // Matemática inversa: Total dividido entre días = precio base
-                                                                        const dailyRate = noches > 0 ? clampedTotal / noches : clampedTotal;
-                                                                        
-                                                                        setData('agreed_price', dailyRate);
+                                                                        const dailyRate =
+                                                                            noches >
+                                                                            0
+                                                                                ? clampedTotal /
+                                                                                  noches
+                                                                                : clampedTotal;
+
+                                                                        setData(
+                                                                            'agreed_price',
+                                                                            dailyRate,
+                                                                        );
                                                                     }}
-                                                                    disabled={isReadOnly}
+                                                                    disabled={
+                                                                        isReadOnly
+                                                                    }
                                                                     className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                     placeholder="0.00"
                                                                 />
@@ -2759,14 +2899,25 @@ export default function CheckinModal({
                                                             </div>
                                                         ) : (
                                                             <span className="text-2xl leading-none font-black text-gray-900">
-                                                                {total.toFixed(2)} Bs
+                                                                {total.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
                                                             </span>
                                                         )}
 
                                                         {noches > 1 && (
                                                             <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                {Number(finalPrice).toFixed(2)} x {noches}{' '}
-                                                                {data.type !== 'estandar' ? 'días' : 'noches'}
+                                                                {Number(
+                                                                    finalPrice,
+                                                                ).toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                x {noches}{' '}
+                                                                {data.type !==
+                                                                'estandar'
+                                                                    ? 'días'
+                                                                    : 'noches'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -3197,12 +3348,20 @@ export default function CheckinModal({
                                                     data.selected_services.includes(
                                                         srvId,
                                                     );
-                                                const capacity = Number(srv.quantity ?? 0);
-                                                const used = Number(srv.quantity_used ?? 0);
-                                                const remaining = Math.max(0, capacity - used);
+                                                const capacity = Number(
+                                                    srv.quantity ?? 0,
+                                                );
+                                                const used = Number(
+                                                    srv.quantity_used ?? 0,
+                                                );
+                                                const remaining = Math.max(
+                                                    0,
+                                                    capacity - used,
+                                                );
                                                 // Bloqueado: ya no hay espacios Y el check-in actual
                                                 // no tiene el garaje (no debe poder agregarlo).
-                                                const blocked = !active && remaining <= 0;
+                                                const blocked =
+                                                    !active && remaining <= 0;
 
                                                 let btnClass: string;
                                                 if (blocked) {
@@ -3255,15 +3414,18 @@ export default function CheckinModal({
                                                         {/* Contador de disponibilidad: solo se muestra
                                                             si el servicio tiene capacidad definida */}
                                                         {capacity > 0 && (
-                                                            <span className={`ml-1 text-[10px] ${blocked ? 'text-red-600' : 'text-gray-500'}`}>
-                                                                ({remaining}/{capacity})
+                                                            <span
+                                                                className={`ml-1 text-[10px] ${blocked ? 'text-red-600' : 'text-gray-500'}`}
+                                                            >
+                                                                ({remaining}/
+                                                                {capacity})
                                                             </span>
                                                         )}
                                                     </button>
                                                 );
                                             })}
 
-                                       {/* 2. DESAYUNO: incluido solo si la habitación es PRIVADA. */}
+                                        {/* 2. DESAYUNO: incluido solo si la habitación es PRIVADA. */}
                                         {(() => {
                                             const rawBath =
                                                 (currentRoom as any)?.price
@@ -3271,8 +3433,9 @@ export default function CheckinModal({
                                                 (currentRoom as any)?.room_type
                                                     ?.bathroom_type;
                                             const esPrivada =
-                                                String(rawBath || '').toUpperCase() ===
-                                                'PRIVATE';
+                                                String(
+                                                    rawBath || '',
+                                                ).toUpperCase() === 'PRIVATE';
 
                                             return esPrivada ? (
                                                 <button
@@ -3289,7 +3452,8 @@ export default function CheckinModal({
                                                     disabled
                                                     className="flex cursor-default items-center gap-1 rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-xs font-bold text-gray-500"
                                                 >
-                                                    SIN DESAYUNO (HAB. COMPARTIDA)
+                                                    SIN DESAYUNO (HAB.
+                                                    COMPARTIDA)
                                                 </button>
                                             );
                                         })()}
