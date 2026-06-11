@@ -27,9 +27,7 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * Guarda un nuevo usuario.
-     */
+   
     public function store(Request $request)
     {
         $request->validate([
@@ -41,6 +39,9 @@ class UserController extends Controller
             'role' => 'required|string|exists:roles,name',
         ]);
 
+        // Generamos la contraseña inicial basada en el nickname (Ej: "jperez" -> "Jperez1234")
+        $passwordInicial = ucfirst(strtolower($request->nickname)) . '1234';
+
         // CORRECCIÓN: Asignamos el resultado a la variable $user
         $user = User::create([
             'nickname' => $request->nickname,
@@ -48,7 +49,7 @@ class UserController extends Controller
             'phone' => $request->phone,
             'address' => $request->address,
             'shift' => $request->shift,
-            'password' => Hash::make($passwordInicial = \Illuminate\Support\Str::random(12)),
+            'password' => Hash::make($passwordInicial), // Encriptamos la contraseña inicial
             'is_active' => true,
             'must_change_password' => true,
             'password_changed_at' => now(),
@@ -59,7 +60,8 @@ class UserController extends Controller
             $user->assignRole($request->role);
         }
 
-        return redirect()->back()->with('success', "Usuario creado correctamente. Contraseña temporal: {$passwordInicial} (deberá cambiarla al iniciar sesión).");
+        // Devolvemos la contraseña generada en el mensaje para el administrador
+        return redirect()->back()->with('success', "Usuario creado correctamente. Contraseña inicial: {$passwordInicial} (deberá cambiarla al iniciar sesión).");
     }
 
     /**
@@ -73,7 +75,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()],
+            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
             'role' => 'required|string|exists:roles,name', // Validamos el rol
         ]);
 
