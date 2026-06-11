@@ -30,9 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         
         // 2. Configurar CORS manualmente aquí si no tienes el archivo config/cors.php
         // 2. Configurar CORS manualmente aquí si no tienes el archivo config/cors.php
-        $middleware->validateCsrfTokens(except: [
-            '/login', // <- Agrega esta línea para ignorar la protección CSRF en el login
-        ]);
+        $middleware->validateCsrfTokens();
 
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,

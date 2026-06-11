@@ -42,6 +42,11 @@ class RoleAndPermissionSeeder extends Seeder
             'dashboard.ver',
             'huespedes.ver_todos',
             'auditoria.ver',
+            'config.gestionar',
+            'usuarios.ver',
+            'usuarios.gestionar',
+            'roles.gestionar',
+            'permisos.gestionar',
         ];
         foreach ($extra as $p) {
             Permission::findOrCreate($p, 'web');
@@ -63,28 +68,49 @@ class RoleAndPermissionSeeder extends Seeder
 
         // ── 4) RECEPCIONISTA (operativo) ──
         $recepcionista->syncPermissions([
-            'huespedes.crear', 'huespedes.buscar', 'huespedes.ver',
-            'reservas.crear', 'reservas.editar', 'reservas.cancelar',
-            'checkin.realizar', 'checkout.realizar',
-            'habitaciones.cambiar_estado', 'mantenimiento.notificar_averia',
-            'caja.abrir', 'caja.cerrar', 'caja.registrar_pago',
-            'gastos.registrar', 'facturar.emitir', 'recibos.imprimir',
-            'reportes.parte_diario', 'reportes.cierre_caja',
+            'huespedes.crear',
+            'huespedes.buscar',
+            'huespedes.ver',
+            'reservas.crear',
+            'reservas.editar',
+            'reservas.cancelar',
+            'checkin.realizar',
+            'checkout.realizar',
+            'habitaciones.cambiar_estado',
+            'mantenimiento.notificar_averia',
+            'caja.abrir',
+            'caja.cerrar',
+            'caja.registrar_pago',
+            'gastos.registrar',
+            'facturar.emitir',
+            'recibos.imprimir',
+            'reportes.parte_diario',
+            'reportes.cierre_caja',
         ]);
 
         // ── 5) GERENTE (supervisión / solo lectura) ──
         $gerente->syncPermissions([
             'dashboard.ver',
-            'reportes.financiero', 'reportes.ocupacion', 'reportes.ventas',
-            'reportes.parte_diario', 'reportes.cierre_caja',
-            'huespedes.ver', 'huespedes.historial', 'huespedes.ver_todos',
-            'reservas.ver_todos', 'checkins.ver_todos',
-            'caja.ver_todo', 'facturas.ver_todas',
-            'gastos.ver', 'gastos.aprobar',
+            'reportes.financiero',
+            'reportes.ocupacion',
+            'reportes.ventas',
+            'reportes.parte_diario',
+            'reportes.cierre_caja',
+            'huespedes.ver',
+            'huespedes.historial',
+            'huespedes.ver_todos',
+            'reservas.ver_todos',
+            'checkins.ver_todos',
+            'caja.ver_todo',
+            'facturas.ver_todas',
+            'gastos.ver',
+            'gastos.aprobar',
             'anulaciones.autorizar',
             'habitaciones.estado_actual',
             'auditoria.ver',
         ]);
+
+
 
         // ── 6) ADMINISTRADOR: TODOS los permisos (+ Gate::before del provider) ──
         $admin->syncPermissions(Permission::all());
