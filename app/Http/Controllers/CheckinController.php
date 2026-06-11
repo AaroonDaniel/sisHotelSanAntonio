@@ -865,6 +865,12 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
+       \Illuminate\Support\Facades\Log::info('🔎 [UPDATE-DEBUG] Checkin ' . $checkin->id . ' | Payload recibido:', $request->all());
+        // Normaliza el tipo de auto-ajuste: no es un valor de formulario válido.
+if ($request->input('type') === 'AJUSTE DE PRECIO') {
+    $request->merge(['type' => 'estandar']);
+}
+        try {
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
             'check_in_date' => 'required|date',
@@ -881,8 +887,12 @@ class CheckinController extends Controller
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'payment_frequency' => 'nullable|string|max:255',
             'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
-            'agreed_price' => 'nullable|numeric|min:0',
+             'agreed_price' => 'nullable|numeric|min:0',
         ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Illuminate\Support\Facades\Log::error('❌ [UPDATE-DEBUG] Validacion RECHAZADA. Campos:', $e->errors());
+            throw $e;
+        }
 
         $validated['room_id'] = $checkin->room_id;
 

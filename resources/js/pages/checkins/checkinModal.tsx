@@ -179,7 +179,7 @@ export interface CheckinData {
     is_corporate?: boolean | number;
     special_agreement?: {
         id: number;
-        type: 'corporativo' | 'delegacion';
+        type: 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
         agreed_price: number;
         payment_frequency_days: number;
     } | null;
@@ -262,7 +262,7 @@ interface CheckinFormData {
     auto_adjust_price: boolean;
     monto_efectivo?: number | string;
     monto_qr?: number | string;
-    type: 'estandar' | 'corporativo' | 'delegacion';
+    type: 'estandar' | 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
     corporate_days: number;
     agreed_price: number | string;
 }
@@ -640,7 +640,12 @@ export default function CheckinModal({
                     auto_adjust_price: isPriceAdjusted,
                     is_temporary: !!checkinToEdit.is_temporary,
 
-                    type: checkinToEdit.special_agreement?.type || 'estandar', // <--- CORREGIDO
+                    type:
+                        checkinToEdit.special_agreement?.type ===
+                            'corporativo' ||
+                        checkinToEdit.special_agreement?.type === 'delegacion'
+                            ? checkinToEdit.special_agreement.type
+                            : 'estandar',
                     agreed_price:
                         checkinToEdit.special_agreement?.agreed_price ||
                         Number(originalRoomPrice),

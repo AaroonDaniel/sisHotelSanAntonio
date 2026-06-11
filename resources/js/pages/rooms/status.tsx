@@ -312,7 +312,7 @@ export default function RoomsStatus({
             ) {
                 sessionStorage.setItem(
                     'pendingCheckinsQueue',
-                    JSON.stringify(flash.auto_open_checkins),
+                    flash.auto_open_checkins.join(','), 
                 );
                 setIsPendingModalOpen(false);
 
@@ -425,9 +425,10 @@ export default function RoomsStatus({
 
             // ¿Se presionó el botón de reajuste en el backend?
             const isPriceAdjusted =
-                originalRoomPrice > 0 &&
-                activeCheckin.agreed_price < originalRoomPrice;
-
+                activeCheckin.special_agreement?.type === 'AJUSTE DE PRECIO' ||
+                (originalRoomPrice > 0 &&
+                    activeCheckin.agreed_price < originalRoomPrice);
+                    
             // Faltan personas SOLO SI: hay camas vacías Y NO se ha reajustado el precio.
             const isCapacityMissing =
                 totalGuests < roomCapacity && !isPriceAdjusted;
