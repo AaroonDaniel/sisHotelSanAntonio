@@ -171,4 +171,15 @@ class Checkin extends Model
         // Si usas una tabla intermedia llamada checkin_guests
         return $this->belongsToMany(Guest::class, 'checkin_guests', 'checkin_id', 'guest_id');
     }
+
+    //Mutador al guarda el monto  por convenios
+    public function setAgreedPriceAttribute($value)
+    {
+        $this->attributes['agreed_price'] = is_null($value) ? null : round((float) $value, 1);
+    }
+
+    public function getAgreedPriceAttribute($value)
+    {
+        return is_null($value) ? null : round((float) $value, 1);
+    }
 }

@@ -78,9 +78,9 @@ class CheckinController extends Controller
         // Nunca menos de 1 huésped para el cálculo.
         $effectiveGuests = max(1, $totalGuests);
 
-        // Ocupación completa o salón => tarifa base.
+        // Ocupación completa o salón => tarifa base (Aplicamos redondeo aquí)
         if ($effectiveGuests >= $roomCapacity || !$bathroomType) {
-            return $originalPrice;
+            return round($originalPrice, 1);
         }
 
         // Ocupación parcial: buscamos la tarifa que corresponde al conteo real.
@@ -89,7 +89,11 @@ class CheckinController extends Controller
             ->whereHas('roomType', fn($q) => $q->where('capacity', $effectiveGuests))
             ->value('amount');
 
-        return $adjustedPrice !== null ? (float) $adjustedPrice : $originalPrice;
+        // Determinamos qué precio usar
+        $finalPrice = $adjustedPrice !== null ? (float) $adjustedPrice : $originalPrice;
+
+        // Retornamos el precio con el REDONDEO OFICIAL a 1 decimal (ej: 93.3)
+        return round($finalPrice, 1);
     }
 
     /**
