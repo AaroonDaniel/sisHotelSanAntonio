@@ -72,6 +72,30 @@ export default function GuestDetailsForm({
     onNext,
     onBack,
 }: any) {
+
+
+    useEffect(() => {
+        const htmlElement = document.documentElement;
+        
+        // Verificamos si el modo oscuro estaba activo en el resto del sistema
+        const wasDark = htmlElement.classList.contains('dark');
+
+        // Eliminamos la clase que activa el modo oscuro en Tailwind
+        htmlElement.classList.remove('dark');
+        
+        // (Opcional) Si tu sistema usa explícitamente la clase 'light', la forzamos:
+        htmlElement.classList.add('light'); 
+
+        // Cleanup: Restaurar el modo oscuro si el usuario sale de esta pantalla 
+        // (Por ejemplo, si un recepcionista estaba viéndolo y vuelve al Dashboard)
+        return () => {
+            if (wasDark) {
+                htmlElement.classList.remove('light');
+                htmlElement.classList.add('dark');
+            }
+        };
+    }, []);
+
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [blockToast, setBlockToast] = useState<string | null>(null);
     const [natInput, setNatInput] = useState<string>(

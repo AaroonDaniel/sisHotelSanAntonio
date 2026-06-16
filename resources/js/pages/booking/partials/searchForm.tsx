@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { router } from '@inertiajs/react';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,28 @@ import {  Search, CalendarDays, Users, ArrowRight, Minus, Plus  } from 'lucide-r
 import Turnstile from '@/components/Turnstile'; // 👈 NUEVO
 
 export default function SearchForm({ bookingData, setBookingData, onNext, turnstileSiteKey }: any) {
+
+    useEffect(() => {
+        const htmlElement = document.documentElement;
+        
+        // Verificamos si el modo oscuro estaba activo en el resto del sistema
+        const wasDark = htmlElement.classList.contains('dark');
+
+        // Eliminamos la clase que activa el modo oscuro en Tailwind
+        htmlElement.classList.remove('dark');
+        
+        // (Opcional) Si tu sistema usa explícitamente la clase 'light', la forzamos:
+        htmlElement.classList.add('light'); 
+
+        // Cleanup: Restaurar el modo oscuro si el usuario sale de esta pantalla 
+        // (Por ejemplo, si un recepcionista estaba viéndolo y vuelve al Dashboard)
+        return () => {
+            if (wasDark) {
+                htmlElement.classList.remove('light');
+                htmlElement.classList.add('dark');
+            }
+        };
+    }, []);
 
     // Obtenemos la fecha actual para bloquear fechas pasadas en el calendario
     const today = new Date().toISOString().split('T')[0];
