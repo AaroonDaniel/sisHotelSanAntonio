@@ -185,12 +185,14 @@ export default function Dashboard({
                     url: '/reports/financial',
                     anyPerm: ['reportes.cierre_caja'],
                 },
+                /*
                 {
                     name: 'Ingresos y Egresos diarios',
                     icon: FileText,
                     url: '/reports/financialMovement',
                     anyPerm: ['reportes.financiero', 'reportes.ventas'],
                 },
+                */
             ],
         },
     ]
