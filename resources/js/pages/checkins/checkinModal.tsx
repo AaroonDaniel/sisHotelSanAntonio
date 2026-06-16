@@ -485,7 +485,7 @@ export default function CheckinModal({
 
     // Calcular estado actual
     const toleranceStatus = getToleranceStatus();
-
+    const [editingTotal, setEditingTotal] = useState<string | null>(null);
     // --- MANEJO DE CLICS FUERA (DROPDOWNS) ---
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -2680,11 +2680,19 @@ export default function CheckinModal({
                                                     r.id === initialRoomId,
                                             );
 
-                                            const originalPrice = Number(
-                                                selectedRoom?.price?.amount ||
-                                                    0,
-                                            );
-                                            // 🔥 NUEVO: Calculamos la base corporativa estricta (Precio normal menos 20 Bs)
+                                            // Función para forzar el redondeo oficial a 1 decimal (10, 20, 50 ctvs)
+                                            const redondearMoneda = (
+                                                monto: number,
+                                            ) => Math.round(monto * 10) / 10;
+
+                                            const originalPrice =
+                                                redondearMoneda(
+                                                    Number(
+                                                        selectedRoom?.price
+                                                            ?.amount || 0,
+                                                    ),
+                                                );
+
                                             const corporateBasePrice = Math.max(
                                                 0,
                                                 originalPrice - 20,
@@ -2692,47 +2700,37 @@ export default function CheckinModal({
 
                                             let finalPrice = originalPrice;
 
-                                            // ==========================================
-                                            // 🧠 LÓGICA DE PRECIO FINAL (CORREGIDA)
-                                            // ==========================================
                                             if (data.type !== 'estandar') {
-                                                // Permitimos que sea 0 al borrar la caja para que no salte el precio
                                                 finalPrice =
                                                     data.agreed_price !== ''
-                                                        ? Number(
-                                                              data.agreed_price,
+                                                        ? redondearMoneda(
+                                                              Number(
+                                                                  data.agreed_price,
+                                                              ),
                                                           )
                                                         : 0;
                                             } else if (
                                                 Number(data.agreed_price) > 0
                                             ) {
-                                                finalPrice = Number(
-                                                    data.agreed_price,
+                                                finalPrice = redondearMoneda(
+                                                    Number(data.agreed_price),
                                                 );
                                             }
 
                                             const isAutoAdjusted =
                                                 finalPrice !== originalPrice;
-
-                                            // 🚦 Conteo real de huéspedes y delta de precio.
-                                            // Permite que el recepcionista vea cuánto sube/baja
-                                            // la tarifa al añadir o quitar una persona.
                                             const occupantsCount =
                                                 1 +
                                                 (data.companions?.length || 0);
                                             const priceDelta =
                                                 finalPrice - originalPrice;
 
-                                            // ==========================================
-                                            // 💰 LÓGICA DEL TOTAL A COBRAR
-                                            // ==========================================
                                             let noches =
                                                 Number(data.duration_days) || 0;
                                             let tituloTotal = isAutoAdjusted
                                                 ? 'Total a cobrar'
                                                 : 'Total sugerido';
 
-                                            // Si es un grupo especial, el total sugerido a cobrar AHORA MISMO es en base a su frecuencia
                                             if (data.type !== 'estandar') {
                                                 noches =
                                                     Number(
@@ -2741,7 +2739,17 @@ export default function CheckinModal({
                                                 tituloTotal = `Cobro (cada ${noches} días)`;
                                             }
 
-                                            const total = finalPrice * noches;
+                                            const total = redondearMoneda(
+                                                finalPrice * noches,
+                                            );
+
+                                            // 🔒 Límites: máximo = precio original completo, mínimo = 50% de ese máximo
+                                            const maxTotal = redondearMoneda(
+                                                originalPrice * noches,
+                                            );
+                                            const minTotal = redondearMoneda(
+                                                maxTotal * 0.5,
+                                            );
 
                                             return (
                                                 <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
@@ -2770,18 +2778,12 @@ export default function CheckinModal({
                                                                         Bs /
                                                                         noche
                                                                     </span>
-                                                                    {/* 🚦 Delta: cuánto sube/baja la tarifa */}
                                                                     {data.type ===
                                                                         'estandar' &&
                                                                         priceDelta !==
                                                                             0 && (
                                                                             <span
-                                                                                className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase shadow-sm ${
-                                                                                    priceDelta <
-                                                                                    0
-                                                                                        ? 'bg-emerald-100 text-emerald-700'
-                                                                                        : 'bg-amber-100 text-amber-700'
-                                                                                }`}
+                                                                                className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase shadow-sm ${priceDelta < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
                                                                             >
                                                                                 {priceDelta <
                                                                                 0
@@ -2830,66 +2832,117 @@ export default function CheckinModal({
                                                             {tituloTotal}
                                                         </span>
 
-                                                        {/* 🌟 AQUÍ ESTÁ EL CAMBIO: LÍMITE STRICTO MENOS 20 BS 🌟 */}
                                                         {data.type !==
                                                         'estandar' ? (
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <input
                                                                     type="number"
                                                                     step="0.10"
-                                                                    min="0"
-                                                                    // El límite máximo es estrictamente el Precio Corporativo (-20Bs) x Noches
-                                                                    max={Number(
-                                                                        (
-                                                                            originalPrice *
-                                                                            noches
-                                                                        ).toFixed(
-                                                                            2,
-                                                                        ),
-                                                                    )}
-                                                                    value={
-                                                                        total >
-                                                                        0
-                                                                            ? Number(
-                                                                                  total.toFixed(
-                                                                                      2,
-                                                                                  ),
-                                                                              )
-                                                                            : ''
+                                                                    min={
+                                                                        minTotal
                                                                     }
+                                                                    max={
+                                                                        maxTotal
+                                                                    }
+                                                                    // 👇 Mientras edita, muestra exactamente lo que escribe.
+                                                                    // Fuera de edición, muestra el total ya calculado/redondeado.
+                                                                    value={
+                                                                        editingTotal !==
+                                                                        null
+                                                                            ? editingTotal
+                                                                            : total >
+                                                                                0
+                                                                              ? String(
+                                                                                    total,
+                                                                                )
+                                                                              : ''
+                                                                    }
+                                                                    onFocus={() => {
+                                                                        // Al entrar al campo, lo dejamos 100% editable
+                                                                        setEditingTotal(
+                                                                            total >
+                                                                                0
+                                                                                ? String(
+                                                                                      total,
+                                                                                  )
+                                                                                : '',
+                                                                        );
+                                                                    }}
                                                                     onChange={(
                                                                         e,
                                                                     ) => {
-                                                                        const inputVal =
+                                                                        // ✏️ Edición libre: sin redondeo ni clamp, nada lo restringe mientras escribes
+                                                                        setEditingTotal(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        );
+                                                                    }}
+                                                                    onBlur={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const rawVal =
+                                                                            e
+                                                                                .target
+                                                                                .value;
+
+                                                                        if (
+                                                                            rawVal ===
+                                                                            ''
+                                                                        ) {
+                                                                            setData(
+                                                                                'agreed_price',
+                                                                                '',
+                                                                            );
+                                                                            setEditingTotal(
+                                                                                null,
+                                                                            );
+                                                                            return;
+                                                                        }
+
+                                                                        let inputVal =
                                                                             Number(
-                                                                                e
-                                                                                    .target
-                                                                                    .value,
+                                                                                rawVal,
                                                                             );
 
-                                                                        // Definimos el tope máximo estricto (-20 Bs)
-                                                                        const maxTotal =
-                                                                            originalPrice *
-                                                                            noches;
-
-                                                                        // Si intenta cobrar MÁS del tope, lo bloquea en el precio corporativo base (-20)
-                                                                        const clampedTotal =
+                                                                        // 🚧 Tope máximo: el precio original es el techo
+                                                                        if (
                                                                             inputVal >
                                                                             maxTotal
-                                                                                ? maxTotal
-                                                                                : inputVal;
+                                                                        )
+                                                                            inputVal =
+                                                                                maxTotal;
 
-                                                                        // Matemática inversa: Total dividido entre días = precio base
+                                                                        // 🚧 Piso mínimo: nunca por debajo del 50%
+                                                                        if (
+                                                                            inputVal <
+                                                                            minTotal
+                                                                        )
+                                                                            inputVal =
+                                                                                minTotal;
+
+                                                                        // 💰 Redondeo comercial final a 1 decimal (285.9, no 285.92)
+                                                                        inputVal =
+                                                                            redondearMoneda(
+                                                                                inputVal,
+                                                                            );
+
                                                                         const dailyRate =
                                                                             noches >
                                                                             0
-                                                                                ? clampedTotal /
+                                                                                ? inputVal /
                                                                                   noches
-                                                                                : clampedTotal;
-
+                                                                                : inputVal;
                                                                         setData(
                                                                             'agreed_price',
-                                                                            dailyRate,
+                                                                            redondearMoneda(
+                                                                                dailyRate,
+                                                                            ),
+                                                                        );
+
+                                                                        // Volvemos al modo "display" con el valor ya validado
+                                                                        setEditingTotal(
+                                                                            null,
                                                                         );
                                                                     }}
                                                                     disabled={
