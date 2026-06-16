@@ -538,10 +538,23 @@ export default function RoomsStatus({
         // 🟥 MOROSO POR CICLO PASADO: faltó completar un ciclo anterior.
         if (totalPaid < deudaVencida) {
             const deudaMora = deudaVencida - totalPaid;
+            
+            // --- NUEVO: Calcular los días exactos de retraso ---
+            const ciclosPagados = Math.floor(totalPaid / cyclePrice);
+            const primerCicloImpago = ciclosPagados + 1;
+            
+            const fechaVencimientoMora = new Date(checkinDay.getTime());
+            fechaVencimientoMora.setDate(fechaVencimientoMora.getDate() + (primerCicloImpago * corpDays));
+            fechaVencimientoMora.setHours(0, 0, 0, 0);
+
+            const msMora = today.getTime() - fechaVencimientoMora.getTime();
+            const diasRetraso = Math.max(1, Math.round(msMora / MS_PER_DAY));
+            // ---------------------------------------------------
+
             return {
                 level: 'moroso',
                 badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
-                text: `MOROSO: ${deudaMora.toFixed(2)} Bs`,
+                text: `MOROSO: ${deudaMora.toFixed(2)} Bs (${diasRetraso} ${diasRetraso === 1 ? 'día' : 'días'} de retraso)`,
             };
         }
 
@@ -596,10 +609,11 @@ export default function RoomsStatus({
 
                 if (new Date().getTime() > limite.getTime()) {
                     // ⛔ Venció la hora de check-out sin pago => MOROSO.
+                    // NUEVO: Retraso de horas en el mismo día.
                     return {
                         level: 'moroso',
                         badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
-                        text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs`,
+                        text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs (Retraso de horas)`,
                     };
                 }
             }
@@ -613,10 +627,12 @@ export default function RoomsStatus({
         }
 
         // CASO C: today > dueDate => moroso directo (pasó el día natural).
+        // --- NUEVO: Fallback en caso de que logre pasar hasta aquí ---
+        const diasRetrasoFallback = Math.max(1, Math.round((todayTime - dueTime) / MS_PER_DAY));
         return {
             level: 'moroso',
             badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
-            text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs`,
+            text: `MOROSO: ${faltanteTotal.toFixed(2)} Bs (${diasRetrasoFallback} ${diasRetrasoFallback === 1 ? 'día' : 'días'} de retraso)`,
         };
     };
 

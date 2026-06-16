@@ -40,7 +40,11 @@ export default function AuthenticatedLayout({
         };
     }>().props;
     const { url, props } = usePage();
-    const { auth }: any = props;
+    const { auth }: any = props as any;
+
+    // apartado de verificacion si tiele rol de recepcionista
+    const isRecepcionista = auth?.roles?.includes('recepcionista');
+
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -65,15 +69,20 @@ export default function AuthenticatedLayout({
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
-    // Función normal de Cerrar Sesión (Exige cerrar caja)
+    // Función normal de Cerrar Sesión (Exige cerrar caja SOLO a recepcionistas)
     const handleLogout = (e: React.MouseEvent) => {
         e.preventDefault();
 
-        if (auth.active_register) {
+        // 1. Verificamos si el usuario activo tiene el rol de recepcionista
+        const isRecepcionista = auth?.user?.roles?.includes('recepcionista');
+
+        // 2. Bloqueamos la salida SOLO si tiene caja abierta Y es recepcionista
+        if (auth.active_register && isRecepcionista) {
             setShowLogoutWarning(true);
             setShowUserMenu(false);
         } else {
-            // Si el suplente cierra sesión normal, eliminamos el pase libre por seguridad
+            // Si el suplente, un administrador, o personal de limpieza cierra sesión, 
+            // cerramos directo y limpiamos el storage.
             localStorage.removeItem('relay_mode_active');
             router.post('/logout');
         }

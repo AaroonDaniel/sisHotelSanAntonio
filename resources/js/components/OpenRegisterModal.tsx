@@ -18,19 +18,19 @@ export default function OpenRegisterModal() {
             
             if (relayMode === 'true') {
                 if (auth.active_register) {
-                    // Si regresó el usuario original (que SÍ tiene su caja abierta)
-                    // destruimos el pase libre porque el relevo terminó.
                     localStorage.removeItem('relay_mode_active');
                 } else {
-                    // Si entró alguien SIN caja, lo activamos como relevo para que pase de largo
                     setIsAutomaticRelay(true);
                 }
             }
         }
     }, [auth?.user, auth?.active_register]);
 
-    // Ocultamos el modal si no hay usuario, si TIENE caja abierta, o si ES RELEVO AUTOMÁTICO
-    if (!auth.user || auth.active_register || isAutomaticRelay) {
+    // 1. Verificamos si tiene el rol exacto de "recepcionista"
+    const isRecepcionista = auth?.user?.roles?.includes('recepcionista');
+
+    // 2. Ocultamos el modal si no hay usuario, si TIENE caja, si es relevo, o si NO es recepcionista
+    if (!auth.user || auth.active_register || isAutomaticRelay || !isRecepcionista) {
         return null;
     }
 

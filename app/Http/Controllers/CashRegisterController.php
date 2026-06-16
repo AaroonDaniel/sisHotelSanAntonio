@@ -14,6 +14,9 @@ class CashRegisterController extends Controller
 {
     public function open(Request $request)
     {
+        if(!Auth::user()->hasRole('recepcionista')) {
+            return back()->with('error', 'Solo el personal de recepcion requiere abrir caja');    
+        }
         $request->validate([
             'opening_amount' => 'required|numeric|min:0',
         ]);
