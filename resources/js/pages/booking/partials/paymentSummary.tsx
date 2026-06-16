@@ -6,10 +6,8 @@ import {
     CheckCircle2,
     QrCode,
     UploadCloud,
-    XCircle,
-    Info
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function PaymentSummary({
     bookingData,
@@ -18,21 +16,19 @@ export default function PaymentSummary({
     onBack,
     isSubmitting,
 }: any) {
-
-
     useEffect(() => {
         const htmlElement = document.documentElement;
-        
+
         // Verificamos si el modo oscuro estaba activo en el resto del sistema
         const wasDark = htmlElement.classList.contains('dark');
 
         // Eliminamos la clase que activa el modo oscuro en Tailwind
         htmlElement.classList.remove('dark');
-        
-        // (Opcional) Si tu sistema usa explícitamente la clase 'light', la forzamos:
-        htmlElement.classList.add('light'); 
 
-        // Cleanup: Restaurar el modo oscuro si el usuario sale de esta pantalla 
+        // (Opcional) Si tu sistema usa explícitamente la clase 'light', la forzamos:
+        htmlElement.classList.add('light');
+
+        // Cleanup: Restaurar el modo oscuro si el usuario sale de esta pantalla
         // (Por ejemplo, si un recepcionista estaba viéndolo y vuelve al Dashboard)
         return () => {
             if (wasDark) {
@@ -45,7 +41,7 @@ export default function PaymentSummary({
     const [voucher, setVoucher] = useState<File | null>(null);
     // 👇 SOLUCIÓN: Agregamos el estado de la vista previa de la imagen 👇
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    
+
     // 👇 ESTADO PARA EL MODAL DE CONFIRMACIÓN 👇
     const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -93,11 +89,11 @@ export default function PaymentSummary({
     // Ejecuta el guardado final en Laravel
     const handleFinalSubmit = () => {
         setShowConfirmModal(false);
-        onSubmit(); 
+        onSubmit();
     };
 
     return (
-        <div className="mx-auto w-full max-w-4xl pb-10 relative">
+        <div className="relative mx-auto w-full max-w-4xl pb-10">
             <div className="mb-6 flex items-center">
                 <Button
                     variant="ghost"
@@ -127,7 +123,8 @@ export default function PaymentSummary({
                                         Titular:
                                     </span>
                                     <span className="font-semibold text-gray-800 uppercase">
-                                        {bookingData.guest_name || bookingData.full_name}
+                                        {bookingData.guest_name ||
+                                            bookingData.full_name}
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-sm">
@@ -169,7 +166,8 @@ export default function PaymentSummary({
                                             <span>
                                                 {room.typeName}{' '}
                                                 <span className="text-xs text-gray-400">
-                                                    ({room.name || 'Habitación'})
+                                                    ({room.name || 'Habitación'}
+                                                    )
                                                 </span>
                                             </span>
                                             <span className="font-medium">
@@ -232,7 +230,7 @@ export default function PaymentSummary({
                                 </strong>
                                 .
                             </p>
-
+                            {/*
                             <div className="mb-6 flex justify-center rounded-lg border-2 border-dashed border-gray-200 bg-white p-4">
                                 <img 
                                     src="/images/qrCop.png" 
@@ -240,7 +238,7 @@ export default function PaymentSummary({
                                     className="w-48 h-48 object-contain"
                                 />
                             </div>
-
+                            */}
                             
 
                             {/* UPLOAD COMPROBANTE */}
@@ -305,40 +303,54 @@ export default function PaymentSummary({
 
             {/* ================= MODAL DE CANCELACIÓN Y POLÍTICAS (Estilo CancelModal) ================= */}
             {showConfirmModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
-                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
+                    <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
                         <div className="p-6 text-center">
-                            
                             {/* Ícono llamativo */}
                             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
                                 <AlertCircle className="h-8 w-8" />
                             </div>
-                            
-                            <h3 className="mb-2 text-xl font-bold text-gray-800">Políticas de Reserva</h3>
-                            
-                            <p className="text-sm text-gray-500 mb-4">
+
+                            <h3 className="mb-2 text-xl font-bold text-gray-800">
+                                Políticas de Reserva
+                            </h3>
+
+                            <p className="mb-4 text-sm text-gray-500">
                                 Por favor lee atentamente antes de finalizar.
                             </p>
 
                             {/* Caja de políticas (Borde rojo) */}
-                            <div className="text-left bg-red-50 border border-red-200 p-4 rounded-xl space-y-3 text-sm text-red-900 shadow-inner">
+                            <div className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 text-left text-sm text-red-900 shadow-inner">
                                 <p>
-                                    <strong>1. Cancelaciones:</strong> Tiene un plazo máximo de <strong>2 días antes</strong> de su fecha de Check-in para cancelar la reserva.
+                                    <strong>1. Cancelaciones:</strong> Tiene un
+                                    plazo máximo de{' '}
+                                    <strong>2 días antes</strong> de su fecha de
+                                    Check-in para cancelar la reserva.
                                 </p>
                                 <p>
-                                    <strong>2. Devoluciones:</strong> Para solicitar su devolución o en caso de retraso, comuníquese obligatoriamente al número <strong className="text-red-700 text-base bg-white px-2 py-0.5 border border-red-200 rounded shadow-sm">70461010</strong>.
+                                    <strong>2. Devoluciones:</strong> Para
+                                    solicitar su devolución o en caso de
+                                    retraso, comuníquese obligatoriamente al
+                                    número{' '}
+                                    <strong className="rounded border border-red-200 bg-white px-2 py-0.5 text-base text-red-700 shadow-sm">
+                                        70461010
+                                    </strong>
+                                    .
                                 </p>
                                 <p>
-                                    <strong>3. Penalidad:</strong> En caso contrario (no presentarse o no avisar a tiempo), el hotel retendrá el adelanto depositado.
+                                    <strong>3. Penalidad:</strong> En caso
+                                    contrario (no presentarse o no avisar a
+                                    tiempo), el hotel retendrá el adelanto
+                                    depositado.
                                 </p>
                             </div>
-                            
+
                             {/* Botones de acción estilo cancelModal */}
                             <div className="mt-8 flex justify-center gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setShowConfirmModal(false)}
-                                    className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+                                    className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
                                     disabled={isSubmitting}
                                 >
                                     Volver
@@ -347,9 +359,16 @@ export default function PaymentSummary({
                                     type="button"
                                     onClick={handleFinalSubmit}
                                     disabled={isSubmitting}
-                                    className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-red-500 active:scale-95 transition disabled:opacity-50"
+                                    className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95 disabled:opacity-50"
                                 >
-                                    {isSubmitting ? 'Procesando...' : <><CheckCircle2 className="h-4 w-4" /> Acepto y Confirmar</>}
+                                    {isSubmitting ? (
+                                        'Procesando...'
+                                    ) : (
+                                        <>
+                                            <CheckCircle2 className="h-4 w-4" />{' '}
+                                            Acepto y Confirmar
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
