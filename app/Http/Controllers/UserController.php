@@ -75,7 +75,7 @@ class UserController extends Controller
             'phone' => 'required|string|max:50',
             'address' => 'required|string|max:255',
             'shift' => 'required|string|max:50',
-            'password' => Hash::make(ucfirst(strtolower($request->nickname)) . '1234'),
+            'password' => 'nullable|string|min:4',
             'role' => 'required|string|exists:roles,name', // Validamos el rol
         ]);
 
