@@ -227,6 +227,12 @@ class CheckinController extends Controller
         $isAssigningSalon = $roomToAssign && str_contains(strtoupper($roomToAssign->roomType->name ?? ''), 'SALON');
 
         // =========================================================
+        // 5. INICIO DE TRANSACCIÓN (ahora envuelve TAMBIÉN la creación del huésped)
+        //    Si algo falla más adelante, el huésped también se revierte.
+        // =========================================================
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $isAssigningSalon) {
+
+        // =========================================================
         // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN DEL TITULAR
         // =========================================================
         $fullName = strtoupper($request->full_name ?? '');
@@ -390,11 +396,8 @@ class CheckinController extends Controller
             $agreedPrice = max((float) $request->discount, $isAssigningSalon ? 0 : $minAllowed);
         }
 
+   
         $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
-        // =========================================================
-        // 5. INICIO DE TRANSACCIÓN EN BASE DE DATOS
-        // =========================================================
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $guestId, $userId, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $agreedPrice, $isSpecialDeal, $totalGuest, $isAssigningSalon) {
 
             $specialAgreementId = null;
             $isAutoAdjust = $request->boolean('auto_adjust_price');
