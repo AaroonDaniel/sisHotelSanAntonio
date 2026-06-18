@@ -1,32 +1,30 @@
-import React, { useState } from 'react';
-import { Head, useForm ,usePage } from '@inertiajs/react'; // 👈 1. Importamos useForm
+import React, { useState, useEffect } from 'react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { CalendarDays, BedDouble, Users, DollarSign, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// Importamos los 4 pasos
+// Importamos los 4 pasos (Asegúrate de que las rutas coincidan con tus archivos)
 import SearchForm from './partials/searchForm';
 import RoomSelection from './partials/roomSelection';
 import GuestDetailsForm from './partials/guestDetailsForm';
 import PaymentSummary from './partials/paymentSummary';
-import { useEffect } from 'react';
 
-export default function BookingIndex({ availableRoomTypes = [], filters = {} }: any) {
+interface BookingProps {
+    availableRoomTypes?: any[];
+    filters?: any;
+}
 
+export default function BookingIndex({ availableRoomTypes = [], filters = {} }: BookingProps) {
+    const { turnsSiteKey } = usePage().props as any;
 
+    // --- Control del Modo Oscuro/Claro ---
     useEffect(() => {
         const htmlElement = document.documentElement;
-        
-        // Verificamos si el modo oscuro estaba activo en el resto del sistema
         const wasDark = htmlElement.classList.contains('dark');
 
-        // Eliminamos la clase que activa el modo oscuro en Tailwind
         htmlElement.classList.remove('dark');
-        
-        // (Opcional) Si tu sistema usa explícitamente la clase 'light', la forzamos:
         htmlElement.classList.add('light'); 
 
-        // Cleanup: Restaurar el modo oscuro si el usuario sale de esta pantalla 
-        // (Por ejemplo, si un recepcionista estaba viéndolo y vuelve al Dashboard)
         return () => {
             if (wasDark) {
                 htmlElement.classList.remove('light');
@@ -35,11 +33,10 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
         };
     }, []);
 
-    const { turnsSiteKey } = usePage().props as any;
-    // Estado del Stepper
+    // --- Estado del Stepper ---
     const [currentStep, setCurrentStep] = useState(1);
     
-    // 👇 2. CAMBIO VITAL: Reemplazamos useState por useForm 👇
+    // --- Lógica del Formulario (useForm de Inertia) ---
     const { data: bookingData, setData: setBookingData, post, processing } = useForm({
         check_in: filters.check_in || '',
         check_out: filters.check_out || '',
@@ -56,32 +53,30 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
         profession: '',
         phone: '',
         guest_email: '', 
-        // 👈 AÑADIMOS EL CAMPO DEL ARCHIVO DESDE EL PRINCIPIO
+        
+        // Campo vital para el comprobante de pago
         payment_voucher: null as File | null, 
     });
 
-    // 👇 3. Función principal usando el post de useForm 👇
+    // --- Envío de la Reserva ---
     const submitBooking = () => {
-        // useForm arma el paquete "multipart/form-data" perfectamente sin perder la foto
         post('/reservar/confirmar', {
             preserveState: true,
             preserveScroll: true,
-            forceFormData: true, 
+            forceFormData: true, // Obligatorio para enviar archivos (multipart/form-data)
             onSuccess: () => {
-                console.log("¡Enviado con éxito!");
+                console.log("¡Reserva enviada con éxito!");
             },
             onError: (errors) => {
                 console.error("Errores de validación:", errors);
-                alert("Hubo un problema con la validación de tus datos. Revisa la consola.");
             }
         });
     };
 
-    // Funciones de navegación del formulario
+    // --- Navegación del Stepper ---
     const nextStep = () => setCurrentStep((prev) => prev + 1);
     const prevStep = () => setCurrentStep((prev) => prev - 1);
 
-    // Función para el Scroll suave del Menú
     const scrollToSection = (id: string) => {
         const element = document.getElementById(id);
         if (element) {
@@ -89,7 +84,6 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
         }
     };
 
-    // Configuración del Stepper (Adaptado para Hotel)
     const steps = [
         { id: 1, label: 'Fechas', icon: CalendarDays },
         { id: 2, label: 'Habitaciones', icon: BedDouble },
@@ -101,12 +95,12 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
         <div className="min-h-screen w-full overflow-x-hidden bg-[#f3f4f6] font-sans scroll-smooth flex flex-col">
             <Head title="Hotel San Antonio - Reservas" />
 
-            {/* NAVBAR (Menú Básico) */}
+            {/* NAVBAR */}
             <nav className="bg-white shadow-md fixed w-full top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16 items-center">
                         <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#b3282d] italic">
-                            <button onClick={() => scrollToSection('inicio')} >Hotel San Antonio</button>
+                            <button onClick={() => scrollToSection('inicio')}>Hotel San Antonio</button>
                         </div>
                         <div className="hidden md:flex space-x-8">
                             <button onClick={() => scrollToSection('inicio')} className="text-gray-600 hover:text-[#b3282d] font-medium transition-colors">Inicio</button>
@@ -120,7 +114,7 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                 </div>
             </nav>
 
-            {/* SECCIÓN INICIO (Hero) */}
+            {/* SECCIÓN INICIO */}
             <section id="inicio" className="pt-24 pb-12 bg-[#b3282d] text-white text-center">
                 <div className="max-w-4xl mx-auto px-4 mt-8">
                     <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-4 break-words">Bienvenido a tu descanso ideal</h1>
@@ -166,7 +160,6 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
             {/* SECCIÓN FORMULARIO DE RESERVAS (Stepper) */}
             <section id="reservar" className="py-16 flex-1">
                 <div className="max-w-5xl mx-auto px-4">
-                    
                     <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-4 sm:p-6 lg:p-8">
                         
                         {/* EL STEPPER VISUAL */}
@@ -208,7 +201,6 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     turnstileSiteKey={turnsSiteKey} 
                                 />
                             )}
-
                             {currentStep === 2 && (
                                 <RoomSelection 
                                     bookingData={bookingData} 
@@ -218,7 +210,6 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     availableRoomTypes={availableRoomTypes} 
                                 />
                             )}
-
                             {currentStep === 3 && (
                                 <GuestDetailsForm 
                                     bookingData={bookingData} 
@@ -227,14 +218,12 @@ export default function BookingIndex({ availableRoomTypes = [], filters = {} }: 
                                     onBack={prevStep} 
                                 />
                             )}
-
                             {currentStep === 4 && (
                                 <PaymentSummary 
                                     bookingData={bookingData} 
                                     setBookingData={setBookingData} 
                                     onBack={prevStep} 
                                     onSubmit={submitBooking} 
-                                    // 👈 4. Usamos processing de useForm para desactivar el botón
                                     isSubmitting={processing} 
                                 />
                             )}

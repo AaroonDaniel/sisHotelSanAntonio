@@ -230,7 +230,7 @@ export default function PaymentSummary({
                                 </strong>
                                 .
                             </p>
-                            {/*
+                            
                             <div className="mb-6 flex justify-center rounded-lg border-2 border-dashed border-gray-200 bg-white p-4">
                                 <img 
                                     src="/images/qrCop.png" 
@@ -238,7 +238,7 @@ export default function PaymentSummary({
                                     className="w-48 h-48 object-contain"
                                 />
                             </div>
-                            */}
+                            
                             
 
                             {/* UPLOAD COMPROBANTE */}

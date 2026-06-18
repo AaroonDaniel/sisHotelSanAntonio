@@ -295,7 +295,7 @@ export default function GuestDetailsForm({
                                 name="full_name"
                                 value={bookingData.full_name || ''}
                                 onChange={handleChange}
-                                placeholder="Ej: JUAN PEREZ MORALES"
+                            
                                 className={`h-11 border-gray-300 uppercase ${errors.full_name ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
                             {errors.full_name && (
@@ -318,7 +318,7 @@ export default function GuestDetailsForm({
                                     bookingData.identification_number || ''
                                 }
                                 onChange={handleChange}
-                                placeholder="Ej: 12345678"
+                              
                                 className={`h-11 border-gray-300 ${errors.identification_number ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
                             {errors.identification_number && (
@@ -359,7 +359,7 @@ export default function GuestDetailsForm({
                                 name="phone"
                                 value={bookingData.phone || ''}
                                 onChange={handleChange}
-                                placeholder="Ej: 71234567"
+                              
                                 className={`h-11 border-gray-300 ${errors.phone ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
                             {errors.phone && (
@@ -380,7 +380,7 @@ export default function GuestDetailsForm({
                                 <Input
                                     type="text"
                                     value={natInput}
-                                    placeholder="Escriba un país..."
+                                 
                                     autoComplete="off"
                                     onFocus={() => {
                                         setNatInput('');
@@ -498,7 +498,7 @@ export default function GuestDetailsForm({
                                 list="profesiones"
                                 value={bookingData.profession || ''}
                                 onChange={handleChange}
-                                placeholder="Ej: ESTUDIANTE"
+                               
                                 className={`h-11 border-gray-300 uppercase ${errors.profession ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                                 autoComplete="off"
                             />
@@ -546,7 +546,7 @@ export default function GuestDetailsForm({
                                 name="guest_email"
                                 value={bookingData.guest_email || ''}
                                 onChange={handleChange}
-                                placeholder="ejemplo@correo.com"
+                                
                                 className={`h-11 border-gray-300 ${errors.guest_email ? 'border-red-500 focus-visible:ring-red-500' : 'focus:border-[#1e3a5f] focus:ring-[#1e3a5f]'}`}
                             />
                             {errors.guest_email ? (
