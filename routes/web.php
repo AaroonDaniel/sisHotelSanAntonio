@@ -319,6 +319,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // ==========================================
 // RESERVAS ONLINE (Rutas públicas)
 // ==========================================
+// Quitar las rutas de reserva online
 Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
 Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.confirm');
 
