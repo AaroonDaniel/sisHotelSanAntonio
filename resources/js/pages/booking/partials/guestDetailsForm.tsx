@@ -270,9 +270,6 @@ export default function GuestDetailsForm({
                         Volver a selección de habitaciones
                     </span>
                 </Button>
-                <h2 className="text-xl font-bold text-[#1e3a5f] sm:text-2xl">
-                    Datos del Titular de la Reserva
-                </h2>
             </div>
 
             <Card className="rounded-sm border border-gray-200 shadow-sm">

@@ -313,7 +313,7 @@ class ReservationController extends Controller
                             'check_in_date' => $reservation->arrival_date ?? now(),
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
-                            'advance_payment' => 0,
+                            
                             'origin' => null,
                             'status' => 'activo',
                             'is_temporary' => true,
@@ -344,8 +344,7 @@ class ReservationController extends Controller
 
                         $totalPagos = $pagos->sum('amount');
 
-                        // 👇 ESTO ES LO QUE FALTABA: persistir el adelanto en el check-in principal
-                        Checkin::where('id', $primerCheckinId)->update(['advance_payment' => $totalPagos]);
+                        
 
                         Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
