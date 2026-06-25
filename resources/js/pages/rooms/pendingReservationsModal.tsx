@@ -291,7 +291,7 @@ export default function PendingReservationsModal({
         requestedRoomTypeName = typeObj?.room_type?.name || 'Cualquier Tipo';
     }
 
-    let filteredRooms =
+    const filteredRooms =
         rooms?.filter((room) => {
             const isLibre = [
                 'available',

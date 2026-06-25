@@ -453,7 +453,7 @@ export default function CheckinModal({
         const [hours, minutes] = schedule.check_in_time.split(':').map(Number);
 
         // Creamos la fecha oficial basada en el día que seleccionó el usuario
-        let officialDate = new Date(inputDate);
+        const officialDate = new Date(inputDate);
         officialDate.setHours(hours, minutes, 0, 0);
 
         // =====================================================================
@@ -591,7 +591,7 @@ export default function CheckinModal({
                 setIsExistingGuest(!isSecondaryRoom);
 
                 // --- LÓGICA DE DETECCIÓN DE EXCESO DE TIEMPO ---
-                let calculatedDuration = Math.max(
+                const calculatedDuration = Math.max(
                     1,
                     Number(checkinToEdit.duration_days),
                 );
@@ -1418,7 +1418,7 @@ export default function CheckinModal({
             // 1. Preparamos el dinero y el método de pago que el recepcionista llenó
             // (Asegúrate de que 'data' sea el nombre de tu variable del formulario useForm)
             const metodo = data.payment_method || 'EFECTIVO';
-            let payload: any = {
+            const payload: any = {
                 check_out_date: new Date().toISOString(),
                 payment_method: metodo,
                 qr_bank: data.qr_bank,

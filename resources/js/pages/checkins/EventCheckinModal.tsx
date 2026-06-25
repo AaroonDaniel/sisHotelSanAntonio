@@ -81,7 +81,7 @@ export default function EventCheckinModal({
                 const notes = checkinToEdit.notes || '';
                 const parts = notes.split('|').map((p: string) => p.trim());
 
-                let extracted = {
+                const extracted = {
                     chairs: 0,
                     tables: 0,
                     startDateTime: now,

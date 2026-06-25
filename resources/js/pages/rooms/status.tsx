@@ -46,7 +46,7 @@ import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
 
 // Evitar errores de TS con Ziggy
-declare var route: any;
+declare let route: any;
 
 // =========================================================
 // 🕐 HELPER DE FECHAS — Normaliza una fecha a medianoche local.
@@ -334,7 +334,7 @@ export default function RoomsStatus({
         if (queueStr && !isCheckinModalOpen) {
             // Formato CSV simple: "12,45,7". Parsear números nunca lanza
             // excepción; los valores inválidos (NaN) se descartan con filter.
-            let queue: number[] = queueStr
+            const queue: number[] = queueStr
                 .split(',')
                 .map((s) => Number(s.trim()))
                 .filter((n) => Number.isInteger(n) && n > 0);
@@ -1976,7 +1976,7 @@ function CheckoutConfirmationModal({
                 } else {
                     // [DOC] Opción B: Local. Cálculo manual si falla el servidor
                     const ingreso = new Date(checkin.check_in_date);
-                    let salida = new Date();
+                    const salida = new Date();
                     if (waivePenalty && exitToleranceStatus.officialTime) {
                         const [hours, minutes] =
                             exitToleranceStatus.officialTime

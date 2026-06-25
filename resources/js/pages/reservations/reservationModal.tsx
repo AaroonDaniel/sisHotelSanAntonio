@@ -215,7 +215,7 @@ export default function ReservationModal({
         const formEnd = formStart + (data.duration_days * 24 * 60 * 60 * 1000);
         
         // 1. Filtrar TODAS las habitaciones disponibles sin importar el baño todavía
-        let allAvailableRooms = rooms.filter(room => {
+        const allAvailableRooms = rooms.filter(room => {
             if (newDetails.some(d => d.room_id === String(room.id))) return false;
             if (['MANTENIMIENTO', 'INHABILITADO'].includes(room.status.toUpperCase())) return false;
 

@@ -154,7 +154,7 @@ export default function GuestDetailsForm({
 
     const handleContinue = () => {
     const civilStatus = bookingData.civil_status || 'SINGLE';
-    let newErrors: Record<string, string> = {};
+    const newErrors: Record<string, string> = {};
 
     // 1. Detectar si es boliviano o extranjero (usa el catálogo, igual que el check-in)
     const esBoliviano =
