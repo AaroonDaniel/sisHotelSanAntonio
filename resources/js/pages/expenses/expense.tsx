@@ -1,6 +1,6 @@
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowLeft,
