@@ -48,13 +48,11 @@ class HandleInertiaRequests extends Middleware
 
             'auth' => [
                 'user' => $user ? array_merge($user->toArray(), [
-                    // Cacheamos roles 5 min por usuario
                     'roles' => Cache::remember(
                         "user_roles_{$user->id}",
                         300,
                         fn() => $user->getRoleNames()->toArray()
                     ),
-                    // Cacheamos permisos 5 min por usuario
                     'permissions' => Cache::remember(
                         "user_permissions_{$user->id}",
                         300,
@@ -62,17 +60,14 @@ class HandleInertiaRequests extends Middleware
                     ),
                 ]) : null,
 
-                // Estado de caja (ya lo tenías cacheado, sin cambios)
+                // SOLUCIÓN: Consulta en tiempo real, sin caché
                 'active_register' => $user
-                    ? Cache::remember('active_register_user_' . $user->id, 300, function () use ($user) {
-                        return \App\Models\CashRegister::query()
-                            ->where('user_id', $user->id)
-                            ->where('status', 'ABIERTA')
-                            ->first();
-                    })
+                    ? \App\Models\CashRegister::query()
+                    ->where('user_id', $user->id)
+                    ->where('status', 'ABIERTA')
+                    ->first()
                     : null,
             ],
-
             'flash' => [
                 'success'            => fn() => $request->session()->get('success'),
                 'error'              => fn() => $request->session()->get('error'),

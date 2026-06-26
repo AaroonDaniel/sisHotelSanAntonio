@@ -1,9 +1,11 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head,router, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
     CheckCircle2,
-    Clock, // <-- Importado el icono del reloj
+    Clock,
+    Eye,
+    EyeOff,
     KeyRound,
     MapPin,
     Phone,
@@ -11,7 +13,7 @@ import {
     ShieldCheck,
     UserCircle,
 } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { FormEventHandler, useState } from 'react';
 
 // Interfaz local para evitar errores si no está en index.d.ts
 export interface User {
@@ -20,7 +22,7 @@ export interface User {
     full_name: string;
     phone: string;
     address: string;
-    shift?: string; // <-- Agregado a la interfaz
+    shift?: string;
     is_active: boolean;
 }
 
@@ -29,6 +31,8 @@ interface Props {
 }
 
 export default function ProfileIndex({ auth }: Props) {
+    const [showPassword, setShowPassword] = useState(false);
+
     const user = auth.user;
 
     const {
@@ -43,7 +47,7 @@ export default function ProfileIndex({ auth }: Props) {
         nickname: user.nickname || '',
         phone: user.phone || '',
         address: user.address || '',
-        shift: user.shift || '', // <-- Agregado al estado del formulario
+        shift: user.shift || '',
     });
 
     const {
@@ -76,6 +80,22 @@ export default function ProfileIndex({ auth }: Props) {
     return (
         <AuthenticatedLayout user={user}>
             <Head title="Mi Perfil" />
+            
+            {/* Oculta el ícono nativo de revelar/limpiar del navegador (Edge/Chrome/IE) */}
+            <style>{`
+                .password-input::-ms-reveal,
+                .password-input::-ms-clear {
+                    display: none !important;
+                }
+                .password-input::-webkit-credentials-auto-fill-button,
+                .password-input::-webkit-strong-password-auto-fill-button,
+                .password-input::-webkit-caps-lock-indicator {
+                    visibility: hidden !important;
+                    display: none !important;
+                    pointer-events: none !important;
+                }
+            `}</style>
+
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 {/* Botón Volver */}
                 <button
@@ -85,7 +105,7 @@ export default function ProfileIndex({ auth }: Props) {
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
                         <ArrowLeft className="h-4 w-4" />
                     </div>
-                    <span className='text-base'>Volver</span>
+                    <span className="text-base">Volver</span>
                 </button>
 
                 <div className="py-12">
@@ -115,7 +135,12 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="text"
                                                 value={infoData.full_name}
-                                                onChange={(e) => setInfoData('full_name', e.target.value.toUpperCase())}
+                                                onChange={(e) =>
+                                                    setInfoData(
+                                                        'full_name',
+                                                        e.target.value.toUpperCase(),
+                                                    )
+                                                }
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-green-500 focus:ring-green-500"
                                             />
                                         </div>
@@ -139,7 +164,17 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <input
                                                     type="text"
                                                     value={infoData.nickname}
-                                                    onChange={(e) => setInfoData('nickname', e.target.value.toLowerCase().replace(/\s/g, ''))}
+                                                    onChange={(e) =>
+                                                        setInfoData(
+                                                            'nickname',
+                                                            e.target.value
+                                                                .toLowerCase()
+                                                                .replace(
+                                                                    /\s/g,
+                                                                    '',
+                                                                ),
+                                                        )
+                                                    }
                                                     className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base font-semibold text-green-600 focus:border-green-500 focus:ring-green-500"
                                                 />
                                             </div>
@@ -161,7 +196,12 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <input
                                                     type="text"
                                                     value={infoData.phone}
-                                                    onChange={(e) => setInfoData('phone', e.target.value)}
+                                                    onChange={(e) =>
+                                                        setInfoData(
+                                                            'phone',
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                                 />
                                             </div>
@@ -185,7 +225,12 @@ export default function ProfileIndex({ auth }: Props) {
                                             <input
                                                 type="text"
                                                 value={infoData.address}
-                                                onChange={(e) => setInfoData('address', e.target.value.toUpperCase())}
+                                                onChange={(e) =>
+                                                    setInfoData(
+                                                        'address',
+                                                        e.target.value.toUpperCase(),
+                                                    )
+                                                }
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black uppercase focus:border-green-500 focus:ring-green-500"
                                             />
                                         </div>
@@ -207,22 +252,37 @@ export default function ProfileIndex({ auth }: Props) {
                                             </div>
                                             <select
                                                 value={infoData.shift}
-                                                onChange={(e) => setInfoData('shift', e.target.value)}
+                                                onChange={(e) =>
+                                                    setInfoData(
+                                                        'shift',
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-green-500 focus:ring-green-500"
                                             >
-                                                <option value="" disabled>SELECCIONAR TURNO...</option>
-                                                <option value="DÍA">DÍA (08:00 a 20:00)</option>
-                                                <option value="NOCHE">NOCHE (20:00 a 08:00)</option>
+                                                <option value="" disabled>
+                                                    SELECCIONAR TURNO...
+                                                </option>
+                                                <option value="DÍA">
+                                                    DÍA (08:00 a 20:00)
+                                                </option>
+                                                <option value="NOCHE">
+                                                    NOCHE (20:00 a 08:00)
+                                                </option>
                                             </select>
                                         </div>
-                                        
-                                        {infoErrors.shift && <p className="mt-1 text-xs font-bold text-red-500">{infoErrors.shift}</p>}
+
+                                        {infoErrors.shift && (
+                                            <p className="mt-1 text-xs font-bold text-red-500">
+                                                {infoErrors.shift}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="mt-6 flex items-center justify-end gap-4 border-t border-gray-100 pt-4">
                                     {infoSuccessful && (
-                                        <span className="flex items-center gap-1 animate-in fade-in text-sm font-bold text-green-600 duration-300">
+                                        <span className="flex animate-in items-center gap-1 text-sm font-bold text-green-600 duration-300 fade-in">
                                             <CheckCircle2 className="h-4 w-4" />{' '}
                                             ¡Guardado!
                                         </span>
@@ -232,7 +292,8 @@ export default function ProfileIndex({ auth }: Props) {
                                         disabled={infoProcessing}
                                         className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
                                     >
-                                        <Save className="h-4 w-4" /> Guardar Cambios
+                                        <Save className="h-4 w-4" /> Guardar
+                                        Cambios
                                     </button>
                                 </div>
                             </form>
@@ -261,11 +322,36 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <KeyRound className="h-4 w-4 text-gray-400" />
                                             </div>
                                             <input
-                                                type="password"
+                                                type={
+                                                    showPassword
+                                                        ? 'text'
+                                                        : 'password'
+                                                }
                                                 value={pwdData.current_password}
-                                                onChange={(e) => setPwdData('current_password', e.target.value)}
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
+                                                onChange={(e) =>
+                                                    setPwdData(
+                                                        'current_password',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="password-input w-full rounded-xl border border-gray-300 py-2.5 pr-10 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowPassword(
+                                                        !showPassword,
+                                                    )
+                                                }
+                                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-red-600 focus:outline-none"
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
                                         </div>
                                         {pwdErrors.current_password && (
                                             <p className="mt-1 text-xs font-bold text-red-500">
@@ -284,11 +370,36 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <KeyRound className="h-4 w-4 text-gray-400" />
                                             </div>
                                             <input
-                                                type="password"
+                                                type={
+                                                    showPassword
+                                                        ? 'text'
+                                                        : 'password'
+                                                }
                                                 value={pwdData.password}
-                                                onChange={(e) => setPwdData('password', e.target.value)}
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
+                                                onChange={(e) =>
+                                                    setPwdData(
+                                                        'password',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="password-input w-full rounded-xl border border-gray-300 py-2.5 pr-10 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowPassword(
+                                                        !showPassword,
+                                                    )
+                                                }
+                                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-red-600 focus:outline-none"
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
                                         </div>
                                         {pwdErrors.password && (
                                             <p className="mt-1 text-xs font-bold text-red-500">
@@ -307,15 +418,44 @@ export default function ProfileIndex({ auth }: Props) {
                                                 <KeyRound className="h-4 w-4 text-gray-400" />
                                             </div>
                                             <input
-                                                type="password"
-                                                value={pwdData.password_confirmation}
-                                                onChange={(e) => setPwdData('password_confirmation', e.target.value)}
-                                                className="w-full rounded-xl border border-gray-300 py-2.5 pr-3 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
+                                                type={
+                                                    showPassword
+                                                        ? 'text'
+                                                        : 'password'
+                                                }
+                                                value={
+                                                    pwdData.password_confirmation
+                                                }
+                                                onChange={(e) =>
+                                                    setPwdData(
+                                                        'password_confirmation',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="password-input w-full rounded-xl border border-gray-300 py-2.5 pr-10 pl-10 text-base text-black focus:border-red-500 focus:ring-red-500"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowPassword(
+                                                        !showPassword,
+                                                    )
+                                                }
+                                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-red-600 focus:outline-none"
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
                                         </div>
                                         {pwdErrors.password_confirmation && (
                                             <p className="mt-1 text-xs font-bold text-red-500">
-                                                {pwdErrors.password_confirmation}
+                                                {
+                                                    pwdErrors.password_confirmation
+                                                }
                                             </p>
                                         )}
                                     </div>
@@ -323,7 +463,7 @@ export default function ProfileIndex({ auth }: Props) {
 
                                 <div className="mt-6 flex items-center justify-end gap-4 border-t border-gray-100 pt-4">
                                     {pwdSuccessful && (
-                                        <span className="flex items-center gap-1 animate-in fade-in text-sm font-bold text-green-600 duration-300">
+                                        <span className="flex animate-in items-center gap-1 text-sm font-bold text-green-600 duration-300 fade-in">
                                             <CheckCircle2 className="h-4 w-4" />{' '}
                                             ¡Contraseña Actualizada!
                                         </span>
@@ -333,7 +473,8 @@ export default function ProfileIndex({ auth }: Props) {
                                         disabled={pwdProcessing}
                                         className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95 disabled:opacity-50"
                                     >
-                                        <Save className="h-4 w-4" /> Actualizar Contraseña
+                                        <Save className="h-4 w-4" /> Actualizar
+                                        Contraseña
                                     </button>
                                 </div>
                             </form>
