@@ -604,13 +604,18 @@ export default function MultiCheckoutModal({
                                                 )}
                                             </div>
                                             <span className="text-xs font-bold uppercase">
-                                                Sin Factura
+                                                Recibo
                                             </span>
                                         </button>
+                                        {/*}
                                         <button
                                             onClick={() =>
                                                 setTipoDocumento('factura')
+                                                
+                                                
                                             }
+                                            
+                                            
                                             className={` flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'factura' ? 'border-green-500 bg-blue-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             <div
@@ -624,7 +629,7 @@ export default function MultiCheckoutModal({
                                             <span className="text-xs font-bold uppercase">
                                                 Con Factura
                                             </span>
-                                        </button>
+                                        </button>{*/}
                                     </div>
                                 </div>
 

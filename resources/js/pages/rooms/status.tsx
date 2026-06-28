@@ -2552,9 +2552,10 @@ function CheckoutConfirmationModal({
                                                         )}
                                                     </div>
                                                     <span className="text-xs font-bold uppercase">
-                                                        Sin Factura
+                                                        Recibo
                                                     </span>
                                                 </button>
+                                                {/*}
                                                 <button
                                                     onClick={() =>
                                                         setTipoDocumento(
@@ -2575,6 +2576,7 @@ function CheckoutConfirmationModal({
                                                         Con Factura
                                                     </span>
                                                 </button>
+                                                {*/}
                                             </div>
                                         </div>
 
