@@ -316,24 +316,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index')->middleware('permission:auditoria.ver');
 }); // <-- Cierre del grupo autenticado
 
-// ==========================================
-// RESERVAS ONLINE (Rutas públicas)
-// ==========================================
-// Quitar las rutas de reserva online
-Route::get('/reservar', [OnlineBookingController::class, 'index'])->name('booking.index');
-Route::post('/reservar/confirmar', [OnlineBookingController::class, 'store'])->name('booking.confirm');
-
-Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
-Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
-
-
-// Mostrar el PDF del recibo final de reserva online
-Route::get('/reservar/recibo-publico/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt_public');
-
-Route::get('/storage/{path}', function (string $path) {
-    abort_unless(Storage::disk('public')->exists($path), 404);
-    return Storage::disk('public')->response($path);
-})->where('path', '.*')->name('storage.public');
- 
 
 require __DIR__ . '/settings.php';
