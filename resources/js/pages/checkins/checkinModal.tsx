@@ -2005,50 +2005,54 @@ export default function CheckinModal({
                                 </div>
                                 <div className="col-span-2 flex gap-2">
                                     <div className="flex-1">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Fecha Nac.
-                                        </label>
-                                        <input
-                                            type="date"
-                                            className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
-                                            value={currentPerson.birth_date}
-                                            max={
-                                                new Date()
-                                                    .toISOString()
-                                                    .split('T')[0]
-                                            }
-                                            disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'birth_date',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            onKeyDown={(e) => {
-                                                // TAB hacia adelante (lo controlas tú)
-                                                if (
-                                                    e.key === 'Tab' &&
-                                                    !e.shiftKey
-                                                ) {
-                                                    e.preventDefault();
-                                                    professionRef.current?.focus();
-                                                }
+    <label className="text-xs font-bold text-gray-500 uppercase">
+        Edad
+    </label>
+    <input
+        type="number"
+        min="1"
+        className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
+        value={
+            currentPerson.birth_date
+                ? new Date().getFullYear() - parseInt(currentPerson.birth_date.split('-')[0])
+                : ''
+        }
+        disabled={isReadOnly}
+        onChange={(e) => {
+            const age = parseInt(e.target.value, 10);
+            if (!isNaN(age) && age > 0) {
+                // Calculamos el año restando la edad al año actual
+                const birthYear = new Date().getFullYear() - age;
+                // Guardamos el formato ficticio de la base de datos (Ej: 1992-01-01)
+                handleFieldChange(
+                    'birth_date',
+                    `${birthYear}-01-01`,
+                );
+            } else {
+                // Si borra el campo, limpiamos la fecha
+                handleFieldChange('birth_date', '');
+            }
+        }}
+        onKeyDown={(e) => {
+            // TAB hacia adelante (lo controlas tú)
+            if (
+                e.key === 'Tab' &&
+                !e.shiftKey
+            ) {
+                e.preventDefault();
+                professionRef.current?.focus();
+            }
 
-                                                // SHIFT + TAB hacia atrás (comportamiento normal)
-                                                if (
-                                                    e.key === 'Tab' &&
-                                                    e.shiftKey
-                                                ) {
-                                                    // no hacemos nada para que el navegador retroceda libremente
-                                                }
-                                            }}
-                                        />
-                                        <span className="pl-1 text-xs font-bold text-gray-700">
-                                            {displayAge
-                                                ? `Edad: ${displayAge}`
-                                                : ''}
-                                        </span>
-                                    </div>
+            // SHIFT + TAB hacia atrás (comportamiento normal)
+            if (
+                e.key === 'Tab' &&
+                e.shiftKey
+            ) {
+                // no hacemos nada para que el navegador retroceda libremente
+            }
+        }}
+    />
+</div>
 
                                     {/* INPUT DE PROFESIÓN ACTUALIZADO */}
                                     {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
