@@ -211,12 +211,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/permisos/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
     Route::delete('/permisos/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 
-    //Verificación de Reserva online
-    Route::post('/admin/reservas/{id}/aprobar-pago', [AdminBookingController::class, 'approvePayment'])->name('admin.bookings.approve-payment');
-    Route::post('/admin/reservas/{id}/rechazar-pago', [AdminBookingController::class, 'rejectPayment'])->name('admin.bookings.reject-payment');
-    Route::get('/reservar/recibo/{id}', [OnlineBookingController::class, 'showReceipt'])->name('booking.receipt');
-    Route::post('/reservar', [OnlineBookingController::class, 'store'])->name('booking.store');
-
+    
     // ==========================================
     // MÓDULO DE FACTURACIÓN Y GESTIÓN DE DOCUMENTOS
     // ==========================================
