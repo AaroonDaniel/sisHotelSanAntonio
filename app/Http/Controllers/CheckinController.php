@@ -193,7 +193,7 @@ class CheckinController extends Controller
         // =========================================================
         // 🛑 3. VERIFICACIÓN DE COMPLETITUD (TITULAR)
         // =========================================================
-        $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in', 'phone'];
+        $requiredFields = ['identification_number', 'nationality', 'profession', 'civil_status', 'birth_date', 'issued_in'];
         $isTitularComplete = true;
         $missingField = null;
 
@@ -236,172 +236,172 @@ class CheckinController extends Controller
         // =========================================================
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $isAssigningSalon) {
 
-        // =========================================================
-        // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN DEL TITULAR
-        // =========================================================
-        $fullName = strtoupper($request->full_name ?? '');
-        $birthDate = $request->birth_date;
-        $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
+            // =========================================================
+            // 4. PROCESO DE CREACIÓN / ACTUALIZACIÓN DEL TITULAR
+            // =========================================================
+            $fullName = strtoupper($request->full_name ?? '');
+            $birthDate = $request->birth_date;
+            $idNumber = $request->filled('identification_number') ? strtoupper($request->identification_number) : null;
 
-        if (!$request->filled('guest_id')) {
-            // MODO NUEVO HUÉSPED
-            $existingGuest = null;
+            if (!$request->filled('guest_id')) {
+                // MODO NUEVO HUÉSPED
+                $existingGuest = null;
 
-            if (!empty($idNumber)) {
-                $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
-            }
-
-            if (!$existingGuest && !empty($fullName)) {
-                $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
-                if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
-                    $existingGuest = null;
+                if (!empty($idNumber)) {
+                    $existingGuest = \App\Models\Guest::where('identification_number', $idNumber)->first();
                 }
-            }
 
-            if ($existingGuest) {
-                // BARRERA 1 INTELIGENTE
-                $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
-                    ->where('guest_id', $existingGuest->id)
-                    ->where('status', 'activo')
-                    ->get();
-
-                foreach ($ocupacionesPrevias as $ocupacion) {
-                    $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                    if ($isAssigningSalon === $isPreviousSalon) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
-                        ]);
+                if (!$existingGuest && !empty($fullName)) {
+                    $existingGuest = \App\Models\Guest::where('full_name', $fullName)->first();
+                    if ($existingGuest && !empty($existingGuest->identification_number) && !empty($idNumber) && $existingGuest->identification_number !== $idNumber) {
+                        $existingGuest = null;
                     }
                 }
 
-                $existingGuest->update([
-                    'identification_number' => $idNumber ?? $existingGuest->identification_number,
-                    'nationality' => $request->nationality ?? $existingGuest->nationality,
-                    'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
-                    'birth_date' => $birthDate ?? $existingGuest->birth_date,
-                    'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
-                    'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
-                    'phone' => $request->phone ?? $existingGuest->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
-                ]);
-                $guestId = $existingGuest->id;
-            } else {
-                $guest = \App\Models\Guest::create([
-                    'full_name' => $fullName,
-                    'identification_number' => $idNumber,
-                    'nationality' => $request->nationality ?? 'BOLIVIANA',
-                    'civil_status' => $request->civil_status,
-                    'birth_date' => $birthDate,
-                    'profession' => $request->profession ? strtoupper($request->profession) : null,
-                    'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
-                    'phone' => $request->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
-                ]);
-                $guestId = $guest->id;
-            }
-        } else {
-            // MODO EDICIÓN (Huésped existente)
-            $guestId = $request->guest_id;
-            $existingGuest = \App\Models\Guest::find($guestId);
+                if ($existingGuest) {
+                    // BARRERA 1 INTELIGENTE
+                    $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
+                        ->where('guest_id', $existingGuest->id)
+                        ->where('status', 'activo')
+                        ->get();
 
-            // =========================================================
-            // 🛡️ GUARDIÁN DE IDENTIDAD TITULAR (Anti IDs Fantasmas)
-            // =========================================================
-            if ($existingGuest) {
-                $nuevoNombre = strtoupper(trim($request->full_name ?? ''));
-                $nuevoCarnet = $idNumber;
+                    foreach ($ocupacionesPrevias as $ocupacion) {
+                        $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
+                        if ($isAssigningSalon === $isPreviousSalon) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
+                            ]);
+                        }
+                    }
 
-                $esNombreDiferente = !empty($nuevoNombre) && $nuevoNombre !== strtoupper($existingGuest->full_name);
-                $esCarnetDiferente = !empty($nuevoCarnet) && !empty($existingGuest->identification_number) && $nuevoCarnet !== strtoupper($existingGuest->identification_number);
-
-                if ($esNombreDiferente && $esCarnetDiferente) {
-                    $existingGuest = null; // Rompemos el vínculo. Se creará uno nuevo abajo.
+                    $existingGuest->update([
+                        'identification_number' => $idNumber ?? $existingGuest->identification_number,
+                        'nationality' => $request->nationality ?? $existingGuest->nationality,
+                        'civil_status' => $request->civil_status ?? $existingGuest->civil_status,
+                        'birth_date' => $birthDate ?? $existingGuest->birth_date,
+                        'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
+                        'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
+                        'phone' => $request->phone ?? $existingGuest->phone,
+                        'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
+                    ]);
+                    $guestId = $existingGuest->id;
+                } else {
+                    $guest = \App\Models\Guest::create([
+                        'full_name' => $fullName,
+                        'identification_number' => $idNumber,
+                        'nationality' => $request->nationality ?? 'BOLIVIANA',
+                        'civil_status' => $request->civil_status,
+                        'birth_date' => $birthDate,
+                        'profession' => $request->profession ? strtoupper($request->profession) : null,
+                        'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
+                        'phone' => $request->phone,
+                        'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
+                    ]);
+                    $guestId = $guest->id;
                 }
-            }
+            } else {
+                // MODO EDICIÓN (Huésped existente)
+                $guestId = $request->guest_id;
+                $existingGuest = \App\Models\Guest::find($guestId);
 
-            if ($existingGuest) {
-                // BARRERA 2 INTELIGENTE
-                $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
-                    ->where('guest_id', $guestId)
-                    ->where('status', 'activo')
-                    ->get();
+                // =========================================================
+                // 🛡️ GUARDIÁN DE IDENTIDAD TITULAR (Anti IDs Fantasmas)
+                // =========================================================
+                if ($existingGuest) {
+                    $nuevoNombre = strtoupper(trim($request->full_name ?? ''));
+                    $nuevoCarnet = $idNumber;
 
-                foreach ($ocupacionesPrevias as $ocupacion) {
-                    $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
-                    if ($isAssigningSalon === $isPreviousSalon) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
-                        ]);
+                    $esNombreDiferente = !empty($nuevoNombre) && $nuevoNombre !== strtoupper($existingGuest->full_name);
+                    $esCarnetDiferente = !empty($nuevoCarnet) && !empty($existingGuest->identification_number) && $nuevoCarnet !== strtoupper($existingGuest->identification_number);
+
+                    if ($esNombreDiferente && $esCarnetDiferente) {
+                        $existingGuest = null; // Rompemos el vínculo. Se creará uno nuevo abajo.
                     }
                 }
 
-                $existingGuest->update([
-                    'identification_number' => $request->filled('identification_number') ? strtoupper($request->identification_number) : $existingGuest->identification_number,
-                    'nationality' => $request->filled('nationality') ? strtoupper($request->nationality) : $existingGuest->nationality,
-                    'civil_status' => $request->filled('civil_status') ? strtoupper($request->civil_status) : $existingGuest->civil_status,
-                    'birth_date' => $request->filled('birth_date') ? $request->birth_date : $existingGuest->birth_date,
-                    'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
-                    'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
-                    'phone' => $request->phone ?? $existingGuest->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
-                ]);
-            } else {
-                // CREACIÓN FORZADA (El Guardián detectó un ID Fantasma)
-                $guest = \App\Models\Guest::create([
-                    'full_name' => strtoupper(trim($request->full_name ?? '')),
-                    'identification_number' => $idNumber,
-                    'nationality' => $request->nationality ?? 'BOLIVIANA',
-                    'civil_status' => $request->civil_status,
-                    'birth_date' => $request->birth_date,
-                    'profession' => $request->profession ? strtoupper($request->profession) : null,
-                    'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
-                    'phone' => $request->phone,
-                    'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
-                ]);
-                $guestId = $guest->id;
-            }
-        }
+                if ($existingGuest) {
+                    // BARRERA 2 INTELIGENTE
+                    $ocupacionesPrevias = \App\Models\Checkin::with('room.roomType')
+                        ->where('guest_id', $guestId)
+                        ->where('status', 'activo')
+                        ->get();
 
-        // =========================================================
-        // LÓGICA DE PRECIOS Y PLAN CORPORATIVO / DELEGACIÓN
-        // =========================================================
-        $totalGuest = 1;
-        if ($request->has('companions') && is_array($request->companions)) {
-            foreach ($request->companions as $compData) {
-                if (!empty($compData['full_name'])) {
-                    $totalGuest++;
+                    foreach ($ocupacionesPrevias as $ocupacion) {
+                        $isPreviousSalon = str_contains(strtoupper($ocupacion->room->roomType->name ?? ''), 'SALON');
+                        if ($isAssigningSalon === $isPreviousSalon) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'guest_id' => "ALERTA: Este huésped ya se encuentra registrado en el/la " . $ocupacion->room->number,
+                            ]);
+                        }
+                    }
+
+                    $existingGuest->update([
+                        'identification_number' => $request->filled('identification_number') ? strtoupper($request->identification_number) : $existingGuest->identification_number,
+                        'nationality' => $request->filled('nationality') ? strtoupper($request->nationality) : $existingGuest->nationality,
+                        'civil_status' => $request->filled('civil_status') ? strtoupper($request->civil_status) : $existingGuest->civil_status,
+                        'birth_date' => $request->filled('birth_date') ? $request->birth_date : $existingGuest->birth_date,
+                        'profession' => $request->filled('profession') ? strtoupper($request->profession) : $existingGuest->profession,
+                        'issued_in' => $request->filled('issued_in') ? strtoupper($request->issued_in) : $existingGuest->issued_in,
+                        'phone' => $request->phone ?? $existingGuest->phone,
+                        'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE'
+                    ]);
+                } else {
+                    // CREACIÓN FORZADA (El Guardián detectó un ID Fantasma)
+                    $guest = \App\Models\Guest::create([
+                        'full_name' => strtoupper(trim($request->full_name ?? '')),
+                        'identification_number' => $idNumber,
+                        'nationality' => $request->nationality ?? 'BOLIVIANA',
+                        'civil_status' => $request->civil_status,
+                        'birth_date' => $request->birth_date,
+                        'profession' => $request->profession ? strtoupper($request->profession) : null,
+                        'issued_in' => $request->issued_in ? strtoupper($request->issued_in) : null,
+                        'phone' => $request->phone,
+                        'profile_status' => $isTitularComplete ? 'COMPLETE' : 'INCOMPLETE',
+                    ]);
+                    $guestId = $guest->id;
                 }
             }
-        }
 
-        $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
-        $basePrice  = (float) ($roomModelForPrice->price->amount ?? 0);
+            // =========================================================
+            // LÓGICA DE PRECIOS Y PLAN CORPORATIVO / DELEGACIÓN
+            // =========================================================
+            $totalGuest = 1;
+            if ($request->has('companions') && is_array($request->companions)) {
+                foreach ($request->companions as $compData) {
+                    if (!empty($compData['full_name'])) {
+                        $totalGuest++;
+                    }
+                }
+            }
 
-        $isSpecialDeal = $request->boolean('is_corporate')
-            || in_array($request->input('type'), ['corporativo', 'delegacion']);
+            $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
+            $basePrice  = (float) ($roomModelForPrice->price->amount ?? 0);
 
-        if ($isSpecialDeal) {
-            // CONVENIO CERRADO: el precio lo fija el Gerente/recepción.
-            // No se recalcula por conteo de huéspedes.
-            $agreedPrice = $request->filled('agreed_price')
-                ? (float) $request->input('agreed_price')
-                : max(0, $basePrice - 20);
-        } else {
-            // BUGFIX 3.13.2: para estadías normales el precio SIEMPRE se ajusta
-            // matemáticamente según el conteo real de huéspedes. Antes esto solo
-            // ocurría si llegaba el flag 'auto_adjust_price', que el frontend
-            // dejó de enviar -> el precio quedaba "congelado" en la tarifa base.
-            $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
-        }
+            $isSpecialDeal = $request->boolean('is_corporate')
+                || in_array($request->input('type'), ['corporativo', 'delegacion']);
 
-        // El descuento manual sigue teniendo prioridad sobre el precio calculado.
-        if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-            $minAllowed  = $agreedPrice * 0.5;
-            $agreedPrice = max((float) $request->discount, $isAssigningSalon ? 0 : $minAllowed);
-        }
+            if ($isSpecialDeal) {
+                // CONVENIO CERRADO: el precio lo fija el Gerente/recepción.
+                // No se recalcula por conteo de huéspedes.
+                $agreedPrice = $request->filled('agreed_price')
+                    ? (float) $request->input('agreed_price')
+                    : max(0, $basePrice - 20);
+            } else {
+                // BUGFIX 3.13.2: para estadías normales el precio SIEMPRE se ajusta
+                // matemáticamente según el conteo real de huéspedes. Antes esto solo
+                // ocurría si llegaba el flag 'auto_adjust_price', que el frontend
+                // dejó de enviar -> el precio quedaba "congelado" en la tarifa base.
+                $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
+            }
 
-   
-        $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
+            // El descuento manual sigue teniendo prioridad sobre el precio calculado.
+            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
+                $minAllowed  = $agreedPrice * 0.5;
+                $agreedPrice = max((float) $request->discount, $isAssigningSalon ? 0 : $minAllowed);
+            }
+
+
+            $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
             $specialAgreementId = null;
             $isAutoAdjust = $request->boolean('auto_adjust_price');
@@ -872,30 +872,30 @@ class CheckinController extends Controller
 
     public function update(Request $request, Checkin $checkin)
     {
-       \Illuminate\Support\Facades\Log::info('🔎 [UPDATE-DEBUG] Checkin ' . $checkin->id . ' | Payload recibido:', $request->all());
+        \Illuminate\Support\Facades\Log::info('🔎 [UPDATE-DEBUG] Checkin ' . $checkin->id . ' | Payload recibido:', $request->all());
         // Normaliza el tipo de auto-ajuste: no es un valor de formulario válido.
-if ($request->input('type') === 'AJUSTE DE PRECIO') {
-    $request->merge(['type' => 'estandar']);
-}
+        if ($request->input('type') === 'AJUSTE DE PRECIO') {
+            $request->merge(['type' => 'estandar']);
+        }
         try {
-        $validated = $request->validate([
-            'room_id' => 'required|exists:rooms,id',
-            'check_in_date' => 'required|date',
-            'actual_arrival_date' => 'nullable|date',
-            'duration_days' => 'required|integer|min:1',
-            'notes' => 'nullable|string',
-            'origin' => 'nullable|string',
-            'is_temporary' => 'boolean',
-            'auto_adjust_price' => 'boolean',
+            $validated = $request->validate([
+                'room_id' => 'required|exists:rooms,id',
+                'check_in_date' => 'required|date',
+                'actual_arrival_date' => 'nullable|date',
+                'duration_days' => 'required|integer|min:1',
+                'notes' => 'nullable|string',
+                'origin' => 'nullable|string',
+                'is_temporary' => 'boolean',
+                'auto_adjust_price' => 'boolean',
 
-            // --- Campos viejos / Nuevos ---
-            'is_corporate' => 'nullable|boolean',
-            'is_delegation' => 'nullable|boolean',
-            'type' => 'nullable|string|in:estandar,corporativo,delegacion',
-            'payment_frequency' => 'nullable|string|max:255',
-            'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
-             'agreed_price' => 'nullable|numeric|min:0',
-        ]);
+                // --- Campos viejos / Nuevos ---
+                'is_corporate' => 'nullable|boolean',
+                'is_delegation' => 'nullable|boolean',
+                'type' => 'nullable|string|in:estandar,corporativo,delegacion',
+                'payment_frequency' => 'nullable|string|max:255',
+                'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
+                'agreed_price' => 'nullable|numeric|min:0',
+            ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ [UPDATE-DEBUG] Validacion RECHAZADA. Campos:', $e->errors());
             throw $e;
@@ -939,14 +939,14 @@ if ($request->input('type') === 'AJUSTE DE PRECIO') {
 
             if ($currentGuest) {
                 // Evaluamos si el titular tiene todos sus datos antes del update
+                // 🛑 ELIMINAMOS LA VALIDACIÓN OBLIGATORIA DEL TELÉFONO ('phone') AQUÍ
                 $isTitularComplete = !empty($request->identification_number ?? $currentGuest->identification_number) &&
                     !empty($request->nationality ?? $currentGuest->nationality) &&
                     !empty($cleanOrigin) &&
                     !empty($request->profession ?? $currentGuest->profession) &&
                     !empty($request->civil_status ?? $currentGuest->civil_status) &&
                     !empty($request->birth_date ?? $currentGuest->birth_date) &&
-                    !empty($request->issued_in ?? $currentGuest->issued_in) &&
-                    !empty($request->phone ?? $currentGuest->phone);
+                    !empty($request->issued_in ?? $currentGuest->issued_in);
 
                 $currentGuest->update([
                     'full_name' => $request->has('full_name') ? ($request->full_name ? strtoupper($request->full_name) : $currentGuest->full_name) : $currentGuest->full_name,
