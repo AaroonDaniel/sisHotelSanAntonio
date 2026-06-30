@@ -312,7 +312,7 @@ export default function RoomsStatus({
             ) {
                 sessionStorage.setItem(
                     'pendingCheckinsQueue',
-                    flash.auto_open_checkins.join(','), 
+                    flash.auto_open_checkins.join(','),
                 );
                 setIsPendingModalOpen(false);
 
@@ -428,7 +428,7 @@ export default function RoomsStatus({
                 activeCheckin.special_agreement?.type === 'AJUSTE DE PRECIO' ||
                 (originalRoomPrice > 0 &&
                     activeCheckin.agreed_price < originalRoomPrice);
-                    
+
             // Faltan personas SOLO SI: hay camas vacías Y NO se ha reajustado el precio.
             const isCapacityMissing =
                 totalGuests < roomCapacity && !isPriceAdjusted;
@@ -538,13 +538,15 @@ export default function RoomsStatus({
         // 🟥 MOROSO POR CICLO PASADO: faltó completar un ciclo anterior.
         if (totalPaid < deudaVencida) {
             const deudaMora = deudaVencida - totalPaid;
-            
+
             // --- NUEVO: Calcular los días exactos de retraso ---
             const ciclosPagados = Math.floor(totalPaid / cyclePrice);
             const primerCicloImpago = ciclosPagados + 1;
-            
+
             const fechaVencimientoMora = new Date(checkinDay.getTime());
-            fechaVencimientoMora.setDate(fechaVencimientoMora.getDate() + (primerCicloImpago * corpDays));
+            fechaVencimientoMora.setDate(
+                fechaVencimientoMora.getDate() + primerCicloImpago * corpDays,
+            );
             fechaVencimientoMora.setHours(0, 0, 0, 0);
 
             const msMora = today.getTime() - fechaVencimientoMora.getTime();
@@ -628,7 +630,10 @@ export default function RoomsStatus({
 
         // CASO C: today > dueDate => moroso directo (pasó el día natural).
         // --- NUEVO: Fallback en caso de que logre pasar hasta aquí ---
-        const diasRetrasoFallback = Math.max(1, Math.round((todayTime - dueTime) / MS_PER_DAY));
+        const diasRetrasoFallback = Math.max(
+            1,
+            Math.round((todayTime - dueTime) / MS_PER_DAY),
+        );
         return {
             level: 'moroso',
             badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
@@ -1118,17 +1123,16 @@ export default function RoomsStatus({
                         {/* PRIMERA FILA: Controles de Filtros */}
                         {/* Eliminamos 'justify-end' para evitar el corte izquierdo, usamos 'xl:ml-auto' en el primer botón */}
                         <div className="flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-2">
-                            
-                                <button
-                                    onClick={handleOpenQuickPreview}
-                                    // MAGIA AQUÍ: w-auto y xl:ml-auto empujan toda la fila a la derecha sin cortarla
-                                    className="flex w-auto shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95 xl:ml-auto"
-                                    title="Ver resumen visual del dinero cobrado"
-                                >
-                                    <FileText className="h-5 w-5" />
-                                    Vista Previa
-                                </button>
-                    
+                            <button
+                                onClick={handleOpenQuickPreview}
+                                // MAGIA AQUÍ: w-auto y xl:ml-auto empujan toda la fila a la derecha sin cortarla
+                                className="flex w-auto shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95 xl:ml-auto"
+                                title="Ver resumen visual del dinero cobrado"
+                            >
+                                <FileText className="h-5 w-5" />
+                                Vista Previa
+                            </button>
+
                             {/* Selector de Tipo de Habitación (Reducido a w-32) */}
                             <div
                                 className={`relative shrink-0 ${(auth as any).active_register ? '' : 'xl:ml-auto'}`}
@@ -1395,17 +1399,53 @@ export default function RoomsStatus({
 
                                 {/* BOTONES INFERIORES con rounded-b-lg para mantener la forma */}
                                 {isActionable ? (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRoomClick(room);
-                                        }}
-                                        className="z-20 flex w-full items-center justify-center gap-2 rounded-b-lg border-t border-amber-600 bg-amber-700 py-2 text-xs font-bold text-white uppercase hover:bg-amber-800"
-                                    >
-                                        <FileEdit className="h-3 w-3" />{' '}
-                                        Completar Datos
-                                    </button>
+                                    <div className="z-20 flex w-full overflow-hidden rounded-b-lg border-t border-amber-600">
+                                        {/* BOTÓN 1: Completar Datos */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRoomClick(room);
+                                            }}
+                                            className="flex flex-1 flex-col items-center justify-center border-r border-amber-800 bg-amber-700 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-amber-800"
+                                            title="Editar y agregar los huéspedes faltantes"
+                                        >
+                                            <FileEdit className="mb-0.5 h-3 w-3" />
+                                            Completar
+                                        </button>
+
+                                        {/* BOTÓN 2: Confirmar habitación completa */}
+                                        {/* BOTÓN 2: Confirmar habitación completa */}
+        <button
+            onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm(`¿Confirmar que la Hab. ${room.number} está completa?\nSe marcará como Ocupada y se mantendrá el precio original.`)) {
+                    try {
+                        // 1. RUTA CORREGIDA (sin /update al final)
+                        await axios.put(`/checks/${activeCheckin?.id}`, {
+                            room_id: room.id,
+                            duration_days: activeCheckin?.duration_days,
+                            check_in_date: activeCheckin?.check_in_date,
+                            // 2. CAMPO OBLIGATORIO AÑADIDO PARA PASAR LA VALIDACIÓN DEL BACKEND
+                            origin: activeCheckin?.origin, 
+                            force_complete: true 
+                        });
+                        
+                        router.reload({ only: ['Rooms', 'Checkins'] });
+                    } catch (error) {
+                        console.error("Error al forzar completitud", error);
+                        alert("Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.");
+                    }
+                }
+            }}
+            className="flex flex-1 flex-col items-center justify-center bg-emerald-600 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-emerald-700"
+            title="Finalizar asignación sin agregar más huéspedes y mantener tarifa base"
+        >
+            <CheckCircle2 className="mb-0.5 h-3 w-3" />
+            Confirmar Completa
+        </button>
+                                    </div>
                                 ) : isOccupied && activeCheckin ? (
+                                    // ... resto de tu código original (isOccupied)
                                     <div className="z-20 flex overflow-hidden rounded-b-lg border-t border-cyan-700">
                                         {!room.room_type?.name
                                             ?.toUpperCase()

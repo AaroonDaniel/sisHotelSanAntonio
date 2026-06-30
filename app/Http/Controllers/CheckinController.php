@@ -380,18 +380,20 @@ class CheckinController extends Controller
             $isSpecialDeal = $request->boolean('is_corporate')
                 || in_array($request->input('type'), ['corporativo', 'delegacion']);
 
+            $isAutoAdjust = $request->boolean('auto_adjust_price');
+
             if ($isSpecialDeal) {
                 // CONVENIO CERRADO: el precio lo fija el Gerente/recepción.
-                // No se recalcula por conteo de huéspedes.
                 $agreedPrice = $request->filled('agreed_price')
                     ? (float) $request->input('agreed_price')
                     : max(0, $basePrice - 20);
-            } else {
-                // BUGFIX 3.13.2: para estadías normales el precio SIEMPRE se ajusta
-                // matemáticamente según el conteo real de huéspedes. Antes esto solo
-                // ocurría si llegaba el flag 'auto_adjust_price', que el frontend
-                // dejó de enviar -> el precio quedaba "congelado" en la tarifa base.
+            } elseif ($isAutoAdjust) {
+                // AHORA: Solo recalculamos matemáticamente si presionaron "Auto ajuste"
                 $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
+            } else {
+                // ESTADÍA NORMAL: Respeta la tarifa original base (o la que se digitó manualmente) 
+                // sin importar cuántos huéspedes falten o se registren.
+                $agreedPrice = $request->filled('agreed_price') ? (float) $request->input('agreed_price') : $basePrice;
             }
 
             // El descuento manual sigue teniendo prioridad sobre el precio calculado.
@@ -1109,18 +1111,21 @@ class CheckinController extends Controller
 
             $extraNotes = "";
 
-            // 🌟 Recalculamos matemáticamente al agregar/quitar personas en la edición.
-            if ($isSpecialGroupNow) {
-                // Grupo especial / convenio cerrado: respeta el precio enviado.
+            // 🌟 Evaluamos el precio según la orden explícita del usuario
+            if ($isAutoAdjustNow) {
+                // AHORA: Solo recalculamos matemáticamente si presionaron "Auto ajuste"
+                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+            } elseif ($isSpecialGroupNow) {
+                // Grupo especial / convenio cerrado (Delegación/Corporativo): respeta el precio enviado o guardado.
                 $updatedAgreedPrice = $request->filled('agreed_price')
                     ? (float) $request->input('agreed_price')
                     : $precioActualGuardado;
             } else {
-                // BUGFIX: estadía normal -> el precio se ajusta SIEMPRE por conteo real.
-                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+                // ESTADÍA NORMAL: Mantiene congelada la tarifa sin importar si se agregan más huéspedes.
+                $updatedAgreedPrice = $request->filled('agreed_price') 
+                    ? (float) $request->input('agreed_price') 
+                    : $precioActualGuardado;
             }
-
-            $extraNotes = "";
 
             if ($isSpecialGroupNow) {
                 $tipoTratoNuevo  = $isAutoAdjustNow ? 'AJUSTE DE PRECIO' : ($typeRequest ?? 'corporativo');
@@ -1136,11 +1141,14 @@ class CheckinController extends Controller
                 );
                 $checkin->special_agreement_id = $agreement->id;
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
-                // De especial a normal: se revoca el convenio y se recalcula por huéspedes.
-                $checkInDate          = \Carbon\Carbon::parse($checkin->check_in_date);
+                // De especial a normal: se revoca el convenio
+                $checkInDate           = \Carbon\Carbon::parse($checkin->check_in_date);
                 $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays(\Carbon\Carbon::now())));
 
-                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
+                // Al volver a la normalidad (sin auto ajuste), devolvemos el precio a la tarifa base original (o la digitada manualmente)
+                $updatedAgreedPrice = $request->filled('agreed_price') 
+                    ? (float) $request->input('agreed_price') 
+                    : $basePrice;
 
                 $oldAgreementId = $checkin->special_agreement_id;
                 $checkin->special_agreement_id = null;
@@ -1150,7 +1158,9 @@ class CheckinController extends Controller
             }
 
             // 🌟 Si es Auto Ajuste o Especial, consideramos la capacidad como llena
-            $isCapacityFull = $isSpecialGroupNow ? true : ($totalGuests >= $maxCapacity);
+            $forceComplete = $request->boolean('force_complete');
+
+            $isCapacityFull = ($isSpecialGroupNow || $forceComplete) ? true : ($totalGuests >= $maxCapacity);
             // =========================================================
             // 6. EVALUACIÓN FINAL Y GUARDADO
             // =========================================================

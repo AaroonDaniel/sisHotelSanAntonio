@@ -42,6 +42,7 @@ class CashRegisterController extends Controller
                     'opening_amount' => $request->opening_amount,
                     'status'         => 'ABIERTA',
                 ]);
+                
             });
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
