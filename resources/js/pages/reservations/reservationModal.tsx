@@ -201,7 +201,6 @@ export default function ReservationModal({
     // Toast de error (rojo) para datos mal llenados o errores internos.
     const [errorToast, setErrorToast] = useState<string | null>(null);
 
-
     // Función Inteligente para Delegaciones Rápidas
     // Función Inteligente para Delegaciones Rápidas (Con Lógica 50/50)
     const handleAutoAssign = () => {
@@ -209,37 +208,61 @@ export default function ReservationModal({
         if (remaining <= 0) return;
 
         const newDetails = [...data.details] as any[];
-        
+
         // ⏱️ Calculamos las fechas en milisegundos
         const formStart = new Date(data.arrival_date).getTime();
-        const formEnd = formStart + (data.duration_days * 24 * 60 * 60 * 1000);
-        
+        const formEnd = formStart + data.duration_days * 24 * 60 * 60 * 1000;
+
         // 1. Filtrar TODAS las habitaciones disponibles sin importar el baño todavía
-        const allAvailableRooms = rooms.filter(room => {
-            if (newDetails.some(d => d.room_id === String(room.id))) return false;
-            if (['MANTENIMIENTO', 'INHABILITADO'].includes(room.status.toUpperCase())) return false;
+        const allAvailableRooms = rooms.filter((room) => {
+            if (newDetails.some((d) => d.room_id === String(room.id)))
+                return false;
+            if (
+                ['MANTENIMIENTO', 'INHABILITADO'].includes(
+                    room.status.toUpperCase(),
+                )
+            )
+                return false;
 
             // ⚡ Convertimos a any temporalmente
             const rAny = room as any;
 
             // 🔍 VERIFICACIÓN DE DISPONIBILIDAD (Cruces de fechas)
-            const hasConflict = rAny.reservation_details?.some((rd: any) => {
-                const res = rd.reservation;
-                if (!res || ['CANCELADO', 'COMPLETADO'].includes(res.status?.toUpperCase())) return false;
-                
-                const resStart = new Date(res.arrival_date).getTime();
-                const resEnd = resStart + (res.duration_days * 24 * 60 * 60 * 1000);
-                
-                return (formStart < resEnd && formEnd > resStart);
-            }) || rAny.checkin_details?.some((cd: any) => {
-                const ch = cd.checkin;
-                if (!ch || ['CHECKOUT', 'CANCELADO'].includes(ch.status?.toUpperCase())) return false;
-                
-                const chStart = new Date(ch.arrival_date || ch.created_at).getTime(); 
-                const chEnd = chStart + ((ch.duration_days || 1) * 24 * 60 * 60 * 1000);
+            const hasConflict =
+                rAny.reservation_details?.some((rd: any) => {
+                    const res = rd.reservation;
+                    if (
+                        !res ||
+                        ['CANCELADO', 'COMPLETADO'].includes(
+                            res.status?.toUpperCase(),
+                        )
+                    )
+                        return false;
 
-                return (formStart < chEnd && formEnd > chStart);
-            });
+                    const resStart = new Date(res.arrival_date).getTime();
+                    const resEnd =
+                        resStart + res.duration_days * 24 * 60 * 60 * 1000;
+
+                    return formStart < resEnd && formEnd > resStart;
+                }) ||
+                rAny.checkin_details?.some((cd: any) => {
+                    const ch = cd.checkin;
+                    if (
+                        !ch ||
+                        ['CHECKOUT', 'CANCELADO'].includes(
+                            ch.status?.toUpperCase(),
+                        )
+                    )
+                        return false;
+
+                    const chStart = new Date(
+                        ch.arrival_date || ch.created_at,
+                    ).getTime();
+                    const chEnd =
+                        chStart + (ch.duration_days || 1) * 24 * 60 * 60 * 1000;
+
+                    return formStart < chEnd && formEnd > chStart;
+                });
 
             return !hasConflict;
         });
@@ -248,33 +271,46 @@ export default function ReservationModal({
         let roomsToAssign: any[] = [];
 
         if (autoAssignFilter === 'private') {
-            roomsToAssign = allAvailableRooms.filter(room => {
-                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+            roomsToAssign = allAvailableRooms.filter((room) => {
+                const isShared =
+                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
+                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
                 return !isShared;
             });
         } else if (autoAssignFilter === 'shared') {
-            roomsToAssign = allAvailableRooms.filter(room => {
-                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+            roomsToAssign = allAvailableRooms.filter((room) => {
+                const isShared =
+                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
+                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
                 return isShared;
             });
         } else {
             // ✨ MODO AMBOS: Separamos y entrelazamos para asegurar mitad y mitad
-            const privateRooms = allAvailableRooms.filter(room => {
-                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+            const privateRooms = allAvailableRooms.filter((room) => {
+                const isShared =
+                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
+                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
                 return !isShared;
             });
-            const sharedRooms = allAvailableRooms.filter(room => {
-                const isShared = room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido';
+            const sharedRooms = allAvailableRooms.filter((room) => {
+                const isShared =
+                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
+                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
                 return isShared;
             });
 
             // Entrelazamos: 1 privado, 1 compartido, 1 privado...
-            let pIndex = 0, sIndex = 0;
-            while (pIndex < privateRooms.length || sIndex < sharedRooms.length) {
-                if (pIndex < privateRooms.length) roomsToAssign.push(privateRooms[pIndex++]);
-                if (sIndex < sharedRooms.length) roomsToAssign.push(sharedRooms[sIndex++]);
+            let pIndex = 0,
+                sIndex = 0;
+            while (
+                pIndex < privateRooms.length ||
+                sIndex < sharedRooms.length
+            ) {
+                if (pIndex < privateRooms.length)
+                    roomsToAssign.push(privateRooms[pIndex++]);
+                if (sIndex < sharedRooms.length)
+                    roomsToAssign.push(sharedRooms[sIndex++]);
             }
-            
         }
 
         // 3. Proceso de asignación final usando la lista ordenada
@@ -285,14 +321,18 @@ export default function ReservationModal({
             if (!rType || rType.name.toLowerCase().includes('salon')) continue;
 
             const cap = getRoomCapacity(rType) || 1;
-            const physicalBath = (room.price?.bathroom_type?.toLowerCase() === 'shared' || room.price?.bathroom_type?.toLowerCase() === 'compartido') ? 'shared' : 'private';
+            const physicalBath =
+                room.price?.bathroom_type?.toLowerCase() === 'shared' ||
+                room.price?.bathroom_type?.toLowerCase() === 'compartido'
+                    ? 'shared'
+                    : 'private';
 
             const priceCalc = recalculatePrice(
                 String(rType.id),
                 physicalBath,
                 cap,
                 true,
-                isCorporateToggle
+                isCorporateToggle,
             );
 
             newDetails.push({
@@ -305,20 +345,20 @@ export default function ReservationModal({
                 _temp_pax_count: cap,
                 _temp_room_name: rType.name,
                 _temp_advance_payment: 0,
-                room: room
+                room: room,
             });
-            
+
             remaining -= cap;
         }
-        
+
         setData('details', newDetails);
     };
-    
+
     const validGuestCount =
         typeof data.guest_count === 'number' ? data.guest_count : 0;
 
     // 🚀 REGLA ESTRICTA: Si es corporativo, se anula la delegación automáticamente
-    const isDelegation = validGuestCount >= 20 && !isCorporateToggle;
+    const isDelegation = validGuestCount >= 15 && !isCorporateToggle;
 
     // Cálculo Interactivo de la "Sala de Espera" (Blindado para TypeScript)
     const totalCapacityAssigned = (data.details || []).reduce(
@@ -326,12 +366,12 @@ export default function ReservationModal({
             const pax = item._temp_pax_count ? Number(item._temp_pax_count) : 1;
             return sum + pax;
         },
-        0
+        0,
     );
-    
+
     const unassignedGuests = Math.max(
         0,
-        validGuestCount - totalCapacityAssigned
+        validGuestCount - totalCapacityAssigned,
     );
     // Filtrar Tipos de Habitación (Excluir Salón) y mapear únicos
     const uniqueRoomTypes = useMemo(() => {
@@ -449,11 +489,10 @@ export default function ReservationModal({
             const dd = String(today.getDate()).padStart(2, '0');
             const localToday = `${yyyy}-${mm}-${dd}`;
 
-            setData(prev => ({
+            setData((prev) => ({
                 ...prev,
-                arrival_date: localToday
+                arrival_date: localToday,
             }));
-            
         } else if (!show) {
             reset();
             clearErrors();
@@ -461,7 +500,7 @@ export default function ReservationModal({
             setIsCorporateToggle(false);
         }
     }, [show, reservationToEdit]);
-    
+
     // LÓGICA DE PRECIOS OFICIAL
     const recalculatePrice = (
         typeId: string,
@@ -752,7 +791,7 @@ export default function ReservationModal({
                         <Building2 className="h-6 w-6 text-green-600" />
                         {reservationToEdit
                             ? 'Editar Requerimientos de Reserva'
-                            : 'Nueva Reserva Inteligente'}
+                            : 'Nueva Reserva'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -832,7 +871,11 @@ export default function ReservationModal({
                                     <input
                                         type="date"
                                         value={data.arrival_date}
-                                        min={new Date().toISOString().split('T')[0]}
+                                        min={
+                                            new Date()
+                                                .toISOString()
+                                                .split('T')[0]
+                                        }
                                         onChange={(e) =>
                                             setData(
                                                 'arrival_date',
@@ -852,7 +895,12 @@ export default function ReservationModal({
                                             onClick={() =>
                                                 setData(
                                                     'duration_days',
-                                                    Math.max(1, Number(data.duration_days) - 1),
+                                                    Math.max(
+                                                        1,
+                                                        Number(
+                                                            data.duration_days,
+                                                        ) - 1,
+                                                    ),
                                                 )
                                             }
                                             className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-lg font-bold text-gray-700 transition hover:bg-gray-200"
@@ -867,7 +915,8 @@ export default function ReservationModal({
                                             onClick={() =>
                                                 setData(
                                                     'duration_days',
-                                                    Number(data.duration_days) + 1,
+                                                    Number(data.duration_days) +
+                                                        1,
                                                 )
                                             }
                                             className="flex h-7 w-7 items-center justify-center rounded-lg bg-green-100 text-lg font-bold text-green-700 transition hover:bg-green-200"
@@ -880,29 +929,79 @@ export default function ReservationModal({
                                     <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
                                         Cantidad de Personas
                                     </label>
+
                                     <div className="flex items-center justify-center gap-4 rounded-xl border border-blue-300 bg-blue-50 py-1.5">
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 handleGuestCountChange(
-                                                    String(Math.max(1, (Number(data.guest_count) || 1) - 1)),
+                                                    String(
+                                                        Math.max(
+                                                            1,
+                                                            (Number(
+                                                                data.guest_count,
+                                                            ) || 1) - 1,
+                                                        ),
+                                                    ),
                                                 )
                                             }
                                             className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
                                         >
                                             −
                                         </button>
+
                                         <div className="flex items-center gap-2">
                                             <Users className="h-5 w-5 text-blue-500" />
-                                            <span className="w-10 text-center text-2xl font-black text-blue-900">
-                                                {data.guest_count || 1}
-                                            </span>
+
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={data.guest_count}
+                                                onChange={(e) => {
+                                                    const value =
+                                                        e.target.value;
+
+                                                    // Permite borrar temporalmente el contenido
+                                                    if (value === '') {
+                                                        handleGuestCountChange(
+                                                            '',
+                                                        );
+                                                        return;
+                                                    }
+
+                                                    if (Number(value) >= 1) {
+                                                        handleGuestCountChange(
+                                                            value,
+                                                        );
+                                                    }
+                                                }}
+                                                onBlur={() => {
+                                                    // Si queda vacío o es menor a 1, vuelve a 1
+                                                    if (
+                                                        data.guest_count ===
+                                                            '' ||
+                                                        Number(
+                                                            data.guest_count,
+                                                        ) < 1
+                                                    ) {
+                                                        handleGuestCountChange(
+                                                            '1',
+                                                        );
+                                                    }
+                                                }}
+                                                className="m-0 w-14 [appearance:textfield] rounded-md border border-blue-300 bg-white text-center text-2xl font-black text-blue-900 outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                            />
                                         </div>
+
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 handleGuestCountChange(
-                                                    String((Number(data.guest_count) || 1) + 1),
+                                                    String(
+                                                        (Number(
+                                                            data.guest_count,
+                                                        ) || 1) + 1,
+                                                    ),
                                                 )
                                             }
                                             className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
@@ -1153,60 +1252,71 @@ export default function ReservationModal({
                             {/* Barra de Herramientas para Agregar - SE OCULTA SI ES CERO O YA ESTÁN TODOS ASIGNADOS */}
                             {/* Barra de Herramientas para Agregar */}
                             {unassignedGuests > 0 && validGuestCount > 0 && (
-    <div className="mb-6 flex animate-in items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm zoom-in-95 fade-in flex-wrap md:flex-nowrap">
-        
-        {/* Selector principal de habitación */}
-        <select
-            id="roomSelector"
-            className="flex-1 cursor-pointer border-0 bg-transparent px-4 py-2 text-sm font-bold text-gray-700 uppercase focus:ring-0"
-        >
-            <option value="" disabled selected>
-                Elegir tipo de habitación a ocupar...
-            </option>
-            {uniqueRoomTypes.map((rt: any) => (
-                <option key={rt.id} value={rt.id}>
-                    {rt.name} (Entran: {getRoomCapacity(rt)} personas)
-                </option>
-            ))}
-        </select>
+                                <div className="mb-6 flex animate-in flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm zoom-in-95 fade-in md:flex-nowrap">
+                                    {/* Selector principal de habitación */}
+                                    <select
+                                        id="roomSelector"
+                                        className="flex-1 cursor-pointer border-0 bg-transparent px-4 py-2 text-sm font-bold text-gray-700 uppercase focus:ring-0"
+                                    >
+                                        <option value="" disabled selected>
+                                            Elegir tipo de habitación a
+                                            ocupar...
+                                        </option>
+                                        {uniqueRoomTypes.map((rt: any) => (
+                                            <option key={rt.id} value={rt.id}>
+                                                {rt.name} (Entran:{' '}
+                                                {getRoomCapacity(rt)} personas)
+                                            </option>
+                                        ))}
+                                    </select>
 
-        {/* Botón Insertar Normal */}
-        <button
-            type="button"
-            onClick={addRoomBox}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-green-500 active:scale-95"
-        >
-            <Plus className="h-5 w-5" /> Insertar
-        </button>
+                                    {/* Botón Insertar Normal */}
+                                    <button
+                                        type="button"
+                                        onClick={addRoomBox}
+                                        className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-green-500 active:scale-95"
+                                    >
+                                        <Plus className="h-5 w-5" /> Insertar
+                                    </button>
 
-        {/* 👇 SECCIÓN MODO DELEGACIÓN (Auto-Agarrar) 👇 */}
-        {isDelegation && (
-            <div className="flex items-center gap-1 ml-auto border-l border-gray-200">
-                
-                {/* Selector de Filtro de Baño */}
-                <select
-                    value={autoAssignFilter}
-                    onChange={(e) => setAutoAssignFilter(e.target.value as any)}
-                    className="cursor-pointer rounded-lg border border-indigo-200 bg-indigo-50 px-0.5 py-2 text-xs font-bold text-indigo-800 uppercase shadow-sm transition-colors hover:bg-indigo-50 focus:border-indigo-500 focus:ring-indigo-500"
-                    title="Filtrar tipo de baño para auto-asignación"
-                >
-                    <option value="ambos">Ambos</option>
-                    <option value="private">Privado</option>
-                    <option value="shared">Compartido</option>
-                </select>
+                                    {/* 👇 SECCIÓN MODO DELEGACIÓN (Auto-Agarrar) 👇 */}
+                                    {isDelegation && (
+                                        <div className="ml-auto flex items-center gap-1 border-l border-gray-200">
+                                            {/* Selector de Filtro de Baño */}
+                                            <select
+                                                value={autoAssignFilter}
+                                                onChange={(e) =>
+                                                    setAutoAssignFilter(
+                                                        e.target.value as any,
+                                                    )
+                                                }
+                                                className="cursor-pointer rounded-lg border border-indigo-200 bg-indigo-50 px-0.5 py-2 text-xs font-bold text-indigo-800 uppercase shadow-sm transition-colors hover:bg-indigo-50 focus:border-indigo-500 focus:ring-indigo-500"
+                                                title="Filtrar tipo de baño para auto-asignación"
+                                            >
+                                                <option value="ambos">
+                                                    Ambos
+                                                </option>
+                                                <option value="private">
+                                                    Privado
+                                                </option>
+                                                <option value="shared">
+                                                    Compartido
+                                                </option>
+                                            </select>
 
-                {/* Botón de Acción Auto-Agarrar */}
-                <button
-                    type="button"
-                    onClick={handleAutoAssign}
-                    className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-sm font-bold text-white shadow-md transition-all hover:bg-indigo-500 active:scale-95"
-                >
-                    <Zap className="h-4 w-4" /> Auto-Asignar
-                </button>
-            </div>
-        )}
-    </div>
-)}
+                                            {/* Botón de Acción Auto-Agarrar */}
+                                            <button
+                                                type="button"
+                                                onClick={handleAutoAssign}
+                                                className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-sm font-bold text-white shadow-md transition-all hover:bg-indigo-500 active:scale-95"
+                                            >
+                                                <Zap className="h-4 w-4" />{' '}
+                                                Auto-Asignar
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Cajas Dinámicas */}
                             {data.details.length === 0 && (
