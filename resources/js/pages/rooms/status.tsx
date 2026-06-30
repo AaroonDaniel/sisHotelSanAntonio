@@ -1410,11 +1410,12 @@ export default function RoomsStatus({
                                             title="Editar y agregar los huéspedes faltantes"
                                         >
                                             <FileEdit className="mb-0.5 h-3 w-3" />
-                                            Completar
+                                            Completar Datos
                                         </button>
 
                                         {/* BOTÓN 2: Confirmar habitación completa */}
-                                        {/* BOTÓN 2: Confirmar habitación completa */}
+                                        
+                                        {/*}
         <button
             onClick={async (e) => {
                 e.stopPropagation();
@@ -1443,6 +1444,8 @@ export default function RoomsStatus({
             <CheckCircle2 className="mb-0.5 h-3 w-3" />
             Confirmar Completa
         </button>
+
+                                        {*/}
                                     </div>
                                 ) : isOccupied && activeCheckin ? (
                                     // ... resto de tu código original (isOccupied)
