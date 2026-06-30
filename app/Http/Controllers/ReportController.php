@@ -24,7 +24,7 @@ class ReportController extends Controller
 
         // 1. OBTENER ACTIVOS (Entrantes y Quedantes)
         $activeCheckins = Checkin::with(['guest', 'room', 'companions'])
-            ->where('created_at', '<=', $targetDateEnd)
+            ->where('check_in_date', '<=', $targetDateEnd)
             ->where(function ($query) use ($targetDateEnd) {
                 $query->whereRaw('LOWER(status) = ?', ['activo'])
                     ->orWhere(function ($sub) use ($targetDateEnd) {
@@ -71,7 +71,7 @@ class ReportController extends Controller
                     'issued_in' => trim($person->issued_in),
                     'room_number' => $checkin->room ? $checkin->room->number : '-',
                     'role' => $role,
-                    'checkin_date' => Carbon::parse($checkin->created_at)->toDateString()
+                    'checkin_date' => Carbon::parse($checkin->check_in_date)->toDateString()
                 ];
             };
 
