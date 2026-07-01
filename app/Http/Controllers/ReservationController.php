@@ -25,7 +25,8 @@ class ReservationController extends Controller
             'guest',
             'details.room.roomType',
             'details.requestedRoomType',
-            'payments'
+            'payments',
+            'specialAgreement'
         ])->latest()->get();
 
         return Inertia::render('reservations/index', [
@@ -292,6 +293,34 @@ class ReservationController extends Controller
 
                 // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
+
+                    // 🛑 VALIDACIÓN PREVIA: ninguna habitación de la reserva puede tener
+                    // ya un check-in activo de otro huésped. Si alguna lo tiene, abortamos
+                    // TODA la confirmación (no se crea ningún check-in) y avisamos cuál falta reasignar.
+                    $habitacionesOcupadas = [];
+                    foreach ($reservation->details as $detail) {
+                        if (!$detail->room_id) continue;
+
+                        $yaOcupada = Checkin::where('room_id', $detail->room_id)
+                            ->where('status', 'activo')
+                            ->exists();
+
+                        if ($yaOcupada) {
+                            $room = Room::find($detail->room_id);
+                            $habitacionesOcupadas[] = $room->number ?? "ID {$detail->room_id}";
+                        }
+                    }
+
+                    if (!empty($habitacionesOcupadas)) {
+                        Log::warning("⛔ Confirmación bloqueada para Reserva #{$reservation->id}. Habitaciones ya ocupadas: " . implode(', ', $habitacionesOcupadas));
+
+                        throw new \Exception(
+                            'No se puede confirmar la reserva: la(s) habitación(es) ' .
+                                implode(', ', $habitacionesOcupadas) .
+                                ' ya están ocupadas por otro huésped. Asigne otra habitación disponible antes de confirmar.'
+                        );
+                    }
+
                     $reservation->update(['status' => 'confirmada']);
                     $primerCheckinId = null;
                     Log::info("✅ Reserva confirmada. Creando check-ins para cada habitación asignada... #{$reservation->id}");
@@ -313,7 +342,7 @@ class ReservationController extends Controller
                             'check_in_date' => $reservation->arrival_date ?? now(),
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
-                            
+
                             'origin' => null,
                             'status' => 'activo',
                             'is_temporary' => true,
@@ -343,8 +372,6 @@ class ReservationController extends Controller
                         }
 
                         $totalPagos = $pagos->sum('amount');
-
-                        
 
                         Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in Principal ID: {$primerCheckinId}.");
                     }
@@ -489,17 +516,22 @@ class ReservationController extends Controller
             foreach ($request->assignments as $assignment) {
                 $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
 
-                // 1. Si el detalle ya tenía una habitación asignada antes y la están cambiando,
-                // debemos liberar la habitación vieja para que vuelva a estar disponible.
+                // 🛑 NUEVO: no asignar sobre una habitación con checkin activo
+                $ocupada = Checkin::where('room_id', $assignment['room_id'])
+                    ->where('status', 'activo')
+                    ->exists();
+                if ($ocupada) {
+                    $room = Room::find($assignment['room_id']);
+                    throw new \Exception("La habitación {$room->number} ya está ocupada. Elija otra.");
+                }
+
                 if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
                     Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
                 }
 
-                // 2. Asignamos la nueva habitación al detalle de reserva
                 $detail->room_id = $assignment['room_id'];
                 $detail->save();
 
-                // 3. Bloqueamos físicamente la nueva habitación
                 Room::where('id', $assignment['room_id'])->update(['status' => 'RESERVADO']);
             }
         });
@@ -516,13 +548,15 @@ class ReservationController extends Controller
             'guest',
             'details.room.roomType',
             'details.requestedRoomType',
-            'payments'
+            'payments',
+            'specialAgreement'
         ])
             ->whereIn('status', ['pendiente'])
             // 👇 2. NUEVO FILTRO: Solo trae reservas cuya fecha de llegada sea HOY o en el futuro
             ->where('arrival_date', '>=', $today)
             ->orderBy('arrival_date', 'asc')
             ->get();
+
 
         $guests = Guest::all();
 

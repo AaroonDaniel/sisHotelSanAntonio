@@ -469,17 +469,139 @@ export default function RoomsStatus({
     //
     // Devuelve null si el check-in no es un convenio corporativo.
     // =========================================================
+    // =========================================================
+    // PUNTO DE ENTRADA ÚNICO: decide a qué lógica delegar según el tipo
+    // =========================================================
     const computeCorpState = (activeCheckin: any): any => {
         if (!activeCheckin) return null;
 
         const convenio = activeCheckin?.special_agreement;
-        const isSpecialGroup =
-            convenio?.type === 'corporativo' || convenio?.type === 'delegacion';
+        const tipo = convenio?.type;
 
-        if (!isSpecialGroup) return null;
+        if (tipo === 'delegacion') {
+            return computeDelegacionState(activeCheckin, convenio);
+        }
+        if (tipo === 'corporativo') {
+            return computeCorporativoState(activeCheckin, convenio);
+        }
+        return null;
+    };
 
-        // 1. Total pagado. Las devoluciones ya vienen con monto negativo,
-        //    por eso solo se SUMA el array (no se resta por type).
+    // =========================================================
+    // LÓGICA EXCLUSIVA PARA DELEGACIÓN
+    // Monto TOTAL fijo acordado para toda la estadía, sin ciclos
+    // ni multiplicación por días. Se cobra una sola vez, en su totalidad,
+    // con vencimiento en la fecha de checkout.
+    // =========================================================
+    const computeDelegacionState = (activeCheckin: any, convenio: any): any => {
+        // 1. Total pagado (igual que en corporativo: se suma el array de pagos).
+        let totalPaid = 0;
+        if (activeCheckin.payments && activeCheckin.payments.length > 0) {
+            totalPaid = activeCheckin.payments.reduce(
+                (acc: number, p: any) => acc + (parseFloat(p.amount) || 0),
+                0,
+            );
+        } else {
+            totalPaid = parseFloat(String(activeCheckin.advance_payment)) || 0;
+        }
+
+        // 2. El monto acordado YA es el total de toda la estadía. No se multiplica
+        //    por duration_days ni por ningún ciclo.
+        const montoTotalAcordado =
+            parseFloat(String(activeCheckin.agreed_price)) || 0;
+        const faltanteTotal = montoTotalAcordado - totalPaid;
+
+        // 3. Si ya está pagado en su totalidad, AL DÍA.
+        if (faltanteTotal <= 0) {
+            return {
+                level: 'al_dia',
+                badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
+                text: 'DELEGACIÓN - PAGADO',
+            };
+        }
+
+        // 4. Fecha de vencimiento = fecha de checkout (checkin_date + duration_days).
+        const checkinDay = stripTime(
+            activeCheckin.check_in_date || new Date().toISOString(),
+        );
+        const today = stripTime(new Date());
+        const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+        const duracion = Number(activeCheckin.duration_days) || 1;
+        const dueDateDay = new Date(checkinDay.getTime());
+        dueDateDay.setDate(dueDateDay.getDate() + duracion);
+        dueDateDay.setHours(0, 0, 0, 0);
+
+        const todayTime = today.getTime();
+        const dueTime = dueDateDay.getTime();
+
+        // CASO A: aún no llega el día de checkout.
+        if (todayTime < dueTime) {
+            const diasFaltantes = Math.round(
+                (dueTime - todayTime) / MS_PER_DAY,
+            );
+            if (diasFaltantes === 1) {
+                return {
+                    level: 'pendiente',
+                    badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                    text: `DELEGACIÓN - COBRAR MAÑANA: ${faltanteTotal.toFixed(2)} Bs`,
+                };
+            }
+            return {
+                level: 'pendiente',
+                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500',
+                text: `DELEGACIÓN - PENDIENTE: ${faltanteTotal.toFixed(2)} Bs`,
+            };
+        }
+
+        // CASO B: hoy ES el día de checkout. Plazo hasta la hora de check-out.
+        if (todayTime === dueTime) {
+            const checkoutTime: string | undefined =
+                activeCheckin?.room?.active_checkin?.schedule?.check_out_time ||
+                activeCheckin?.schedule?.check_out_time;
+
+            if (checkoutTime) {
+                const [h, m] = String(checkoutTime).split(':').map(Number);
+                const limite = new Date();
+                limite.setHours(h || 0, m || 0, 0, 0);
+
+                if (new Date().getTime() > limite.getTime()) {
+                    return {
+                        level: 'moroso',
+                        badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+                        text: `DELEGACIÓN - MOROSO: ${faltanteTotal.toFixed(2)} Bs (Retraso de horas)`,
+                    };
+                }
+            }
+
+            return {
+                level: 'pendiente',
+                badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
+                text: `DELEGACIÓN - COBRAR HOY: ${faltanteTotal.toFixed(2)} Bs`,
+            };
+        }
+
+        // CASO C: ya pasó la fecha de checkout sin pagar el total => MOROSO directo.
+        const diasRetraso = Math.max(
+            1,
+            Math.round((todayTime - dueTime) / MS_PER_DAY),
+        );
+        return {
+            level: 'moroso',
+            badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
+            text: `DELEGACIÓN - MOROSO: ${faltanteTotal.toFixed(2)} Bs (${diasRetraso} ${diasRetraso === 1 ? 'día' : 'días'} de retraso)`,
+        };
+    };
+
+    // =========================================================
+    // LÓGICA EXCLUSIVA PARA CORPORATIVO
+    // Se mantiene exactamente igual: ciclos de pago (precio × días de ciclo).
+    // =========================================================
+    const computeCorporativoState = (
+        activeCheckin: any,
+        convenio: any,
+    ): any => {
+        // 1. Total pagado.
         let totalPaid = 0;
         if (activeCheckin.payments && activeCheckin.payments.length > 0) {
             totalPaid = activeCheckin.payments.reduce(
@@ -499,8 +621,6 @@ export default function RoomsStatus({
         const cyclePrice = agreedPrice * corpDays;
 
         // 3. Días reales de estadía — POR DÍAS NATURALES.
-        //    Normalizamos ambas fechas a medianoche para que las horas
-        //    del check-in (ej. 12:09) NO afecten el conteo de días.
         const checkinDay = stripTime(
             activeCheckin.check_in_date || new Date().toISOString(),
         );
@@ -508,11 +628,9 @@ export default function RoomsStatus({
 
         const MS_PER_DAY = 1000 * 60 * 60 * 24;
         const diffTime = today.getTime() - checkinDay.getTime();
-        // Math.round evita errores de redondeo por cambios de horario (DST).
         const diasEstadia = Math.max(0, Math.round(diffTime / MS_PER_DAY));
 
         // 4. Matemática del ciclo de cobro.
-        //    ciclosVencidos: ciclos del pasado que YA debieron pagarse.
         const ciclosVencidos = Math.max(
             0,
             Math.floor((diasEstadia - 1) / corpDays),
@@ -522,19 +640,17 @@ export default function RoomsStatus({
         const deudaCicloActual = cicloActual * cyclePrice;
         const faltanteTotal = deudaCicloActual - totalPaid;
 
-        // 5. Fecha de vencimiento del ciclo actual (en días naturales).
-        //    dueDateDay = checkinDay + (cicloActual * corpDays) días.
+        // 5. Fecha de vencimiento del ciclo actual.
         const dueDateDay = new Date(checkinDay.getTime());
         dueDateDay.setDate(dueDateDay.getDate() + cicloActual * corpDays);
         dueDateDay.setHours(0, 0, 0, 0);
 
         // 6. Evaluación del semáforo.
 
-        // 🟥 MOROSO POR CICLO PASADO: faltó completar un ciclo anterior.
+        // 🟥 MOROSO POR CICLO PASADO.
         if (totalPaid < deudaVencida) {
             const deudaMora = deudaVencida - totalPaid;
 
-            // --- NUEVO: Calcular los días exactos de retraso ---
             const ciclosPagados = Math.floor(totalPaid / cyclePrice);
             const primerCicloImpago = ciclosPagados + 1;
 
@@ -546,7 +662,6 @@ export default function RoomsStatus({
 
             const msMora = today.getTime() - fechaVencimientoMora.getTime();
             const diasRetraso = Math.max(1, Math.round(msMora / MS_PER_DAY));
-            // ---------------------------------------------------
 
             return {
                 level: 'moroso',
@@ -590,11 +705,8 @@ export default function RoomsStatus({
             };
         }
 
-        // CASO B: hoy ES el día de vencimiento (today === dueDate).
-        //    El huésped tiene hasta la hora de check-out para pagar.
-        //    Si ya se superó esa hora, pasa a MOROSO; si no, "COBRAR HOY".
+        // CASO B: hoy ES el día de vencimiento.
         if (todayTime === dueTime) {
-            // Hora límite configurada en el horario del check-in.
             const checkoutTime: string | undefined =
                 activeCheckin?.room?.active_checkin?.schedule?.check_out_time ||
                 activeCheckin?.schedule?.check_out_time;
@@ -605,8 +717,6 @@ export default function RoomsStatus({
                 limite.setHours(h || 0, m || 0, 0, 0);
 
                 if (new Date().getTime() > limite.getTime()) {
-                    // ⛔ Venció la hora de check-out sin pago => MOROSO.
-                    // NUEVO: Retraso de horas en el mismo día.
                     return {
                         level: 'moroso',
                         badge: 'bg-red-600 text-white shadow-sm border border-red-700 font-bold animate-pulse',
@@ -615,7 +725,6 @@ export default function RoomsStatus({
                 }
             }
 
-            // Dentro del plazo del día => cobrar hoy.
             return {
                 level: 'pendiente',
                 badge: 'bg-yellow-400 text-yellow-900 shadow-sm border border-yellow-500 font-bold',
@@ -623,8 +732,7 @@ export default function RoomsStatus({
             };
         }
 
-        // CASO C: today > dueDate => moroso directo (pasó el día natural).
-        // --- NUEVO: Fallback en caso de que logre pasar hasta aquí ---
+        // CASO C: ya pasó el día de vencimiento.
         const diasRetrasoFallback = Math.max(
             1,
             Math.round((todayTime - dueTime) / MS_PER_DAY),
