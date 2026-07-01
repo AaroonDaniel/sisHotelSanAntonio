@@ -129,12 +129,18 @@ const calculateAge = (dateString: string) => {
 // Esta función prepara la fecha para el input datetime-local
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
-
-    // Si Laravel envía "2026-03-15 14:30:00" o "2026-03-15T14:30:00.000000Z"
-    // Simplemente estandarizamos el separador a "T" y cortamos hasta los minutos (16 caracteres).
-    // Esto evita que JavaScript intente sumar o restar horas de zonas horarias.
+    
+    // Si viene con "Z" al final, es UTC y debemos convertirlo a hora local
+    if (dateString.includes('Z')) {
+        const date = new Date(dateString);
+        // Convertimos a hora de Bolivia
+        return date.toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+            .replace(' ', 'T')
+            .slice(0, 16);
+    }
+    
+    // Si no tiene "Z", asumimos que ya está en hora local
     const cleanString = dateString.replace(' ', 'T').substring(0, 16);
-
     return cleanString;
 };
 
@@ -381,11 +387,10 @@ export default function CheckinModal({
     const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
 
     //Hora actual
-    const now = (() => {
-        const date = new Date();
-        const offset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-    })();
+    const now = new Date()
+        .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+        .replace(' ', 'T')
+        .slice(0, 16);
     // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm<CheckinFormData>({
@@ -547,9 +552,11 @@ export default function CheckinModal({
             setIsToleranceApplied(false);
             // 1. Calculamos la HORA ACTUAL EXACTA
 
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            const currentDateTimeISO = now.toISOString().slice(0, 16);
+            // 1. Calculamos la HORA ACTUAL EXACTA (Bolivia)
+            const currentDateTimeISO = new Date()
+                .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+                .replace(' ', 'T')
+                .slice(0, 16);
             const nowObj = new Date(); // Objeto fecha normal para comparaciones
 
             const activeSchedule = schedules.find(
