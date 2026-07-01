@@ -1411,45 +1411,43 @@ export default function RoomsStatus({
                                         {/* BOTÓN 2: Confirmar habitación completa */}
 
                                         <button
-                                            onClick={async (e) => {
+                                            onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (
                                                     confirm(
                                                         `¿Confirmar que la Hab. ${room.number} está completa?\nSe marcará como Ocupada y se mantendrá el precio original.`,
                                                     )
                                                 ) {
-                                                    try {
-                                                        // 1. RUTA CORREGIDA (sin /update al final)
-                                                        await axios.put(
-                                                            `/checks/${activeCheckin?.id}`,
-                                                            {
-                                                                room_id:
-                                                                    room.id,
-                                                                duration_days:
-                                                                    activeCheckin?.duration_days,
-                                                                check_in_date:
-                                                                    activeCheckin?.check_in_date,
-                                                                // 2. CAMPO OBLIGATORIO AÑADIDO PARA PASAR LA VALIDACIÓN DEL BACKEND
-                                                                origin: activeCheckin?.origin,
-                                                                force_complete: true,
+                                                    router.put(
+                                                        `/checks/${activeCheckin?.id}`,
+                                                        {
+                                                            room_id: room.id,
+                                                            duration_days:
+                                                                activeCheckin?.duration_days,
+                                                            check_in_date:
+                                                                activeCheckin?.check_in_date,
+                                                            origin: activeCheckin?.origin,
+                                                            force_complete: true,
+                                                        },
+                                                        {
+                                                            preserveScroll: true,
+                                                            onSuccess: () => {
+                                                                // Inertia ya actualiza las props automáticamente,
+                                                                // no hace falta router.reload() manual.
                                                             },
-                                                        );
-
-                                                        router.reload({
-                                                            only: [
-                                                                'Rooms',
-                                                                'Checkins',
-                                                            ],
-                                                        });
-                                                    } catch (error) {
-                                                        console.error(
-                                                            'Error al forzar completitud',
-                                                            error,
-                                                        );
-                                                        alert(
-                                                            "Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.",
-                                                        );
-                                                    }
+                                                            onError: (
+                                                                errors,
+                                                            ) => {
+                                                                console.error(
+                                                                    'Error al forzar completitud',
+                                                                    errors,
+                                                                );
+                                                                alert(
+                                                                    "Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.",
+                                                                );
+                                                            },
+                                                        },
+                                                    );
                                                 }
                                             }}
                                             className="flex flex-1 flex-col items-center justify-center bg-emerald-600 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-emerald-700"
