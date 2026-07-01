@@ -39,6 +39,44 @@ const isMatchingBathroom = (dbVal?: string, filterVal?: string) => {
     return false;
 };
 
+// 🌟 NUEVA FUNCIÓN: CALCULAR PRECIO DE DELEGACIÓN POR CAMA
+const calculateDelegationPrice = (room: any, hasBreakfast: boolean = true): number => {
+    const priceInfo = getRoomPriceInfo(room);
+    const capacity = room.room_type?.capacity || room.roomType?.capacity || 1;
+    const bathroomType = priceInfo?.bathroom_type?.toLowerCase() || '';
+    
+    const isPrivate = bathroomType.includes('private') || bathroomType.includes('privado');
+    
+    let ratePerBed;
+    if (hasBreakfast) {
+        // Con desayuno: 90 Bs privada, 60 Bs compartida
+        ratePerBed = isPrivate ? 90 : 60;
+    } else {
+        // Sin desayuno: 50 Bs cualquiera
+        ratePerBed = 50;
+    }
+    
+    return ratePerBed * capacity;
+};
+
+// 🌟 NUEVA FUNCIÓN: DETERMINAR SI LA RESERVA ES DELEGACIÓN
+const isDelegationReservation = (reservation: any): boolean => {
+    return reservation?.special_agreement?.type === 'delegacion' || 
+           reservation?.type === 'delegacion' ||
+           reservation?.is_delegation === true;
+};
+
+// 🌟 NUEVA FUNCIÓN: DETERMINAR SI TIENE DESAYUNO
+const hasBreakfastInReservation = (reservation: any): boolean => {
+    if (reservation?.special_agreement?.has_breakfast !== undefined) {
+        return Boolean(reservation.special_agreement.has_breakfast);
+    }
+    if (reservation?.has_breakfast !== undefined) {
+        return Boolean(reservation.has_breakfast);
+    }
+    return true; // Por defecto con desayuno
+};
+
 export default function AssignRoomsModal({
     show,
     onClose,
@@ -52,6 +90,10 @@ export default function AssignRoomsModal({
     const [searchQuery, setSearchQuery] = useState('');
     const [showSummary, setShowSummary] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // 🌟 CALCULAR SI ES DELEGACIÓN Y SI TIENE DESAYUNO
+    const isDelegation = isDelegationReservation(reservation);
+    const hasBreakfast = hasBreakfastInReservation(reservation);
 
     useEffect(() => {
         if (show && reservation) {
@@ -81,7 +123,6 @@ export default function AssignRoomsModal({
         if (!reservation?.arrival_date) return 0;
         const arrival = new Date(reservation.arrival_date);
         const today = new Date();
-        // Igualamos las horas a 0 para que la diferencia sea de días exactos
         arrival.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
         
@@ -101,14 +142,11 @@ export default function AssignRoomsModal({
         const expectedBathroom = activeDetail.requested_bathroom || '';
 
         return availableRooms.filter(room => {
-            // 1. Ocultar si ya se eligió PARA OTRA PETICIÓN
             if (alreadyPickedIds.includes(room.id)) return false;
 
-            // 2. Filtro por tipo de habitación
             const actualTypeId = String(room.room_type_id || room.room_type?.id || room.roomType?.id);
             if (actualTypeId !== expectedTypeId) return false;
 
-            // 3. Filtro por tipo de baño
             const priceInfo = getRoomPriceInfo(room);
             const actualBathroom = priceInfo?.bathroom_type || '';
 
@@ -118,14 +156,12 @@ export default function AssignRoomsModal({
                 }
             }
 
-            // 4. Filtro por buscador (número)
             if (searchQuery) {
                 const query = searchQuery.toLowerCase().trim();
                 const roomNumber = String(room.number).toLowerCase();
                 if (!roomNumber.includes(query)) return false;
             }
 
-            // 🛡️ 5. REGLA DEL MARGEN DE SEGURIDAD (5 DÍAS) 🛡️
            const roomStatus = room.status?.toUpperCase() || 'DESCONOCIDO';
             if (roomStatus === 'RESERVADO') {
                 if (daysUntilArrival <= 5) {
@@ -153,21 +189,29 @@ export default function AssignRoomsModal({
     };
 
     const submitFinal = () => {
-        setIsProcessing(true);
+    setIsProcessing(true);
 
-        const payload = Object.entries(localAssignments).map(([idx, room]) => ({
+    const payload = Object.entries(localAssignments).map(([idx, room]) => {
+        const priceInfo = getRoomPriceInfo(room);
+        const finalPrice = isDelegation
+            ? calculateDelegationPrice(room, hasBreakfast)
+            : (priceInfo?.amount || 0);
+
+        return {
             detail_id: reservation.details[Number(idx)].id,
-            room_id: room.id
-        }));
+            room_id: room.id,
+            price: finalPrice, // 👈 NUEVO: se manda el precio calculado (90/60/50 si es Delegación)
+        };
+    });
 
-        router.post(`/reservas/${reservation.id}/assign-rooms`, {
-            assignments: payload
-        }, {
-            preserveScroll: true,
-            onSuccess: () => onClose(),
-            onFinish: () => setIsProcessing(false)
-        });
-    };
+    router.post(`/reservas/${reservation.id}/assign-rooms`, {
+        assignments: payload
+    }, {
+        preserveScroll: true,
+        onSuccess: () => onClose(),
+        onFinish: () => setIsProcessing(false)
+    });
+};
 
     if (!show || !reservation) return null;
 
@@ -184,6 +228,11 @@ export default function AssignRoomsModal({
                                 <BedDouble className="h-5 w-5" />
                             </div>
                             ASIGNACIÓN DE HABITACIONES
+                            {isDelegation && (
+                                <span className="ml-2 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 uppercase">
+                                    DELEGACIÓN {hasBreakfast ? '(C/Desayuno)' : '(S/Desayuno)'}
+                                </span>
+                            )}
                         </h2>
                         <button onClick={onClose} className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600">
                             <X className="h-5 w-5" />
@@ -197,7 +246,6 @@ export default function AssignRoomsModal({
                                 <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600">Reserva de</p>
                                 <h3 className="text-sm font-black uppercase text-gray-800">{reservation.guest?.full_name}</h3>
                                 
-                                {/* Etiqueta visual de los días faltantes para que el recepcionista lo sepa */}
                                 <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-green-500">
                                     <Calendar className="h-3 w-3" />
                                     {daysUntilArrival === 0 ? 'Llega Hoy' : 
@@ -243,6 +291,11 @@ export default function AssignRoomsModal({
                                             {isAssigned && (
                                                 <div className="mt-2 inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-[12px] font-bold text-green-700 border border-green-200">
                                                     Hab. {isAssigned.number}
+                                                    {isDelegation && (
+                                                        <span className="text-purple-600">
+                                                            ({calculateDelegationPrice(isAssigned, hasBreakfast)} Bs)
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -261,6 +314,11 @@ export default function AssignRoomsModal({
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                         Filtro: Baño {activeDetail?.requested_bathroom === 'private' ? 'Privado' : activeDetail?.requested_bathroom === 'shared' ? 'Compartido' : 'No especificado'}
                                     </p>
+                                    {isDelegation && (
+                                        <p className="mt-1 text-[10px] font-bold text-purple-600 uppercase">
+                                            💰 Precio por cama: {hasBreakfast ? '90/60 Bs' : '50 Bs'}
+                                        </p>
+                                    )}
                                 </div>
                                 
                                 <div className="relative w-48">
@@ -295,7 +353,11 @@ export default function AssignRoomsModal({
                                             const priceInfo = getRoomPriceInfo(room);
                                             const roomBath = priceInfo?.bathroom_type || 'N/A';
                                             const translatedBath = roomBath.toLowerCase().includes('private') ? 'Privado' : roomBath.toLowerCase().includes('shared') ? 'Compartido' : roomBath;
-                                            const roomPrice = priceInfo?.amount || 0;
+                                            
+                                            // 🌟 CÁLCULO DE PRECIO SEGÚN TIPO DE RESERVA
+                                            const roomPrice = isDelegation 
+                                                ? calculateDelegationPrice(room, hasBreakfast) 
+                                                : (priceInfo?.amount || 0);
                                             
                                             const roomStatus = room.status?.toUpperCase() || 'DESCONOCIDO';
                                             const isFree = roomStatus === 'LIBRE' || roomStatus === 'DISPONIBLE';
@@ -338,7 +400,7 @@ export default function AssignRoomsModal({
                                                             <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200">
                                                                 Baño {translatedBath}
                                                             </span>
-                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200">
+                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isDelegation ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                                                                 Bs {roomPrice}
                                                             </span>
                                                         </div>
@@ -379,6 +441,11 @@ export default function AssignRoomsModal({
                             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                 <Save className="h-5 w-5 text-green-600" />
                                 RESUMEN DE ASIGNACIÓN
+                                {isDelegation && (
+                                    <span className="ml-2 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 uppercase">
+                                        DELEGACIÓN
+                                    </span>
+                                )}
                             </h2>
                         </div>
 
@@ -394,6 +461,11 @@ export default function AssignRoomsModal({
                                     const priceInfo = getRoomPriceInfo(assignedRoom);
                                     const roomBath = priceInfo?.bathroom_type || detail.requested_bathroom;
                                     const translatedBath = roomBath?.toLowerCase().includes('private') ? 'Privado' : 'Compartido';
+
+                                    // 🌟 CALCULAR PRECIO FINAL PARA EL RESUMEN
+                                    const finalPrice = isDelegation 
+                                        ? calculateDelegationPrice(assignedRoom, hasBreakfast) 
+                                        : (priceInfo?.amount || 0);
 
                                     return (
                                         <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -418,6 +490,11 @@ export default function AssignRoomsModal({
                                                     <div className="text-xl font-black text-gray-900">
                                                         Hab. {assignedRoom?.number || '?'}
                                                     </div>
+                                                    {isDelegation && (
+                                                        <div className="text-[11px] font-bold text-purple-600 mt-0.5">
+                                                            {finalPrice} Bs/noche
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -444,6 +521,6 @@ export default function AssignRoomsModal({
                     </div>
                 </div>
             )}
-        </>
+        </> 
     );
 }

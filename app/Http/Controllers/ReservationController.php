@@ -505,39 +505,46 @@ class ReservationController extends Controller
     }
 
     public function assignRooms(Request $request, $id)
-    {
-        $request->validate([
-            'assignments' => 'required|array',
-            'assignments.*.detail_id' => 'required|exists:reservation_details,id',
-            'assignments.*.room_id' => 'required|exists:rooms,id',
-        ]);
+{
+    $request->validate([
+        'assignments' => 'required|array',
+        'assignments.*.detail_id' => 'required|exists:reservation_details,id',
+        'assignments.*.room_id' => 'required|exists:rooms,id',
+        'assignments.*.price' => 'nullable|numeric|min:0', // 👈 NUEVO
+    ]);
 
-        DB::transaction(function () use ($request) {
-            foreach ($request->assignments as $assignment) {
-                $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
+    DB::transaction(function () use ($request) {
+        foreach ($request->assignments as $assignment) {
+            $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
 
-                // 🛑 NUEVO: no asignar sobre una habitación con checkin activo
-                $ocupada = Checkin::where('room_id', $assignment['room_id'])
-                    ->where('status', 'activo')
-                    ->exists();
-                if ($ocupada) {
-                    $room = Room::find($assignment['room_id']);
-                    throw new \Exception("La habitación {$room->number} ya está ocupada. Elija otra.");
-                }
-
-                if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
-                    Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
-                }
-
-                $detail->room_id = $assignment['room_id'];
-                $detail->save();
-
-                Room::where('id', $assignment['room_id'])->update(['status' => 'RESERVADO']);
+            // Resguardo del punto 1: no asignar sobre habitación ya ocupada
+            $ocupada = Checkin::where('room_id', $assignment['room_id'])
+                ->where('status', 'activo')
+                ->exists();
+            if ($ocupada) {
+                $room = Room::find($assignment['room_id']);
+                throw new \Exception("La habitación {$room->number} ya está ocupada. Elija otra.");
             }
-        });
 
-        return back()->with('success', 'Habitaciones asignadas correctamente y bloqueadas en el sistema.');
-    }
+            if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
+                Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
+            }
+
+            $detail->room_id = $assignment['room_id'];
+
+            // 👇 NUEVO: se guarda el precio real calculado en el frontend (90/60/50 si es Delegación)
+            if (isset($assignment['price'])) {
+                $detail->price = $assignment['price'];
+            }
+
+            $detail->save();
+
+            Room::where('id', $assignment['room_id'])->update(['status' => 'RESERVADO']);
+        }
+    });
+
+    return back()->with('success', 'Habitaciones asignadas correctamente y bloqueadas en el sistema.');
+}
 
     public function reception()
     {
