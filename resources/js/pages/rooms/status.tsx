@@ -1454,7 +1454,7 @@ export default function RoomsStatus({
                                             title="Finalizar asignación sin agregar más huéspedes y mantener tarifa base"
                                         >
                                             <CheckCircle2 className="mb-0.5 h-3 w-3" />
-                                            Confirmar Completa
+                                            Confirmar Hab. Completa
                                         </button>
                                     </div>
                                 ) : isOccupied && activeCheckin ? (
