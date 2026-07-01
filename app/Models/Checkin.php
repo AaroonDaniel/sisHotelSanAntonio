@@ -45,6 +45,7 @@ class Checkin extends Model
         'check_out_date' => 'datetime',
         'advance_payment' => 'decimal:2',
         'actual_arrival_date' => 'datetime',
+        'is_temporary' => 'boolean',
     ];
 
     // --- RELACIONES (BelongsTo) ---

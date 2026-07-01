@@ -397,14 +397,19 @@ export default function RoomsStatus({
 
         const isSalon = room.room_type?.name?.toUpperCase().includes('SALON');
 
-        // 🛑 1. EVALUAR CHECK-IN PRIMERO:
         if (activeCheckin) {
             // 🚀 PROTECCIÓN ABSOLUTA PARA SALONES: Nunca están incompletos
             if (isSalon) {
                 return 'occupied';
             }
 
+            // 🚀 NUEVO: Si el backend ya confirmó que no es temporal, es OCUPADO seguro.
+            if (!activeCheckin.is_temporary) {
+                return 'occupied';
+            }
+
             const guest = activeCheckin.guest as Guest | undefined;
+
             const isTitularIncomplete = guest?.profile_status === 'INCOMPLETE';
 
             const companions = activeCheckin.companions as Guest[] | undefined;
@@ -412,28 +417,21 @@ export default function RoomsStatus({
                 (c) => c.profile_status === 'INCOMPLETE',
             );
 
-            // Origin missing = Falta de datos
             const isOriginMissing =
                 !activeCheckin.origin || activeCheckin.origin.trim() === '';
 
-            // --- VERIFICAR CAPACIDAD O AUTO-AJUSTE ---
             const roomCapacity = room.room_type?.capacity || 1;
             const totalGuests = 1 + (companions?.length || 0);
-
-            // Verificamos si el precio acordado es MENOR al precio original normal.
             const originalRoomPrice = room.price?.amount || 0;
 
-            // ¿Se presionó el botón de reajuste en el backend?
             const isPriceAdjusted =
                 activeCheckin.special_agreement?.type === 'AJUSTE DE PRECIO' ||
                 (originalRoomPrice > 0 &&
                     activeCheckin.agreed_price < originalRoomPrice);
 
-            // Faltan personas SOLO SI: hay camas vacías Y NO se ha reajustado el precio.
             const isCapacityMissing =
                 totalGuests < roomCapacity && !isPriceAdjusted;
 
-            // Si falta algún dato O faltan personas (sin ajuste), forzamos INCOMPLETO (Naranja)
             if (
                 isTitularIncomplete ||
                 isAnyCompanionIncomplete ||
@@ -443,12 +441,9 @@ export default function RoomsStatus({
                 return 'incomplete';
             }
 
-            // Si está completo o fue ajustado, es OCUPADO seguro (Rojo)
             return 'occupied';
         }
 
-        // 🛑 2. SI NO HAY CHECK-IN ACTIVO:
-        // Mostramos el estado tal cual viene de la base de datos
         if (['occupied', 'ocupado', 'ocupada'].includes(dbStatus))
             return 'occupied';
         if (['available', 'disponible', 'libre'].includes(dbStatus))
@@ -1414,38 +1409,55 @@ export default function RoomsStatus({
                                         </button>
 
                                         {/* BOTÓN 2: Confirmar habitación completa */}
-                                        
-                                        {/*}
-        <button
-            onClick={async (e) => {
-                e.stopPropagation();
-                if (confirm(`¿Confirmar que la Hab. ${room.number} está completa?\nSe marcará como Ocupada y se mantendrá el precio original.`)) {
-                    try {
-                        // 1. RUTA CORREGIDA (sin /update al final)
-                        await axios.put(`/checks/${activeCheckin?.id}`, {
-                            room_id: room.id,
-                            duration_days: activeCheckin?.duration_days,
-                            check_in_date: activeCheckin?.check_in_date,
-                            // 2. CAMPO OBLIGATORIO AÑADIDO PARA PASAR LA VALIDACIÓN DEL BACKEND
-                            origin: activeCheckin?.origin, 
-                            force_complete: true 
-                        });
-                        
-                        router.reload({ only: ['Rooms', 'Checkins'] });
-                    } catch (error) {
-                        console.error("Error al forzar completitud", error);
-                        alert("Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.");
-                    }
-                }
-            }}
-            className="flex flex-1 flex-col items-center justify-center bg-emerald-600 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-emerald-700"
-            title="Finalizar asignación sin agregar más huéspedes y mantener tarifa base"
-        >
-            <CheckCircle2 className="mb-0.5 h-3 w-3" />
-            Confirmar Completa
-        </button>
 
-                                        {*/}
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (
+                                                    confirm(
+                                                        `¿Confirmar que la Hab. ${room.number} está completa?\nSe marcará como Ocupada y se mantendrá el precio original.`,
+                                                    )
+                                                ) {
+                                                    try {
+                                                        // 1. RUTA CORREGIDA (sin /update al final)
+                                                        await axios.put(
+                                                            `/checks/${activeCheckin?.id}`,
+                                                            {
+                                                                room_id:
+                                                                    room.id,
+                                                                duration_days:
+                                                                    activeCheckin?.duration_days,
+                                                                check_in_date:
+                                                                    activeCheckin?.check_in_date,
+                                                                // 2. CAMPO OBLIGATORIO AÑADIDO PARA PASAR LA VALIDACIÓN DEL BACKEND
+                                                                origin: activeCheckin?.origin,
+                                                                force_complete: true,
+                                                            },
+                                                        );
+
+                                                        router.reload({
+                                                            only: [
+                                                                'Rooms',
+                                                                'Checkins',
+                                                            ],
+                                                        });
+                                                    } catch (error) {
+                                                        console.error(
+                                                            'Error al forzar completitud',
+                                                            error,
+                                                        );
+                                                        alert(
+                                                            "Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.",
+                                                        );
+                                                    }
+                                                }
+                                            }}
+                                            className="flex flex-1 flex-col items-center justify-center bg-emerald-600 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-emerald-700"
+                                            title="Finalizar asignación sin agregar más huéspedes y mantener tarifa base"
+                                        >
+                                            <CheckCircle2 className="mb-0.5 h-3 w-3" />
+                                            Confirmar Completa
+                                        </button>
                                     </div>
                                 ) : isOccupied && activeCheckin ? (
                                     // ... resto de tu código original (isOccupied)
