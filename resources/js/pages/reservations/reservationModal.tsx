@@ -3,7 +3,6 @@ import axios from 'axios';
 import {
     AlertCircle,
     AlertTriangle,
-    Banknote,
     BedDouble,
     Building2,
     Calendar,
@@ -161,7 +160,13 @@ export default function ReservationModal({
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Interruptores
-    const [isCorporateToggle, setIsCorporateToggle] = useState<boolean>(false);
+    type ReservationType = 'estandar' | 'corporativo' | 'delegacion';
+    const [reservationType, setReservationType] =
+        useState<ReservationType>('estandar');
+
+    // Booleanos derivados para no romper el resto del archivo, que ya usa estos nombres
+    const isCorporateToggle = reservationType === 'corporativo';
+    const isDelegation = reservationType === 'delegacion';
 
     // Semáforo
     const [availabilityData, setAvailabilityData] = useState<any>(null);
@@ -358,7 +363,6 @@ export default function ReservationModal({
         typeof data.guest_count === 'number' ? data.guest_count : 0;
 
     // 🚀 REGLA ESTRICTA: Si es corporativo, se anula la delegación automáticamente
-    const isDelegation = validGuestCount >= 15 && !isCorporateToggle;
 
     // Cálculo Interactivo de la "Sala de Espera" (Blindado para TypeScript)
     const totalCapacityAssigned = (data.details || []).reduce(
@@ -408,9 +412,16 @@ export default function ReservationModal({
     // Cargar datos al Editar o Crear
     useEffect(() => {
         if (show && reservationToEdit) {
+            // 1. OBTENEMOS EL TIPO REAL DESDE LA RELACIÓN
+            const tipoExistente =
+                (reservationToEdit as any).special_agreement?.type ??
+                'estandar';
+            setReservationType(tipoExistente as ReservationType);
+
             setData((prev) => {
                 // Lógica para repartir el adelanto visualmente si es Corporativo
-                const isCorp = Boolean(reservationToEdit.is_corporate);
+                // Ahora usamos la variable derivada de nuestra nueva fuente de verdad
+                const isCorp = tipoExistente === 'corporativo';
                 const advanceTotal = Number(
                     reservationToEdit.advance_payment || 0,
                 );
@@ -426,7 +437,8 @@ export default function ReservationModal({
                     guest_count: Number(reservationToEdit.guest_count || 1),
                     advance_payment: advanceTotal,
                     payment_type: reservationToEdit.payment_type || 'EFECTIVO',
-                    is_delegation: Boolean(reservationToEdit.is_delegation),
+                    // Ya no leemos Boolean(reservationToEdit.is_delegation)
+                    is_delegation: tipoExistente === 'delegacion',
                     is_corporate: isCorp,
                     details: (reservationToEdit.details || []).map(
                         (detail: any) => {
@@ -466,7 +478,7 @@ export default function ReservationModal({
                                 _temp_room_name:
                                     roomTypeObj?.name || 'Habitación',
                                 _temp_pax_count: roomTypeObj?.capacity || 1,
-                                _temp_advance_payment: splitAdvance, // 👈 Llena el adelanto por caja si es corporativo
+                                _temp_advance_payment: splitAdvance,
                             };
                         },
                     ),
@@ -479,11 +491,12 @@ export default function ReservationModal({
                         `${reservationToEdit.guest.name} ${reservationToEdit.guest.last_name}`,
                 );
             }
-            setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
+            // ELIMINA: setIsCorporateToggle(Boolean(reservationToEdit.is_corporate));
         } else if (show && !reservationToEdit) {
-            // 👇 NUEVA CONDICIÓN: Si se abre para NUEVA reserva, forzamos la fecha de HOY
+            // 👇 Si se abre para NUEVA reserva, forzamos "estandar"
+            setReservationType('estandar');
+
             const today = new Date();
-            // Formateo manual para evitar saltos de zona horaria (UTC a Bolivia GMT-4)
             const yyyy = today.getFullYear();
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
@@ -497,7 +510,8 @@ export default function ReservationModal({
             reset();
             clearErrors();
             setGuestQuery('');
-            setIsCorporateToggle(false);
+            // 👇 Limpiamos el selector
+            setReservationType('estandar');
         }
     }, [show, reservationToEdit]);
 
@@ -697,6 +711,7 @@ export default function ReservationModal({
             ...currentData,
             guest_count: Number(currentData.guest_count),
             advance_payment: totalAdvancePayment,
+            type: reservationType,
             is_delegation: isDelegation,
             is_corporate: isCorporateToggle,
             details: currentData.details.map((det) => ({
@@ -1013,35 +1028,38 @@ export default function ReservationModal({
                             </div>
 
                             {/* Botón Corporativo y Mensaje Delegación (Compacto en 1 sola fila) */}
-                            <div className="flex min-h-[24px] items-center justify-between pt-1">
-                                {/* Checkbox Corporativo */}
-                                <label className="group flex cursor-pointer items-center gap-2 select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={isCorporateToggle}
-                                        onChange={() =>
-                                            setIsCorporateToggle(
-                                                !isCorporateToggle,
-                                            )
-                                        }
-                                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500"
-                                    />
-                                    <span
-                                        className={`flex items-center gap-1.5 text-[11px] font-black tracking-wide uppercase transition-colors ${isCorporateToggle ? 'text-indigo-800' : 'text-gray-500 hover:text-gray-700'}`}
-                                    >
-                                        <Banknote className="h-3.5 w-3.5" />{' '}
-                                        Plan Corporativo
-                                    </span>
-                                </label>
-
-                                {/* Alerta Delegación (Solo aparece si hay >= 20 personas Y corporativo está apagado) */}
-                                {isDelegation && (
-                                    <div className="flex animate-in items-center rounded-lg border border-blue-200 bg-blue-100 px-2 py-0.5 shadow-sm fade-in slide-in-from-right-2">
-                                        <span className="text-[9px] font-black tracking-wide text-blue-800 uppercase">
-                                            🏷️ Modo Delegación
-                                        </span>
-                                    </div>
-                                )}
+                            <div className="flex min-h-[24px] items-center gap-2 pt-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase">
+                                    Tipo:
+                                </span>
+                                <div className="flex gap-1">
+                                    {(
+                                        [
+                                            'estandar',
+                                            'corporativo',
+                                            'delegacion',
+                                        ] as ReservationType[]
+                                    ).map((tipo) => (
+                                        <button
+                                            key={tipo}
+                                            type="button"
+                                            onClick={() =>
+                                                setReservationType(tipo)
+                                            }
+                                            className={`rounded-md px-2 py-1 text-[10px] font-black uppercase transition-colors ${
+                                                reservationType === tipo
+                                                    ? tipo === 'delegacion'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : tipo === 'corporativo'
+                                                          ? 'bg-indigo-600 text-white'
+                                                          : 'bg-gray-600 text-white'
+                                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {tipo}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
