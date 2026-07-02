@@ -40,7 +40,7 @@ export default function CancelAssignmentModal({ show, onClose, onConfirm, checki
                         La habitación quedará <strong>LIBRE</strong> inmediatamente y no se generará cobro.
                         <br />
                         <span className="mt-2 block text-xs bg-red-50 text-red-600 py-1 px-2 rounded">
-                            Acción irreversible (Solo primeros 10 min)
+                            Acción irreversible (Solo primeros 30 min)
                         </span>
                     </p>
                     

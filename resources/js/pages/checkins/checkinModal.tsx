@@ -1512,7 +1512,7 @@ export default function CheckinModal({
         if (!checkinToEdit || !checkinToEdit.created_at) return false;
         const createdAt = new Date(checkinToEdit.created_at).getTime();
         const diffMinutes = (currentTime - createdAt) / 60000;
-        return diffMinutes <= 35;
+        return diffMinutes <= 30;
     };
 
     if (!show) return null;
@@ -3320,7 +3320,7 @@ export default function CheckinModal({
                                                     </div>
                                                     <input
                                                         type="number"
-                                                        step="0.50"
+                                                        step="1"
                                                         min="0"
                                                         value={
                                                             data.advance_payment ===
@@ -3355,7 +3355,7 @@ export default function CheckinModal({
                                                                 ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo
                                                                 : 'border-gray-400'
                                                         }`}
-                                                        placeholder="0.00"
+                                                        placeholder="0"
                                                     />
                                                 </div>
                                             </div>

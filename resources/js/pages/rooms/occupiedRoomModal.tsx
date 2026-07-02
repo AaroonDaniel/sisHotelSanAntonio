@@ -107,24 +107,20 @@ export default function OccupiedRoomModal({
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
 
-     // --- FORMULARIO DE ANULACIÓN DE CONVENIO ---
-    const {
-        post: postCancelAgreement,
-        processing: processingCancel,
-    } = useForm({});
+    // --- FORMULARIO DE ANULACIÓN DE CONVENIO ---
+    const { post: postCancelAgreement, processing: processingCancel } = useForm(
+        {},
+    );
     const [showCancelAgreementModal, setShowCancelAgreementModal] =
         useState(false);
 
     const confirmCancelAgreement = () => {
         if (!liveCheckin) return;
-        postCancelAgreement(
-            `/checkins/${liveCheckin.id}/cancel-agreement`,
-            {
-                preserveScroll: true,
-                preserveState: true,
-                onFinish: () => setShowCancelAgreementModal(false),
-            },
-        );
+        postCancelAgreement(`/checkins/${liveCheckin.id}/cancel-agreement`, {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => setShowCancelAgreementModal(false),
+        });
     };
     // --- FORMULARIO DE ADELANTO ---
     const {
@@ -161,12 +157,8 @@ export default function OccupiedRoomModal({
         if (!liveCheckin?.payments || liveCheckin.payments.length === 0)
             return [];
         return [...liveCheckin.payments].sort((a: any, b: any) => {
-            const fa = new Date(
-                a.payment_date || a.created_at || 0,
-            ).getTime();
-            const fb = new Date(
-                b.payment_date || b.created_at || 0,
-            ).getTime();
+            const fa = new Date(a.payment_date || a.created_at || 0).getTime();
+            const fb = new Date(b.payment_date || b.created_at || 0).getTime();
             return fb - fa;
         });
     }, [liveCheckin]);
@@ -286,10 +278,7 @@ export default function OccupiedRoomModal({
         const agreement = liveCheckin?.special_agreement;
         if (!agreement) return null;
 
-        const frequency = parseInt(
-            agreement.payment_frequency_days ?? '0',
-            10,
-        );
+        const frequency = parseInt(agreement.payment_frequency_days ?? '0', 10);
 
         if (!frequency || frequency <= 0) {
             return { frequency: 0, dueDate: null };
@@ -313,8 +302,6 @@ export default function OccupiedRoomModal({
 
         return { frequency, dueDate };
     }, [liveCheckin]);
-
-   
 
     // Detecta la nota de transición que deja el backend al anular el convenio.
     const agreementTransitionNote = useMemo<string | null>(() => {
@@ -578,8 +565,6 @@ export default function OccupiedRoomModal({
                                             )}
                                         </div>
 
-                                        
-
                                         {/* --- BOTÓN / FORMULARIO DE ADELANTO --- */}
                                         {!showPaymentForm ? (
                                             <button
@@ -597,7 +582,7 @@ export default function OccupiedRoomModal({
                                                 className="animate-in rounded-lg border border-green-200 bg-white p-3 shadow-inner fade-in slide-in-from-top-2"
                                             >
                                                 <div className="mb-2 flex items-center justify-between">
-                                                    <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 uppercase">
+                                                    <span className="flex items-center gap-1 text-[12px] font-bold text-green-700 uppercase">
                                                         <Wallet className="h-3 w-3" />{' '}
                                                         Nuevo Pago
                                                     </span>
@@ -618,7 +603,7 @@ export default function OccupiedRoomModal({
                                                     <div className="flex flex-col gap-2">
                                                         <div className="flex gap-2">
                                                             <div className="w-1/2">
-                                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                                <label className="mb-1 block text-[12px] font-bold text-gray-500 uppercase">
                                                                     Método
                                                                 </label>
                                                                 <div className="flex rounded-lg bg-gray-100 p-0.5">
@@ -650,7 +635,7 @@ export default function OccupiedRoomModal({
                                                                                         }),
                                                                                     )
                                                                                 }
-                                                                                className={`flex-1 rounded py-1 text-[8px] font-bold transition-all ${
+                                                                                className={`flex-1 rounded py-1 text-[12px] font-bold transition-all ${
                                                                                     paymentData.payment_method ===
                                                                                     method
                                                                                         ? method ===
@@ -670,16 +655,16 @@ export default function OccupiedRoomModal({
                                                             </div>
 
                                                             <div className="w-1/2">
-                                                                <label className="mb-1 block text-[10px] font-bold text-gray-500 uppercase">
+                                                                <label className="mb-1 block text-[12px] font-bold text-gray-500 uppercase">
                                                                     Monto
                                                                 </label>
                                                                 <div className="relative">
-                                                                    <span className="absolute inset-y-0 left-2 flex items-center text-[10px] font-bold text-gray-400">
+                                                                    <span className="absolute inset-y-0 left-2 flex items-center text-[12px] font-bold text-gray-400">
                                                                         Bs
                                                                     </span>
                                                                     <input
                                                                         type="number"
-                                                                        step="0.50"
+                                                                        step="1"
                                                                         min="0"
                                                                         autoFocus
                                                                         value={
@@ -695,8 +680,8 @@ export default function OccupiedRoomModal({
                                                                                     .value,
                                                                             )
                                                                         }
-                                                                        className="h-[26px] w-full rounded border border-gray-300 pr-2 pl-6 text-xs font-bold text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                                                        placeholder="0.00"
+                                                                        className="h-[26px] w-full rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                        placeholder="0"
                                                                     />
                                                                 </div>
                                                             </div>
@@ -710,7 +695,7 @@ export default function OccupiedRoomModal({
                                                                     : 'max-h-0 opacity-0'
                                                             }`}
                                                         >
-                                                            <label className="mb-1 ml-1 block text-[9px] font-bold text-purple-600 uppercase">
+                                                            <label className="mb-1 ml-1 block text-[12px] font-bold text-purple-600 uppercase">
                                                                 Banco (QR)
                                                             </label>
                                                             <div className="grid grid-cols-4 gap-1">
@@ -869,7 +854,8 @@ export default function OccupiedRoomModal({
                                                     <CalendarClock className="h-4 w-4 text-gray-400" />
                                                     <div className="text-xs">
                                                         <span className="text-gray-500">
-                                                            Pago pactado cada{' '}
+                                                            Pago pactado
+                                                            cada{' '}
                                                         </span>
                                                         <span className="font-bold text-gray-700">
                                                             {
@@ -1359,12 +1345,14 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                                 id="refund-amount"
                                 type="number"
                                 min="1"
-                                step="0.01"
+                                step="1"
                                 placeholder="0.00"
                                 value={data.amount}
+                                className=" [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 onChange={(e) =>
                                     setData('amount', e.target.value)
                                 }
+
                             />
                             {errors.amount && (
                                 <p className="text-xs font-medium text-red-600">
