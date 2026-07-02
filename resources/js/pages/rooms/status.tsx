@@ -485,8 +485,10 @@ export default function RoomsStatus({
         const convenio = activeCheckin?.special_agreement;
         const tipo = convenio?.type;
 
+        // 🚀 Delegación: sin semáforo. Solo se asigna la habitación,
+        // sin badge de "pendiente"/"moroso"/"al día".
         if (tipo === 'delegacion') {
-            return computeDelegacionState(activeCheckin, convenio);
+            return null;
         }
         if (tipo === 'corporativo') {
             return computeCorporativoState(activeCheckin, convenio);
@@ -801,33 +803,8 @@ export default function RoomsStatus({
         if (status === 'available' || status === 'reserved') {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
-
-            // 🚀 NUEVO: si la habitación viene de una reserva ya asignada
-            // (típicamente Delegación), rescatamos el precio pactado por cama
-            // guardado en el detalle, en vez de dejar que el modal use el
-            // precio normal de tabla.
-            let precioAsignado: number | null = null;
-            let specialAgreementId: number | null = null;
-            const reservaCoincidente = reservations?.find((res: any) =>
-                res.details?.some((d: any) => d.room_id === room.id),
-            );
-            if (reservaCoincidente) {
-                const detalleCoincidente = reservaCoincidente.details.find(
-                    (d: any) => d.room_id === room.id,
-                );
-                if (
-                    reservaCoincidente.special_agreement?.type ===
-                        'delegacion' &&
-                    detalleCoincidente?.price
-                ) {
-                    precioAsignado = Number(detalleCoincidente.price);
-                    specialAgreementId =
-                        reservaCoincidente.special_agreement.id;
-                }
-            }
-            setSelectedInitialAgreedPrice(precioAsignado);
-            setSelectedInitialSpecialAgreementId(specialAgreementId);
-
+            setSelectedInitialAgreedPrice(null);
+            setSelectedInitialSpecialAgreementId(null);
             if (isSalon) setIsEventCheckinModalOpen(true);
             else setIsCheckinModalOpen(true);
             return;

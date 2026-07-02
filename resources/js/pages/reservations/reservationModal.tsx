@@ -1276,7 +1276,7 @@ export default function ReservationModal({
                                         id="roomSelector"
                                         className="flex-1 cursor-pointer border-0 bg-transparent px-4 py-2 text-sm font-bold text-gray-700 uppercase focus:ring-0"
                                     >
-                                        <option value="" disabled selected>
+                                        <option value="" disabled>
                                             Elegir tipo de habitación a
                                             ocupar...
                                         </option>
