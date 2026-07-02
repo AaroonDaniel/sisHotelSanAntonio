@@ -239,7 +239,7 @@ class RoomController
             ->get();
 
         // 3. Reservas pendientes
-        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType', 'payments'])
+        $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType', 'payments', 'specialAgreement'])
             ->whereRaw('LOWER(status) = ?', ['pendiente'])
             ->get()
             ->map(function ($reservation) {

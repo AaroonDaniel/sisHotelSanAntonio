@@ -178,6 +178,13 @@ export default function RoomsStatus({
     );
     const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
     const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+    const [selectedInitialAgreedPrice, setSelectedInitialAgreedPrice] =
+        useState<number | null>(null);
+    const [
+        selectedInitialSpecialAgreementId,
+        setSelectedInitialSpecialAgreementId,
+    ] = useState<number | null>(null);
+
     const [checkinToEdit, setCheckinToEdit] = useState<CheckinData | null>(
         null,
     );
@@ -794,6 +801,33 @@ export default function RoomsStatus({
         if (status === 'available' || status === 'reserved') {
             setCheckinToEdit(null);
             setSelectedRoomId(room.id);
+
+            // 🚀 NUEVO: si la habitación viene de una reserva ya asignada
+            // (típicamente Delegación), rescatamos el precio pactado por cama
+            // guardado en el detalle, en vez de dejar que el modal use el
+            // precio normal de tabla.
+            let precioAsignado: number | null = null;
+            let specialAgreementId: number | null = null;
+            const reservaCoincidente = reservations?.find((res: any) =>
+                res.details?.some((d: any) => d.room_id === room.id),
+            );
+            if (reservaCoincidente) {
+                const detalleCoincidente = reservaCoincidente.details.find(
+                    (d: any) => d.room_id === room.id,
+                );
+                if (
+                    reservaCoincidente.special_agreement?.type ===
+                        'delegacion' &&
+                    detalleCoincidente?.price
+                ) {
+                    precioAsignado = Number(detalleCoincidente.price);
+                    specialAgreementId =
+                        reservaCoincidente.special_agreement.id;
+                }
+            }
+            setSelectedInitialAgreedPrice(precioAsignado);
+            setSelectedInitialSpecialAgreementId(specialAgreementId);
+
             if (isSalon) setIsEventCheckinModalOpen(true);
             else setIsCheckinModalOpen(true);
             return;
@@ -1635,6 +1669,8 @@ export default function RoomsStatus({
                     setSelectedRoomId(null);
                     setCheckinToEdit(null);
                     setSelectedForAction(null);
+                    setSelectedInitialAgreedPrice(null);
+                    setSelectedInitialSpecialAgreementId(null);
                     if (!isSuccess) {
                         sessionStorage.removeItem('pendingCheckinsQueue');
                     }
@@ -1643,6 +1679,8 @@ export default function RoomsStatus({
                 guests={Guests}
                 rooms={Rooms}
                 initialRoomId={selectedRoomId}
+                initialAgreedPrice={selectedInitialAgreedPrice}
+                initialSpecialAgreementId={selectedInitialSpecialAgreementId}
                 schedules={Schedules}
                 availableServices={services}
                 isReadOnly={

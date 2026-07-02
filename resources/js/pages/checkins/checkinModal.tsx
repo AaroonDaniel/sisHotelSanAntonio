@@ -129,16 +129,17 @@ const calculateAge = (dateString: string) => {
 // Esta función prepara la fecha para el input datetime-local
 const formatDateForInput = (dateString?: string) => {
     if (!dateString) return '';
-    
+
     // Si viene con "Z" al final, es UTC y debemos convertirlo a hora local
     if (dateString.includes('Z')) {
         const date = new Date(dateString);
         // Convertimos a hora de Bolivia
-        return date.toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+        return date
+            .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
             .replace(' ', 'T')
             .slice(0, 16);
     }
-    
+
     // Si no tiene "Z", asumimos que ya está en hora local
     const cleanString = dateString.replace(' ', 'T').substring(0, 16);
     return cleanString;
@@ -211,6 +212,11 @@ interface CheckinModalProps {
     rooms: Room[];
     schedules: Schedule[];
     initialRoomId?: number | null;
+    // 🚀 NUEVO: cuando la habitación viene de una reserva de Delegación ya
+    // asignada, se pasa aquí el precio pactado por cama (90/60/50) guardado
+    // en el detalle de la reserva, para no usar el precio normal de tabla.
+    initialAgreedPrice?: number | null;
+    initialSpecialAgreementId?: number | null;
     availableServices?: any[];
     isReadOnly?: boolean;
     isReceptionView?: boolean;
@@ -282,6 +288,8 @@ export default function CheckinModal({
     rooms,
     schedules = [],
     initialRoomId,
+    initialAgreedPrice,
+    initialSpecialAgreementId,
     availableServices = [],
     //isReadOnly = false,
     isReadOnly: propIsReadOnly = false,
@@ -755,8 +763,13 @@ export default function CheckinModal({
                 const initialRoomObj = rooms?.find(
                     (r: any) => String(r.id) === String(initialRoomId),
                 );
-                const originalRoomPriceForNew =
-                    initialRoomObj?.price?.amount || 0;
+
+                // 🚀 Si la habitación viene de una reserva de Delegación con
+                // precio ya pactado (90/60/50 por cama), usamos ESE precio.
+                // Si no, caemos al precio normal de tabla como antes.
+                const originalRoomPriceForNew = initialAgreedPrice
+                    ? Number(initialAgreedPrice)
+                    : initialRoomObj?.price?.amount || 0;
 
                 // Valores iniciales
                 setData((prev) => ({
@@ -771,7 +784,7 @@ export default function CheckinModal({
                     qr_bank: '',
                     auto_adjust_price: false,
                     is_temporary: false,
-                    type: 'estandar',
+                    type: initialAgreedPrice ? 'delegacion' : 'estandar',
                     agreed_price: originalRoomPriceForNew
                         ? Number(originalRoomPriceForNew)
                         : 0,
