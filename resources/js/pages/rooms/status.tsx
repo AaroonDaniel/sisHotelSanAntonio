@@ -44,6 +44,7 @@ import EventOccupiedModal from './EventOccupiedModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
+import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 
 // Evitar errores de TS con Ziggy
 declare let route: any;
@@ -134,6 +135,9 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
 }: Props) {
+    // Completado de checkins
+    const [confirmCompleteTarget, setConfirmCompleteTarget] =
+        useState<any>(null);
     // Reservas donde la fecha aun no llego
     const [isActionModalOpen, setIsActionModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
@@ -1532,48 +1536,22 @@ export default function RoomsStatus({
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (
-                                                    confirm(
-                                                        `¿Confirmar que la Hab. ${room.number} está completa?\nSe marcará como Ocupada y se mantendrá el precio original.`,
-                                                    )
-                                                ) {
-                                                    router.put(
-                                                        `/checks/${activeCheckin?.id}`,
-                                                        {
-                                                            room_id: room.id,
-                                                            duration_days:
-                                                                activeCheckin?.duration_days,
-                                                            check_in_date:
-                                                                activeCheckin?.check_in_date,
-                                                            origin: activeCheckin?.origin,
-                                                            force_complete: true,
-                                                        },
-                                                        {
-                                                            preserveScroll: true,
-                                                            onSuccess: () => {
-                                                                // Inertia ya actualiza las props automáticamente,
-                                                                // no hace falta router.reload() manual.
-                                                            },
-                                                            onError: (
-                                                                errors,
-                                                            ) => {
-                                                                console.error(
-                                                                    'Error al forzar completitud',
-                                                                    errors,
-                                                                );
-                                                                alert(
-                                                                    "Error: Revisa que el titular tenga todos sus datos básicos guardados usando el botón 'Completar'.",
-                                                                );
-                                                            },
-                                                        },
-                                                    );
-                                                }
+                                                setConfirmCompleteTarget({
+                                                    id: activeCheckin?.id,
+                                                    room_id: room.id,
+                                                    duration_days:
+                                                        activeCheckin?.duration_days,
+                                                    check_in_date:
+                                                        activeCheckin?.check_in_date,
+                                                    origin: activeCheckin?.origin,
+                                                    roomNumber: room.number,
+                                                });
                                             }}
                                             className="flex flex-1 flex-col items-center justify-center bg-emerald-600 py-1.5 text-[10px] font-bold text-white uppercase hover:bg-emerald-700"
                                             title="Finalizar asignación sin agregar más huéspedes y mantener tarifa base"
                                         >
                                             <CheckCircle2 className="mb-0.5 h-3 w-3" />
-                                            Confirmar Hab. Completa
+                                            Confirmar Completa
                                         </button>
                                     </div>
                                 ) : isOccupied && activeCheckin ? (
@@ -1788,6 +1766,11 @@ export default function RoomsStatus({
                 services={services} // <--- ESTA ES LA CLAVE
                 corpState={occupiedCorpState}
                 onTransfer={() => handleOpenTransfer(occupiedCheckinData)}
+            />
+            <ConfirmCompleteModal
+                show={!!confirmCompleteTarget}
+                onClose={() => setConfirmCompleteTarget(null)}
+                checkin={confirmCompleteTarget}
             />
             <MultiCheckoutModal
                 show={showMultiCheckoutModal}
