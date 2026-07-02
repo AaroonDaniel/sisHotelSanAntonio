@@ -620,7 +620,10 @@ export default function CheckinModal({
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
                 let isPriceAdjusted = false;
 
-                if (checkinToEdit.special_agreement?.type !== 'corporativo') {
+                if (
+                    checkinToEdit.special_agreement?.type !== 'corporativo' &&
+                    checkinToEdit.special_agreement?.type !== 'delegacion'
+                ) {
                     isPriceAdjusted =
                         (checkinToEdit.special_agreement &&
                             String(checkinToEdit.special_agreement.type) ===
@@ -662,6 +665,7 @@ export default function CheckinModal({
                             ? checkinToEdit.special_agreement.type
                             : 'estandar',
                     agreed_price:
+                        checkinToEdit.agreed_price ||
                         checkinToEdit.special_agreement?.agreed_price ||
                         Number(originalRoomPrice),
                     corporate_days:
@@ -770,6 +774,18 @@ export default function CheckinModal({
                 const originalRoomPriceForNew = initialAgreedPrice
                     ? Number(initialAgreedPrice)
                     : initialRoomObj?.price?.amount || 0;
+
+                console.log('🔍 [CHECKIN] Cálculo de precio inicial', {
+                    room_id: initialRoomId,
+                    room_number: initialRoomObj?.number,
+                    room_capacity: initialRoomObj?.room_type?.capacity,
+                    price_normal_tabla: initialRoomObj?.price?.amount,
+                    initialAgreedPrice_recibido: initialAgreedPrice,
+                    precio_final_usado: originalRoomPriceForNew,
+                    origen: initialAgreedPrice
+                        ? 'RESERVA DELEGACIÓN (detail.price)'
+                        : 'PRECIO NORMAL DE TABLA',
+                });
 
                 // Valores iniciales
                 setData((prev) => ({

@@ -49,14 +49,23 @@ const calculateDelegationPrice = (room: any, hasBreakfast: boolean = true): numb
     
     let ratePerBed;
     if (hasBreakfast) {
-        // Con desayuno: 90 Bs privada, 60 Bs compartida
         ratePerBed = isPrivate ? 90 : 60;
     } else {
-        // Sin desayuno: 50 Bs cualquiera
         ratePerBed = 50;
     }
-    
-    return ratePerBed * capacity;
+
+    const total = ratePerBed * capacity;
+
+    console.log('🔍 [DELEGACIÓN] Cálculo por cama', {
+        habitacion: room.number,
+        capacidad_camas: capacity,
+        tipo_bano: isPrivate ? 'PRIVADO' : 'COMPARTIDO',
+        con_desayuno: hasBreakfast,
+        tarifa_por_cama: ratePerBed,
+        total_calculado: `${ratePerBed} x ${capacity} = ${total}`,
+    });
+
+    return total;
 };
 
 // 🌟 NUEVA FUNCIÓN: DETERMINAR SI LA RESERVA ES DELEGACIÓN
