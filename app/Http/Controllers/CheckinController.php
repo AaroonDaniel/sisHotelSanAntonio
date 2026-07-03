@@ -897,6 +897,11 @@ class CheckinController extends Controller
                 'payment_frequency' => 'nullable|string|max:255',
                 'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
                 'agreed_price' => 'nullable|numeric|min:0',
+
+                'payment_method' => 'nullable|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+                'qr_bank' => 'nullable|string',
+                'advance_payment' => 'nullable|numeric|min:0',
+                'selected_services' => 'nullable|array',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ [UPDATE-DEBUG] Validacion RECHAZADA. Campos:', $e->errors());
@@ -1122,8 +1127,8 @@ class CheckinController extends Controller
                     : $precioActualGuardado;
             } else {
                 // ESTADÍA NORMAL: Mantiene congelada la tarifa sin importar si se agregan más huéspedes.
-                $updatedAgreedPrice = $request->filled('agreed_price') 
-                    ? (float) $request->input('agreed_price') 
+                $updatedAgreedPrice = $request->filled('agreed_price')
+                    ? (float) $request->input('agreed_price')
                     : $precioActualGuardado;
             }
 
@@ -1146,8 +1151,8 @@ class CheckinController extends Controller
                 $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays(\Carbon\Carbon::now())));
 
                 // Al volver a la normalidad (sin auto ajuste), devolvemos el precio a la tarifa base original (o la digitada manualmente)
-                $updatedAgreedPrice = $request->filled('agreed_price') 
-                    ? (float) $request->input('agreed_price') 
+                $updatedAgreedPrice = $request->filled('agreed_price')
+                    ? (float) $request->input('agreed_price')
                     : $basePrice;
 
                 $oldAgreementId = $checkin->special_agreement_id;
@@ -1189,7 +1194,59 @@ class CheckinController extends Controller
                 'origin' => $cleanOrigin,
                 'agreed_price' => $updatedAgreedPrice,
                 'special_agreement_id' => $checkin->special_agreement_id, // Conectamos con la llave de la nueva tabla
+
+                'payment_method' => $validated['payment_method'] ?? $checkin->payment_method,
+                'qr_bank' => ($validated['payment_method'] ?? $checkin->payment_method) === 'EFECTIVO'
+                    ? null
+                    : ($validated['qr_bank'] ?? $checkin->qr_bank),
+
             ];
+
+           
+            if ($request->has('selected_services')) {
+                $checkin->services()->sync($request->selected_services);
+            }
+
+            if ($request->has('advance_payment')) {
+                $nuevoMonto = (float) $validated['advance_payment'];
+
+                // Buscamos el primer pago (el adelanto inicial)
+                $pagoInicial = \App\Models\Payment::where('checkin_id', $checkin->id)
+                    ->orderBy('id', 'asc')
+                    ->first();
+
+                // Lógica para determinar el método y el banco, respetando 'bank_name'
+                $metodo = $validated['payment_method'] ?? ($pagoInicial->method ?? 'EFECTIVO');
+                $banco = $metodo === 'EFECTIVO' ? null : ($validated['qr_bank'] ?? ($pagoInicial->bank_name ?? null));
+
+                if ($pagoInicial) {
+                    $pagoInicial->update([
+                        'amount'    => $nuevoMonto,
+                        'method'    => $metodo,
+                        'bank_name' => $banco,
+                    ]);
+                } elseif ($nuevoMonto > 0) {
+                    // Si no había pago y ahora agregaron un monto
+                    $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
+                    $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+                        ->where('status', 'ABIERTA')
+                        ->first();
+
+                    \App\Models\Payment::create([
+                        'checkin_id'       => $checkin->id,
+                        'user_id'          => $userId,
+                        'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null,
+                        'amount'           => $nuevoMonto,
+                        'method'           => $metodo,
+                        'bank_name'        => $banco,
+                        'type'             => 'ADELANTO',
+                        'payment_date'     => now(),
+                    ]);
+                }
+
+                // Guardamos el acumulado en la tabla checkins (si tienes la columna)
+                $updateData['advance_payment'] = $nuevoMonto;
+            }
 
             // Ya no mandamos is_corporate, agreed_price, etc. en el updateData
 

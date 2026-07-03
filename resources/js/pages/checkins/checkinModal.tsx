@@ -3272,8 +3272,7 @@ export default function CheckinModal({
                                                 <button
                                                     type="button"
                                                     disabled={
-                                                        !isTitular ||
-                                                        !!checkinToEdit
+                                                        !isTitular 
                                                     }
                                                     onClick={() =>
                                                         setData((prev) => ({
@@ -3339,8 +3338,8 @@ export default function CheckinModal({
                                                             e.target.select()
                                                         }
                                                         disabled={
-                                                            !isTitular ||
-                                                            !!checkinToEdit
+                                                            !isTitular 
+                                                           
                                                         }
                                                         required={
                                                             data.type ===
@@ -3388,8 +3387,8 @@ export default function CheckinModal({
                                                             key={banco}
                                                             type="button"
                                                             disabled={
-                                                                !isTitular ||
-                                                                !!checkinToEdit
+                                                                !isTitular 
+                                                            
                                                             }
                                                             onClick={() =>
                                                                 setData(
