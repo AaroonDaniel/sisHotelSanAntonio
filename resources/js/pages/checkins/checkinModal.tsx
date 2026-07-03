@@ -3150,7 +3150,19 @@ export default function CheckinModal({
                                                 e.target.value,
                                             )
                                         }
+                                        // 👇 NUEVO: Validación automática al salir de la casilla
+                                        onBlur={(e) => {
+                                            const selectedDate = new Date(
+                                                e.target.value,
+                                            );
+                                            const currentDate = new Date(now);
+                                            // Si la fecha/hora escrita es mayor a la actual, se reinicia al momento actual
+                                            if (selectedDate > currentDate) {
+                                                setData('check_in_date', now);
+                                            }
+                                        }}
                                         disabled={false}
+                                        max={now} // Mantiene el bloqueo en el calendario desplegable
                                         // Clases actualizadas para coincidir con el diseño de Fecha Nac.
                                         className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100"
                                     />
@@ -3271,9 +3283,7 @@ export default function CheckinModal({
                                                 </label>
                                                 <button
                                                     type="button"
-                                                    disabled={
-                                                        !isTitular 
-                                                    }
+                                                    disabled={!isTitular}
                                                     onClick={() =>
                                                         setData((prev) => ({
                                                             ...prev,
@@ -3337,10 +3347,7 @@ export default function CheckinModal({
                                                         onFocus={(e) =>
                                                             e.target.select()
                                                         }
-                                                        disabled={
-                                                            !isTitular 
-                                                           
-                                                        }
+                                                        disabled={!isTitular}
                                                         required={
                                                             data.type ===
                                                             'corporativo'
@@ -3387,8 +3394,7 @@ export default function CheckinModal({
                                                             key={banco}
                                                             type="button"
                                                             disabled={
-                                                                !isTitular 
-                                                            
+                                                                !isTitular
                                                             }
                                                             onClick={() =>
                                                                 setData(
