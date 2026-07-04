@@ -14,8 +14,8 @@ class CashRegisterController extends Controller
 {
     public function open(Request $request)
     {
-        if(!Auth::user()->hasRole('recepcionista')) {
-            return back()->with('error', 'Solo el personal de recepcion requiere abrir caja');    
+        if (!Auth::user()->hasRole('recepcionista')) {
+            return back()->with('error', 'Solo el personal de recepcion requiere abrir caja');
         }
         $request->validate([
             'opening_amount' => 'required|numeric|min:0',
@@ -42,7 +42,6 @@ class CashRegisterController extends Controller
                     'opening_amount' => $request->opening_amount,
                     'status'         => 'ABIERTA',
                 ]);
-                
             });
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
@@ -86,15 +85,57 @@ class CashRegisterController extends Controller
 
     public function show(CashRegister $cashRegister)
     {
-        // 1. Obtenemos solo los datos necesarios para renderizar la tabla visual
         $payments = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
             ->with('checkin.room')
-            ->orderBy('payment_date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->join('checkins', 'checkins.id', '=', 'payments.checkin_id')
+            ->orderBy('payments.payment_date', 'desc')
+            ->select('payments.*')
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id'             => $p->id,
+                    'amount'         => (float) $p->amount,
+                    'method'         => $p->method,
+                    'bank_name'      => $p->bank_name,
+                    'type'           => $p->type,
+                    'payment_date'   => optional($p->payment_date)->format('d/m/Y H:i'),
+                    'room_number'    => optional(optional($p->checkin)->room)->number ?? '-',
+                    'guest_name'     => optional(optional($p->checkin)->guest)->full_name ?? '-',
+                ];
+            });
+        $checkinIdsDelTurno = Payment::query()
+            ->where('cash_register_id', $cashRegister->id)
+            ->pluck('checkin_id')
+            ->unique();
 
-        // 2. OPTIMIZACIÓN: Dejamos que la Base de Datos haga los cálculos pesados en lugar de PHP
+        $services = \Illuminate\Support\Facades\DB::table('checkin_details')
+            ->join('services', 'services.id', '=', 'checkin_details.service_id')
+            ->join('checkins', 'checkins.id', '=', 'checkin_details.checkin_id')
+            ->leftJoin('rooms', 'rooms.id', '=', 'checkins.room_id')
+            ->whereIn('checkin_details.checkin_id', $checkinIdsDelTurno)
+            ->whereBetween('checkin_details.consumed_at', [$cashRegister->opened_at, $cashRegister->closed_at ?? now()])
+            ->select(
+                'services.name as service_name',
+                'checkin_details.quantity',
+                'checkin_details.selling_price',
+                'checkin_details.consumed_at',
+                'rooms.number as room_number',
+            )
+            ->orderBy('checkin_details.consumed_at', 'desc')
+            ->get()
+            ->map(function ($s) {
+                return [
+                    'service_name'  => $s->service_name,
+                    'quantity'      => (int) $s->quantity,
+                    'selling_price' => (float) $s->selling_price,
+                    'total'         => (float) $s->selling_price * (int) $s->quantity,
+                    'consumed_at'   => \Carbon\Carbon::parse($s->consumed_at)->format('d/m/Y H:i'),
+                    'room_number'   => $s->room_number ?? '-',
+                ];
+            });
+
+        // 3. Totales por método (sin cambios)
         $totalIncome = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
             ->sum('amount');
@@ -102,16 +143,15 @@ class CashRegisterController extends Controller
         $byMethodDB = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
             ->selectRaw("
-                UPPER(COALESCE(method, 'SIN_METODO')) as method,
-                SUM(amount) as total,
-                COUNT(*) as count,
-                SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as refunds,
-                SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as collections
-            ")
+            UPPER(COALESCE(method, 'SIN_METODO')) as method,
+            SUM(amount) as total,
+            COUNT(*) as count,
+            SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as refunds,
+            SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as collections
+        ")
             ->groupByRaw("UPPER(COALESCE(method, 'SIN_METODO'))")
             ->get();
 
-        // 3. Formateamos la respuesta para que la vista de React (Inertia) no note la diferencia
         $byMethod = $byMethodDB->map(function ($group) {
             return [
                 'method'      => $group->method,
@@ -122,10 +162,9 @@ class CashRegisterController extends Controller
             ];
         })->values();
 
-        // CÓDIGO CORREGIDO
         $cashMovements = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
-            ->whereRaw("UPPER(method) = ?", ['EFECTIVO']) // <--- Corrección aplicada
+            ->whereRaw("UPPER(method) = ?", ['EFECTIVO'])
             ->sum('amount');
 
         $expectedCash = (float) $cashRegister->opening_amount + (float) $cashMovements;
@@ -133,6 +172,7 @@ class CashRegisterController extends Controller
         return Inertia::render('cash-registers/show', [
             'CashRegister' => $cashRegister,
             'Payments'     => $payments,
+            'Services'     => $services->values(),
             'TotalIncome'  => (float) $totalIncome,
             'ByMethod'     => $byMethod,
             'ExpectedCash' => $expectedCash,

@@ -898,7 +898,7 @@ class CheckinController extends Controller
                 'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
                 'agreed_price' => 'nullable|numeric|min:0',
 
-                'payment_method' => 'nullable|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+                'payment_method' => 'nullable|in:EFECTIVO,QR,',
                 'qr_bank' => 'nullable|string',
                 'advance_payment' => 'nullable|numeric|min:0',
                 'selected_services' => 'nullable|array',
@@ -1202,10 +1202,12 @@ class CheckinController extends Controller
 
             ];
 
-           
+           // actualiza servicios consumidos si vienen del request
             if ($request->has('selected_services')) {
                 $checkin->services()->sync($request->selected_services);
             }
+
+            // corregir el adelanto inicial, manteniendo la consistencia con pagos
 
             if ($request->has('advance_payment')) {
                 $nuevoMonto = (float) $validated['advance_payment'];

@@ -1,5 +1,6 @@
 import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
+import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import ReservationsPopover from '@/components/Reservationspopover';
 import ToleranceModal from '@/components/ToleranceModal';
@@ -44,7 +45,6 @@ import EventOccupiedModal from './EventOccupiedModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
-import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 
 // Evitar errores de TS con Ziggy
 declare let route: any;
@@ -204,10 +204,21 @@ export default function RoomsStatus({
     const [quickPreviewUrl, setQuickPreviewUrl] = useState<string | null>(null);
 
     const handleOpenQuickPreview = () => {
-        const today = new Date().toISOString().split('T')[0];
+        const activeRegister = (auth as any).active_register;
+
+        // Usamos la fecha REAL de apertura de la caja del recepcionista,
+        // no el día calendario de "hoy". Si el turno cruza la medianoche
+        // (ej. abrió 03/07 de noche, sigue abierto 04/07), esto cubre
+        // ambos días automáticamente.
+        const startDate = activeRegister?.opened_at
+            ? activeRegister.opened_at.split('T')[0].split(' ')[0]
+            : new Date().toISOString().split('T')[0];
+
+        const endDate = new Date().toISOString().split('T')[0];
+
         const params = new URLSearchParams({
-            start_date: today,
-            end_date: today,
+            start_date: startDate,
+            end_date: endDate,
             user_id: auth.user.id.toString(),
             record_type: 'ambos',
         });
