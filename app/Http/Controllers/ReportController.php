@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Expense;
 use App\Models\CashRegister;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 use Inertia\Inertia;
 use Fpdf;
@@ -467,9 +468,15 @@ class ReportController extends Controller
 
     public function financialIndex(Request $request)
     {
+        // 🛑 Si el usuario NO tiene permiso de ver reportes de todos,
+        // se le bloquea a SU PROPIO id sin importar qué mande la URL.
+        $puedeVerTodos = Auth::user()->can('reportes.financiero');
+
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate   = $request->query('end_date', now()->toDateString());
-        $userId    = $request->query('user_id', 'todos');
+        $userId    = $puedeVerTodos
+            ? $request->query('user_id', 'todos')
+            : (string) Auth::id();
 
         $rangoInicio = $startDate . ' 00:00:00';
         $rangoFin    = $endDate . ' 23:59:59';
@@ -567,7 +574,11 @@ class ReportController extends Controller
                 'end_date'   => $endDate,
                 'user_id'    => $userId,
             ],
-            'users' => User::where('is_active', true)->get(['id', 'full_name', 'nickname']),
+            // 🛑 Si no puede ver todos, la lista solo trae su propio usuario
+            'users' => $puedeVerTodos
+                ? User::where('is_active', true)->get(['id', 'full_name', 'nickname'])
+                : User::where('id', Auth::id())->get(['id', 'full_name', 'nickname']),
+            'CanViewAll' => $puedeVerTodos, // 👈 NUEVO: el frontend lo usa para bloquear el <select>
         ]);
     }
 
