@@ -85,6 +85,13 @@ class CashRegisterController extends Controller
 
     public function show(CashRegister $cashRegister)
     {
+        if (
+            $cashRegister->user_id !== Auth::id() &&
+            !Auth::user()->can('reportes.financiero')
+        ) {
+            abort(403, 'No tienes permiso para ver esta caja.');
+        }
+
         $payments = Payment::query()
             ->where('cash_register_id', $cashRegister->id)
             ->with('checkin.room')
@@ -170,7 +177,7 @@ class CashRegisterController extends Controller
         $expectedCash = (float) $cashRegister->opening_amount + (float) $cashMovements;
 
         return Inertia::render('cash-registers/show', [
-            'CashRegister' => $cashRegister,
+            'CashRegister' => $cashRegister->load('user'), // 👈 FALTA: trae name, email, shift del recepcionista
             'Payments'     => $payments,
             'Services'     => $services->values(),
             'TotalIncome'  => (float) $totalIncome,
