@@ -66,6 +66,7 @@ interface Props {
         end_date?: string;
         user_id?: string;
     };
+    CanViewAll?: boolean;
 }
 
 /* ===================== HELPERS ===================== */
@@ -82,6 +83,7 @@ export default function FinancialReport({
     Expenses = [],
     Summary,
     Filters,
+    CanViewAll = false,
 }: Props) {
     // Modal de Cierre de Caja
     const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
@@ -107,9 +109,10 @@ export default function FinancialReport({
     const resumen: Summary = useMemo(() => {
         if (Summary) return Summary;
 
-        const ingresos = Payments.filter(
-            (p) => p.type !== 'DEVOLUCION',
-        ).reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+        const ingresos = Payments.filter((p) => p.type !== 'DEVOLUCION').reduce(
+            (acc, p) => acc + (Number(p.amount) || 0),
+            0,
+        );
 
         const devoluciones = Payments.filter(
             (p) => p.type === 'DEVOLUCION',
@@ -282,11 +285,14 @@ export default function FinancialReport({
                                                 onChange={(e) =>
                                                     setUserId(e.target.value)
                                                 }
-                                                className="w-full appearance-none rounded-lg border border-gray-400 bg-white py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
+                                                disabled={!CanViewAll}
+                                                className="w-full appearance-none rounded-lg border border-gray-400 bg-white py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                                             >
-                                                <option value="todos">
-                                                    Todos
-                                                </option>
+                                                {CanViewAll && (
+                                                    <option value="todos">
+                                                        Todos
+                                                    </option>
+                                                )}
                                                 {users && users.length > 0 ? (
                                                     users.map((user) => (
                                                         <option
@@ -603,9 +609,7 @@ export default function FinancialReport({
                                                                 <td className="px-3 py-2 whitespace-nowrap">
                                                                     {p.date}{' '}
                                                                     <span className="text-gray-400">
-                                                                        {
-                                                                            p.time
-                                                                        }
+                                                                        {p.time}
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-3 py-2">
@@ -628,9 +632,7 @@ export default function FinancialReport({
                                                                     <span
                                                                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${p.type === 'DEVOLUCION' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}
                                                                     >
-                                                                        {
-                                                                            p.type
-                                                                        }
+                                                                        {p.type}
                                                                     </span>
                                                                 </td>
                                                                 <td
@@ -709,9 +711,7 @@ export default function FinancialReport({
                                                                 <td className="px-3 py-2 whitespace-nowrap">
                                                                     {e.date}{' '}
                                                                     <span className="text-gray-400">
-                                                                        {
-                                                                            e.time
-                                                                        }
+                                                                        {e.time}
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-3 py-2">
