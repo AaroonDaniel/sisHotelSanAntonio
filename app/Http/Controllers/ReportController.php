@@ -481,6 +481,19 @@ class ReportController extends Controller
         $rangoInicio = $startDate . ' 00:00:00';
         $rangoFin    = $endDate . ' 23:59:59';
 
+        if ($userId !== 'todos' && $startDate === $endDate) {
+            $ultimaCaja = CashRegister::where('user_id', $userId)
+                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($ultimaCaja) {
+                $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
+                $rangoFin = $ultimaCaja->closed_at ?? now();
+            }
+        }
+
+
         // =========================================================
         // 1. INGRESOS Y DEVOLUCIONES (tabla payments)
         // Las devoluciones ya vienen como valores negativos, por lo que
@@ -589,8 +602,31 @@ class ReportController extends Controller
         $userId = $request->query('user_id', 'todos');
         $recordType = $request->query('record_type', 'ambos');
 
+        // ==========================================
+        // 1. DEFINIR EL RANGO DE TIEMPO INTELIGENTE
+        // ==========================================
+        $rangoInicio = $startDate . ' 00:00:00';
+        $rangoFin    = $endDate . ' 23:59:59';
+
+        if ($userId !== 'todos' && $startDate === $endDate) {
+            $ultimaCaja = CashRegister::where('user_id', $userId)
+                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($ultimaCaja) {
+                $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
+                $rangoFin = $ultimaCaja->closed_at ?? now();
+            }
+        }
+
+        // ==========================================
+        // 2. APLICAR RANGOS A LAS CONSULTAS
+        // ==========================================
+
+        // --- Pagos ---
         $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 
         if ($userId !== 'todos') $query->where('user_id', $userId);
         if ($recordType === 'efectivo') $query->where('method', 'EFECTIVO');
@@ -605,15 +641,20 @@ class ReportController extends Controller
             return strtoupper($p->method) !== 'EFECTIVO';
         });
 
-        $expensesQuery = Expense::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        // --- Gastos ---
+        $expensesQuery = Expense::whereBetween('created_at', [$rangoInicio, $rangoFin]);
         if ($userId !== 'todos') $expensesQuery->where('user_id', $userId);
         $gastos = $expensesQuery->orderBy('created_at')->get();
         $totalGastos = $gastos->sum('amount');
 
-        $aperturaQuery = CashRegister::whereBetween('opened_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        // --- Apertura ---
+        $aperturaQuery = CashRegister::whereBetween('opened_at', [$rangoInicio, $rangoFin]);
         if ($userId !== 'todos') $aperturaQuery->where('user_id', $userId);
         $totalApertura = $aperturaQuery->sum('opening_amount');
 
+        // ==========================================
+        // 3. GENERACIÓN DEL PDF
+        // ==========================================
         $pdf = new \FPDF('P', 'mm', 'Letter');
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 30);
@@ -829,14 +870,32 @@ class ReportController extends Controller
     public function financialMovement(Request $request)
     {
         $targetDate = $request->query('date', now()->toDateString());
-        $targetDateStart = Carbon::parse($targetDate)->startOfDay();
-        $targetDateEnd = Carbon::parse($targetDate)->endOfDay();
+        $userId = Auth::id(); // El recepcionista que hizo clic en Vista Previa
+
+        // Rango por defecto (todo el día)
+        $rangoInicio = $targetDate . ' 00:00:00';
+        $rangoFin    = $targetDate . ' 23:59:59';
+
+        // --- LÓGICA DE TURNO INTELIGENTE ---
+        // Si la vista previa es de "hoy", buscamos el último turno abierto por este usuario
+        if ($targetDate === now()->toDateString()) {
+            $ultimaCaja = CashRegister::where('user_id', $userId)
+                ->whereBetween('created_at', [$targetDate . ' 00:00:00', $targetDate . ' 23:59:59'])
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($ultimaCaja) {
+                $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
+                $rangoFin = $ultimaCaja->closed_at ?? now();
+            }
+        }
 
         // ============================================================
-        // 📒 LIBRO DIARIO (Punto 7.9) — Movimientos del día en curso
+        // 📒 LIBRO DIARIO — Movimientos del turno aislado
         // ============================================================
         $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin])
+            ->where('user_id', $userId) // <- Forzamos a que solo vea SUS cobros de este turno
             ->get()
             ->map(function ($p) {
                 $monto = (float) $p->amount; // las devoluciones ya vienen negativas
@@ -856,12 +915,13 @@ class ReportController extends Controller
                     'bank'        => $p->bank_name,
                     'user'        => $p->user->name ?? 'Sistema',
                     'amount'      => $monto,
-                    'occurred_at' => Carbon::parse($p->created_at)->toIso8601String(),
+                    'occurred_at' => \Carbon\Carbon::parse($p->created_at)->toIso8601String(),
                 ];
             });
 
         $expenses = Expense::with('user')
-            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin])
+            ->where('user_id', $userId) // <- Forzamos a que solo vea SUS gastos de este turno
             ->get()
             ->map(function ($e) {
                 return [
@@ -874,7 +934,7 @@ class ReportController extends Controller
                     'bank'        => null,
                     'user'        => $e->user->name ?? 'Sistema',
                     'amount'      => -1 * abs((float) $e->amount), // egreso siempre negativo
-                    'occurred_at' => Carbon::parse($e->created_at)->toIso8601String(),
+                    'occurred_at' => \Carbon\Carbon::parse($e->created_at)->toIso8601String(),
                 ];
             });
 
