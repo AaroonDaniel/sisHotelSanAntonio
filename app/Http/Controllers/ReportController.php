@@ -238,8 +238,13 @@ class ReportController extends Controller
                 ->where(function ($query) use ($targetDateEnd) {
                     $query->whereRaw('LOWER(status) = ?', ['activo'])
                         ->orWhere(function ($sub) use ($targetDateEnd) {
+                            // 🔧 CORREGIDO: usamos check_out_date (fecha real de
+                            // salida) en vez de updated_at, que puede cambiar
+                            // por cualquier edición ajena al checkout real
+                            // (ej. corrección manual de user_id) y falsear
+                            // este reporte en fechas pasadas.
                             $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
-                                ->where('updated_at', '>', $targetDateEnd);
+                                ->where('check_out_date', '>', $targetDateEnd);
                         });
                 })
                 ->with('room')->orderBy('created_at', 'desc')->first();
@@ -251,7 +256,7 @@ class ReportController extends Controller
                         $query->whereRaw('LOWER(status) = ?', ['activo'])
                             ->orWhere(function ($sub) use ($targetDateEnd) {
                                 $sub->whereRaw('LOWER(status) = ?', ['finalizado'])
-                                    ->where('updated_at', '>', $targetDateEnd);
+                                    ->where('check_out_date', '>', $targetDateEnd);
                             });
                     })
                     ->whereHas('companions', function ($q) use ($guest) {
@@ -266,7 +271,14 @@ class ReportController extends Controller
                 $guest->room_number = $actualCheckin->room ? $actualCheckin->room->number : '-';
                 $guest->origin = $actualCheckin->origin;
 
-                $checkinDateStr = Carbon::parse($actualCheckin->created_at)->toDateString();
+                // 🔧 CORREGIDO: la fecha de referencia para "¿llegó hoy o ya
+                // estaba?" debe ser la llegada REAL del huésped, no cuándo se
+                // insertó la fila en la base de datos.
+                $fechaLlegadaReal = $actualCheckin->actual_arrival_date
+                    ?? $actualCheckin->check_in_date
+                    ?? $actualCheckin->created_at;
+
+                $checkinDateStr = Carbon::parse($fechaLlegadaReal)->toDateString();
                 if ($checkinDateStr === $targetDate) {
                     $entrantes->push($guest);
                 } else {
@@ -279,9 +291,12 @@ class ReportController extends Controller
         $quedantes = $quedantes->sortBy('room_number');
 
         $salientes = collect();
+        // 🔧 CORREGIDO: "salió hoy" se determina por check_out_date (fecha real
+        // de checkout), no por updated_at (que cambia con cualquier edición
+        // posterior no relacionada con la salida, ej. correcciones de datos).
         $checkinsFinalizadosHoy = Checkin::with(['guest', 'companions', 'room'])
             ->whereRaw('LOWER(status) = ?', ['finalizado'])
-            ->whereBetween('updated_at', [$targetDateStart, $targetDateEnd])
+            ->whereBetween('check_out_date', [$targetDateStart, $targetDateEnd])
             ->get();
 
         foreach ($checkinsFinalizadosHoy as $cf) {
@@ -369,7 +384,6 @@ class ReportController extends Controller
         }
         $pdf->Ln();
 
-        // 1. FUNCIÓN PARA IMPRIMIR TÍTULO DE SECCIÓN (¡Esta era la que faltaba!)
         $imprimirCabeceraSeccion = function ($titulo) use ($pdf, $w) {
             $pdf->SetX(10);
             $pdf->SetFont('Courier', 'B', 9);
@@ -380,7 +394,6 @@ class ReportController extends Controller
             $pdf->Ln();
         };
 
-        // 2. FUNCIÓN PARA IMPRIMIR FILA CON PUNTOS
         $imprimirFilaVacia = function () use ($pdf, $w) {
             $pdf->SetX(10);
             $pdf->SetFont('Courier', '', 7);
@@ -391,7 +404,6 @@ class ReportController extends Controller
             $pdf->Ln();
         };
 
-        // 3. FUNCIÓN PARA IMPRIMIR HUÉSPEDES
         $imprimirFila = function ($persona) use ($pdf, $w) {
             $edad = $persona->birth_date ? Carbon::parse($persona->birth_date)->age : '-';
             $estadoCivilFull = $persona->civil_status ?? '-';
@@ -424,11 +436,6 @@ class ReportController extends Controller
             $pdf->Ln();
         };
 
-        // ==========================================
-        // 5. IMPRIMIR SECCIONES (AHORA SIEMPRE VISIBLES)
-        // ==========================================
-
-        // ENTRANTES
         $imprimirCabeceraSeccion(' ENTRANTES');
         if ($entrantes->isNotEmpty()) {
             foreach ($entrantes as $persona) $imprimirFila($persona);
@@ -436,7 +443,6 @@ class ReportController extends Controller
             $imprimirFilaVacia();
         }
 
-        // QUEDANTES
         $imprimirCabeceraSeccion(' QUEDANTES');
         if ($quedantes->isNotEmpty()) {
             foreach ($quedantes as $persona) $imprimirFila($persona);
@@ -444,7 +450,6 @@ class ReportController extends Controller
             $imprimirFilaVacia();
         }
 
-        // SALIENTES
         $imprimirCabeceraSeccion(' SALIENTES');
         if ($salientes->isNotEmpty()) {
             foreach ($salientes as $persona) $imprimirFila($persona);
@@ -452,7 +457,6 @@ class ReportController extends Controller
             $imprimirFilaVacia();
         }
 
-        // 6. CERRAR LA TABLA POR DEBAJO
         $pdf->SetX(10);
         $pdf->Cell(array_sum($w), 0, '', 'T', 1);
 
@@ -597,34 +601,57 @@ class ReportController extends Controller
 
     public function generateFinancialReportPdf(Request $request)
     {
-        $startDate = $request->query('start_date', now()->toDateString());
-        $endDate = $request->query('end_date', now()->toDateString());
-        $userId = $request->query('user_id', 'todos');
+        $cashRegisterId = $request->query('cash_register_id');
         $recordType = $request->query('record_type', 'ambos');
 
-        // ==========================================
-        // 1. DEFINIR EL RANGO DE TIEMPO INTELIGENTE
-        // ==========================================
-        $rangoInicio = $startDate . ' 00:00:00';
-        $rangoFin    = $endDate . ' 23:59:59';
+        if ($cashRegisterId) {
+            // ==========================================
+            // MODO TURNO ESPECÍFICO: aísla EXACTAMENTE ese
+            // cash_register_id, sin importar fechas ni si hubo
+            // otro turno el mismo día.
+            // ==========================================
+            $cashRegister = CashRegister::findOrFail($cashRegisterId);
 
-        if ($userId !== 'todos' && $startDate === $endDate) {
-            $ultimaCaja = CashRegister::where('user_id', $userId)
-                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->orderBy('id', 'desc')
-                ->first();
+            // 🛑 Un recepcionista solo puede generar SU PROPIO turno
+            if (
+                $cashRegister->user_id !== Auth::id() &&
+                !Auth::user()->can('reportes.financiero')
+            ) {
+                abort(403, 'No tienes permiso para generar este reporte.');
+            }
 
-            if ($ultimaCaja) {
-                $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
-                $rangoFin = $ultimaCaja->closed_at ?? now();
+            $userId = (string) $cashRegister->user_id;
+            $rangoInicio = $cashRegister->opened_at;
+            $rangoFin = $cashRegister->closed_at ?? now();
+            $startDate = \Carbon\Carbon::parse($rangoInicio)->toDateString();
+            $endDate = \Carbon\Carbon::parse($rangoFin)->toDateString();
+        } else {
+            // ==========================================
+            // MODO ORIGINAL: por rango de fechas (histórico/supervisores)
+            // ==========================================
+            $startDate = $request->query('start_date', now()->toDateString());
+            $endDate = $request->query('end_date', now()->toDateString());
+            $userId = $request->query('user_id', 'todos');
+
+            $rangoInicio = $startDate . ' 00:00:00';
+            $rangoFin    = $endDate . ' 23:59:59';
+
+            if ($userId !== 'todos' && $startDate === $endDate) {
+                $ultimaCaja = CashRegister::where('user_id', $userId)
+                    ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($ultimaCaja) {
+                    $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
+                    $rangoFin = $ultimaCaja->closed_at ?? now();
+                }
             }
         }
 
         // ==========================================
-        // 2. APLICAR RANGOS A LAS CONSULTAS
+        // 2. APLICAR RANGOS A LAS CONSULTAS (sin cambios de aquí en adelante)
         // ==========================================
-
-        // --- Pagos ---
         $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 

@@ -206,20 +206,13 @@ export default function RoomsStatus({
     const handleOpenQuickPreview = () => {
         const activeRegister = (auth as any).active_register;
 
-        // Usamos la fecha REAL de apertura de la caja del recepcionista,
-        // no el día calendario de "hoy". Si el turno cruza la medianoche
-        // (ej. abrió 03/07 de noche, sigue abierto 04/07), esto cubre
-        // ambos días automáticamente.
-        const startDate = activeRegister?.opened_at
-            ? activeRegister.opened_at.split('T')[0].split(' ')[0]
-            : new Date().toISOString().split('T')[0];
-
-        const endDate = new Date().toISOString().split('T')[0];
+        if (!activeRegister?.id) {
+            alert('No tienes un turno de caja abierto.');
+            return;
+        }
 
         const params = new URLSearchParams({
-            start_date: startDate,
-            end_date: endDate,
-            user_id: auth.user.id.toString(),
+            cash_register_id: activeRegister.id.toString(), // 👈 clave: aísla exactamente este turno
             record_type: 'ambos',
         });
         setQuickPreviewUrl(
