@@ -2832,22 +2832,46 @@ export default function CheckinModal({
                                                 ? 'Total a cobrar'
                                                 : 'Total sugerido';
 
-                                            if (data.type !== 'estandar') {
+                                            // 🚀 CORREGIDO: Corporativo y Delegación ya NO comparten la misma
+                                            // rama. Delegación no tiene ciclos ni "noches" — es un monto TOTAL
+                                            // fijo pactado para toda la estadía.
+                                            if (data.type === 'corporativo') {
                                                 noches =
                                                     Number(
                                                         data.corporate_days,
                                                     ) || 1;
                                                 tituloTotal = `Cobro (cada ${noches} días)`;
+                                            } else if (
+                                                data.type === 'delegacion'
+                                            ) {
+                                                noches = 1;
+                                                tituloTotal =
+                                                    'Monto Total Acordado';
                                             }
 
                                             const total = redondearMoneda(
                                                 finalPrice * noches,
                                             );
 
-                                            // 🔒 Límites: máximo = precio original completo, mínimo = 50% de ese máximo
-                                            const maxTotal = redondearMoneda(
-                                                originalPrice * noches,
-                                            );
+                                            // 🔒 Límites: Estándar/Corporativo mantienen el tope original
+                                            // (precio de tabla × noches/ciclo). Delegación usa precio de
+                                            // tabla × duración real de la estadía como resguardo básico,
+                                            // ya que aquí "noches" siempre vale 1.
+                                            const maxTotal =
+                                                data.type === 'delegacion'
+                                                    ? redondearMoneda(
+                                                          Math.max(
+                                                              originalPrice *
+                                                                  (Number(
+                                                                      data.duration_days,
+                                                                  ) || 1),
+                                                              finalPrice,
+                                                          ),
+                                                      )
+                                                    : redondearMoneda(
+                                                          originalPrice *
+                                                              noches,
+                                                      );
                                             const minTotal = redondearMoneda(
                                                 maxTotal * 0.5,
                                             );
@@ -2945,8 +2969,6 @@ export default function CheckinModal({
                                                                     max={
                                                                         maxTotal
                                                                     }
-                                                                    // 👇 Mientras edita, muestra exactamente lo que escribe.
-                                                                    // Fuera de edición, muestra el total ya calculado/redondeado.
                                                                     value={
                                                                         editingTotal !==
                                                                         null
@@ -2959,7 +2981,6 @@ export default function CheckinModal({
                                                                               : ''
                                                                     }
                                                                     onFocus={() => {
-                                                                        // Al entrar al campo, lo dejamos 100% editable
                                                                         setEditingTotal(
                                                                             total >
                                                                                 0
@@ -2972,7 +2993,6 @@ export default function CheckinModal({
                                                                     onChange={(
                                                                         e,
                                                                     ) => {
-                                                                        // ✏️ Edición libre: sin redondeo ni clamp, nada lo restringe mientras escribes
                                                                         setEditingTotal(
                                                                             e
                                                                                 .target
@@ -3006,15 +3026,12 @@ export default function CheckinModal({
                                                                                 rawVal,
                                                                             );
 
-                                                                        // 🚧 Tope máximo: el precio original es el techo
                                                                         if (
                                                                             inputVal >
                                                                             maxTotal
                                                                         )
                                                                             inputVal =
                                                                                 maxTotal;
-
-                                                                        // 🚧 Piso mínimo: nunca por debajo del 50%
                                                                         if (
                                                                             inputVal <
                                                                             minTotal
@@ -3022,26 +3039,32 @@ export default function CheckinModal({
                                                                             inputVal =
                                                                                 minTotal;
 
-                                                                        // 💰 Redondeo comercial final a 1 decimal (285.9, no 285.92)
                                                                         inputVal =
                                                                             redondearMoneda(
                                                                                 inputVal,
                                                                             );
 
-                                                                        const dailyRate =
-                                                                            noches >
-                                                                            0
-                                                                                ? inputVal /
-                                                                                  noches
-                                                                                : inputVal;
+                                                                        // 🚀 CORREGIDO: Delegación guarda el
+                                                                        // TOTAL tal cual (no se divide entre
+                                                                        // noches/ciclos). Corporativo mantiene
+                                                                        // la conversión a tarifa por ciclo.
+                                                                        const valorAGuardar =
+                                                                            data.type ===
+                                                                            'delegacion'
+                                                                                ? inputVal
+                                                                                : redondearMoneda(
+                                                                                      noches >
+                                                                                          0
+                                                                                          ? inputVal /
+                                                                                                noches
+                                                                                          : inputVal,
+                                                                                  );
+
                                                                         setData(
                                                                             'agreed_price',
-                                                                            redondearMoneda(
-                                                                                dailyRate,
-                                                                            ),
+                                                                            valorAGuardar,
                                                                         );
 
-                                                                        // Volvemos al modo "display" con el valor ya validado
                                                                         setEditingTotal(
                                                                             null,
                                                                         );
