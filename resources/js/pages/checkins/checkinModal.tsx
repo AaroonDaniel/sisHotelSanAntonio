@@ -2957,137 +2957,127 @@ export default function CheckinModal({
                                                             {tituloTotal}
                                                         </span>
 
-                                                        {data.type !==
-                                                        'estandar' ? (
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.10"
-                                                                    min={
-                                                                        minTotal
-                                                                    }
-                                                                    max={
-                                                                        maxTotal
-                                                                    }
-                                                                    value={
-                                                                        editingTotal !==
-                                                                        null
-                                                                            ? editingTotal
-                                                                            : total >
-                                                                                0
-                                                                              ? String(
-                                                                                    total,
-                                                                                )
-                                                                              : ''
-                                                                    }
-                                                                    onFocus={() => {
-                                                                        setEditingTotal(
-                                                                            total >
-                                                                                0
-                                                                                ? String(
-                                                                                      total,
-                                                                                  )
-                                                                                : '',
-                                                                        );
-                                                                    }}
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) => {
-                                                                        setEditingTotal(
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                        );
-                                                                    }}
-                                                                    onBlur={(
-                                                                        e,
-                                                                    ) => {
-                                                                        const rawVal =
-                                                                            e
-                                                                                .target
-                                                                                .value;
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <input
+                                                                type="number"
+                                                                step="0.10"
+                                                                min={minTotal}
+                                                                max={maxTotal}
+                                                                value={
+                                                                    editingTotal !==
+                                                                    null
+                                                                        ? editingTotal
+                                                                        : total >
+                                                                            0
+                                                                          ? String(
+                                                                                total,
+                                                                            )
+                                                                          : ''
+                                                                }
+                                                                onFocus={() => {
+                                                                    setEditingTotal(
+                                                                        total >
+                                                                            0
+                                                                            ? String(
+                                                                                  total,
+                                                                              )
+                                                                            : '',
+                                                                    );
+                                                                }}
+                                                                onChange={(
+                                                                    e,
+                                                                ) => {
+                                                                    setEditingTotal(
+                                                                        e.target
+                                                                            .value,
+                                                                    );
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    const rawVal =
+                                                                        e.target
+                                                                            .value;
 
-                                                                        if (
-                                                                            rawVal ===
-                                                                            ''
-                                                                        ) {
-                                                                            setData(
-                                                                                'agreed_price',
-                                                                                '',
-                                                                            );
-                                                                            setEditingTotal(
-                                                                                null,
-                                                                            );
-                                                                            return;
-                                                                        }
-
-                                                                        let inputVal =
-                                                                            Number(
-                                                                                rawVal,
-                                                                            );
-
-                                                                        if (
-                                                                            inputVal >
-                                                                            maxTotal
-                                                                        )
-                                                                            inputVal =
-                                                                                maxTotal;
-                                                                        if (
-                                                                            inputVal <
-                                                                            minTotal
-                                                                        )
-                                                                            inputVal =
-                                                                                minTotal;
-
-                                                                        inputVal =
-                                                                            redondearMoneda(
-                                                                                inputVal,
-                                                                            );
-
-                                                                        // 🚀 CORREGIDO: Delegación guarda el
-                                                                        // TOTAL tal cual (no se divide entre
-                                                                        // noches/ciclos). Corporativo mantiene
-                                                                        // la conversión a tarifa por ciclo.
-                                                                        const valorAGuardar =
-                                                                            data.type ===
-                                                                            'delegacion'
-                                                                                ? inputVal
-                                                                                : redondearMoneda(
-                                                                                      noches >
-                                                                                          0
-                                                                                          ? inputVal /
-                                                                                                noches
-                                                                                          : inputVal,
-                                                                                  );
-
+                                                                    if (
+                                                                        rawVal ===
+                                                                        ''
+                                                                    ) {
                                                                         setData(
                                                                             'agreed_price',
-                                                                            valorAGuardar,
+                                                                            '',
                                                                         );
-
                                                                         setEditingTotal(
                                                                             null,
                                                                         );
-                                                                    }}
-                                                                    disabled={
-                                                                        isReadOnly
+                                                                        return;
                                                                     }
-                                                                    className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                    placeholder="0.00"
-                                                                />
-                                                                <span className="text-2xl leading-none font-black text-gray-900">
-                                                                    Bs
-                                                                </span>
-                                                            </div>
-                                                        ) : (
+
+                                                                    let inputVal =
+                                                                        Number(
+                                                                            rawVal,
+                                                                        );
+
+                                                                    if (
+                                                                        inputVal >
+                                                                        maxTotal
+                                                                    )
+                                                                        inputVal =
+                                                                            maxTotal;
+                                                                    if (
+                                                                        inputVal <
+                                                                        minTotal
+                                                                    )
+                                                                        inputVal =
+                                                                            minTotal;
+
+                                                                    inputVal =
+                                                                        redondearMoneda(
+                                                                            inputVal,
+                                                                        );
+
+                                                                    const valorAGuardar =
+                                                                        data.type ===
+                                                                        'delegacion'
+                                                                            ? inputVal
+                                                                            : redondearMoneda(
+                                                                                  noches >
+                                                                                      0
+                                                                                      ? inputVal /
+                                                                                            noches
+                                                                                      : inputVal,
+                                                                              );
+
+                                                                    setData(
+                                                                        (
+                                                                            prev,
+                                                                        ) => ({
+                                                                            ...prev,
+                                                                            agreed_price:
+                                                                                valorAGuardar,
+                                                                            ...(prev.type ===
+                                                                                'estandar' &&
+                                                                            inputVal !==
+                                                                                maxTotal
+                                                                                ? {
+                                                                                      auto_adjust_price: false,
+                                                                                  }
+                                                                                : {}),
+                                                                        }),
+                                                                    );
+
+                                                                    setEditingTotal(
+                                                                        null,
+                                                                    );
+                                                                }}
+                                                                disabled={
+                                                                    isReadOnly
+                                                                }
+                                                                className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                placeholder="0.00"
+                                                            />
                                                             <span className="text-2xl leading-none font-black text-gray-900">
-                                                                {total.toFixed(
-                                                                    2,
-                                                                )}{' '}
                                                                 Bs
                                                             </span>
-                                                        )}
-
+                                                        </div>
                                                         {noches > 1 && (
                                                             <span className="mt-0.5 text-[10px] font-medium text-gray-500">
                                                                 {Number(
