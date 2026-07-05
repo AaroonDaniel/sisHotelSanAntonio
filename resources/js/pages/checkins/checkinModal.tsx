@@ -2876,9 +2876,7 @@ export default function CheckinModal({
                                                           originalPrice *
                                                               noches,
                                                       );
-                                            const minTotal = redondearMoneda(
-                                                maxTotal * 0.5,
-                                            );
+                                            const minTotal = 0;
 
                                             return (
                                                 <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
