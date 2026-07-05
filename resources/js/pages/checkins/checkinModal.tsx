@@ -618,6 +618,13 @@ export default function CheckinModal({
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
 
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
+                // 🚀 CORREGIDO: auto_adjust_price SOLO se activa si la BD registró
+                // explícitamente que este precio vino del "Ajuste automático" por
+                // ocupación (special_agreement.type === 'AJUSTE DE PRECIO').
+                // Ya NO se infiere solo de "precio guardado < precio de tabla", porque
+                // eso también es cierto para un descuento manual normal — y esa
+                // comparación no puede distinguir entre ambos casos, causando que se
+                // sobreescriba un descuento manual real al reabrir para editar.
                 let isPriceAdjusted = false;
 
                 if (
@@ -625,12 +632,9 @@ export default function CheckinModal({
                     checkinToEdit.special_agreement?.type !== 'delegacion'
                 ) {
                     isPriceAdjusted =
-                        (checkinToEdit.special_agreement &&
-                            String(checkinToEdit.special_agreement.type) ===
-                                'AJUSTE DE PRECIO') ||
-                        (Number(checkinToEdit.agreed_price) > 0 &&
-                            Number(checkinToEdit.agreed_price) <
-                                Number(originalRoomPrice));
+                        !!checkinToEdit.special_agreement &&
+                        String(checkinToEdit.special_agreement.type) ===
+                            'AJUSTE DE PRECIO';
                 }
                 // Cargamos todo al formulario
                 setData((prev) => ({
