@@ -41,6 +41,7 @@ class CashRegisterController extends Controller
                     'user_id'        => $userId,
                     'opening_amount' => $request->opening_amount,
                     'status'         => 'ABIERTA',
+                    'opened_at' => now(),
                 ]);
             });
         } catch (RuntimeException $e) {
@@ -121,7 +122,10 @@ class CashRegisterController extends Controller
             ->join('checkins', 'checkins.id', '=', 'checkin_details.checkin_id')
             ->leftJoin('rooms', 'rooms.id', '=', 'checkins.room_id')
             ->whereIn('checkin_details.checkin_id', $checkinIdsDelTurno)
-            ->whereBetween('checkin_details.consumed_at', [$cashRegister->opened_at, $cashRegister->closed_at ?? now()])
+            ->whereBetween('checkin_details.consumed_at', [
+                $cashRegister->opened_at ?? $cashRegister->created_at, // <-- USA CREATED_AT COMO RESPALDO
+                $cashRegister->closed_at ?? now()
+            ])
             ->select(
                 'services.name as service_name',
                 'checkin_details.quantity',
