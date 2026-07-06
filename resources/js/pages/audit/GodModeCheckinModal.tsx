@@ -143,7 +143,7 @@ function CheckinAuditForm({
     const initialTotal = (Number(checkin.agreed_price) || 0) * initialNights;
 
     const [form, setForm] = useState({
-        actual_arrival_date: formatDateForInput(checkin.actual_arrival_date),
+        check_in_date: formatDateForInput(checkin.check_in_date),
         check_out_date: formatDateForInput(checkin.check_out_date),
         status: checkin.status,
         total_a_pagar: String(initialTotal),
@@ -182,15 +182,15 @@ function CheckinAuditForm({
 
     // --- VISTA PREVIA (cálculo en tiempo real, sin efectos) ---
     const nights = computeNights(
-        form.actual_arrival_date,
+        form.check_in_date,
         form.check_out_date,
         checkin.duration_days,
     );
     const totalAPagar = Number(form.total_a_pagar) || 0;
     const costPerNight = nights > 0 ? totalAPagar / nights : 0;
 
-    const arrivalDate = form.actual_arrival_date
-        ? new Date(form.actual_arrival_date)
+    const arrivalDate = form.check_in_date
+        ? new Date(form.check_in_date)
         : null;
     const departureDate = form.check_out_date
         ? new Date(form.check_out_date)
@@ -201,7 +201,8 @@ function CheckinAuditForm({
         departureDate <= arrivalDate
     );
 
-    const isConsistent = totalAPagar >= 0 && nights > 0;
+    const isConsistent =
+        totalAPagar >= 0 && nights > 0 && !!form.check_in_date;
     const canSave = isConsistent && previewAcknowledged;
 
     // El check-in YA estaba finalizado al abrir el modal (dato original,
@@ -243,7 +244,7 @@ function CheckinAuditForm({
         router.put(
             `/admin/god-mode/checkins/${checkin.id}`,
             {
-                actual_arrival_date: form.actual_arrival_date || null,
+                check_in_date: form.check_in_date,
                 check_out_date: form.check_out_date || null,
                 status: form.status,
                 agreed_price: costPerNight.toFixed(2),
@@ -400,16 +401,15 @@ function CheckinAuditForm({
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Llegada real (actual_arrival_date)
+                                    Fecha de Check-in (check_in_date)
                                 </label>
                                 <input
                                     type="datetime-local"
-                                    value={form.actual_arrival_date}
+                                    value={form.check_in_date}
                                     onChange={(e) => {
                                         setForm((prev) => ({
                                             ...prev,
-                                            actual_arrival_date:
-                                                e.target.value,
+                                            check_in_date: e.target.value,
                                         }));
                                         invalidatePreview();
                                     }}
@@ -418,7 +418,8 @@ function CheckinAuditForm({
                             </div>
                             <div>
                                 <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Fecha de salida (check_out_date)
+                                    Fecha de finalización / salida
+                                    (check_out_date)
                                 </label>
                                 <input
                                     type="datetime-local"

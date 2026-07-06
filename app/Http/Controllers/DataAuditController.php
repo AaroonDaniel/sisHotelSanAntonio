@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashRegister;
 use App\Models\Checkin;
+use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\InvoiceDetail;
 use App\Models\Payment;
@@ -43,6 +44,8 @@ class DataAuditController extends Controller
         return Inertia::render('audit/index', [
             'CashRegisters' => $this->getCashRegistersForAudit(),
             'Checkins' => $this->getCheckinsForAudit(),
+            'Payments' => $this->getPaymentsForAudit(),
+            'Expenses' => $this->getExpensesForAudit(),
             'Operators' => User::orderBy('full_name')->get(['id', 'full_name', 'nickname']),
             'AllCashRegisters' => CashRegister::with('user')
                 ->orderByDesc('opened_at')
@@ -164,6 +167,63 @@ class DataAuditController extends Controller
     }
 
     /**
+     * Todos los pagos del sistema (ligados o no a un check-in), para
+     * corregir monto, método, tipo, caja y operador sin tener que entrar
+     * a cada estadía una por una.
+     */
+    private function getPaymentsForAudit()
+    {
+        return Payment::with([
+            'checkin.guest:id,full_name',
+            'checkin.room:id,number',
+            'operador:id,full_name,nickname',
+        ])
+            ->orderByDesc('payment_date')
+            ->get()
+            ->map(function (Payment $p) {
+                return [
+                    'id' => $p->id,
+                    'checkin_id' => $p->checkin_id,
+                    'guest_name' => $p->checkin->guest->full_name ?? 'N/D',
+                    'room_number' => $p->checkin->room->number ?? 'N/D',
+                    'amount' => (float) $p->amount,
+                    'method' => $p->method,
+                    'type' => $p->type,
+                    'cash_register_id' => $p->cash_register_id,
+                    'operator_id' => $p->operator_id,
+                    'operator_name' => $p->operador->full_name ?? $p->operador->nickname ?? null,
+                    'payment_date' => optional($p->payment_date)->toIso8601String(),
+                ];
+            });
+    }
+
+    /**
+     * Todos los gastos del sistema, para corregir descripción, monto,
+     * caja, operador y fecha.
+     */
+    private function getExpensesForAudit()
+    {
+        return Expense::with([
+            'user:id,full_name,nickname',
+            'operador:id,full_name,nickname',
+        ])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (Expense $e) {
+                return [
+                    'id' => $e->id,
+                    'description' => $e->description,
+                    'amount' => (float) $e->amount,
+                    'cash_register_id' => $e->cash_register_id,
+                    'operator_id' => $e->operator_id,
+                    'operator_name' => $e->operador->full_name ?? $e->operador->nickname ?? null,
+                    'user_name' => $e->user->full_name ?? $e->user->nickname ?? 'N/D',
+                    'created_at' => optional($e->created_at)->toIso8601String(),
+                ];
+            });
+    }
+
+    /**
      * Sobrescribe un Check-in a nivel de fila (bypass total): fechas,
      * estado, precio por noche (ya calculado en el frontend a partir del
      * "Total a pagar" / noches de la Vista Previa), noches totales y el
@@ -174,7 +234,7 @@ class DataAuditController extends Controller
     public function updateCheckin(Request $request, Checkin $checkin)
     {
         $validated = $request->validate([
-            'actual_arrival_date' => 'nullable|date',
+            'check_in_date' => 'required|date',
             'check_out_date' => 'nullable|date',
             'status' => 'required|string|in:' . implode(',', self::CHECKIN_STATUSES),
             'agreed_price' => 'required|numeric|min:0',
@@ -189,7 +249,7 @@ class DataAuditController extends Controller
         $wasFinalizado = $checkin->status === 'finalizado';
 
         DB::table('checkins')->where('id', $checkin->id)->update([
-            'actual_arrival_date' => $validated['actual_arrival_date'],
+            'check_in_date' => $validated['check_in_date'],
             'check_out_date' => $validated['check_out_date'],
             'status' => $validated['status'],
             'agreed_price' => $validated['agreed_price'],
@@ -292,29 +352,86 @@ class DataAuditController extends Controller
     }
 
     /**
-     * Sobrescribe un pago a nivel de fila: monto y a qué caja pertenece.
-     * Igual que updateCheckin(), sin pasar por el modelo Eloquent.
+     * Sobrescribe un pago a nivel de fila: monto, caja y (opcionalmente,
+     * cuando viene del tab de Finanzas) método, tipo, fecha y operador.
+     * Los campos opcionales solo se tocan si vienen en el request, para
+     * no romper al editor de pagos embebido en el modal de Check-ins (que
+     * solo envía amount + cash_register_id). Igual que updateCheckin(),
+     * sin pasar por el modelo Eloquent.
      */
     public function updatePayment(Request $request, Payment $payment)
     {
         $validated = $request->validate([
             'amount' => 'required|numeric',
             'cash_register_id' => 'nullable|exists:cash_registers,id',
+            'method' => 'nullable|string|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'type' => 'nullable|string|in:PAGO,ADELANTO,DEVOLUCION',
+            'payment_date' => 'nullable|date',
+            'operator_id' => 'nullable|exists:users,id',
         ]);
 
-        DB::table('payments')->where('id', $payment->id)->update([
+        $updateData = [
             'amount' => $validated['amount'],
             'cash_register_id' => $validated['cash_register_id'],
             'updated_at' => now(),
-        ]);
+        ];
+
+        if ($request->filled('method')) {
+            $updateData['method'] = $validated['method'];
+        }
+        if ($request->filled('type')) {
+            $updateData['type'] = $validated['type'];
+        }
+        if ($request->has('payment_date')) {
+            $updateData['payment_date'] = $validated['payment_date'];
+        }
+        if ($request->has('operator_id')) {
+            $updateData['operator_id'] = $validated['operator_id'];
+        }
+
+        DB::table('payments')->where('id', $payment->id)->update($updateData);
 
         Log::warning('[GOD MODE] Pago sobrescrito manualmente', [
             'admin' => Auth::user()->nickname,
             'payment_id' => $payment->id,
             'checkin_id' => $payment->checkin_id,
-            'payload' => $validated,
+            'payload' => $updateData,
         ]);
 
         return redirect()->back()->with('success', "Pago #{$payment->id} sobrescrito correctamente (God Mode).");
+    }
+
+    /**
+     * Sobrescribe un gasto a nivel de fila: descripción, monto, caja,
+     * operador y fecha. cash_register_id NO es nullable a nivel de BD
+     * (constraint NOT NULL en la tabla expenses), así que aquí sí es
+     * obligatorio a diferencia de Payment.
+     */
+    public function updateExpense(Request $request, Expense $expense)
+    {
+        $validated = $request->validate([
+            'description' => 'required|string|max:255',
+            'amount' => 'required|numeric|min:0',
+            'cash_register_id' => 'required|exists:cash_registers,id',
+            'operator_id' => 'nullable|exists:users,id',
+            'created_at' => 'required|date',
+        ]);
+
+        DB::table('expenses')->where('id', $expense->id)->update([
+            'description' => $validated['description'],
+            'amount' => $validated['amount'],
+            'cash_register_id' => $validated['cash_register_id'],
+            'operator_id' => $validated['operator_id'],
+            'created_at' => $validated['created_at'],
+            'updated_at' => now(),
+        ]);
+
+        Log::warning('[GOD MODE] Gasto sobrescrito manualmente', [
+            'admin' => Auth::user()->nickname,
+            'expense_id' => $expense->id,
+            'payload' => $validated,
+        ]);
+
+        return redirect()->back()->with('success', "Gasto #{$expense->id} sobrescrito correctamente (God Mode).");
     }
 }

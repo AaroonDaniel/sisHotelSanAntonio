@@ -319,6 +319,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/god-mode/cash-registers/{cashRegister}', [DataAuditController::class, 'updateCashRegister'])->name('god-mode.cash-registers.update');
         Route::put('/god-mode/checkins/{checkin}', [DataAuditController::class, 'updateCheckin'])->name('god-mode.checkins.update');
         Route::put('/god-mode/payments/{payment}', [DataAuditController::class, 'updatePayment'])->name('god-mode.payments.update');
+        Route::put('/god-mode/expenses/{expense}', [DataAuditController::class, 'updateExpense'])->name('god-mode.expenses.update');
     });
 }); // <-- Cierre del grupo autenticado
 

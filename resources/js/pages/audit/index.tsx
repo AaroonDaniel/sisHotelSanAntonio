@@ -11,6 +11,7 @@ import {
     Banknote,
 } from 'lucide-react';
 import { useState } from 'react';
+import FinanzasTab, { ExpenseAudit, PaymentAudit } from './FinanzasTab';
 import GodModeCheckinModal, {
     CashRegisterOption,
     CheckinAudit,
@@ -32,6 +33,8 @@ interface Props {
     auth: { user: User };
     CashRegisters: CashRegisterAudit[];
     Checkins: CheckinAudit[];
+    Payments: PaymentAudit[];
+    Expenses: ExpenseAudit[];
     Operators: OperatorOption[];
     AllCashRegisters: CashRegisterOption[];
 }
@@ -67,6 +70,8 @@ export default function DataAuditIndex({
     auth,
     CashRegisters,
     Checkins,
+    Payments,
+    Expenses,
     Operators,
     AllCashRegisters,
 }: Props) {
@@ -569,11 +574,13 @@ export default function DataAuditIndex({
                     </div>
                 )}
 
-                {/* --- TAB: FINANZAS (placeholder, próxima iteración) --- */}
+                {/* --- TAB: FINANZAS --- */}
                 {activeTab === 'finanzas' && (
-                    <PlaceholderPanel
-                        icon={Banknote}
-                        title="Finanzas (Pagos / Gastos)"
+                    <FinanzasTab
+                        payments={Payments}
+                        expenses={Expenses}
+                        operators={Operators}
+                        cashRegisters={AllCashRegisters}
                     />
                 )}
             </div>
@@ -586,24 +593,5 @@ export default function DataAuditIndex({
                 cashRegisters={AllCashRegisters}
             />
         </AuthenticatedLayout>
-    );
-}
-
-function PlaceholderPanel({
-    icon: Icon,
-    title,
-}: {
-    icon: React.ElementType;
-    title: string;
-}) {
-    return (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-gray-800 bg-gray-900 p-16 text-center">
-            <Icon className="h-10 w-10 text-gray-600" />
-            <h3 className="text-base font-bold text-gray-300">{title}</h3>
-            <p className="max-w-sm text-sm text-gray-500">
-                Este módulo todavía no tiene funcionalidad de edición. Se
-                implementará en una próxima iteración.
-            </p>
-        </div>
     );
 }
