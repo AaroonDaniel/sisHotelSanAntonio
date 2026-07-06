@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/react';
 import {
     BedDouble,
     Lock,
+    Pencil,
     Save,
     ShieldAlert,
     Wallet,
@@ -10,6 +11,11 @@ import {
     Banknote,
 } from 'lucide-react';
 import { useState } from 'react';
+import GodModeCheckinModal, {
+    CashRegisterOption,
+    CheckinAudit,
+    OperatorOption,
+} from './GodModeCheckinModal';
 
 // --- INTERFACES ---
 interface CashRegisterAudit {
@@ -25,6 +31,9 @@ interface CashRegisterAudit {
 interface Props {
     auth: { user: User };
     CashRegisters: CashRegisterAudit[];
+    Checkins: CheckinAudit[];
+    Operators: OperatorOption[];
+    AllCashRegisters: CashRegisterOption[];
 }
 
 type TabKey = 'cajas' | 'estadias' | 'finanzas';
@@ -54,8 +63,19 @@ const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: 'finanzas', label: 'Finanzas (Pagos/Gastos)', icon: Banknote },
 ];
 
-export default function DataAuditIndex({ auth, CashRegisters }: Props) {
+export default function DataAuditIndex({
+    auth,
+    CashRegisters,
+    Checkins,
+    Operators,
+    AllCashRegisters,
+}: Props) {
     const [activeTab, setActiveTab] = useState<TabKey>('cajas');
+
+    // --- Modal God Mode de Check-ins ---
+    const [checkinToEdit, setCheckinToEdit] = useState<CheckinAudit | null>(
+        null,
+    );
 
     // --- Edición en línea de Cajas ---
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -428,12 +448,125 @@ export default function DataAuditIndex({ auth, CashRegisters }: Props) {
                     </div>
                 )}
 
-                {/* --- TAB: ESTADÍAS (placeholder, próxima iteración) --- */}
+                {/* --- TAB: ESTADÍAS --- */}
                 {activeTab === 'estadias' && (
-                    <PlaceholderPanel
-                        icon={BedDouble}
-                        title="Estadías (Check-ins / Check-outs)"
-                    />
+                    <div className="rounded-2xl border border-gray-800 bg-gray-900 shadow-xl">
+                        <div className="border-b border-gray-800 px-5 py-4">
+                            <h2 className="text-sm font-bold text-gray-200">
+                                Todos los Check-ins
+                            </h2>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Activos, finalizados, transferidos o
+                                cancelados. Edita cualquier campo (fechas,
+                                estado, precio, operador) y los pagos
+                                asociados sin restricciones de negocio.
+                            </p>
+                        </div>
+
+                        <div className="max-h-[65vh] overflow-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="sticky top-0 bg-gray-800/90 text-xs tracking-wider text-gray-400 uppercase backdrop-blur">
+                                    <tr>
+                                        <th className="px-4 py-3">ID</th>
+                                        <th className="px-4 py-3">Huésped</th>
+                                        <th className="px-4 py-3">Hab.</th>
+                                        <th className="px-4 py-3">Estado</th>
+                                        <th className="px-4 py-3">Operador</th>
+                                        <th className="px-4 py-3">
+                                            Check-in
+                                        </th>
+                                        <th className="px-4 py-3">Salida</th>
+                                        <th className="px-4 py-3">Precio</th>
+                                        <th className="px-4 py-3">Pagos</th>
+                                        <th className="px-4 py-3 text-right">
+                                            Acciones
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-800">
+                                    {Checkins.length === 0 && (
+                                        <tr>
+                                            <td
+                                                colSpan={10}
+                                                className="px-4 py-8 text-center text-gray-500"
+                                            >
+                                                No hay check-ins registrados.
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {Checkins.map((c) => (
+                                        <tr
+                                            key={c.id}
+                                            className="hover:bg-gray-800/40"
+                                        >
+                                            <td className="px-4 py-3 font-mono text-gray-400">
+                                                #{c.id}
+                                            </td>
+                                            <td className="px-4 py-3 font-semibold text-white">
+                                                {c.guest_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-300">
+                                                {c.room_number}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span
+                                                    className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                                                        c.status === 'activo'
+                                                            ? 'bg-emerald-500/20 text-emerald-400'
+                                                            : c.status ===
+                                                                'cancelado'
+                                                              ? 'bg-red-500/20 text-red-400'
+                                                              : 'bg-gray-500/20 text-gray-300'
+                                                    }`}
+                                                >
+                                                    {c.status.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-400">
+                                                {c.operator_name ?? '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-400">
+                                                {c.check_in_date
+                                                    ? new Date(
+                                                          c.check_in_date,
+                                                      ).toLocaleDateString(
+                                                          'es-BO',
+                                                      )
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-400">
+                                                {c.check_out_date
+                                                    ? new Date(
+                                                          c.check_out_date,
+                                                      ).toLocaleDateString(
+                                                          'es-BO',
+                                                      )
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-300">
+                                                Bs {c.agreed_price.toFixed(2)}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-400">
+                                                {c.payments.length}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    onClick={() =>
+                                                        setCheckinToEdit(c)
+                                                    }
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-gray-700"
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                    God Mode
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 )}
 
                 {/* --- TAB: FINANZAS (placeholder, próxima iteración) --- */}
@@ -444,6 +577,14 @@ export default function DataAuditIndex({ auth, CashRegisters }: Props) {
                     />
                 )}
             </div>
+
+            <GodModeCheckinModal
+                show={!!checkinToEdit}
+                onClose={() => setCheckinToEdit(null)}
+                checkin={checkinToEdit}
+                operators={Operators}
+                cashRegisters={AllCashRegisters}
+            />
         </AuthenticatedLayout>
     );
 }

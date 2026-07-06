@@ -317,6 +317,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('admin')->middleware('god_mode')->group(function () {
         Route::get('/god-mode', [DataAuditController::class, 'index'])->name('god-mode.index');
         Route::put('/god-mode/cash-registers/{cashRegister}', [DataAuditController::class, 'updateCashRegister'])->name('god-mode.cash-registers.update');
+        Route::put('/god-mode/checkins/{checkin}', [DataAuditController::class, 'updateCheckin'])->name('god-mode.checkins.update');
+        Route::put('/god-mode/payments/{payment}', [DataAuditController::class, 'updatePayment'])->name('god-mode.payments.update');
     });
 }); // <-- Cierre del grupo autenticado
 
