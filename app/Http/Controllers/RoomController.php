@@ -301,6 +301,7 @@ class RoomController
             'RoomTypes'    => \App\Models\RoomType::all(),
             'Schedules'    => \App\Models\Schedule::where('is_active', true)->get(),
             'reservations' => $pendingReservations,
+            'Operators'    => \App\Models\User::operadores()->get(),
         ]);
     }
 

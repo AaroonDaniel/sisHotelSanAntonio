@@ -36,6 +36,7 @@ import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
+    Operator,
     Room as ModalRoom,
 } from '../checkins/checkinModal';
 import EventCheckinModal from '../checkins/EventCheckinModal';
@@ -120,6 +121,7 @@ interface Props {
     Checkins: any[];
     Schedules: any[];
     reservations: any[];
+    Operators: Operator[];
 }
 
 export default function RoomsStatus({
@@ -134,6 +136,7 @@ export default function RoomsStatus({
     reservations,
     availableRooms,
     occupiedRooms,
+    Operators,
 }: Props) {
     // Completado de checkins
     const [confirmCompleteTarget, setConfirmCompleteTarget] =
@@ -1637,6 +1640,7 @@ export default function RoomsStatus({
                 checkinToEdit={checkinToEdit}
                 guests={Guests}
                 rooms={Rooms}
+                operators={Operators}
                 initialRoomId={selectedRoomId}
                 initialAgreedPrice={selectedInitialAgreedPrice}
                 initialSpecialAgreementId={selectedInitialSpecialAgreementId}

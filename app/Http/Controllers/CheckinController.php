@@ -44,12 +44,14 @@ class CheckinController extends Controller
         $rooms = Room::with(['roomType', 'price'])->get();
         $schedules = \App\Models\Schedule::where('is_active', true)->get();
         $roomTypes = \App\Models\RoomType::where('is_active', true)->get();
+        $operators = \App\Models\User::operadores()->get();
         return Inertia::render('checkins/index', [
             'Checkins' => $checkins,
             'Guests' => $guests,
             'Rooms' => $rooms,
             'Schedules' => $schedules,
             'RoomTypes' => $roomTypes,
+            'Operators' => $operators,
         ]);
     }
 
@@ -158,6 +160,7 @@ class CheckinController extends Controller
         // =========================================================
         $validatedCheckin = $request->validate([
             'room_id' => 'required|exists:rooms,id',
+            'operator_id' => 'required|exists:users,id',
             'check_in_date' => 'required|date',
             'actual_arrival_date' => 'nullable|date',
             'schedule_id' => 'nullable|exists:schedules,id',
@@ -426,6 +429,7 @@ class CheckinController extends Controller
                 'guest_id' => $guestId,
                 'room_id' => $validatedCheckin['room_id'],
                 'user_id' => $userId,
+                'operator_id' => $validatedCheckin['operator_id'],
                 'check_in_date' => $validatedCheckin['check_in_date'],
                 'actual_arrival_date' => $validatedCheckin['actual_arrival_date'] ?? now(),
                 'schedule_id' => $validatedCheckin['schedule_id'] ?? null,

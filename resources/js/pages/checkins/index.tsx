@@ -18,7 +18,7 @@ import {
     MapPin,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import CheckinModal from './checkinModal';
+import CheckinModal, { Operator } from './checkinModal';
 import DeleteModal from './deleteModal';
 
 // --- INTERFACES ---
@@ -73,6 +73,7 @@ interface Props {
     Rooms: Room[];
     Schedules: any[];
     RoomTypes: any[];
+    Operators: Operator[];
 }
 export interface CheckinData {
     id: number;
@@ -96,7 +97,8 @@ export default function CheckinsIndex({
     Guests,
     Rooms,
     Schedules,
-    RoomTypes
+    RoomTypes,
+    Operators
 }: Props) {
     const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
@@ -497,6 +499,7 @@ export default function CheckinsIndex({
                     guests={Guests}
                     rooms={Rooms}
                     schedules={Schedules}
+                    operators={Operators}
                     isReceptionView={false}
                 />
 

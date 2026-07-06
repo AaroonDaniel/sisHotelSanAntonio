@@ -5,7 +5,7 @@ import {
     NACIONALIDADES,
     paisDe,
 } from '@/lib/catalogos';
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
@@ -192,6 +192,13 @@ export interface CheckinData {
     } | null;
     payments?: any[];
     corporate_days?: number;
+    operator_id?: number | null;
+}
+
+export interface Operator {
+    id: number;
+    full_name: string;
+    nickname: string;
 }
 
 export interface Room {
@@ -211,6 +218,7 @@ interface CheckinModalProps {
     guests: Guest[];
     rooms: Room[];
     schedules: Schedule[];
+    operators?: Operator[];
     initialRoomId?: number | null;
     // 🚀 NUEVO: cuando la habitación viene de una reserva de Delegación ya
     // asignada, se pasa aquí el precio pactado por cama (90/60/50) guardado
@@ -277,6 +285,7 @@ interface CheckinFormData {
     type: 'estandar' | 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
     corporate_days: number;
     agreed_price: number | string;
+    operator_id: string;
 }
 
 export default function CheckinModal({
@@ -287,6 +296,7 @@ export default function CheckinModal({
     guests,
     rooms,
     schedules = [],
+    operators = [],
     initialRoomId,
     initialAgreedPrice,
     initialSpecialAgreementId,
@@ -399,6 +409,11 @@ export default function CheckinModal({
         .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
         .replace(' ', 'T')
         .slice(0, 16);
+
+    // Usuario de la sesión (por defecto, el operador que ejecuta la acción)
+    const { auth } = usePage().props as any;
+    const loggedUserId = auth?.user?.id ? String(auth.user.id) : '';
+
     // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm<CheckinFormData>({
@@ -422,6 +437,7 @@ export default function CheckinModal({
             companions: [],
             payment_method: '',
             qr_bank: '',
+            operator_id: loggedUserId,
             is_temporary: false,
             auto_adjust_price: false,
             monto_efectivo: '',
@@ -675,6 +691,9 @@ export default function CheckinModal({
                     corporate_days:
                         checkinToEdit.special_agreement
                             ?.payment_frequency_days || 0,
+                    operator_id: checkinToEdit.operator_id
+                        ? String(checkinToEdit.operator_id)
+                        : loggedUserId,
 
                     full_name: isSecondaryRoom
                         ? ''
@@ -809,6 +828,7 @@ export default function CheckinModal({
                         ? Number(originalRoomPriceForNew)
                         : 0,
                     corporate_days: 0,
+                    operator_id: loggedUserId,
                 }));
 
                 // Aseguramos que la caja "OTRO" se oculte
@@ -1589,7 +1609,28 @@ export default function CheckinModal({
                             : 'Asignación'}
                     </h2>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                            <User className="h-4 w-4 text-gray-400" />
+                            <select
+                                value={data.operator_id}
+                                onChange={(e) =>
+                                    setData('operator_id', e.target.value)
+                                }
+                                title="Seleccione al usuario que está ejecutando esta acción"
+                                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 focus:border-green-500 focus:ring-green-500"
+                            >
+                                <option value="">
+                                    Seleccione al usuario que está ejecutando
+                                    esta acción
+                                </option>
+                                {operators.map((op) => (
+                                    <option key={op.id} value={String(op.id)}>
+                                        {op.full_name || op.nickname}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <button
                             onClick={() => onClose(false)}
                             className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
