@@ -15,6 +15,7 @@ class Expense extends Model
     protected $fillable = [
         'cash_register_id',
         'user_id',
+        'operator_id',
         'amount',
         'description',
     ];
@@ -31,9 +32,14 @@ class Expense extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    } 
+    }
 
-    public function getActivitylogOptions(): LogOptions 
+    public function operador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operator_id');
+    }
+
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()

@@ -19,6 +19,7 @@ class Checkin extends Model
         'room_id',
         'guest_id',
         'user_id',
+        'operator_id',
         'reservation_id',
         'check_in_date',
         'duration_days',
@@ -71,6 +72,12 @@ class Checkin extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    // El operador que realizó físicamente la acción durante la sesión global
+    public function operador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operator_id');
     }
 
     // --- RELACIONES (HasMany) ---

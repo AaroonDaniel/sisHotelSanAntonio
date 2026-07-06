@@ -15,6 +15,7 @@ class Payment extends Model
         'checkin_id',
         'reservation_id',
         'user_id',
+        'operator_id',
         'cash_register_id',
         'amount',
         'method',
@@ -38,6 +39,11 @@ class Payment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function operador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operator_id');
     }
 
     public function cashRegister(): BelongsTo

@@ -97,6 +97,15 @@ class User extends Authenticatable
         return $this->hasMany(Expense::class);
     }
 
+    /**
+     * Usuarios activos disponibles para ser seleccionados como "operador"
+     * en el selector de la sesión global de recepción.
+     */
+    public function scopeOperadores($query)
+    {
+        return $query->where('is_active', true)->orderBy('full_name');
+    }
+
     /*Configuraxion de la bitacora de actividades*/
     public function getActivitylogOptions(): LogOptions
     {
