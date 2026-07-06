@@ -24,6 +24,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
+use App\Http\Controllers\DataAuditController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -309,6 +310,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Auditoría de actividades
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index')->middleware('permission:auditoria.ver');
+
+    // ==========================================
+    // "GOD MODE" / AUDITORÍA DE DATOS (secreto, solo administrador principal)
+    // ==========================================
+    Route::prefix('admin')->middleware('god_mode')->group(function () {
+        Route::get('/god-mode', [DataAuditController::class, 'index'])->name('god-mode.index');
+        Route::put('/god-mode/cash-registers/{cashRegister}', [DataAuditController::class, 'updateCashRegister'])->name('god-mode.cash-registers.update');
+    });
 }); // <-- Cierre del grupo autenticado
 
 
