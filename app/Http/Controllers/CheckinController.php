@@ -611,7 +611,6 @@ class CheckinController extends Controller
             'new_room_id' => 'required|exists:rooms,id|different:room_id',
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
-            'auto_adjust_price' => 'nullable|boolean',
             'reason' => 'required|string|max:255', // El motivo exigido por recepción
         ]);
 
@@ -658,10 +657,22 @@ class CheckinController extends Controller
                     ? " | TRANSFER TO ROOM {$newRoom->number}. Previous balance owed: {$deudaHastaAhora} Bs"
                     : " | TRANSFER TO ROOM {$newRoom->number}";
 
+                // 🚀 ANCLA DE PRECIO: las noches ya transcurridas en la
+                // habitación vieja quedan fijas como deuda (al precio VIEJO,
+                // ya pagado o no). Desde este momento, calculateBillableDays()
+                // solo cuenta noches nuevas al precio de la habitación nueva
+                // (evita cobrar las noches viejas dos veces o al precio
+                // equivocado).
+                if ($deudaHastaAhora > 0) {
+                    $checkin->increment('carried_balance', $deudaHastaAhora);
+                }
+
                 $checkin->update([
                     'room_id' => $newRoomId,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $nuevoAgreedPrice,
                     'special_agreement_id' => $checkin->special_agreement_id,
+                    'price_effective_since' => $ahora,
+                    'duration_days' => 1,
                     'notes' => $checkin->notes . $noteAddition
                 ]);
 
@@ -691,10 +702,21 @@ class CheckinController extends Controller
                     ? " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}. Balance before split: {$deudaHastaAhora} Bs"
                     : " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}";
 
+                // 🚀 ANCLA DE PRECIO: igual que en la transferencia completa.
+                // El precio cambia (menos ocupantes = otra tarifa) aunque la
+                // habitación sea la misma, así que las noches ya
+                // transcurridas quedan fijas en carried_balance al precio
+                // VIEJO antes de aplicar la tarifa nueva.
+                if ($deudaHastaAhora > 0) {
+                    $checkin->increment('carried_balance', $deudaHastaAhora);
+                }
+
                 $checkin->update([
                     'guest_id' => $newOldTitularId,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioViejaHabitacion,
                     'special_agreement_id' => $checkin->special_agreement_id,
+                    'price_effective_since' => $ahora,
+                    'duration_days' => 1,
                     'notes' => $checkin->notes . $noteAdditionStay
                 ]);
                 $checkin->companions()->sync($newOldCompanions);
@@ -707,6 +729,12 @@ class CheckinController extends Controller
                     'room_id' => $newRoomId,
                     'check_in_date' => $checkin->check_in_date,
                     'actual_arrival_date' => $checkin->actual_arrival_date ?? $checkin->check_in_date,
+                    // 🚀 ANCLA DE PRECIO: este checkin es nuevo, pero conserva
+                    // el check_in_date ORIGINAL (registro/parte diario). Sin
+                    // esta ancla, calculateBillableDays() contaría también
+                    // las noches previas al split (pasadas en la habitación
+                    // vieja) al precio de la habitación NUEVA.
+                    'price_effective_since' => $ahora,
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
@@ -2759,10 +2787,20 @@ class CheckinController extends Controller
             return max(1, intval($checkin->duration_days));
         }
 
-        $ingreso = Carbon::parse($checkin->check_in_date);
+        // 🚀 ANCLA DE PRECIO: si esta estadía tuvo una transferencia o
+        // fusión a mitad de camino, 'price_effective_since' marca el
+        // momento exacto desde el cual rige el precio ACTUAL. Las noches
+        // anteriores a ese momento ya quedaron cobradas como una deuda fija
+        // en 'carried_balance' (ver transfer()/merge()), así que aquí NO
+        // deben volver a contarse al precio nuevo.
+        $usingTransferAnchor = !is_null($checkin->price_effective_since);
+        $ingreso = Carbon::parse($checkin->price_effective_since ?? $checkin->check_in_date);
 
         // AJUSTE DE ENTRADA (Mantenemos tolerancia automática al entrar)
-        if ($checkin->schedule) {
+        // Solo aplica al ingreso ORIGINAL del huésped al hotel: el ancla de
+        // una transferencia/fusión ya es una hora exacta y no debe
+        // beneficiarse de la tolerancia de horario oficial.
+        if (!$usingTransferAnchor && $checkin->schedule) {
             $horaOficialEntrada = Carbon::parse($ingreso->format('Y-m-d') . ' ' . $checkin->schedule->check_in_time);
             $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($checkin->schedule->entry_tolerance_minutes);
 
@@ -2877,9 +2915,22 @@ class CheckinController extends Controller
                 // FUSIÓN PARCIAL: Se divide la cuenta, los que se quedan asumen la deuda original
                 $stayingIds = array_values(array_diff($allGuestIds, $selectedGuests));
 
+                // 🚀 ANCLA DE PRECIO: cambia la tarifa (menos ocupantes) sin
+                // cambiar de habitación. Igual que en transfer(): fijamos lo
+                // ya transcurrido como deuda al precio VIEJO antes de aplicar
+                // la tarifa nueva, para que calculateBillableDays() no vuelva
+                // a cobrar esas noches al precio equivocado.
+                $diasPasadosMerge = $this->calculateBillableDays($checkin, $ahora, true);
+                $deudaHastaAhoraMerge = $diasPasadosMerge * ($checkin->agreed_price ?? 0);
+                if ($deudaHastaAhoraMerge > 0) {
+                    $checkin->increment('carried_balance', $deudaHastaAhoraMerge);
+                }
+
                 $checkin->update([
                     'guest_id' => $stayingIds[0], // Nombra a un nuevo titular para los que se quedan
                     'agreed_price' => $this->calculateAgreedPrice($checkin->room_id, count($stayingIds)),
+                    'price_effective_since' => $ahora,
+                    'duration_days' => 1,
                     'notes' => $checkin->notes . " | FUSIÓN PARCIAL (Algunos pasaron a Hab. " . $targetCheckin->room->number . ")"
                 ]);
                 // Desvinculamos a los que se fueron de la vieja habitación
@@ -2924,9 +2975,22 @@ class CheckinController extends Controller
             // Evaluamos: Si ya se llenó y tiene origen, apagamos el "is_temporary"
             $isTemporaryNewState = !($isCapacityFull && $hasOrigin);
 
+            // 🚀 ANCLA DE PRECIO: el checkin DESTINO también cambia de tarifa
+            // aquí (ahora tiene más ocupantes). Las noches que ya llevaba
+            // ANTES de recibir a los nuevos huéspedes deben quedar fijas a
+            // SU propio precio viejo (independiente de la deuda que ya se le
+            // haya trasladado del checkin de origen más arriba).
+            $diasTargetHastaAhora = $this->calculateBillableDays($targetCheckin, $ahora, true);
+            $deudaTargetHastaAhora = $diasTargetHastaAhora * ($targetCheckin->agreed_price ?? 0);
+            if ($deudaTargetHastaAhora > 0) {
+                $targetCheckin->increment('carried_balance', $deudaTargetHastaAhora);
+            }
+
             // Recalculamos la tarifa y aplicamos el nuevo estado is_temporary
             $targetCheckin->update([
                 'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, $totalGuestsNow),
+                'price_effective_since' => $ahora,
+                'duration_days' => 1,
                 'notes' => ltrim($targetCheckin->notes . " | Recibió huéspedes de Hab. " . \App\Models\Room::find($oldRoomId)->number, " | "),
                 'is_temporary' => $isTemporaryNewState // 👈 ¡ESTO ES LO QUE ARREGLA EL ERROR!
             ]);

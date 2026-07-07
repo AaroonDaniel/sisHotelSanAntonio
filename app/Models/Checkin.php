@@ -34,6 +34,7 @@ class Checkin extends Model
         'parent_checkin_id',
         'special_agreement_id',
         'agreed_price',
+        'price_effective_since',
     ];
 
     protected $uppercaseFields = [
@@ -46,6 +47,7 @@ class Checkin extends Model
         'check_out_date' => 'datetime',
         'advance_payment' => 'decimal:2',
         'actual_arrival_date' => 'datetime',
+        'price_effective_since' => 'datetime',
         'is_temporary' => 'boolean',
     ];
 
