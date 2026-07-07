@@ -804,16 +804,21 @@ export default function RoomsStatus({
                     setOccupiedCheckinData({ ...activeCheckin, room });
                     setIsEventOccupiedModalOpen(true);
                 } else {
-                    if (activeCheckin.is_temporary) {
-                        setCheckinToEdit(activeCheckin);
-                        setSelectedRoomId(room.id);
-                        setIsCheckinModalOpen(true);
-                    } else {
-                        setOccupiedCheckinData({ ...activeCheckin, room });
-                        // Semáforo unificado: mismo cálculo que el badge de la card.
-                        setOccupiedCorpState(computeCorpState(activeCheckin));
-                        setIsOccupiedModalOpen(true);
-                    }
+                    // 🚀 FIX: 'status' YA es el resultado de
+                    // getDisplayStatus(room), que es la fuente única de
+                    // verdad sobre si la tarjeta está "ocupada" o
+                    // "incompleta" (revisa titular, acompañantes, origen y
+                    // capacidad — no solo el flag crudo is_temporary, que
+                    // puede seguir en true aunque los datos ya estén
+                    // completos). Volver a preguntar por
+                    // activeCheckin.is_temporary aquí contradecía esa
+                    // decisión y abría CheckinModal en vez de
+                    // OccupiedRoomModal aunque la tarjeta ya se viera
+                    // "ocupada".
+                    setOccupiedCheckinData({ ...activeCheckin, room });
+                    // Semáforo unificado: mismo cálculo que el badge de la card.
+                    setOccupiedCorpState(computeCorpState(activeCheckin));
+                    setIsOccupiedModalOpen(true);
                 }
             }
             return;
