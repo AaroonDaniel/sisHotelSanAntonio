@@ -13,6 +13,7 @@ class Payment extends Model
 
     protected $fillable = [
         'checkin_id',
+        'special_agreement_id',
         'reservation_id',
         'user_id',
         'operator_id',
@@ -34,6 +35,15 @@ class Payment extends Model
     public function checkin(): BelongsTo
     {
         return $this->belongsTo(Checkin::class);
+    }
+
+    /**
+     * Si este pago fue hecho contra una Cuenta Maestra corporativa (grupo
+     * de habitaciones), no contra una habitación puntual.
+     */
+    public function specialAgreement(): BelongsTo
+    {
+        return $this->belongsTo(SpecialAgreement::class);
     }
 
     public function user(): BelongsTo

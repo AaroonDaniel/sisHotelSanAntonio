@@ -155,6 +155,7 @@ export default function Dashboard({
                     anyPerm: ['reservas.crear', 'reservas.ver_todos'],
                 },
                 { name: 'Asignación', icon: BedDouble, url: '/checks', anyPerm: ['checkin.realizar', 'checkins.ver_todos'] },
+                { name: 'Cuentas Corporativas', icon: Building, url: '/corporate-accounts', anyPerm: ['checkin.realizar', 'checkins.ver_todos'] },
                 {
                     name: 'Detalles de asignación',
                     icon: Briefcase,

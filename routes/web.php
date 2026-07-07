@@ -25,6 +25,7 @@ use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\DataAuditController;
+use App\Http\Controllers\CorporateAccountController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -141,6 +142,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Ruta de Merge
     Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
+
+    // ==========================================
+    // CUENTA MAESTRA CORPORATIVA (varias habitaciones, un solo convenio)
+    // ==========================================
+    Route::get('/corporate-accounts', [CorporateAccountController::class, 'index'])->name('corporate-accounts.index');
+    Route::post('/corporate-accounts', [CorporateAccountController::class, 'store'])->name('corporate-accounts.store');
+    Route::post('/corporate-accounts/{corporateAccount}/attach', [CorporateAccountController::class, 'attach'])->name('corporate-accounts.attach');
+    Route::post('/corporate-accounts/{corporateAccount}/payments', [CorporateAccountController::class, 'registerPayment'])->name('corporate-accounts.payments');
+    Route::get('/corporate-accounts/{corporateAccount}/balances', [CorporateAccountController::class, 'balances'])->name('corporate-accounts.balances');
 
     // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');
