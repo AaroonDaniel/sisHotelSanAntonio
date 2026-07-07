@@ -42,6 +42,20 @@ import {
 import { Textarea } from '@headlessui/react';
 import CheckinDetailModal from '../checkindetails/checkindetailModal';
 
+// La app entera trabaja en hora de La Paz (config/app.php: America/La_Paz).
+// Convierte cualquier fecha a un Date cuyos getters LOCALES (getDate(),
+// getMonth(), etc.) reflejan la hora de La Paz, sin importar la zona
+// horaria configurada en el navegador. Mismo truco que
+// checkinModal.tsx (formatDateForInput) — evita que la fecha se corra un
+// día al hacer aritmética (setDate()) o mostrarla con toLocaleDateString()
+// sin especificar timeZone.
+const toLaPazLocalDate = (dateString: string | Date): Date => {
+    const iso = new Date(dateString)
+        .toLocaleString('sv-SE', { timeZone: 'America/La_Paz' })
+        .replace(' ', 'T');
+    return new Date(iso);
+};
+
 interface CorpState {
     level: 'moroso' | 'pendiente' | 'al_dia';
     badge: string;
@@ -268,8 +282,9 @@ export default function OccupiedRoomModal({
     //
     // Aquí solo se deriva información COMPLEMENTARIA para mostrar al
     // recepcionista: la frecuencia pactada y la fecha del próximo
-    // vencimiento (next_payment_date del backend, o cálculo matemático
-    // check_in_date + payment_frequency_days).
+    // vencimiento, calculada desde `starts_at` (el momento en que el
+    // convenio REALMENTE empezó — no necesariamente el check_in_date de
+    // la estadía, si el convenio se activó después del ingreso real).
     // =================================================================
     const agreementInfo = useMemo<{
         frequency: number;
@@ -284,17 +299,22 @@ export default function OccupiedRoomModal({
             return { frequency: 0, dueDate: null };
         }
 
-        // Fecha límite: explícita del backend o cálculo matemático.
+        const anchor = agreement.starts_at || liveCheckin?.check_in_date;
         let dueDate: Date | null = null;
-        if (agreement.next_payment_date) {
-            dueDate = new Date(agreement.next_payment_date);
-        } else if (liveCheckin?.check_in_date) {
-            const base = new Date(liveCheckin.check_in_date);
+        if (anchor) {
+            // 🚀 Normalizamos a un Date cuyos getters LOCALES reflejan la
+            // hora de La Paz (mismo truco que checkinModal.tsx). Sin esto,
+            // setDate() suma días sobre la hora local del NAVEGADOR, que
+            // puede no coincidir con America/La_Paz y correr la fecha un
+            // día — mostrando un vencimiento distinto al que checkinModal
+            // calcula para el mismo check-in.
+            const base = toLaPazLocalDate(anchor);
             dueDate = new Date(base);
             dueDate.setDate(base.getDate() + frequency);
 
-            // Avanzamos al ciclo vigente si ya pasaron varios.
-            const now = new Date();
+            // Avanzamos al ciclo vigente si ya pasaron varios (comparado
+            // contra "ahora" también normalizado a La Paz).
+            const now = toLaPazLocalDate(new Date().toISOString());
             while (dueDate < now) {
                 dueDate.setDate(dueDate.getDate() + frequency);
             }
@@ -340,7 +360,10 @@ export default function OccupiedRoomModal({
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '---';
-        const date = new Date(dateString);
+        // 🚀 Normalizado a hora de La Paz: mismo dato, misma fecha que
+        // muestra/edita checkinModal.tsx para este mismo check-in,
+        // independientemente de la zona horaria del navegador.
+        const date = toLaPazLocalDate(dateString);
         const day = date.getDate();
         const month = date.toLocaleDateString('es-BO', { month: 'long' });
         const time = date.toLocaleTimeString('es-BO', {

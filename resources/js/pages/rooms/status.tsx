@@ -540,9 +540,13 @@ export default function RoomsStatus({
             };
         }
 
-        // 4. Fecha de vencimiento = fecha de checkout (checkin_date + duration_days).
+        // 4. Fecha de vencimiento = fecha de inicio del convenio + duration_days.
+        // 🚀 ANCLA: usamos convenio.starts_at (cuándo REALMENTE empezó la
+        // delegación) en vez de check_in_date de la estadía — si la
+        // delegación se activó días después del ingreso real, contar desde
+        // check_in_date marcaría "moroso" de forma incorrecta e inmediata.
         const checkinDay = stripTime(
-            activeCheckin.check_in_date || new Date().toISOString(),
+            convenio?.starts_at || activeCheckin.check_in_date || new Date().toISOString(),
         );
         const today = stripTime(new Date());
         const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -641,8 +645,13 @@ export default function RoomsStatus({
         const cyclePrice = agreedPrice * corpDays;
 
         // 3. Días reales de estadía — POR DÍAS NATURALES.
+        // 🚀 ANCLA: usamos convenio.starts_at (cuándo REALMENTE empezó el
+        // trato corporativo) en vez de check_in_date de la estadía — si el
+        // convenio se activó/editó días después del ingreso real, contar
+        // desde check_in_date generaría ciclos vencidos retroactivos que
+        // nunca existieron (el huésped no tuvo oportunidad de pagarlos).
         const checkinDay = stripTime(
-            activeCheckin.check_in_date || new Date().toISOString(),
+            convenio?.starts_at || activeCheckin.check_in_date || new Date().toISOString(),
         );
         const today = stripTime(new Date());
 

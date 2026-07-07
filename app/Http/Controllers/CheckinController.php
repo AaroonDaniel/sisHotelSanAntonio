@@ -186,7 +186,6 @@ class CheckinController extends Controller
             'discount' => 'nullable|numeric|min:0',
             'is_corporate' => 'nullable|boolean',
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
-            'payment_frequency' => 'nullable|string|max:255',
             'corporate_days' => 'nullable|integer',
             'agreed_price' => 'nullable|numeric|min:0',
         ], [
@@ -400,9 +399,10 @@ class CheckinController extends Controller
             }
 
             // El descuento manual sigue teniendo prioridad sobre el precio calculado.
-            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-                $minAllowed  = $agreedPrice * 0.5;
-                $agreedPrice = max((float) $request->discount, $isAssigningSalon ? 0 : $minAllowed);
+            // Sin piso del 50%: el mínimo permitido es 0 (estadía gratuita),
+            // nunca un monto negativo.
+            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount >= 0) {
+                $agreedPrice = max(0, (float) $request->discount);
             }
 
 
@@ -419,6 +419,9 @@ class CheckinController extends Controller
                     'type' => $tipoTrato,
                     'agreed_price' => $agreedPrice,
                     'payment_frequency_days' => $frecuenciaDias,
+                    // 🚀 ANCLA DEL CONVENIO: es un checkin NUEVO, así que el
+                    // convenio arranca junto con el ingreso declarado.
+                    'starts_at' => $validatedCheckin['check_in_date'],
                 ]);
 
                 $specialAgreementId = $agreement->id;
@@ -858,13 +861,23 @@ class CheckinController extends Controller
             $userId    = \Illuminate\Support\Facades\Auth::id() ?? 1;
             $agreement = $checkin->specialAgreement;
 
-            // 1. Días que el huésped estuvo bajo trato corporativo.
-            $checkInDate = \Carbon\Carbon::parse($checkin->check_in_date);
-            $diasCorporativo = max(0, intval($checkInDate->diffInDays($ahora)));
+            // 1. Días que el huésped estuvo bajo trato corporativo, contados
+            // desde que el convenio REALMENTE empezó (starts_at), no desde
+            // el check_in_date de la estadía (pueden ser fechas distintas
+            // si el convenio se activó después del ingreso real).
+            $agreementStart = \Carbon\Carbon::parse($agreement->starts_at);
+            $diasCorporativo = max(0, intval($agreementStart->diffInDays($ahora)));
 
             // 2. Precio NORMAL desde ahora: tarifa de la habitación ajustada por ocupación real.
             $totalGuests = 1 + $checkin->companions()->count();
             $precioNormal = $this->calculateAgreedPrice($checkin->room_id, $totalGuests);
+
+            // 🚀 ANCLA DE PRECIO: las noches ya transcurridas bajo el precio
+            // corporativo quedan fijas como deuda (carried_balance) a ESE
+            // precio. Desde este momento, calculateBillableDays() solo
+            // cuenta noches nuevas al precio NORMAL — evita cobrar las
+            // noches del convenio dos veces o al precio equivocado.
+            $deudaCorporativa = $diasCorporativo * ($checkin->agreed_price ?? 0);
 
             // 3. Nota financiera de transición (queda visible en el modal).
             $transicion = sprintf(
@@ -878,10 +891,16 @@ class CheckinController extends Controller
             );
 
             // 4. Aplicar los cambios. El dinero ya pagado NO se toca.
+            if ($deudaCorporativa > 0) {
+                $checkin->increment('carried_balance', $deudaCorporativa);
+            }
+
             $oldAgreementId = $checkin->special_agreement_id;
             $checkin->update([
                 'special_agreement_id' => null,                 // corporate_client = false
                 'agreed_price'         => $precioNormal,          // precio original desde ahora
+                'price_effective_since' => $ahora,
+                'duration_days'        => 1,
                 'notes'                => trim(($checkin->notes ?? '') . $transicion),
             ]);
 
@@ -924,9 +943,7 @@ class CheckinController extends Controller
 
                 // --- Campos viejos / Nuevos ---
                 'is_corporate' => 'nullable|boolean',
-                'is_delegation' => 'nullable|boolean',
                 'type' => 'nullable|string|in:estandar,corporativo,delegacion',
-                'payment_frequency' => 'nullable|string|max:255',
                 'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
                 'agreed_price' => 'nullable|numeric|min:0',
 
@@ -1129,12 +1146,11 @@ class CheckinController extends Controller
             $basePrice = $roomModelUpdate->price->amount ?? 0;
 
             $isCorporateNow = $request->boolean('is_corporate');
-            $isDelegationNow = $request->boolean('is_delegation');
             $isAutoAdjustNow = $request->boolean('auto_adjust_price');
             $typeRequest = $request->input('type');
 
             // 🌟 Consideramos el Auto Ajuste como un Grupo Especial
-            $isSpecialGroupNow = $isCorporateNow || $isDelegationNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
+            $isSpecialGroupNow = $isCorporateNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
 
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
             $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
@@ -1168,19 +1184,36 @@ class CheckinController extends Controller
                 $tipoTratoNuevo  = $isAutoAdjustNow ? 'AJUSTE DE PRECIO' : ($typeRequest ?? 'corporativo');
                 $frecuenciaDias  = $isAutoAdjustNow ? 0 : (int) $request->input('corporate_days', 0);
 
+                // 🚀 ANCLA DEL CONVENIO: si ya existía, se conserva su
+                // starts_at original (no reiniciar los ciclos ya corridos
+                // solo porque se edita el precio/frecuencia). Si es la
+                // PRIMERA vez que se activa, el convenio arranca en la
+                // fecha de check-in REGISTRADA en el formulario
+                // (check_in_date), no en el momento en que se guarda el
+                // cambio — si el huésped entró el 30 de junio y recién hoy
+                // se registra/edita como corporativo, el ciclo de pago debe
+                // contarse desde el 30 de junio, no desde hoy.
+                $startsAt = $hadSpecialAgreement
+                    ? $checkin->specialAgreement->starts_at
+                    : $validated['check_in_date'];
+
                 $agreement = \App\Models\SpecialAgreement::updateOrCreate(
                     ['id' => $checkin->special_agreement_id],
                     [
                         'type'                   => $tipoTratoNuevo,
                         'agreed_price'           => $updatedAgreedPrice,
                         'payment_frequency_days' => $frecuenciaDias,
+                        'starts_at'              => $startsAt,
                     ]
                 );
                 $checkin->special_agreement_id = $agreement->id;
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
-                // De especial a normal: se revoca el convenio
-                $checkInDate           = \Carbon\Carbon::parse($checkin->check_in_date);
-                $diasQueFueCorporativo = max(0, intval($checkInDate->diffInDays(\Carbon\Carbon::now())));
+                // De especial a normal: se revoca el convenio. Contamos los
+                // días bajo trato corporativo desde que el convenio
+                // REALMENTE empezó (starts_at), no desde el check_in_date
+                // de la estadía (podrían ser fechas distintas).
+                $agreementStart        = \Carbon\Carbon::parse($checkin->specialAgreement->starts_at);
+                $diasQueFueCorporativo = max(0, intval($agreementStart->diffInDays(\Carbon\Carbon::now())));
 
                 // Al volver a la normalidad (sin auto ajuste), devolvemos el precio a la tarifa base original (o la digitada manualmente)
                 $updatedAgreedPrice = $request->filled('agreed_price')

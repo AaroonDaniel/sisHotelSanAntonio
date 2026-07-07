@@ -13,6 +13,11 @@ class SpecialAgreement extends Model
         'type',
         'agreed_price',
         'payment_frequency_days',
+        'starts_at',
+    ];
+
+    protected $casts = [
+        'starts_at' => 'datetime',
     ];
 
     public function checkins(): HasMany

@@ -169,8 +169,6 @@ export interface CheckinData {
     duration_days: number;
     advance_payment: number;
     agreed_price: number;
-    is_delegation?: boolean;
-    discount?: number;
     notes?: string;
     services?: string[];
     guest?: Guest;
@@ -261,7 +259,6 @@ interface CheckinFormData {
     duration_days: number | string;
     origin: string;
     advance_payment: number;
-    discount?: number;
     notes: string;
     selected_services: string[];
     // Campos del Titular (Index 0)
