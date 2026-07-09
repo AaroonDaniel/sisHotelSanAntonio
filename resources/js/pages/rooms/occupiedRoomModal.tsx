@@ -1,3 +1,6 @@
+import OperatorSelector, {
+    Operator as SharedOperator,
+} from '@/components/OperatorSelector';
 import { router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
@@ -120,6 +123,9 @@ export default function OccupiedRoomModal({
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
+    const [paymentOperatorError, setPaymentOperatorError] = useState<
+        string | null
+    >(null);
 
     // --- FORMULARIO DE ANULACIÓN DE CONVENIO ---
     const { post: postCancelAgreement, processing: processingCancel } = useForm(
@@ -147,7 +153,10 @@ export default function OccupiedRoomModal({
         amount: '',
         payment_method: 'EFECTIVO',
         qr_bank: '',
+        operator_id: '',
     });
+
+    const operators: SharedOperator[] = props.Operators ?? [];
 
     const totalPaid = useMemo(() => {
         if (!liveCheckin) return 0;
@@ -184,6 +193,7 @@ export default function OccupiedRoomModal({
         setExpandedGuestId(null);
         setShowPaymentForm(false);
         setShowConfirmModal(false);
+        setPaymentOperatorError(null);
         resetPayment();
         onClose();
     };
@@ -336,7 +346,12 @@ export default function OccupiedRoomModal({
         const amountValue = parseFloat(paymentData.amount);
         if (!amountValue || amountValue <= 0) return;
         if (paymentData.payment_method === 'QR' && !paymentData.qr_bank) return;
+        if (!paymentData.operator_id) {
+            setPaymentOperatorError('Seleccione un operador para continuar.');
+            return;
+        }
 
+        setPaymentOperatorError(null);
         setShowConfirmModal(true);
     };
 
@@ -611,11 +626,14 @@ export default function OccupiedRoomModal({
                                                     </span>
                                                     <button
                                                         type="button"
-                                                        onClick={() =>
+                                                        onClick={() => {
                                                             setShowPaymentForm(
                                                                 false,
-                                                            )
-                                                        }
+                                                            );
+                                                            setPaymentOperatorError(
+                                                                null,
+                                                            );
+                                                        }}
                                                         className="text-gray-400 hover:text-red-500"
                                                     >
                                                         <X className="h-3 w-3" />
@@ -703,7 +721,7 @@ export default function OccupiedRoomModal({
                                                                                     .value,
                                                                             )
                                                                         }
-                                                                        className="h-[26px] w-full rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                        className="h-[26px] w-full [appearance:textfield] rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                         placeholder="0"
                                                                     />
                                                                 </div>
@@ -800,11 +818,44 @@ export default function OccupiedRoomModal({
                                                     </div>
                                                 </div>
 
+                                                {/* Operador: solo se pide al momento de cobrar un adelanto */}
+                                                <div className="mb-3">
+                                                    <label className="mb-1 block text-center text-[12px] font-bold text-gray-500 uppercase">
+                                                        Operador
+                                                    </label>
+                                                    <OperatorSelector
+                                                        operators={operators}
+                                                        value={
+                                                            paymentData.operator_id
+                                                        }
+                                                        onChange={(id) => {
+                                                            setPaymentData(
+                                                                'operator_id',
+                                                                id,
+                                                            );
+                                                            setPaymentOperatorError(
+                                                                null,
+                                                            );
+                                                        }}
+                                                        compact
+                                                        size="sm"
+                                                        label=""
+                                                    />
+                                                    {paymentOperatorError && (
+                                                        <p className="mt-1 text-center text-[11px] font-bold text-red-600">
+                                                            {
+                                                                paymentOperatorError
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+
                                                 <button
                                                     type="submit"
                                                     disabled={
                                                         processingPayment ||
                                                         !paymentData.amount ||
+                                                        !paymentData.operator_id ||
                                                         (paymentData.payment_method ===
                                                             'QR' &&
                                                             !paymentData.qr_bank)
@@ -1371,11 +1422,10 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                                 step="1"
                                 placeholder="0.00"
                                 value={data.amount}
-                                className=" [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 onChange={(e) =>
                                     setData('amount', e.target.value)
                                 }
-
                             />
                             {errors.amount && (
                                 <p className="text-xs font-medium text-red-600">

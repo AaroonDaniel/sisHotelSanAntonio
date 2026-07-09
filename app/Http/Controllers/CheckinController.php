@@ -1458,6 +1458,7 @@ class CheckinController extends Controller
             'amount' => 'required|numeric|min:0.5', // Permitir centavos si es necesario
             'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
+            'operator_id' => 'required|exists:users,id',
         ]);
 
         // 2. Transacción
@@ -1469,6 +1470,7 @@ class CheckinController extends Controller
             \App\Models\Payment::create([
                 'checkin_id' => $checkin->id,
                 'user_id' => Auth::id(),
+                'operator_id' => $request->operator_id,
                 'amount' => $request->amount,
                 'method' => $request->payment_method,
                 'bank_name' => $banco,
@@ -1706,10 +1708,11 @@ class CheckinController extends Controller
 
                 // --- Finalizar la estadía ---
                 $checkin->update([
-                    'check_out_date' => $checkOutDate,
-                    'duration_days'  => $finalDays,
-                    'agreed_price'   => $agreedPrice,
-                    'status'         => 'finalizado',
+                    'check_out_date'        => $checkOutDate,
+                    'duration_days'         => $finalDays,
+                    'agreed_price'          => $agreedPrice,
+                    'status'                => 'finalizado',
+                    'checkout_operator_id'  => $request->input('checkout_operator_id'),
                 ]);
 
                 // =========================================================
