@@ -104,8 +104,7 @@ class User extends Authenticatable
      */
     public function scopeOperadores($query)
     {
-        return $query->where('is_active', true)
-            ->orderBy('full_name');
+       return $query->where('is_active', true);
     }
 
     /*Configuraxion de la bitacora de actividades*/

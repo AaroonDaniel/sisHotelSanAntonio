@@ -8,7 +8,7 @@ import {
     NACIONALIDADES,
     paisDe,
 } from '@/lib/catalogos';
-import { router, useForm, usePage } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
@@ -442,10 +442,6 @@ export default function CheckinModal({
         .replace(' ', 'T')
         .slice(0, 16);
 
-    // Usuario de la sesión (por defecto, el operador que ejecuta la acción)
-    const { auth } = usePage().props as any;
-    const loggedUserId = auth?.user?.id ? String(auth.user.id) : '';
-
     // [ACTUALIZADO] useForm con la Interfaz y el campo companions
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm<CheckinFormData>({
@@ -469,7 +465,7 @@ export default function CheckinModal({
             companions: [],
             payment_method: '',
             qr_bank: '',
-            checkin_operator_id: loggedUserId,
+            checkin_operator_id: '',
             is_temporary: false,
             auto_adjust_price: false,
             monto_efectivo: '',
@@ -725,7 +721,7 @@ export default function CheckinModal({
                             ?.payment_frequency_days || 0,
                     checkin_operator_id: checkinToEdit.checkin_operator_id
                         ? String(checkinToEdit.checkin_operator_id)
-                        : loggedUserId,
+                        : '',
 
                     full_name: isSecondaryRoom
                         ? ''
@@ -860,7 +856,7 @@ export default function CheckinModal({
                         ? Number(originalRoomPriceForNew)
                         : 0,
                     corporate_days: 0,
-                    checkin_operator_id: loggedUserId,
+                    checkin_operator_id: '',
                 }));
 
                 // Aseguramos que la caja "OTRO" se oculte
@@ -1356,15 +1352,16 @@ export default function CheckinModal({
 
         // =========================================================
         // 🛑 CANDADO ABSOLUTO: sin operador seleccionado, no se asigna la
-        // habitación bajo ninguna circunstancia. En vez de dejar el botón
-        // nativamente disabled (lo que impediría detectar el intento y
-        // avisar), interceptamos el submit aquí: si falta el operador,
-        // NO se llama a executeSubmit(); en su lugar se hace parpadear el
-        // selector flotante Y se lanza el Toast de validación.
+        // habitación bajo ninguna circunstancia. El botón ya queda
+        // nativamente disabled sin operador, pero este guard es la
+        // defensa real (cubre envío por Enter u otras vías) y dispara
+        // el parpadeo del selector + el Toast de validación.
         // =========================================================
         if (!data.checkin_operator_id) {
             triggerOperatorAlert();
-            setOperatorToastError('Seleccione un operador');
+            setOperatorToastError(
+                'Seleccione su usuario operador para continuar',
+            );
             setTimeout(() => setOperatorToastError(null), 5000);
             return;
         }
@@ -3968,18 +3965,8 @@ export default function CheckinModal({
                                         {!isReadOnly && (
                                             <button
                                                 type="submit"
-                                                // 🚫 A propósito NO usamos
-                                                // disabled={!checkin_operator_id}:
-                                                // un <button disabled> no
-                                                // dispara click/submit, así que
-                                                // no podríamos interceptar el
-                                                // intento para hacer parpadear
-                                                // el selector. El bloqueo REAL
-                                                // ocurre dentro de submit()
-                                                // (candado absoluto); aquí solo
-                                                // se ve "no listo".
-                                                disabled={processing}
-                                                aria-disabled={
+                                                disabled={
+                                                    processing ||
                                                     !data.checkin_operator_id
                                                 }
                                                 title={
