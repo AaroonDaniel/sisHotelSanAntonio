@@ -3126,6 +3126,7 @@ class CheckinController extends Controller
             'nombre_factura' => 'nullable|string',
             'nit_factura' => 'nullable|string',
             'metodo_pago' => 'required|string',
+            'checkout_operator_id' => 'required|exists:users,id',
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -3221,7 +3222,8 @@ class CheckinController extends Controller
                 $checkin->update([
                     'check_out_date' => $salida,
                     'duration_days' => $diasACobrar,
-                    'status' => 'finalizado'
+                    'status' => 'finalizado',
+                    'checkout_operator_id' => $request->input('checkout_operator_id'),
                 ]);
             }
 

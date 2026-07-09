@@ -2,6 +2,7 @@ import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
+import OperatorSelector from '@/components/OperatorSelector';
 import ReservationsPopover from '@/components/Reservationspopover';
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
@@ -1734,6 +1735,7 @@ export default function RoomsStatus({
                         room={checkoutData.room}
                         schedules={Schedules}
                         guests={Guests}
+                        operators={Operators}
                         onClose={() => {
                             setConfirmCheckoutId(null);
                             setSelectedForAction(null);
@@ -1803,6 +1805,7 @@ export default function RoomsStatus({
                 selectedRoomIds={selectedRoomsForCheckout}
                 rooms={Rooms}
                 guests={Guests}
+                operators={Operators}
                 onClose={() => setShowMultiCheckoutModal(false)}
             />
             <FinancialHistoryModal
@@ -1900,13 +1903,27 @@ function CheckoutConfirmationModal({
     onClose,
     schedules,
     guests = [],
+    operators = [],
 }: {
     checkin: any;
     room: any;
     onClose: () => void;
     schedules?: any[];
     guests?: any[];
+    operators?: Operator[];
 }) {
+    // --- OPERADOR QUE FINALIZA (mismo patrón visual que checkinModal) ---
+    const [checkoutOperatorId, setCheckoutOperatorId] = useState('');
+    const [operatorAlertPulse, setOperatorAlertPulse] = useState(false);
+    const [operatorToastError, setOperatorToastError] = useState<string | null>(
+        null,
+    );
+    const triggerOperatorAlert = () => {
+        setOperatorAlertPulse(false);
+        requestAnimationFrame(() => setOperatorAlertPulse(true));
+        setTimeout(() => setOperatorAlertPulse(false), 1600);
+    };
+
     if (!checkin) return null;
 
     const [tolModal, setTolModal] = useState<{
@@ -2209,6 +2226,15 @@ function CheckoutConfirmationModal({
     const handleConfirmAndPreview = async () => {
         if (!displayData) return;
 
+        // 🛑 CANDADO ABSOLUTO: sin operador seleccionado, no se finaliza la
+        // estadía bajo ninguna circunstancia (mismo patrón que checkinModal).
+        if (!checkoutOperatorId) {
+            triggerOperatorAlert();
+            setOperatorToastError('Seleccione un operador');
+            setTimeout(() => setOperatorToastError(null), 5000);
+            return;
+        }
+
         if (rebaja && rebajaConfirmada === null) {
             alert(
                 "Por favor, haz clic en el botón 'Confirmar' al lado de la rebaja antes de continuar.",
@@ -2251,6 +2277,7 @@ function CheckoutConfirmationModal({
                 monto_efectivo: parseFloat(montoEfectivo) || 0,
                 monto_qr: parseFloat(montoQR) || 0,
                 discount: rebajaConfirmada !== null ? rebajaConfirmada : null,
+                checkout_operator_id: checkoutOperatorId,
             });
 
             // 2. Una vez guardado, pedimos el PDF correspondiente
@@ -2327,480 +2354,558 @@ function CheckoutConfirmationModal({
     // --- RENDERIZADO ---
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
-            {/* 👇 ESTE ES EL DIV QUE CAMBIA SU TAMAÑO 👇 */}
             <div
-                className={`flex w-full animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-300 zoom-in-95 ${
+                className={`relative w-full ${
                     pdfUrl
-                        ? 'h-[80vh] max-w-[470px]'
+                        ? 'max-w-[470px]'
                         : tipoDocumento === 'factura'
-                          ? 'max-h-[85vh] max-w-6xl'
-                          : 'max-h-[85vh] max-w-2xl'
+                          ? 'max-w-6xl'
+                          : 'max-w-2xl'
                 }`}
             >
-                {/* HEADER */}
-                <div
-                    className={`flex flex-none items-center justify-between border-b px-4 py-2 ${pdfUrl ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}
-                >
-                    <h3
-                        className={`flex items-center gap-2 text-lg font-bold ${pdfUrl ? 'text-emerald-700' : 'text-red-700'}`}
+                {/* ===================================================== */}
+                {/* 🔴 SELECTOR FLOTANTE DE OPERADOR — mismo patrón que      */}
+                {/* checkinModal: fuera de la caja blanca, flotando arriba  */}
+                {/* a la derecha, bottom-full + mb-3 (se auto-ajusta a la   */}
+                {/* altura real, sin adivinar un -top-[Npx] fijo).          */}
+                {/* ===================================================== */}
+                {!pdfUrl && (
+                    <div
+                        className={`absolute right-0 bottom-full z-50 mb-3 w-[30rem] max-w-[calc(100vw-2rem)] rounded-lg border-2 bg-white p-3 shadow-xl transition-all ${
+                            checkoutOperatorId
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-red-500 bg-red-50'
+                        } ${operatorAlertPulse ? 'animate-pulse ring-4 ring-red-400' : ''}`}
                     >
-                        {pdfUrl ? (
-                            <>
-                                <CheckCircle2 className="h-6 w-6" /> Salida
-                                Exitosa
-                            </>
-                        ) : (
-                            <>
-                                <AlertTriangle className="h-6 w-6" /> Finalizar
-                                Estadía
-                            </>
-                        )}
-                    </h3>
-                    <button
-                        onClick={handleCloseFinal}
-                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
+                        <p
+                            className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-bold ${checkoutOperatorId ? 'text-green-700' : 'text-red-700'}`}
+                        >
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                            {checkoutOperatorId
+                                ? 'Operador seleccionado correctamente'
+                                : 'Seleccione su nombre para finalizar la estadía'}
+                        </p>
+                        <OperatorSelector
+                            operators={operators}
+                            value={checkoutOperatorId}
+                            onChange={setCheckoutOperatorId}
+                            compact
+                            size="lg"
+                            label=""
+                        />
+                    </div>
+                )}
+
+                {/* ZONA DE TOAST FLOTANTE — misma posición fija que checkinModal */}
+                <div className="pointer-events-none fixed top-24 right-8 z-[100] flex flex-row items-start justify-end gap-4">
+                    {operatorToastError && (
+                        <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-red-300 bg-red-50 p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                            <div className="flex items-start gap-3">
+                                <div className="rounded-full bg-red-200 p-2 text-red-700 shadow-sm">
+                                    <AlertTriangle className="h-5 w-5 animate-pulse" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-bold text-red-800">
+                                        {operatorToastError}
+                                    </h3>
+                                    <p className="mt-1 text-xs leading-tight font-semibold text-red-600">
+                                        Debes elegir quién está ejecutando esta
+                                        acción antes de finalizar.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setOperatorToastError(null)}
+                                    className="text-red-400 transition-colors hover:text-red-700"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* CONTENIDO (Con Scroll) */}
-                <div className="flex-1 overflow-y-auto">
-                    {!pdfUrl ? (
-                        <div className="p-4">
-                            {loadingDetails || !displayData ? (
-                                <div className="flex justify-center py-10">
-                                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                                </div>
+                {/* 👇 ESTE ES EL DIV QUE CAMBIA SU TAMAÑO 👇 */}
+                <div
+                    className={`flex w-full animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-300 zoom-in-95 ${
+                        pdfUrl ? 'h-[80vh]' : 'max-h-[85vh]'
+                    }`}
+                >
+                    {/* HEADER */}
+                    <div
+                        className={`flex flex-none items-center justify-between border-b px-4 py-2 ${pdfUrl ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}
+                    >
+                        <h3
+                            className={`flex items-center gap-2 text-lg font-bold ${pdfUrl ? 'text-emerald-700' : 'text-red-700'}`}
+                        >
+                            {pdfUrl ? (
+                                <>
+                                    <CheckCircle2 className="h-6 w-6" /> Salida
+                                    Exitosa
+                                </>
                             ) : (
-                                <div className="flex flex-col gap-6">
-                                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                        {/* --- COLUMNA IZQUIERDA: RESUMEN DE LA ESTADÍA --- */}
-                                        <div>
-                                            <div
-                                                className={`rounded-xl border p-4 text-base shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
-                                            >
-                                                <div className="mb-3 text-center">
-                                                    <span className="block text-[20px] font-bold text-red-600 uppercase">
-                                                        Habitación {room.number}
-                                                    </span>
-                                                    {/* Se oculta el titular si es Factura */}
-                                                    {tipoDocumento !==
-                                                        'factura' && (
-                                                        <span className="mt-1 block animate-in text-[13px] font-bold text-black uppercase fade-in zoom-in">
-                                                            {
-                                                                displayData
-                                                                    .guest
-                                                                    ?.full_name
-                                                            }
-                                                        </span>
-                                                    )}
-                                                </div>
+                                <>
+                                    <AlertTriangle className="h-6 w-6" />{' '}
+                                    Finalizar Estadía
+                                </>
+                            )}
+                        </h3>
+                        <button
+                            onClick={handleCloseFinal}
+                            className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
 
-                                                {/* RECIBO RESUMEN: claridad financiera de un vistazo */}
-                                                <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg bg-white/70 p-2 text-center shadow-inner">
-                                                    <div>
-                                                        <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
-                                                            Total Acordado
-                                                        </p>
-                                                        <p className="text-base font-black text-gray-800">
-                                                            {(
-                                                                hospedajeFinal +
-                                                                consumoFinal
-                                                            ).toFixed(2)}{' '}
-                                                            Bs
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
-                                                            Total Pagado
-                                                        </p>
-                                                        <p className="text-base font-black text-emerald-600">
-                                                            {adelantoFinal.toFixed(
-                                                                2,
-                                                            )}{' '}
-                                                            Bs
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
-                                                            Saldo Pendiente
-                                                        </p>
-                                                        <p
-                                                            className={`text-base font-black ${saldoPagar <= 0 ? 'text-green-600' : 'text-red-600'}`}
-                                                        >
-                                                            {saldoPagar.toFixed(
-                                                                2,
-                                                            )}{' '}
-                                                            Bs
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="mb-2 grid grid-cols-2 gap-2 text-sm text-gray-800">
-                                                    <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
-                                                        <span className="font-bold">
-                                                            Ingreso:
+                    {/* CONTENIDO (Con Scroll) */}
+                    <div className="flex-1 overflow-y-auto">
+                        {!pdfUrl ? (
+                            <div className="p-4">
+                                {loadingDetails || !displayData ? (
+                                    <div className="flex justify-center py-10">
+                                        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-6">
+                                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                            {/* --- COLUMNA IZQUIERDA: RESUMEN DE LA ESTADÍA --- */}
+                                            <div>
+                                                <div
+                                                    className={`rounded-xl border p-4 text-base shadow-inner transition-colors ${waivePenalty ? 'border-amber-200 bg-amber-50' : 'border-red-100 bg-red-50/50'}`}
+                                                >
+                                                    <div className="mb-3 text-center">
+                                                        <span className="block text-[20px] font-bold text-red-600 uppercase">
+                                                            Habitación{' '}
+                                                            {room.number}
                                                         </span>
-                                                        <span>
-                                                            {new Date(
-                                                                displayData.check_in_date,
-                                                            ).toLocaleDateString()}
-                                                        </span>
-                                                        <span className="text-right font-bold">
-                                                            Hora:
-                                                        </span>
-                                                        <span className="text-right">
-                                                            {new Date(
-                                                                displayData.check_in_date,
-                                                            ).toLocaleTimeString(
-                                                                [],
+                                                        {/* Se oculta el titular si es Factura */}
+                                                        {tipoDocumento !==
+                                                            'factura' && (
+                                                            <span className="mt-1 block animate-in text-[13px] font-bold text-black uppercase fade-in zoom-in">
                                                                 {
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit',
-                                                                    hourCycle:
-                                                                        'h23',
-                                                                },
-                                                            )}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
-                                                        <span className="font-bold">
-                                                            Salida:
-                                                        </span>
-                                                        <span>
-                                                            {new Date(
-                                                                displayData.check_out_date,
-                                                            ).toLocaleDateString()}
-                                                        </span>
-                                                        <span className="text-right font-bold">
-                                                            Hora:
-                                                        </span>
-                                                        <span className="text-right">
-                                                            {new Date(
-                                                                displayData.check_out_date,
-                                                            ).toLocaleTimeString(
-                                                                [],
-                                                                {
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit',
-                                                                    hourCycle:
-                                                                        'h23',
-                                                                },
-                                                            )}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="col-span-2 my-1 border-t border-dashed border-gray-700"></div>
-
-                                                    <div className="whitespace-nowrap">
-                                                        <span className="font-bold">
-                                                            Permanencia:
-                                                        </span>{' '}
-                                                        {Math.max(
-                                                            0,
-                                                            displayData.duration_days,
-                                                        )}{' '}
-                                                        noche(s)
-                                                    </div>
-                                                    <div></div>
-
-                                                    <div>
-                                                        <span className="font-bold">
-                                                            Hospedaje:
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        {rebajaConfirmada !==
-                                                        null ? (
-                                                            <span className="font-bold text-green-600">
-                                                                {hospedajeFinal.toFixed(
-                                                                    2,
-                                                                )}{' '}
-                                                                Bs (Rebajado)
-                                                            </span>
-                                                        ) : (
-                                                            <span>
-                                                                {hospedajeFinal.toFixed(
-                                                                    2,
-                                                                )}{' '}
-                                                                Bs
+                                                                    displayData
+                                                                        .guest
+                                                                        ?.full_name
+                                                                }
                                                             </span>
                                                         )}
                                                     </div>
-                                                    {displayData.services_total >
-                                                        0 && (
-                                                        <>
-                                                            <div>
-                                                                <span>
-                                                                    Extras:
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                {displayData.services_total.toFixed(
-                                                                    2,
-                                                                )}{' '}
-                                                                Bs
-                                                            </div>
-                                                        </>
-                                                    )}
 
-                                                    {/* CORRECCIÓN VISUAL: Usar el total_pagado calculado */}
-                                                    {/* Sección de Adelantos en el HTML */}
-                                                    {/* MOSTRAR EL TOTAL PAGADO REAL */}
-                                                    {(displayData as any)
-                                                        ?.total_pagado > 0 && (
-                                                        <>
-                                                            <div className="font-bold text-green-600">
-                                                                Adelanto /
-                                                                Pagado:
-                                                            </div>
-                                                            <div className="text-right font-bold text-green-600">
-                                                                -
+                                                    {/* RECIBO RESUMEN: claridad financiera de un vistazo */}
+                                                    <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg bg-white/70 p-2 text-center shadow-inner">
+                                                        <div>
+                                                            <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                                                Total Acordado
+                                                            </p>
+                                                            <p className="text-base font-black text-gray-800">
                                                                 {(
-                                                                    (
-                                                                        displayData as any
-                                                                    )
-                                                                        ?.total_pagado ||
-                                                                    0
+                                                                    hospedajeFinal +
+                                                                    consumoFinal
                                                                 ).toFixed(
                                                                     2,
                                                                 )}{' '}
                                                                 Bs
-                                                            </div>
-                                                        </>
-                                                    )}
-
-                                                    <div className="col-span-2 mt-1 flex items-center justify-between border-t border-gray-300 pt-1">
-                                                        <span
-                                                            className={`font-bold ${saldoPagar <= 0 ? 'text-green-700' : 'text-red-700'}`}
-                                                        >
-                                                            Saldo Pendiente:
-                                                        </span>
-                                                        <span
-                                                            className={`text-base font-black ${saldoPagar <= 0 ? 'text-green-700' : 'text-red-700'}`}
-                                                        >
-                                                            {saldoPagar.toFixed(
-                                                                2,
-                                                            )}{' '}
-                                                            Bs
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
-                                                    Obs:{' '}
-                                                    {checkin.notes ||
-                                                        'Sin obs.'}
-                                                </div>
-
-                                                {serviceGrouped.length > 0 && (
-                                                    <div className="mt-2 border-t border-red-200/50 pt-2">
-                                                        <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
-                                                            Consumos
-                                                        </span>
-                                                        <div className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
-                                                            {serviceGrouped.map(
-                                                                (
-                                                                    item: any,
-                                                                    idx: number,
-                                                                ) => (
-                                                                    <div
-                                                                        key={
-                                                                            idx
-                                                                        }
-                                                                        className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
-                                                                    >
-                                                                        <span className="font-medium text-gray-600">
-                                                                            {
-                                                                                item.count
-                                                                            }{' '}
-                                                                            x{' '}
-                                                                            {
-                                                                                item.service
-                                                                            }
-                                                                        </span>
-                                                                        <span className="font-bold text-gray-900">
-                                                                            {item.subtotal.toFixed(
-                                                                                2,
-                                                                            )}{' '}
-                                                                            Bs
-                                                                        </span>
-                                                                    </div>
-                                                                ),
-                                                            )}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                                                Total Pagado
+                                                            </p>
+                                                            <p className="text-base font-black text-emerald-600">
+                                                                {adelantoFinal.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                                                Saldo Pendiente
+                                                            </p>
+                                                            <p
+                                                                className={`text-base font-black ${saldoPagar <= 0 ? 'text-green-600' : 'text-red-600'}`}
+                                                            >
+                                                                {saldoPagar.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </p>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        </div>
 
-                                        {/* --- COLUMNA DERECHA: ACCIONES --- */}
-                                        <div>
-                                            {exitToleranceStatus.isValid &&
-                                                displayData &&
-                                                displayData.duration_days >
-                                                    1 && (
-                                                    <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
-                                                        <button
-                                                            type="button"
-                                                            // Solo ejecuta la función si no se ha aplicado la tolerancia
-                                                            onClick={
-                                                                !waivePenalty
-                                                                    ? handleApplyTolerance
-                                                                    : undefined
-                                                            }
-                                                            // Deshabilitamos el botón nativamente en HTML
-                                                            disabled={
-                                                                waivePenalty
-                                                            }
-                                                            className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
-                                                                waivePenalty
-                                                                    ? // Clases cuando YA SE APLICÓ (Desactivado/Gris)
-                                                                      'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-500 opacity-70'
-                                                                    : // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
-                                                                      'animate-pulse cursor-pointer border-green-500 bg-emerald-100 text-green-700 hover:bg-emerald-200'
-                                                            }`}
-                                                            title={
-                                                                waivePenalty
-                                                                    ? 'La tolerancia ya ha sido aplicada.'
-                                                                    : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
-                                                            }
-                                                        >
-                                                            {waivePenalty ? (
-                                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                            ) : (
-                                                                <ArrowRightCircle className="h-3.5 w-3.5" />
-                                                            )}
-                                                            <span>
-                                                                {waivePenalty
-                                                                    ? 'Tolerancia Aplicada'
-                                                                    : 'Aplicar Tolerancia'}
+                                                    <div className="mb-2 grid grid-cols-2 gap-2 text-sm text-gray-800">
+                                                        <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                            <span className="font-bold">
+                                                                Ingreso:
                                                             </span>
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                            <span>
+                                                                {new Date(
+                                                                    displayData.check_in_date,
+                                                                ).toLocaleDateString()}
+                                                            </span>
+                                                            <span className="text-right font-bold">
+                                                                Hora:
+                                                            </span>
+                                                            <span className="text-right">
+                                                                {new Date(
+                                                                    displayData.check_in_date,
+                                                                ).toLocaleTimeString(
+                                                                    [],
+                                                                    {
+                                                                        hour: '2-digit',
+                                                                        minute: '2-digit',
+                                                                        hourCycle:
+                                                                            'h23',
+                                                                    },
+                                                                )}
+                                                            </span>
+                                                        </div>
 
-                                            {/* BLOQUE REBAJA */}
-                                            <div className="mt-4 flex w-full justify-end">
-                                                {!mostrarDescuento ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setMostrarDescuento(
-                                                                true,
-                                                            )
-                                                        }
-                                                        className="text-bold text-sm font-bold text-red-600 transition-colors hover:text-red-500 hover:underline"
-                                                    >
-                                                        + Aplicar descuento
-                                                    </button>
-                                                ) : (
-                                                    <div className="relative w-full rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-inner">
+                                                        <div className="col-span-2 grid grid-cols-[70px_1fr_50px_80px] items-center">
+                                                            <span className="font-bold">
+                                                                Salida:
+                                                            </span>
+                                                            <span>
+                                                                {new Date(
+                                                                    displayData.check_out_date,
+                                                                ).toLocaleDateString()}
+                                                            </span>
+                                                            <span className="text-right font-bold">
+                                                                Hora:
+                                                            </span>
+                                                            <span className="text-right">
+                                                                {new Date(
+                                                                    displayData.check_out_date,
+                                                                ).toLocaleTimeString(
+                                                                    [],
+                                                                    {
+                                                                        hour: '2-digit',
+                                                                        minute: '2-digit',
+                                                                        hourCycle:
+                                                                            'h23',
+                                                                    },
+                                                                )}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="col-span-2 my-1 border-t border-dashed border-gray-700"></div>
+
+                                                        <div className="whitespace-nowrap">
+                                                            <span className="font-bold">
+                                                                Permanencia:
+                                                            </span>{' '}
+                                                            {Math.max(
+                                                                0,
+                                                                displayData.duration_days,
+                                                            )}{' '}
+                                                            noche(s)
+                                                        </div>
+                                                        <div></div>
+
+                                                        <div>
+                                                            <span className="font-bold">
+                                                                Hospedaje:
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {rebajaConfirmada !==
+                                                            null ? (
+                                                                <span className="font-bold text-green-600">
+                                                                    {hospedajeFinal.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                    (Rebajado)
+                                                                </span>
+                                                            ) : (
+                                                                <span>
+                                                                    {hospedajeFinal.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {displayData.services_total >
+                                                            0 && (
+                                                            <>
+                                                                <div>
+                                                                    <span>
+                                                                        Extras:
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    {displayData.services_total.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </div>
+                                                            </>
+                                                        )}
+
+                                                        {/* CORRECCIÓN VISUAL: Usar el total_pagado calculado */}
+                                                        {/* Sección de Adelantos en el HTML */}
+                                                        {/* MOSTRAR EL TOTAL PAGADO REAL */}
+                                                        {(displayData as any)
+                                                            ?.total_pagado >
+                                                            0 && (
+                                                            <>
+                                                                <div className="font-bold text-green-600">
+                                                                    Adelanto /
+                                                                    Pagado:
+                                                                </div>
+                                                                <div className="text-right font-bold text-green-600">
+                                                                    -
+                                                                    {(
+                                                                        (
+                                                                            displayData as any
+                                                                        )
+                                                                            ?.total_pagado ||
+                                                                        0
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </div>
+                                                            </>
+                                                        )}
+
+                                                        <div className="col-span-2 mt-1 flex items-center justify-between border-t border-gray-300 pt-1">
+                                                            <span
+                                                                className={`font-bold ${saldoPagar <= 0 ? 'text-green-700' : 'text-red-700'}`}
+                                                            >
+                                                                Saldo Pendiente:
+                                                            </span>
+                                                            <span
+                                                                className={`text-base font-black ${saldoPagar <= 0 ? 'text-green-700' : 'text-red-700'}`}
+                                                            >
+                                                                {saldoPagar.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-red-200/50 pt-2 text-xs text-gray-500 italic">
+                                                        Obs:{' '}
+                                                        {checkin.notes ||
+                                                            'Sin obs.'}
+                                                    </div>
+
+                                                    {serviceGrouped.length >
+                                                        0 && (
+                                                        <div className="mt-2 border-t border-red-200/50 pt-2">
+                                                            <span className="mb-1 block text-[10px] font-bold text-red-600 uppercase">
+                                                                Consumos
+                                                            </span>
+                                                            <div className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 text-xs text-gray-700">
+                                                                {serviceGrouped.map(
+                                                                    (
+                                                                        item: any,
+                                                                        idx: number,
+                                                                    ) => (
+                                                                        <div
+                                                                            key={
+                                                                                idx
+                                                                            }
+                                                                            className="flex justify-between border-b border-gray-100 pb-1 last:border-0"
+                                                                        >
+                                                                            <span className="font-medium text-gray-600">
+                                                                                {
+                                                                                    item.count
+                                                                                }{' '}
+                                                                                x{' '}
+                                                                                {
+                                                                                    item.service
+                                                                                }
+                                                                            </span>
+                                                                            <span className="font-bold text-gray-900">
+                                                                                {item.subtotal.toFixed(
+                                                                                    2,
+                                                                                )}{' '}
+                                                                                Bs
+                                                                            </span>
+                                                                        </div>
+                                                                    ),
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* --- COLUMNA DERECHA: ACCIONES --- */}
+                                            <div>
+                                                {exitToleranceStatus.isValid &&
+                                                    displayData &&
+                                                    displayData.duration_days >
+                                                        1 && (
+                                                        <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
+                                                            <button
+                                                                type="button"
+                                                                // Solo ejecuta la función si no se ha aplicado la tolerancia
+                                                                onClick={
+                                                                    !waivePenalty
+                                                                        ? handleApplyTolerance
+                                                                        : undefined
+                                                                }
+                                                                // Deshabilitamos el botón nativamente en HTML
+                                                                disabled={
+                                                                    waivePenalty
+                                                                }
+                                                                className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
+                                                                    waivePenalty
+                                                                        ? // Clases cuando YA SE APLICÓ (Desactivado/Gris)
+                                                                          'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-500 opacity-70'
+                                                                        : // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
+                                                                          'animate-pulse cursor-pointer border-green-500 bg-emerald-100 text-green-700 hover:bg-emerald-200'
+                                                                }`}
+                                                                title={
+                                                                    waivePenalty
+                                                                        ? 'La tolerancia ya ha sido aplicada.'
+                                                                        : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
+                                                                }
+                                                            >
+                                                                {waivePenalty ? (
+                                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                                ) : (
+                                                                    <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                                )}
+                                                                <span>
+                                                                    {waivePenalty
+                                                                        ? 'Tolerancia Aplicada'
+                                                                        : 'Aplicar Tolerancia'}
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                {/* BLOQUE REBAJA */}
+                                                <div className="mt-4 flex w-full justify-end">
+                                                    {!mostrarDescuento ? (
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
+                                                            onClick={() =>
                                                                 setMostrarDescuento(
-                                                                    false,
-                                                                );
-                                                                setRebaja('');
-                                                                setRebajaConfirmada(
-                                                                    null,
-                                                                );
-                                                            }}
-                                                            className="absolute top-3 right-3 flex items-center gap-1 text-[11px] font-bold text-red-500 uppercase hover:text-red-600"
+                                                                    true,
+                                                                )
+                                                            }
+                                                            className="text-bold text-sm font-bold text-red-600 transition-colors hover:text-red-500 hover:underline"
                                                         >
-                                                            Cancelar x
+                                                            + Aplicar descuento
                                                         </button>
-
-                                                        <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
-                                                            Nuevo Total de
-                                                            Hospedaje (Bs)
-                                                        </label>
-                                                        <div className="mt-2 flex items-center gap-2">
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                value={rebaja}
-                                                                onChange={(
-                                                                    e,
-                                                                ) => {
+                                                    ) : (
+                                                        <div className="relative w-full rounded-xl border border-red-200 bg-red-50/80 p-3 shadow-inner">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setMostrarDescuento(
+                                                                        false,
+                                                                    );
                                                                     setRebaja(
-                                                                        e.target
-                                                                            .value,
+                                                                        '',
                                                                     );
                                                                     setRebajaConfirmada(
                                                                         null,
-                                                                    ); // Borra confirmación si vuelve a escribir
+                                                                    );
                                                                 }}
-                                                                disabled={
-                                                                    rebajaConfirmada !==
-                                                                    null
-                                                                }
-                                                                className="w-full [appearance:textfield] rounded-lg border-red-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-red-500 focus:ring-red-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                            />
+                                                                className="absolute top-3 right-3 flex items-center gap-1 text-[11px] font-bold text-red-500 uppercase hover:text-red-600"
+                                                            >
+                                                                Cancelar x
+                                                            </button>
 
-                                                            {rebajaConfirmada ===
-                                                            null ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={
-                                                                        handleConfirmarRebaja
+                                                            <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
+                                                                Nuevo Total de
+                                                                Hospedaje (Bs)
+                                                            </label>
+                                                            <div className="mt-2 flex items-center gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    value={
+                                                                        rebaja
                                                                     }
-                                                                    disabled={
-                                                                        !rebaja
-                                                                    }
-                                                                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-700 disabled:opacity-50"
-                                                                >
-                                                                    Confirmar
-                                                                </button>
-                                                            ) : (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        setRebaja(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        );
                                                                         setRebajaConfirmada(
                                                                             null,
-                                                                        )
+                                                                        ); // Borra confirmación si vuelve a escribir
+                                                                    }}
+                                                                    disabled={
+                                                                        rebajaConfirmada !==
+                                                                        null
                                                                     }
-                                                                    className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-600"
-                                                                >
-                                                                    Editar
-                                                                </button>
-                                                            )}
+                                                                    className="w-full [appearance:textfield] rounded-lg border-red-300 px-3 py-2 text-sm font-bold text-gray-800 shadow-sm focus:border-red-500 focus:ring-red-500 disabled:bg-gray-100 disabled:text-gray-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                />
+
+                                                                {rebajaConfirmada ===
+                                                                null ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={
+                                                                            handleConfirmarRebaja
+                                                                        }
+                                                                        disabled={
+                                                                            !rebaja
+                                                                        }
+                                                                        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-700 disabled:opacity-50"
+                                                                    >
+                                                                        Confirmar
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setRebajaConfirmada(
+                                                                                null,
+                                                                            )
+                                                                        }
+                                                                        className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white shadow transition-colors hover:bg-red-600"
+                                                                    >
+                                                                        Editar
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                    )}
+                                                </div>
 
-                                            {/* SECCIÓN 1: TIPO DE DOCUMENTO */}
+                                                {/* SECCIÓN 1: TIPO DE DOCUMENTO */}
 
-                                            <div className="mt-4 text-center">
-                                                <h4 className="mb-3 text-sm font-bold tracking-wide text-gray-800 uppercase">
-                                                    1. Tipo de Documento
-                                                </h4>
-                                                <div className="flex justify-center gap-3">
-                                                    <button
-                                                        onClick={() =>
-                                                            setTipoDocumento(
-                                                                'recibo',
-                                                            )
-                                                        }
-                                                        className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-green-500 bg-emerald-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
-                                                    >
-                                                        <div
-                                                            className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-500' : 'border-gray-300'}`}
+                                                <div className="mt-4 text-center">
+                                                    <h4 className="mb-3 text-sm font-bold tracking-wide text-gray-800 uppercase">
+                                                        1. Tipo de Documento
+                                                    </h4>
+                                                    <div className="flex justify-center gap-3">
+                                                        <button
+                                                            onClick={() =>
+                                                                setTipoDocumento(
+                                                                    'recibo',
+                                                                )
+                                                            }
+                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${tipoDocumento === 'recibo' ? 'border-green-500 bg-emerald-50 text-green-500 shadow-sm ring-1 ring-green-500' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}
                                                         >
-                                                            {tipoDocumento ===
-                                                                'recibo' && (
-                                                                <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                                                            )}
-                                                        </div>
-                                                        <span className="text-xs font-bold uppercase">
-                                                            Recibo
-                                                        </span>
-                                                    </button>
-                                                    {/*}
+                                                            <div
+                                                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${tipoDocumento === 'recibo' ? 'border-green-500' : 'border-gray-300'}`}
+                                                            >
+                                                                {tipoDocumento ===
+                                                                    'recibo' && (
+                                                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                                                                )}
+                                                            </div>
+                                                            <span className="text-xs font-bold uppercase">
+                                                                Recibo
+                                                            </span>
+                                                        </button>
+                                                        {/*}
                                                 <button
                                                     onClick={() =>
                                                         setTipoDocumento(
@@ -2822,247 +2927,75 @@ function CheckoutConfirmationModal({
                                                     </span>
                                                 </button>
                                                 {*/}
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            {/* SECCIÓN 2: MÉTODO DE PAGO (solo si queda saldo por cobrar) */}
-                                            {tipoDocumento &&
-                                                saldoPagar > 0 && (
-                                                    <div className="mt-5 flex-1 animate-in text-center duration-300 fade-in slide-in-from-top-2">
-                                                        <h4 className="mb-3 flex items-center justify-center gap-1 text-sm font-bold tracking-widest text-gray-800 uppercase">
-                                                            <Banknote className="h-4 w-4 text-gray-400" />{' '}
-                                                            2. Tipo de Pago
-                                                        </h4>
+                                                {/* SECCIÓN 2: MÉTODO DE PAGO (solo si queda saldo por cobrar) */}
+                                                {tipoDocumento &&
+                                                    saldoPagar > 0 && (
+                                                        <div className="mt-5 flex-1 animate-in text-center duration-300 fade-in slide-in-from-top-2">
+                                                            <h4 className="mb-3 flex items-center justify-center gap-1 text-sm font-bold tracking-widest text-gray-800 uppercase">
+                                                                <Banknote className="h-4 w-4 text-gray-400" />{' '}
+                                                                2. Tipo de Pago
+                                                            </h4>
 
-                                                        {/* CUADRÍCULA PRINCIPAL (TODO EN UNO) */}
-                                                        {metodoPago !==
-                                                            'ambos' && (
-                                                            <div className="mb-4 grid animate-in grid-cols-3 gap-2 zoom-in-95 fade-in">
-                                                                {/* 1. EFECTIVO */}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        setMetodoPago(
-                                                                            'efectivo',
-                                                                        )
-                                                                    }
-                                                                    className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
-                                                                        metodoPago ===
-                                                                        'efectivo'
-                                                                            ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-green-500'
-                                                                            : 'border-gray-300 bg-white hover:bg-gray-50'
-                                                                    }`}
-                                                                >
-                                                                    <Banknote
-                                                                        className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-500'}`}
-                                                                    />
-                                                                    <span
-                                                                        className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-600'}`}
-                                                                    >
-                                                                        Efectivo
-                                                                    </span>
-                                                                </button>
-
-                                                                {/* 2 AL 5. BANCOS (QR DIRECTO) */}
-                                                                {[
-                                                                    'YAPE',
-                                                                    'BNB',
-                                                                    'FIE',
-                                                                    'ECO',
-                                                                ].map(
-                                                                    (banco) => {
-                                                                        const isSelected =
-                                                                            metodoPago ===
-                                                                            banco.toLowerCase();
-                                                                        return (
-                                                                            <button
-                                                                                key={
-                                                                                    banco
-                                                                                }
-                                                                                type="button"
-                                                                                onClick={() =>
-                                                                                    setMetodoPago(
-                                                                                        banco.toLowerCase(),
-                                                                                    )
-                                                                                }
-                                                                                className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
-                                                                                    isSelected
-                                                                                        ? 'border-green-500 bg-purple-50 shadow-md ring-2 ring-green-500'
-                                                                                        : 'border-gray-300 bg-white hover:bg-gray-50'
-                                                                                }`}
-                                                                            >
-                                                                                <img
-                                                                                    src={`/images/bancos/${banco.toLowerCase()}.png`}
-                                                                                    alt={
-                                                                                        banco
-                                                                                    }
-                                                                                    className={`mb-1 h-6 object-contain transition-all ${!isSelected && 'opacity-70 grayscale'}`}
-                                                                                />
-                                                                                <span
-                                                                                    className={`text-[11px] font-black uppercase ${isSelected ? 'text-green-800' : 'text-gray-600'}`}
-                                                                                >
-                                                                                    {
-                                                                                        banco
-                                                                                    }
-                                                                                </span>
-                                                                            </button>
-                                                                        );
-                                                                    },
-                                                                )}
-
-                                                                {/* 6. AMBOS (MIXTO) */}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        setMetodoPago(
-                                                                            'ambos',
-                                                                        )
-                                                                    }
-                                                                    className="flex flex-col items-center justify-center rounded-xl border border-gray-300 bg-white py-3 shadow-sm transition-all hover:bg-gray-100"
-                                                                >
-                                                                    <SplitSquareHorizontal className="mb-1 h-6 w-6 text-gray-500" />
-                                                                    <span className="text-[10px] font-black text-gray-600 uppercase">
-                                                                        Ambos
-                                                                        (Mixto)
-                                                                    </span>
-                                                                </button>
-                                                            </div>
-                                                        )}
-
-                                                        {/* MODO "AMBOS" (MIXTO) */}
-                                                        {metodoPago ===
-                                                            'ambos' && (
-                                                            <div className="mt-2 animate-in rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm fade-in slide-in-from-right-4">
-                                                                <div className="flex justify-end">
+                                                            {/* CUADRÍCULA PRINCIPAL (TODO EN UNO) */}
+                                                            {metodoPago !==
+                                                                'ambos' && (
+                                                                <div className="mb-4 grid animate-in grid-cols-3 gap-2 zoom-in-95 fade-in">
+                                                                    {/* 1. EFECTIVO */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() =>
                                                                             setMetodoPago(
-                                                                                null,
+                                                                                'efectivo',
                                                                             )
                                                                         }
-                                                                        className="mb-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] font-black text-gray-600 uppercase shadow-sm transition-colors hover:bg-gray-100 hover:text-gray-900"
+                                                                        className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
+                                                                            metodoPago ===
+                                                                            'efectivo'
+                                                                                ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-green-500'
+                                                                                : 'border-gray-300 bg-white hover:bg-gray-50'
+                                                                        }`}
                                                                     >
-                                                                        <ArrowLeft className="h-3 w-3" />{' '}
-                                                                        Volver
-                                                                    </button>
-                                                                </div>
-
-                                                                <div
-                                                                    className={`mb-4 rounded-xl border-2 p-3 text-center transition-all duration-300 ${estaCubierto ? 'border-green-500 bg-green-50 text-green-800 shadow-inner' : 'border-red-300 bg-white text-gray-800 shadow-md'}`}
-                                                                >
-                                                                    <span
-                                                                        className={`mb-1 block text-[10px] font-black tracking-widest uppercase ${estaCubierto ? 'text-green-700' : 'text-red-500'}`}
-                                                                    >
-                                                                        {estaCubierto
-                                                                            ? '¡Monto Completado!'
-                                                                            : 'Monto Restante por Cubrir'}
-                                                                    </span>
-                                                                    <div className="flex items-center justify-center gap-2">
-                                                                        {estaCubierto && (
-                                                                            <CheckCircle2 className="h-6 w-6 animate-in text-green-600 zoom-in" />
-                                                                        )}
+                                                                        <Banknote
+                                                                            className={`mb-1 h-6 w-6 ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-500'}`}
+                                                                        />
                                                                         <span
-                                                                            className={`text-2xl font-black ${estaCubierto ? 'text-green-700' : 'text-gray-900'}`}
+                                                                            className={`text-[10px] font-black uppercase ${metodoPago === 'efectivo' ? 'text-green-500' : 'text-gray-600'}`}
                                                                         >
-                                                                            {restanteMixto.toFixed(
-                                                                                2,
-                                                                            )}{' '}
-                                                                            Bs
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
-                                                                    {/* INPUT EFECTIVO */}
-                                                                    <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
-                                                                        <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
-                                                                            <Banknote className="h-4 w-4 text-gray-400" />{' '}
                                                                             Efectivo
-                                                                            (Bs)
-                                                                        </label>
-                                                                        <input
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            min="0"
-                                                                            placeholder="0.00"
-                                                                            value={
-                                                                                montoEfectivo
-                                                                            }
-                                                                            onChange={(
-                                                                                e,
-                                                                            ) =>
-                                                                                handleMontoEfectivoChange(
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                                )
-                                                                            }
-                                                                            className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
-                                                                        />
-                                                                    </div>
-                                                                    {/* INPUT QR */}
-                                                                    <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
-                                                                        <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
-                                                                            <SplitSquareHorizontal className="h-4 w-4 text-gray-400" />{' '}
-                                                                            Banco
-                                                                            / QR
-                                                                            (Bs)
-                                                                        </label>
-                                                                        <input
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            min="0"
-                                                                            placeholder="0.00"
-                                                                            value={
-                                                                                montoQR
-                                                                            }
-                                                                            onChange={(
-                                                                                e,
-                                                                            ) =>
-                                                                                handleMontoQRChange(
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                                )
-                                                                            }
-                                                                            className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-purple-500 focus:ring-purple-500"
-                                                                        />
-                                                                    </div>
-                                                                </div>
+                                                                        </span>
+                                                                    </button>
 
-                                                                {/* SELECCIÓN DE BANCO PARA EL QR MIXTO */}
-                                                                <div className="pt-3">
-                                                                    <label className="mb-3 block text-center text-[10px] font-black text-gray-700 uppercase">
-                                                                        Seleccione
-                                                                        el Banco
-                                                                        del QR:
-                                                                    </label>
-                                                                    <div className="grid grid-cols-4 gap-2">
-                                                                        {[
-                                                                            'YAPE',
-                                                                            'BNB',
-                                                                            'FIE',
-                                                                            'ECO',
-                                                                        ].map(
-                                                                            (
-                                                                                banco,
-                                                                            ) => (
+                                                                    {/* 2 AL 5. BANCOS (QR DIRECTO) */}
+                                                                    {[
+                                                                        'YAPE',
+                                                                        'BNB',
+                                                                        'FIE',
+                                                                        'ECO',
+                                                                    ].map(
+                                                                        (
+                                                                            banco,
+                                                                        ) => {
+                                                                            const isSelected =
+                                                                                metodoPago ===
+                                                                                banco.toLowerCase();
+                                                                            return (
                                                                                 <button
                                                                                     key={
                                                                                         banco
                                                                                     }
                                                                                     type="button"
                                                                                     onClick={() =>
-                                                                                        setBancoMixto(
+                                                                                        setMetodoPago(
                                                                                             banco.toLowerCase(),
                                                                                         )
                                                                                     }
-                                                                                    className={`flex flex-col items-center justify-center rounded-lg border-2 py-2 transition-all ${
-                                                                                        bancoMixto ===
-                                                                                        banco.toLowerCase()
-                                                                                            ? 'scale-105 border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-500'
-                                                                                            : 'border-gray-300 bg-white hover:bg-gray-100'
+                                                                                    className={`flex flex-col items-center justify-center rounded-xl border py-3 transition-all ${
+                                                                                        isSelected
+                                                                                            ? 'border-green-500 bg-purple-50 shadow-md ring-2 ring-green-500'
+                                                                                            : 'border-gray-300 bg-white hover:bg-gray-50'
                                                                                     }`}
                                                                                 >
                                                                                     <img
@@ -3070,458 +3003,648 @@ function CheckoutConfirmationModal({
                                                                                         alt={
                                                                                             banco
                                                                                         }
-                                                                                        className={`h-6 object-contain transition-all ${bancoMixto !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
+                                                                                        className={`mb-1 h-6 object-contain transition-all ${!isSelected && 'opacity-70 grayscale'}`}
                                                                                     />
+                                                                                    <span
+                                                                                        className={`text-[11px] font-black uppercase ${isSelected ? 'text-green-800' : 'text-gray-600'}`}
+                                                                                    >
+                                                                                        {
+                                                                                            banco
+                                                                                        }
+                                                                                    </span>
                                                                                 </button>
+                                                                            );
+                                                                        },
+                                                                    )}
+
+                                                                    {/* 6. AMBOS (MIXTO) */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setMetodoPago(
+                                                                                'ambos',
+                                                                            )
+                                                                        }
+                                                                        className="flex flex-col items-center justify-center rounded-xl border border-gray-300 bg-white py-3 shadow-sm transition-all hover:bg-gray-100"
+                                                                    >
+                                                                        <SplitSquareHorizontal className="mb-1 h-6 w-6 text-gray-500" />
+                                                                        <span className="text-[10px] font-black text-gray-600 uppercase">
+                                                                            Ambos
+                                                                            (Mixto)
+                                                                        </span>
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {/* MODO "AMBOS" (MIXTO) */}
+                                                            {metodoPago ===
+                                                                'ambos' && (
+                                                                <div className="mt-2 animate-in rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm fade-in slide-in-from-right-4">
+                                                                    <div className="flex justify-end">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setMetodoPago(
+                                                                                    null,
+                                                                                )
+                                                                            }
+                                                                            className="mb-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] font-black text-gray-600 uppercase shadow-sm transition-colors hover:bg-gray-100 hover:text-gray-900"
+                                                                        >
+                                                                            <ArrowLeft className="h-3 w-3" />{' '}
+                                                                            Volver
+                                                                        </button>
+                                                                    </div>
+
+                                                                    <div
+                                                                        className={`mb-4 rounded-xl border-2 p-3 text-center transition-all duration-300 ${estaCubierto ? 'border-green-500 bg-green-50 text-green-800 shadow-inner' : 'border-red-300 bg-white text-gray-800 shadow-md'}`}
+                                                                    >
+                                                                        <span
+                                                                            className={`mb-1 block text-[10px] font-black tracking-widest uppercase ${estaCubierto ? 'text-green-700' : 'text-red-500'}`}
+                                                                        >
+                                                                            {estaCubierto
+                                                                                ? '¡Monto Completado!'
+                                                                                : 'Monto Restante por Cubrir'}
+                                                                        </span>
+                                                                        <div className="flex items-center justify-center gap-2">
+                                                                            {estaCubierto && (
+                                                                                <CheckCircle2 className="h-6 w-6 animate-in text-green-600 zoom-in" />
+                                                                            )}
+                                                                            <span
+                                                                                className={`text-2xl font-black ${estaCubierto ? 'text-green-700' : 'text-gray-900'}`}
+                                                                            >
+                                                                                {restanteMixto.toFixed(
+                                                                                    2,
+                                                                                )}{' '}
+                                                                                Bs
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
+                                                                        {/* INPUT EFECTIVO */}
+                                                                        <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
+                                                                            <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
+                                                                                <Banknote className="h-4 w-4 text-gray-400" />{' '}
+                                                                                Efectivo
+                                                                                (Bs)
+                                                                            </label>
+                                                                            <input
+                                                                                type="number"
+                                                                                step="0.01"
+                                                                                min="0"
+                                                                                placeholder="0.00"
+                                                                                value={
+                                                                                    montoEfectivo
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    handleMontoEfectivoChange(
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                                className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
+                                                                            />
+                                                                        </div>
+                                                                        {/* INPUT QR */}
+                                                                        <div className="rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
+                                                                            <label className="mb-2 flex items-center justify-center gap-1 text-[10px] font-black text-gray-500 uppercase">
+                                                                                <SplitSquareHorizontal className="h-4 w-4 text-gray-400" />{' '}
+                                                                                Banco
+                                                                                /
+                                                                                QR
+                                                                                (Bs)
+                                                                            </label>
+                                                                            <input
+                                                                                type="number"
+                                                                                step="0.01"
+                                                                                min="0"
+                                                                                placeholder="0.00"
+                                                                                value={
+                                                                                    montoQR
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    handleMontoQRChange(
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                                className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-purple-500 focus:ring-purple-500"
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* SELECCIÓN DE BANCO PARA EL QR MIXTO */}
+                                                                    <div className="pt-3">
+                                                                        <label className="mb-3 block text-center text-[10px] font-black text-gray-700 uppercase">
+                                                                            Seleccione
+                                                                            el
+                                                                            Banco
+                                                                            del
+                                                                            QR:
+                                                                        </label>
+                                                                        <div className="grid grid-cols-4 gap-2">
+                                                                            {[
+                                                                                'YAPE',
+                                                                                'BNB',
+                                                                                'FIE',
+                                                                                'ECO',
+                                                                            ].map(
+                                                                                (
+                                                                                    banco,
+                                                                                ) => (
+                                                                                    <button
+                                                                                        key={
+                                                                                            banco
+                                                                                        }
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setBancoMixto(
+                                                                                                banco.toLowerCase(),
+                                                                                            )
+                                                                                        }
+                                                                                        className={`flex flex-col items-center justify-center rounded-lg border-2 py-2 transition-all ${
+                                                                                            bancoMixto ===
+                                                                                            banco.toLowerCase()
+                                                                                                ? 'scale-105 border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-500'
+                                                                                                : 'border-gray-300 bg-white hover:bg-gray-100'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <img
+                                                                                            src={`/images/bancos/${banco.toLowerCase()}.png`}
+                                                                                            alt={
+                                                                                                banco
+                                                                                            }
+                                                                                            className={`h-6 object-contain transition-all ${bancoMixto !== banco.toLowerCase() && 'opacity-70 grayscale'}`}
+                                                                                        />
+                                                                                    </button>
+                                                                                ),
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                {/* CUENTA YA SALDADA: sin campos de pago, solo confirmación */}
+                                                {tipoDocumento &&
+                                                    saldoPagar <= 0 && (
+                                                        <div className="mt-5 flex flex-col items-center gap-2 rounded-xl border-2 border-green-500 bg-green-50 p-6 text-center shadow-sm">
+                                                            <CheckCircle2 className="h-8 w-8 text-green-600" />
+                                                            <p className="text-sm font-bold text-green-700">
+                                                                Cuenta saldada.
+                                                                Listo para
+                                                                finalizar.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                            </div>
+                                        </div>
+
+                                        {/* --- FACTURACIÓN (bloque de ancho completo; hoy inactivo, la opción "Con Factura" está deshabilitada) --- */}
+                                        {tipoDocumento === 'factura' && (
+                                            <div className="flex h-full flex-1 animate-in flex-col rounded-2xl border border-red-100 bg-red-50/30 p-6 shadow-sm duration-300 fade-in slide-in-from-right-4">
+                                                {/* CABECERA: FECHA Y DATOS (Se mantiene igual) */}
+                                                <div className="mb-5 border-b border-blue-200 pb-5">
+                                                    <div className="mb-4 flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-gray-800 uppercase">
+                                                            Fecha:{' '}
+                                                            {new Date().toLocaleDateString(
+                                                                'es-BO',
+                                                            )}
+                                                        </span>
+                                                        <div className="flex items-center gap-3">
+                                                            <label className="text-xs font-bold whitespace-nowrap text-gray-500 uppercase">
+                                                                NIT / CI
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={
+                                                                    nitFactura
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setNitFactura(
+                                                                        e.target.value.toUpperCase(),
+                                                                    )
+                                                                }
+                                                                className="w-48 rounded-xl border border-gray-400 px-2 py-2 text-sm text-black uppercase shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                                placeholder="0000000"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="smb-4 flex items-center gap-3">
+                                                        <label className="mb-1.5 block text-xs font-bold text-gray-800 uppercase">
+                                                            Señor(es)
+                                                        </label>
+                                                        <div className="relative flex-1">
+                                                            <input
+                                                                type="text"
+                                                                className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm text-black uppercase shadow-sm placeholder:text-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                                                placeholder="ESCRIBE PARA BUSCAR..."
+                                                                value={
+                                                                    nombreFactura
+                                                                }
+                                                                onChange={
+                                                                    handleNameChange
+                                                                }
+                                                                onFocus={() => {
+                                                                    if (
+                                                                        nombreFactura.length >
+                                                                        1
+                                                                    )
+                                                                        setIsDropdownOpen(
+                                                                            true,
+                                                                        );
+                                                                }}
+                                                                autoComplete="off"
+                                                            />
+                                                            {isDropdownOpen &&
+                                                                filteredGuests.length >
+                                                                    0 && (
+                                                                    <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                                        {filteredGuests.map(
+                                                                            (
+                                                                                g,
+                                                                            ) => (
+                                                                                <div
+                                                                                    key={
+                                                                                        g.id
+                                                                                    }
+                                                                                    onClick={() =>
+                                                                                        handleSelectGuest(
+                                                                                            g,
+                                                                                        )
+                                                                                    }
+                                                                                    className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm transition-colors last:border-0 hover:bg-green-50"
+                                                                                >
+                                                                                    <div className="font-bold text-gray-800">
+                                                                                        {
+                                                                                            g.full_name
+                                                                                        }
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                                        <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono font-bold text-gray-600">
+                                                                                            CI:{' '}
+                                                                                            {g.identification_number ||
+                                                                                                'S/N'}
+                                                                                        </span>
+                                                                                        {g.nationality && (
+                                                                                            <span className="text-gray-400">
+                                                                                                •{' '}
+                                                                                                {
+                                                                                                    g.nationality
+                                                                                                }
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
                                                                             ),
                                                                         )}
                                                                     </div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                            {/* CUENTA YA SALDADA: sin campos de pago, solo confirmación */}
-                                            {tipoDocumento &&
-                                                saldoPagar <= 0 && (
-                                                    <div className="mt-5 flex flex-col items-center gap-2 rounded-xl border-2 border-green-500 bg-green-50 p-6 text-center shadow-sm">
-                                                        <CheckCircle2 className="h-8 w-8 text-green-600" />
-                                                        <p className="text-sm font-bold text-green-700">
-                                                            Cuenta saldada.
-                                                            Listo para
-                                                            finalizar.
-                                                        </p>
-                                                    </div>
-                                                )}
-                                        </div>
-                                    </div>
-
-                                    {/* --- FACTURACIÓN (bloque de ancho completo; hoy inactivo, la opción "Con Factura" está deshabilitada) --- */}
-                                    {tipoDocumento === 'factura' && (
-                                        <div className="flex h-full flex-1 animate-in flex-col rounded-2xl border border-red-100 bg-red-50/30 p-6 shadow-sm duration-300 fade-in slide-in-from-right-4">
-                                            {/* CABECERA: FECHA Y DATOS (Se mantiene igual) */}
-                                            <div className="mb-5 border-b border-blue-200 pb-5">
-                                                <div className="mb-4 flex items-center justify-between">
-                                                    <span className="text-xs font-bold text-gray-800 uppercase">
-                                                        Fecha:{' '}
-                                                        {new Date().toLocaleDateString(
-                                                            'es-BO',
-                                                        )}
-                                                    </span>
-                                                    <div className="flex items-center gap-3">
-                                                        <label className="text-xs font-bold whitespace-nowrap text-gray-500 uppercase">
-                                                            NIT / CI
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={nitFactura}
-                                                            onChange={(e) =>
-                                                                setNitFactura(
-                                                                    e.target.value.toUpperCase(),
-                                                                )
-                                                            }
-                                                            className="w-48 rounded-xl border border-gray-400 px-2 py-2 text-sm text-black uppercase shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                                            placeholder="0000000"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="smb-4 flex items-center gap-3">
-                                                    <label className="mb-1.5 block text-xs font-bold text-gray-800 uppercase">
-                                                        Señor(es)
-                                                    </label>
-                                                    <div className="relative flex-1">
-                                                        <input
-                                                            type="text"
-                                                            className="w-full rounded-xl border border-gray-400 py-2 pl-10 text-sm text-black uppercase shadow-sm placeholder:text-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                                            placeholder="ESCRIBE PARA BUSCAR..."
-                                                            value={
-                                                                nombreFactura
-                                                            }
-                                                            onChange={
-                                                                handleNameChange
-                                                            }
-                                                            onFocus={() => {
-                                                                if (
-                                                                    nombreFactura.length >
-                                                                    1
-                                                                )
-                                                                    setIsDropdownOpen(
-                                                                        true,
-                                                                    );
-                                                            }}
-                                                            autoComplete="off"
-                                                        />
-                                                        {isDropdownOpen &&
-                                                            filteredGuests.length >
-                                                                0 && (
-                                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                                    {filteredGuests.map(
-                                                                        (g) => (
-                                                                            <div
-                                                                                key={
-                                                                                    g.id
-                                                                                }
-                                                                                onClick={() =>
-                                                                                    handleSelectGuest(
-                                                                                        g,
-                                                                                    )
-                                                                                }
-                                                                                className="cursor-pointer border-b border-gray-50 px-4 py-3 text-sm transition-colors last:border-0 hover:bg-green-50"
-                                                                            >
-                                                                                <div className="font-bold text-gray-800">
-                                                                                    {
-                                                                                        g.full_name
-                                                                                    }
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono font-bold text-gray-600">
-                                                                                        CI:{' '}
-                                                                                        {g.identification_number ||
-                                                                                            'S/N'}
-                                                                                    </span>
-                                                                                    {g.nationality && (
-                                                                                        <span className="text-gray-400">
-                                                                                            •{' '}
-                                                                                            {
-                                                                                                g.nationality
-                                                                                            }
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        ),
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* SECCIÓN DETALLES DE LA FACTURA */}
-                                            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                                                <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-2">
-                                                    <h4 className="text-xs font-bold tracking-wider text-red-600 uppercase">
-                                                        Detalle de la Factura
-                                                    </h4>
-                                                    {loadingDetails && (
-                                                        <span className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase">
-                                                            <Loader2 className="h-3 w-3 animate-spin" />{' '}
-                                                            Extras...
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div className="w-full text-sm">
-                                                    {/* CABECERA GRID */}
-                                                    <div className="mb-2 grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
-                                                        <div className="text-left">
-                                                            Descripción
-                                                        </div>
-                                                        <div className="text-center">
-                                                            Cant.
-                                                        </div>
-                                                        <div className="text-right">
-                                                            P. Unitario
-                                                        </div>
-                                                        <div className="text-right">
-                                                            Total
-                                                        </div>
-                                                        <div></div>
-                                                    </div>
-
-                                                    {/* DETALLE ÚNICO DE LA HABITACIÓN */}
-                                                    <div className="mb-2 border-b border-gray-100 pb-2">
-                                                        {/* 1. HABITACIÓN (Header Principal) */}
-                                                        <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center rounded-lg bg-gray-50/50 px-2 py-1.5">
-                                                            <div className="text-[13px] font-bold text-gray-800 uppercase">
-                                                                Habitación{' '}
-                                                                {room.number} -{' '}
-                                                                {room.room_type
-                                                                    ?.name ||
-                                                                    'ESTÁNDAR'}{' '}
-                                                                -{' '}
-                                                                {room.price?.bathroom_type?.toLowerCase() ===
-                                                                'shared'
-                                                                    ? 'BAÑO COMPARTIDO'
-                                                                    : 'BAÑO PRIVADO'}
-                                                            </div>
-                                                            <div className="text-center font-bold text-gray-400">
-                                                                -
-                                                            </div>
-                                                            <div className="text-right font-bold text-gray-400">
-                                                                -
-                                                            </div>
-                                                            <div className="text-right text-[13px] font-bold text-gray-800">
-                                                                {displayData.balance.toFixed(
-                                                                    2,
                                                                 )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* SECCIÓN DETALLES DE LA FACTURA */}
+                                                <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                                                    <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-2">
+                                                        <h4 className="text-xs font-bold tracking-wider text-red-600 uppercase">
+                                                            Detalle de la
+                                                            Factura
+                                                        </h4>
+                                                        {loadingDetails && (
+                                                            <span className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase">
+                                                                <Loader2 className="h-3 w-3 animate-spin" />{' '}
+                                                                Extras...
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="w-full text-sm">
+                                                        {/* CABECERA GRID */}
+                                                        <div className="mb-2 grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-100 pb-2 text-[10px] font-bold text-gray-500 uppercase">
+                                                            <div className="text-left">
+                                                                Descripción
+                                                            </div>
+                                                            <div className="text-center">
+                                                                Cant.
+                                                            </div>
+                                                            <div className="text-right">
+                                                                P. Unitario
+                                                            </div>
+                                                            <div className="text-right">
+                                                                Total
                                                             </div>
                                                             <div></div>
                                                         </div>
 
-                                                        {/* CONTENIDO DEL DETALLE */}
-                                                        <div className="mt-1">
-                                                            {/* 2. TARIFA */}
-                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-start border-b border-gray-50 px-2 py-1.5">
-                                                                <div className="pl-4">
-                                                                    <div className="mb-1 text-[12px] font-bold text-gray-600">
-                                                                        Tarifa
-                                                                    </div>
-                                                                    <div className="space-y-0.5 pl-2 text-[11px] text-gray-500">
-                                                                        <div>
-                                                                            Número
-                                                                            de
-                                                                            personas:{' '}
-                                                                            <span className="font-bold text-gray-800">
-                                                                                {1 +
-                                                                                    (checkin
-                                                                                        .companions
-                                                                                        ?.length ||
-                                                                                        0)}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div>
-                                                                            Ingreso:{' '}
-                                                                            <span className="font-bold text-gray-800">
-                                                                                {new Date(
-                                                                                    displayData.check_in_date,
-                                                                                ).toLocaleDateString(
-                                                                                    'es-BO',
-                                                                                )}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div>
-                                                                            Salida:{' '}
-                                                                            <span className="font-bold text-gray-800">
-                                                                                {new Date(
-                                                                                    displayData.check_out_date,
-                                                                                ).toLocaleDateString(
-                                                                                    'es-BO',
-                                                                                )}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div>
-                                                                            Total
-                                                                            de
-                                                                            días:{' '}
-                                                                            <span className="font-bold text-gray-800">
-                                                                                {
-                                                                                    displayData.duration_days
-                                                                                }
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="pt-0.5 text-center text-xs font-medium text-gray-800">
+                                                        {/* DETALLE ÚNICO DE LA HABITACIÓN */}
+                                                        <div className="mb-2 border-b border-gray-100 pb-2">
+                                                            {/* 1. HABITACIÓN (Header Principal) */}
+                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center rounded-lg bg-gray-50/50 px-2 py-1.5">
+                                                                <div className="text-[13px] font-bold text-gray-800 uppercase">
+                                                                    Habitación{' '}
                                                                     {
-                                                                        displayData.duration_days
-                                                                    }
+                                                                        room.number
+                                                                    }{' '}
+                                                                    -{' '}
+                                                                    {room
+                                                                        .room_type
+                                                                        ?.name ||
+                                                                        'ESTÁNDAR'}{' '}
+                                                                    -{' '}
+                                                                    {room.price?.bathroom_type?.toLowerCase() ===
+                                                                    'shared'
+                                                                        ? 'BAÑO COMPARTIDO'
+                                                                        : 'BAÑO PRIVADO'}
                                                                 </div>
-                                                                <div className="pt-0.5 text-right text-xs font-medium text-gray-800">
-                                                                    {precioUnitarioFinal.toFixed(
-                                                                        2,
-                                                                    )}
+                                                                <div className="text-center font-bold text-gray-400">
+                                                                    -
                                                                 </div>
-                                                                <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
-                                                                    {hospedajeFinal.toFixed(
+                                                                <div className="text-right font-bold text-gray-400">
+                                                                    -
+                                                                </div>
+                                                                <div className="text-right text-[13px] font-bold text-gray-800">
+                                                                    {displayData.balance.toFixed(
                                                                         2,
                                                                     )}
                                                                 </div>
                                                                 <div></div>
                                                             </div>
 
-                                                            {/* 3. CONSUMO */}
-                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1.5">
-                                                                <div className="pl-4 text-[12px] font-bold text-gray-600">
-                                                                    Consumo
-                                                                </div>
-                                                                <div className="text-center text-gray-400">
-                                                                    -
-                                                                </div>
-                                                                <div className="text-right text-gray-400">
-                                                                    -
-                                                                </div>
-                                                                <div className="text-right text-xs font-bold text-gray-800">
-                                                                    {displayData.services_total.toFixed(
-                                                                        2,
-                                                                    )}
-                                                                </div>
-                                                                <div></div>
-                                                            </div>
-
-                                                            {/* DETALLE CONSUMOS */}
-                                                            {serviceGrouped.length >
-                                                                0 && (
-                                                                <div className="mb-1">
-                                                                    {serviceGrouped.map(
-                                                                        (
-                                                                            srv: any,
-                                                                            idx: number,
-                                                                        ) => {
-                                                                            const unitPrice =
-                                                                                srv.count >
-                                                                                0
-                                                                                    ? (
-                                                                                          srv.subtotal /
-                                                                                          srv.count
-                                                                                      ).toFixed(
-                                                                                          2,
-                                                                                      )
-                                                                                    : '0.00';
-                                                                            return (
-                                                                                <div
-                                                                                    key={
-                                                                                        idx
+                                                            {/* CONTENIDO DEL DETALLE */}
+                                                            <div className="mt-1">
+                                                                {/* 2. TARIFA */}
+                                                                <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-start border-b border-gray-50 px-2 py-1.5">
+                                                                    <div className="pl-4">
+                                                                        <div className="mb-1 text-[12px] font-bold text-gray-600">
+                                                                            Tarifa
+                                                                        </div>
+                                                                        <div className="space-y-0.5 pl-2 text-[11px] text-gray-500">
+                                                                            <div>
+                                                                                Número
+                                                                                de
+                                                                                personas:{' '}
+                                                                                <span className="font-bold text-gray-800">
+                                                                                    {1 +
+                                                                                        (checkin
+                                                                                            .companions
+                                                                                            ?.length ||
+                                                                                            0)}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div>
+                                                                                Ingreso:{' '}
+                                                                                <span className="font-bold text-gray-800">
+                                                                                    {new Date(
+                                                                                        displayData.check_in_date,
+                                                                                    ).toLocaleDateString(
+                                                                                        'es-BO',
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div>
+                                                                                Salida:{' '}
+                                                                                <span className="font-bold text-gray-800">
+                                                                                    {new Date(
+                                                                                        displayData.check_out_date,
+                                                                                    ).toLocaleDateString(
+                                                                                        'es-BO',
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div>
+                                                                                Total
+                                                                                de
+                                                                                días:{' '}
+                                                                                <span className="font-bold text-gray-800">
+                                                                                    {
+                                                                                        displayData.duration_days
                                                                                     }
-                                                                                    className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1"
-                                                                                >
-                                                                                    <div className="pl-8 text-[11px] text-gray-600 uppercase">
-                                                                                        {srv.service ||
-                                                                                            srv.name ||
-                                                                                            srv.description}
-                                                                                    </div>
-                                                                                    <div className="text-center text-[11px] font-medium text-gray-800">
-                                                                                        {
-                                                                                            srv.count
-                                                                                        }
-                                                                                    </div>
-                                                                                    <div className="text-right text-[11px] font-medium text-gray-800">
-                                                                                        {
-                                                                                            unitPrice
-                                                                                        }
-                                                                                    </div>
-                                                                                    <div className="text-right text-[11px] font-bold text-gray-800">
-                                                                                        {srv.subtotal.toFixed(
-                                                                                            2,
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div></div>
-                                                                                </div>
-                                                                            );
-                                                                        },
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {/* 4. OTROS */}
-                                                            <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center px-2 py-1.5">
-                                                                <div className="pl-4 text-[12px] font-bold text-gray-600">
-                                                                    Otros
-                                                                </div>
-                                                                <div className="text-center text-gray-400">
-                                                                    -
-                                                                </div>
-                                                                <div className="text-right text-gray-400">
-                                                                    -
-                                                                </div>
-                                                                <div className="text-right text-xs font-bold text-gray-800">
-                                                                    0.00
-                                                                </div>
-                                                                <div></div>
-                                                            </div>
-
-                                                            {/* 5. ADELANTOS */}
-                                                            {(
-                                                                displayData as any
-                                                            )?.total_pagado >
-                                                                0 && (
-                                                                <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-t border-dashed border-gray-200 bg-green-50/50 px-2 py-1.5 font-bold text-green-600">
-                                                                    <div className="pl-4 text-[11px]">
-                                                                        Adelantos/Pagos
-                                                                        previos
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="text-center text-green-300">
-                                                                        -
+                                                                    <div className="pt-0.5 text-center text-xs font-medium text-gray-800">
+                                                                        {
+                                                                            displayData.duration_days
+                                                                        }
                                                                     </div>
-                                                                    <div className="text-right text-green-300">
-                                                                        -
+                                                                    <div className="pt-0.5 text-right text-xs font-medium text-gray-800">
+                                                                        {precioUnitarioFinal.toFixed(
+                                                                            2,
+                                                                        )}
                                                                     </div>
-                                                                    <div className="text-right text-xs">
-                                                                        -
-                                                                        {(
-                                                                            displayData as any
-                                                                        )?.total_pagado.toFixed(
+                                                                    <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
+                                                                        {hospedajeFinal.toFixed(
                                                                             2,
                                                                         )}
                                                                     </div>
                                                                     <div></div>
                                                                 </div>
-                                                            )}
+
+                                                                {/* 3. CONSUMO */}
+                                                                <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1.5">
+                                                                    <div className="pl-4 text-[12px] font-bold text-gray-600">
+                                                                        Consumo
+                                                                    </div>
+                                                                    <div className="text-center text-gray-400">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-gray-400">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-xs font-bold text-gray-800">
+                                                                        {displayData.services_total.toFixed(
+                                                                            2,
+                                                                        )}
+                                                                    </div>
+                                                                    <div></div>
+                                                                </div>
+
+                                                                {/* DETALLE CONSUMOS */}
+                                                                {serviceGrouped.length >
+                                                                    0 && (
+                                                                    <div className="mb-1">
+                                                                        {serviceGrouped.map(
+                                                                            (
+                                                                                srv: any,
+                                                                                idx: number,
+                                                                            ) => {
+                                                                                const unitPrice =
+                                                                                    srv.count >
+                                                                                    0
+                                                                                        ? (
+                                                                                              srv.subtotal /
+                                                                                              srv.count
+                                                                                          ).toFixed(
+                                                                                              2,
+                                                                                          )
+                                                                                        : '0.00';
+                                                                                return (
+                                                                                    <div
+                                                                                        key={
+                                                                                            idx
+                                                                                        }
+                                                                                        className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1"
+                                                                                    >
+                                                                                        <div className="pl-8 text-[11px] text-gray-600 uppercase">
+                                                                                            {srv.service ||
+                                                                                                srv.name ||
+                                                                                                srv.description}
+                                                                                        </div>
+                                                                                        <div className="text-center text-[11px] font-medium text-gray-800">
+                                                                                            {
+                                                                                                srv.count
+                                                                                            }
+                                                                                        </div>
+                                                                                        <div className="text-right text-[11px] font-medium text-gray-800">
+                                                                                            {
+                                                                                                unitPrice
+                                                                                            }
+                                                                                        </div>
+                                                                                        <div className="text-right text-[11px] font-bold text-gray-800">
+                                                                                            {srv.subtotal.toFixed(
+                                                                                                2,
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div></div>
+                                                                                    </div>
+                                                                                );
+                                                                            },
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* 4. OTROS */}
+                                                                <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center px-2 py-1.5">
+                                                                    <div className="pl-4 text-[12px] font-bold text-gray-600">
+                                                                        Otros
+                                                                    </div>
+                                                                    <div className="text-center text-gray-400">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-gray-400">
+                                                                        -
+                                                                    </div>
+                                                                    <div className="text-right text-xs font-bold text-gray-800">
+                                                                        0.00
+                                                                    </div>
+                                                                    <div></div>
+                                                                </div>
+
+                                                                {/* 5. ADELANTOS */}
+                                                                {(
+                                                                    displayData as any
+                                                                )
+                                                                    ?.total_pagado >
+                                                                    0 && (
+                                                                    <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-t border-dashed border-gray-200 bg-green-50/50 px-2 py-1.5 font-bold text-green-600">
+                                                                        <div className="pl-4 text-[11px]">
+                                                                            Adelantos/Pagos
+                                                                            previos
+                                                                        </div>
+                                                                        <div className="text-center text-green-300">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-green-300">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-xs">
+                                                                            -
+                                                                            {(
+                                                                                displayData as any
+                                                                            )?.total_pagado.toFixed(
+                                                                                2,
+                                                                            )}
+                                                                        </div>
+                                                                        <div></div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* [DOC] TOTAL FINAL CORREGIDO (BALANCE EN LUGAR DE GRAND_TOTAL) */}
-                                            <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
-                                                <div className="text-write col-span-4 text-right text-sm font-bold uppercase">
-                                                    Saldo Pendiente de Cobro
-                                                </div>
-                                                <div className="text-write text-right text-lg font-black">
-                                                    {saldoPagar.toFixed(2)} Bs
+                                                {/* [DOC] TOTAL FINAL CORREGIDO (BALANCE EN LUGAR DE GRAND_TOTAL) */}
+                                                <div className="mt-5 flex items-center justify-between rounded-xl bg-red-500 p-5 text-white shadow-lg">
+                                                    <div className="text-write col-span-4 text-right text-sm font-bold uppercase">
+                                                        Saldo Pendiente de Cobro
+                                                    </div>
+                                                    <div className="text-write text-right text-lg font-black">
+                                                        {saldoPagar.toFixed(2)}{' '}
+                                                        Bs
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex h-full flex-1 flex-col overflow-hidden bg-gray-100">
-                            <iframe
-                                src={pdfUrl}
-                                className="h-full w-full border-none"
-                                title="Recibo PDF"
-                            />
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="flex flex-none justify-end gap-3 border-t border-gray-100 bg-white px-4 py-2">
-                    {!pdfUrl ? (
-                        <>
-                            <button
-                                onClick={onClose}
-                                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
-                                disabled={processing}
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleConfirmAndPreview}
-                                className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50"
-                                disabled={
-                                    processing ||
-                                    !tipoDocumento ||
-                                    !displayData ||
-                                    (saldoPagar > 0 &&
-                                        (!metodoPago ||
-                                            (metodoPago === 'qr' && !qrBank) ||
-                                            (metodoPago === 'ambos' &&
-                                                (!bancoMixto ||
-                                                    !estaCubierto))))
-                                }
-                            >
-                                {processing ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : saldoPagar > 0 ? (
-                                    'Cobrar Saldo y Finalizar'
-                                ) : (
-                                    'Finalizar Estadía y Generar Recibo'
+                                        )}
+                                    </div>
                                 )}
+                            </div>
+                        ) : (
+                            <div className="flex h-full flex-1 flex-col overflow-hidden bg-gray-100">
+                                <iframe
+                                    src={pdfUrl}
+                                    className="h-full w-full border-none"
+                                    title="Recibo PDF"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex flex-none justify-end gap-3 border-t border-gray-100 bg-white px-4 py-2">
+                        {!pdfUrl ? (
+                            <>
+                                <button
+                                    onClick={onClose}
+                                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                                    disabled={processing}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleConfirmAndPreview}
+                                    className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-red-700 disabled:opacity-50"
+                                    disabled={
+                                        processing ||
+                                        !tipoDocumento ||
+                                        !displayData ||
+                                        (saldoPagar > 0 &&
+                                            (!metodoPago ||
+                                                (metodoPago === 'qr' &&
+                                                    !qrBank) ||
+                                                (metodoPago === 'ambos' &&
+                                                    (!bancoMixto ||
+                                                        !estaCubierto))))
+                                    }
+                                >
+                                    {processing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : saldoPagar > 0 ? (
+                                        'Cobrar Saldo y Finalizar'
+                                    ) : (
+                                        'Finalizar Estadía y Generar Recibo'
+                                    )}
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={handleCloseFinal}
+                                className="w-full rounded-xl bg-gray-900 px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-black md:w-auto"
+                            >
+                                Cerrar
                             </button>
-                        </>
-                    ) : (
-                        <button
-                            onClick={handleCloseFinal}
-                            className="w-full rounded-xl bg-gray-900 px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-black md:w-auto"
-                        >
-                            Cerrar
-                        </button>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
             <ToleranceModal
