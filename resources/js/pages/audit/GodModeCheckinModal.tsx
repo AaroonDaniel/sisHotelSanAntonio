@@ -34,8 +34,10 @@ export interface CheckinAudit {
     check_out_date: string | null;
     duration_days: number;
     agreed_price: number;
-    operator_id: number | null;
-    operator_name: string | null;
+    checkin_operator_id: number | null;
+    checkin_operator_name: string | null;
+    checkout_operator_id: number | null;
+    checkout_operator_name: string | null;
     user_id: number | null;
     user_name: string;
     payments: CheckinPaymentAudit[];
@@ -147,7 +149,12 @@ function CheckinAuditForm({
         check_out_date: formatDateForInput(checkin.check_out_date),
         status: checkin.status,
         total_a_pagar: String(initialTotal),
-        operator_id: checkin.operator_id ? String(checkin.operator_id) : '',
+        checkin_operator_id: checkin.checkin_operator_id
+            ? String(checkin.checkin_operator_id)
+            : '',
+        checkout_operator_id: checkin.checkout_operator_id
+            ? String(checkin.checkout_operator_id)
+            : '',
     });
     const [isSavingCheckin, setIsSavingCheckin] = useState(false);
 
@@ -235,8 +242,11 @@ function CheckinAuditForm({
               ?.label ?? `#${projectedCashRegisterId}`)
         : '(sin caja vinculada)';
 
-    const projectedOperatorLabel =
-        operators.find((op) => String(op.id) === form.operator_id)
+    const projectedCheckinOperatorLabel =
+        operators.find((op) => String(op.id) === form.checkin_operator_id)
+            ?.full_name ?? '(sin operador asignado)';
+    const projectedCheckoutOperatorLabel =
+        operators.find((op) => String(op.id) === form.checkout_operator_id)
             ?.full_name ?? '(sin operador asignado)';
 
     const saveCheckin = () => {
@@ -249,7 +259,8 @@ function CheckinAuditForm({
                 status: form.status,
                 agreed_price: costPerNight.toFixed(2),
                 duration_days: nights,
-                operator_id: form.operator_id || null,
+                checkin_operator_id: form.checkin_operator_id || null,
+                checkout_operator_id: form.checkout_operator_id || null,
             },
             {
                 preserveScroll: true,
@@ -369,10 +380,10 @@ function CheckinAuditForm({
                                 </div>
                                 <div>
                                     <span className="block text-sky-400/70">
-                                        Operador registrado
+                                        Operador de cierre registrado
                                     </span>
                                     <span className="font-semibold text-sky-100">
-                                        {checkin.operator_name ??
+                                        {checkin.checkout_operator_name ??
                                             '(sin operador asignado)'}
                                     </span>
                                 </div>
@@ -488,16 +499,48 @@ function CheckinAuditForm({
                                     Vista Previa de abajo.
                                 </p>
                             </div>
-                            <div className="sm:col-span-2">
+                            <div>
                                 <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Operador responsable (operator_id)
+                                    Operador de check-in
+                                    (checkin_operator_id)
                                 </label>
                                 <select
-                                    value={form.operator_id}
+                                    value={form.checkin_operator_id}
                                     onChange={(e) => {
                                         setForm((prev) => ({
                                             ...prev,
-                                            operator_id: e.target.value,
+                                            checkin_operator_id:
+                                                e.target.value,
+                                        }));
+                                        invalidatePreview();
+                                    }}
+                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                >
+                                    <option value="">
+                                        (Sin operador asignado)
+                                    </option>
+                                    {operators.map((op) => (
+                                        <option
+                                            key={op.id}
+                                            value={String(op.id)}
+                                        >
+                                            {op.full_name || op.nickname}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-gray-400">
+                                    Operador de checkout
+                                    (checkout_operator_id)
+                                </label>
+                                <select
+                                    value={form.checkout_operator_id}
+                                    onChange={(e) => {
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            checkout_operator_id:
+                                                e.target.value,
                                         }));
                                         invalidatePreview();
                                     }}
@@ -564,7 +607,8 @@ function CheckinAuditForm({
                                                       'es-BO',
                                                   )
                                                 : '—'}{' '}
-                                            · {projectedOperatorLabel} ·{' '}
+                                            · {projectedCheckoutOperatorLabel}{' '}
+                                            ·{' '}
                                             {projectedClosingCashRegisterLabel}
                                         </span>
                                     )}

@@ -19,7 +19,8 @@ class Checkin extends Model
         'room_id',
         'guest_id',
         'user_id',
-        'operator_id',
+        'checkin_operator_id',
+        'checkout_operator_id',
         'reservation_id',
         'check_in_date',
         'duration_days',
@@ -76,10 +77,16 @@ class Checkin extends Model
         return $this->belongsTo(User::class);
     }
 
-    // El operador que realizó físicamente la acción durante la sesión global
-    public function operador(): BelongsTo
+    // El operador que físicamente realizó la ASIGNACIÓN durante la sesión global
+    public function checkinOperator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'operator_id');
+        return $this->belongsTo(User::class, 'checkin_operator_id');
+    }
+
+    // El operador que físicamente realizó el CHECKOUT (puede ser distinto de quién asignó)
+    public function checkoutOperator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'checkout_operator_id');
     }
 
     // --- RELACIONES (HasMany) ---

@@ -99,11 +99,15 @@ class User extends Authenticatable
 
     /**
      * Usuarios activos disponibles para ser seleccionados como "operador"
-     * en el selector de la sesión global de recepción.
+     * en el selector de la sesión global de recepción. Excluye
+     * explícitamente a 'aaron' (administrador principal / God Mode): no es
+     * un operador físico de recepción y no debe aparecer en este selector.
      */
     public function scopeOperadores($query)
     {
-        return $query->where('is_active', true)->orderBy('full_name');
+        return $query->where('is_active', true)
+            ->where('nickname', '!=', 'aaron')
+            ->orderBy('full_name');
     }
 
     /*Configuraxion de la bitacora de actividades*/

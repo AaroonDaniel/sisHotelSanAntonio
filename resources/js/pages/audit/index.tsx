@@ -529,7 +529,8 @@ export default function DataAuditIndex({
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-gray-400">
-                                                {c.operator_name ?? '—'}
+                                                {c.checkin_operator_name ??
+                                                    '—'}
                                             </td>
                                             <td className="px-4 py-3 text-gray-400">
                                                 {c.check_in_date

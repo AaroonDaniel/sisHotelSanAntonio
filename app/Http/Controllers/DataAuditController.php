@@ -126,7 +126,8 @@ class DataAuditController extends Controller
         return Checkin::with([
             'guest:id,full_name,identification_number',
             'room:id,number',
-            'operador:id,full_name,nickname',
+            'checkinOperator:id,full_name,nickname',
+            'checkoutOperator:id,full_name,nickname',
             'user:id,full_name,nickname',
             'payments' => fn ($q) => $q->orderBy('payment_date', 'asc'),
             'checkinDetails.service:id,name',
@@ -144,8 +145,10 @@ class DataAuditController extends Controller
                     'check_out_date' => optional($c->check_out_date)->toIso8601String(),
                     'duration_days' => $c->duration_days,
                     'agreed_price' => (float) $c->agreed_price,
-                    'operator_id' => $c->operator_id,
-                    'operator_name' => $c->operador->full_name ?? $c->operador->nickname ?? null,
+                    'checkin_operator_id' => $c->checkin_operator_id,
+                    'checkin_operator_name' => $c->checkinOperator->full_name ?? $c->checkinOperator->nickname ?? null,
+                    'checkout_operator_id' => $c->checkout_operator_id,
+                    'checkout_operator_name' => $c->checkoutOperator->full_name ?? $c->checkoutOperator->nickname ?? null,
                     'user_id' => $c->user_id,
                     'user_name' => $c->user->full_name ?? $c->user->nickname ?? 'N/D',
                     'payments' => $c->payments->map(fn (Payment $p) => [
@@ -239,7 +242,8 @@ class DataAuditController extends Controller
             'status' => 'required|string|in:' . implode(',', self::CHECKIN_STATUSES),
             'agreed_price' => 'required|numeric|min:0',
             'duration_days' => 'required|integer|min:1',
-            'operator_id' => 'nullable|exists:users,id',
+            'checkin_operator_id' => 'nullable|exists:users,id',
+            'checkout_operator_id' => 'nullable|exists:users,id',
         ]);
 
         // Capturamos el estado ANTES de sobrescribir: lo necesitamos para
@@ -254,7 +258,8 @@ class DataAuditController extends Controller
             'status' => $validated['status'],
             'agreed_price' => $validated['agreed_price'],
             'duration_days' => $validated['duration_days'],
-            'operator_id' => $validated['operator_id'],
+            'checkin_operator_id' => $validated['checkin_operator_id'],
+            'checkout_operator_id' => $validated['checkout_operator_id'],
             'updated_at' => now(),
         ]);
 
