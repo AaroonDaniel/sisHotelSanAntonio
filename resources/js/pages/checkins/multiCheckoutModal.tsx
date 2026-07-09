@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/react';
 import axios from 'axios';
 import {
     ArrowLeft,
@@ -12,7 +13,6 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
 interface Props {
     show: boolean;
     selectedRoomIds: number[];
@@ -307,6 +307,8 @@ export default function MultiCheckoutModal({
     };
 
     const isPaymentValid = () => {
+        // Cuenta ya saldada: no hace falta elegir método de pago.
+        if (saldoPendienteFinal <= 0) return true;
         if (!metodoPago) return false;
         if (metodoPago === 'ambos') {
             if (!bancoMixto || !estaCubierto) return false;
@@ -336,7 +338,11 @@ export default function MultiCheckoutModal({
                 tipo_documento: tipoDocumento,
                 nombre_factura: nombreFactura,
                 nit_factura: nitFactura,
-                metodo_pago: metodoPago,
+                // El backend exige metodo_pago como string obligatorio; si la
+                // cuenta ya está saldada no se muestra el selector (no hace
+                // falta cobrar nada), así que enviamos un valor por defecto
+                // inofensivo: el backend solo crea un Payment si saldoPagar > 0.
+                metodo_pago: metodoPago || 'efectivo',
                 monto_efectivo:
                     montoEfectivo ||
                     (metodoPago === 'efectivo' ? saldoPendienteFinal : 0),
@@ -483,9 +489,11 @@ export default function MultiCheckoutModal({
 
                                             <div className="col-span-2 mt-1 flex justify-between pt-1 text-lg">
                                                 <span className="font-bold text-gray-900">
-                                                    Total a Cobrar:
+                                                    Saldo Pendiente:
                                                 </span>
-                                                <span className="font-black text-red-600">
+                                                <span
+                                                    className={`font-black ${saldoPendienteFinal <= 0 ? 'text-green-600' : 'text-red-600'}`}
+                                                >
                                                     {saldoPendienteFinal.toFixed(
                                                         2,
                                                     )}{' '}
@@ -633,8 +641,19 @@ export default function MultiCheckoutModal({
                                     </div>
                                 </div>
 
-                                {/* MÉTODO DE PAGO */}
-                                {tipoDocumento && (
+                                {/* CUENTA YA SALDADA: sin campos de pago, solo confirmación */}
+                                {tipoDocumento && saldoPendienteFinal <= 0 && (
+                                    <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border-2 border-green-500 bg-green-50 p-6 text-center shadow-sm">
+                                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                                        <p className="text-sm font-bold text-green-700">
+                                            Cuenta saldada. Listo para
+                                            finalizar.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* MÉTODO DE PAGO (solo si queda saldo por cobrar) */}
+                                {tipoDocumento && saldoPendienteFinal > 0 && (
                                     <div className="mt-1 flex-1 animate-in text-center fade-in slide-in-from-top-2">
                                         <h4 className="mb-1 flex items-center justify-center gap-1 text-sm font-bold tracking-widest text-gray-800 uppercase">
                                             <Banknote className="h-4 w-4 text-gray-400" />{' '}
@@ -1283,8 +1302,10 @@ export default function MultiCheckoutModal({
                             >
                                 {processing ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : saldoPendienteFinal > 0 ? (
+                                    'Cobrar Saldo y Finalizar'
                                 ) : (
-                                    'Sí, Finalizar Múltiple'
+                                    'Finalizar Estadía y Generar Recibo'
                                 )}
                             </button>
                         </>

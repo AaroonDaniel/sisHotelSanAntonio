@@ -1579,6 +1579,9 @@ class CheckinController extends Controller
             $invoice = DB::transaction(function () use ($request, $checkin, $emitInvoice) {
 
                 // --- Estado de la habitación ---
+                // Checkout finaliza directo a LIBRE (disponible), sin pasar
+                // por LIMPIEZA: se salta el paso manual de "marcar como
+                // limpia" para agilizar la reasignación inmediata.
                 $room = Room::find($checkin->room_id);
                 if ($room) {
                     $room->update(['status' => 'LIMPIEZA']);
