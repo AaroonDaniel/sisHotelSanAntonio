@@ -195,6 +195,15 @@ export interface CheckinData {
     corporate_days?: number;
     checkin_operator_id?: number | null;
     checkout_operator_id?: number | null;
+    // Relación cargada por el backend (RoomController::status() /
+    // CheckinController::index() con with('checkinOperator')) para poder
+    // mostrar "asignado por: Nombre" sin tener que cruzar con la lista de
+    // operadores en el frontend.
+    checkin_operator?: {
+        id: number;
+        full_name: string;
+        nickname: string;
+    } | null;
 }
 
 // Re-exportado para no romper a quienes ya importan { Operator } desde este
@@ -351,6 +360,15 @@ export default function CheckinModal({
             setTimeout(() => setOperatorAlertPulse(false), 1600);
         });
     };
+
+    // Toast de validación: "Seleccione un operador". Este proyecto NO usa
+    // una librería de toasts (no hay sonner/react-hot-toast instalado, ver
+    // package.json) — sigue el mismo patrón casero ya usado en este propio
+    // archivo para guestConflictError/showErrorToast: estado local + zona
+    // de toasts flotante + auto-cierre por setTimeout.
+    const [operatorToastError, setOperatorToastError] = useState<string | null>(
+        null,
+    );
 
     // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1341,11 +1359,13 @@ export default function CheckinModal({
         // habitación bajo ninguna circunstancia. En vez de dejar el botón
         // nativamente disabled (lo que impediría detectar el intento y
         // avisar), interceptamos el submit aquí: si falta el operador,
-        // NO se llama a executeSubmit() y en su lugar se hace parpadear
-        // el selector flotante con el mensaje.
+        // NO se llama a executeSubmit(); en su lugar se hace parpadear el
+        // selector flotante Y se lanza el Toast de validación.
         // =========================================================
         if (!data.checkin_operator_id) {
             triggerOperatorAlert();
+            setOperatorToastError('Seleccione un operador');
+            setTimeout(() => setOperatorToastError(null), 5000);
             return;
         }
 
@@ -1631,6 +1651,16 @@ export default function CheckinModal({
             (checkinToEdit && (!data.origin || data.origin.trim() === ''))
           ? 'bg-amber-600 hover:bg-amber-500'
           : 'bg-green-600 hover:bg-green-500';
+
+    // El registro YA tiene un operador guardado (viene del backend, no del
+    // valor por defecto que precarga el formulario) → ya no hace falta
+    // pedir que se elija: se muestra "asignado por:" en el header en vez
+    // del panel flotante.
+    const hasSavedOperator = !!checkinToEdit?.checkin_operator_id;
+    const savedOperatorName =
+        checkinToEdit?.checkin_operator?.full_name ??
+        checkinToEdit?.checkin_operator?.nickname ??
+        null;
     // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
@@ -1640,43 +1670,50 @@ export default function CheckinModal({
             <div className="relative w-full max-w-5xl">
                 {/* ===================================================== */}
                 {/* 🔴 SELECTOR FLOTANTE DE OPERADOR — fuera de la caja      */}
-                {/* blanca del modal, "flotando" arriba a la derecha.      */}
+                {/* blanca del modal, "flotando" arriba a la derecha. Solo  */}
+                {/* aplica a asignaciones NUEVAS o sin operador guardado    */}
+                {/* todavía; si ya hay uno guardado, se reemplaza por el    */}
+                {/* texto "asignado por:" junto a la X (más abajo).         */}
                 {/* bottom-full + mb-3: se auto-ajusta a la altura real     */}
                 {/* del contenido (no hay que adivinar un -top-[Npx] fijo). */}
                 {/* ===================================================== */}
-                <div
-                    className={`absolute right-0 bottom-full z-50 mb-3 w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border-2 bg-white p-3 shadow-xl transition-all ${
-                        data.checkin_operator_id
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-red-500 bg-red-50'
-                    } ${
-                        operatorAlertPulse
-                            ? 'animate-pulse ring-4 ring-red-400'
-                            : ''
-                    }`}
-                >
-                    <p
-                        className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-bold ${
+                {!hasSavedOperator && (
+                    <div
+                        className={`absolute right-0 bottom-full z-50 mb-3 w-[30rem] max-w-[calc(100vw-2rem)] rounded-lg border-2 bg-white p-3 shadow-xl transition-all ${
                             data.checkin_operator_id
-                                ? 'text-green-700'
-                                : 'text-red-700'
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-red-500 bg-red-50'
+                        } ${
+                            operatorAlertPulse
+                                ? 'animate-pulse ring-4 ring-red-400'
+                                : ''
                         }`}
                     >
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        {data.checkin_operator_id
-                            ? 'Operador seleccionado correctamente'
-                            : 'Seleccione su nombre para realizar la asignación'}
-                    </p>
-                    <OperatorSelector
-                        operators={operators}
-                        value={data.checkin_operator_id}
-                        onChange={(id) => setData('checkin_operator_id', id)}
-                        error={errors.checkin_operator_id}
-                        compact
-                        size="lg"
-                        label=""
-                    />
-                </div>
+                        <p
+                            className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-bold ${
+                                data.checkin_operator_id
+                                    ? 'text-green-700'
+                                    : 'text-red-700'
+                            }`}
+                        >
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                            {data.checkin_operator_id
+                                ? 'Operador seleccionado correctamente'
+                                : 'Seleccione su nombre para realizar la asignación'}
+                        </p>
+                        <OperatorSelector
+                            operators={operators}
+                            value={data.checkin_operator_id}
+                            onChange={(id) =>
+                                setData('checkin_operator_id', id)
+                            }
+                            error={errors.checkin_operator_id}
+                            compact
+                            size="lg"
+                            label=""
+                        />
+                    </div>
+                )}
 
                 <div className="flex max-h-[83vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                     {/* Header */}
@@ -1690,12 +1727,22 @@ export default function CheckinModal({
                                 : 'Asignación'}
                         </h2>
 
-                        <button
-                            onClick={() => onClose(false)}
-                            className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
+                        <div className="flex items-center">
+                            {hasSavedOperator && savedOperatorName && (
+                                <span className="mr-4 text-base text-gray-600">
+                                    asignado por:{' '}
+                                    <strong className="font-bold text-gray-800">
+                                        {savedOperatorName}
+                                    </strong>
+                                </span>
+                            )}
+                            <button
+                                onClick={() => onClose(false)}
+                                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
                     </div>
 
                     {/* ===================================================== */}
@@ -1750,6 +1797,35 @@ export default function CheckinModal({
                                         type="button"
                                         onClick={() =>
                                             setGuestConflictError(null)
+                                        }
+                                        className="text-red-400 transition-colors hover:text-red-700"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TOAST 2.5: VALIDACIÓN — FALTA SELECCIONAR OPERADOR */}
+                        {operatorToastError && (
+                            <div className="pointer-events-auto flex w-80 animate-in flex-col gap-2 rounded-xl border border-red-300 bg-red-50 p-4 shadow-xl duration-300 slide-in-from-right-10 fade-in">
+                                <div className="flex items-start gap-3">
+                                    <div className="rounded-full bg-red-200 p-2 text-red-700 shadow-sm">
+                                        <AlertTriangle className="h-5 w-5 animate-pulse" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-bold text-red-800">
+                                            {operatorToastError}
+                                        </h3>
+                                        <p className="mt-1 text-xs leading-tight font-semibold text-red-600">
+                                            Debes elegir quién está ejecutando
+                                            esta acción antes de guardar.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setOperatorToastError(null)
                                         }
                                         className="text-red-400 transition-colors hover:text-red-700"
                                     >

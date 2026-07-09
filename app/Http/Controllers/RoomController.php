@@ -191,7 +191,8 @@ class RoomController
                         },
                         'room.price',
                         'room.roomType',
-                        'specialAgreement' // 🚀 LUGAR 1: Agregar esto (Alimenta las tarjetas visuales)
+                        'specialAgreement', // 🚀 LUGAR 1: Agregar esto (Alimenta las tarjetas visuales)
+                        'checkinOperator:id,full_name,nickname', // Quién hizo la asignación (para "asignado por:")
                     ]);
             }
         ])->orderBy('number')->get()->map(function ($room) {
@@ -231,6 +232,7 @@ class RoomController
             'room.roomType',
             'services',
             'specialAgreement', // 🚀 LUGAR 2: Agregar esto (Alimenta los modales de salida/detalles)
+            'checkinOperator:id,full_name,nickname', // Quién hizo la asignación (para "asignado por:")
             'payments' => function ($query) {
                 $query->orderBy('created_at', 'asc');
             }
