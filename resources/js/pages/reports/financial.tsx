@@ -9,6 +9,7 @@ import {
     Calendar,
     FileSpreadsheet,
     FileText,
+    History,
     Layers,
     Loader2,
     LogOut,
@@ -52,12 +53,17 @@ interface Summary {
     liquidacion: number;
 }
 
+interface OperatorOption extends User {
+    // ISO 8601, o null si el operador no tiene un turno ABIERTO ahora mismo.
+    active_shift_opened_at: string | null;
+}
+
 interface Props {
     auth: {
         user: User;
         active_register?: any;
     };
-    users?: User[];
+    users?: OperatorOption[];
     Payments?: PaymentRow[];
     Expenses?: ExpenseRow[];
     Summary?: Summary;
@@ -67,6 +73,7 @@ interface Props {
         user_id?: string | null;
     };
     CanViewAll?: boolean;
+    HasMovements?: boolean;
 }
 
 /* ===================== HELPERS ===================== */
@@ -84,14 +91,32 @@ export default function FinancialReport({
     Summary,
     Filters,
     CanViewAll = false,
+    HasMovements = false,
 }: Props) {
     // Modal de Cierre de Caja
     const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
 
-    // Estados del formulario
-    const [fechaInicio, setFechaInicio] = useState(Filters?.start_date || '');
-    const [fechaFin, setFechaFin] = useState(Filters?.end_date || '');
+    // Estados del formulario. Por defecto ambas fechas son HOY: el backend
+    // (findShiftOverlapping) ya detecta automáticamente el turno completo
+    // que se solapa con ese día, incluso si empezó el día anterior y cruza
+    // la medianoche — así el recepcionista no tiene que calcular fechas a
+    // mano para ver todo lo que hizo en su turno.
+    const today = new Date().toISOString().slice(0, 10);
+    const [fechaInicio, setFechaInicio] = useState(
+        Filters?.start_date || today,
+    );
+    const [fechaFin, setFechaFin] = useState(Filters?.end_date || today);
     const [userId, setUserId] = useState(Filters?.user_id || '');
+
+    // Mantenemos "fecha fin" pegada a "fecha inicio" salvo que el usuario
+    // la toque explícitamente: un rango de un solo día es lo que activa la
+    // detección automática de turno en el backend (start_date === end_date).
+    const handleFechaInicioChange = (value: string) => {
+        setFechaInicio(value);
+        if (fechaFin === fechaInicio) {
+            setFechaFin(value);
+        }
+    };
     const [tipoRegistro, setTipoRegistro] = useState<
         'efectivo' | 'bancos' | 'ambos'
     >('ambos');
@@ -132,31 +157,70 @@ export default function FinancialReport({
 
     const hayDatos = Payments.length > 0 || Expenses.length > 0;
 
+    // La respuesta HasMovements/Filters del backend corresponde a la
+    // consulta que ya se disparó (Filters.user_id). Si el operador
+    // seleccionado en el <select> todavía no coincide con eso, los datos en
+    // pantalla son de otra selección (o del estado inicial) y no hay que
+    // mostrar la alerta de "turno vacío" todavía.
+    const consultaAlDia = !!userId && Filters?.user_id === userId;
+    const turnoVacio = consultaAlDia && userId !== 'todos' && !HasMovements;
+
     const handleLimpiar = () => {
-        setFechaInicio('');
-        setFechaFin('');
+        setFechaInicio(today);
+        setFechaFin(today);
         setUserId('');
         setTipoRegistro('ambos');
         setFormato('pdf');
     };
 
     /* Carga las transacciones en pantalla (Inertia recarga financialIndex) */
-    const handleConsultar = () => {
-        if (!fechaInicio || !fechaFin || !userId) return;
+    const handleConsultar = (
+        overrideInicio?: string,
+        overrideFin?: string,
+        overrideUserId?: string,
+    ) => {
+        const inicio = overrideInicio ?? fechaInicio;
+        const fin = overrideFin ?? fechaFin;
+        const uid = overrideUserId ?? userId;
+        if (!inicio || !fin || !uid) return;
         router.get(
             '/reports/financial',
             {
-                start_date: fechaInicio,
-                end_date: fechaFin,
-                user_id: userId,
+                start_date: inicio,
+                end_date: fin,
+                user_id: uid,
             },
             { preserveState: true, preserveScroll: true },
         );
     };
 
+    // Al elegir un operador con turno ABIERTO, autocompletamos "Fecha de
+    // Inicio" con la apertura exacta de su turno y "Hasta qué fecha" con
+    // hoy, y consultamos de inmediato — así un turno que cruza la
+    // medianoche se grafica completo sin que el recepcionista tenga que
+    // calcular nada a mano.
+    const handleUserChange = (newUserId: string) => {
+        setUserId(newUserId);
+
+        const operator = users.find((u) => String(u.id) === newUserId);
+        let inicio = fechaInicio;
+        let fin = fechaFin;
+
+        if (operator?.active_shift_opened_at) {
+            inicio = operator.active_shift_opened_at.slice(0, 10);
+            fin = today;
+            setFechaInicio(inicio);
+            setFechaFin(fin);
+        }
+
+        if (newUserId) {
+            handleConsultar(inicio, fin, newUserId);
+        }
+    };
+
     const handleGenerar: FormEventHandler = (e) => {
         e.preventDefault();
-        if (!fechaInicio || !fechaFin || !userId) return;
+        if (!fechaInicio || !fechaFin || !userId || turnoVacio) return;
 
         setIsGenerating(true);
         setPdfUrl(null);
@@ -196,14 +260,34 @@ export default function FinancialReport({
                         </div>
                         <span className="text-gray-400">Volver atrás</span>
                     </button>
-                    <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
-                        Cierre de Caja
-                    </h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
+                            Cierre de Caja
+                        </h2>
+                        {/* Historial: TODOS los cierres de caja guardados
+                            hasta ahora (turno, operador, montos), ya
+                            construido en /admin/shift-reports. Solo se
+                            muestra a quien tenga reportes.financiero, mismo
+                            permiso que habilita la vista agregada "Todos" en
+                            esta misma pantalla. */}
+                        {CanViewAll && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.visit('/admin/shift-reports')
+                                }
+                                className="flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm font-bold text-gray-200 shadow-sm transition hover:bg-gray-700"
+                            >
+                                <History className="h-4 w-4" />
+                                Historial
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* ============ VISTA PREVIA PDF ============ */}
                 {pdfUrl && formato === 'pdf' ? (
-                    <div className="flex h-[calc(100vh-12rem)] w-full animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
+                    <div className="flex w-full animate-in flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
                         <div className="flex flex-col items-center justify-between gap-4 border-b border-gray-100 bg-gray-50 px-6 py-4 sm:flex-row">
                             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                 <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
@@ -242,17 +326,24 @@ export default function FinancialReport({
                             </p>
                         </div>
 
-                        <div className="flex-1 bg-gray-300/50 p-2">
+                        {/* min-h en píxeles (no h-auto/h-full, que el visor
+                            de PDF nativo del navegador ignora) grande para
+                            que quepa una hoja carta/A4 sin scroll propio: el
+                            iframe se expande verticalmente con su contenido
+                            y es la página la que scrollea, no una caja
+                            interna. Sin overflow-hidden/overflow-y-auto en
+                            ningún contenedor padre de este bloque. */}
+                        <div className="bg-gray-300/50 p-2">
                             <iframe
                                 src={pdfUrl}
-                                className="h-full w-full rounded border border-gray-300 bg-white shadow-inner"
+                                className="min-h-[1200px] w-full rounded border-0 bg-white shadow-inner"
                                 title="Reporte PDF"
                             />
                         </div>
                     </div>
                 ) : (
                     /* ============ PASO 1: FORMULARIO + LIQUIDACIÓN ============ */
-                    <div className="flex flex-col gap-6 lg:flex-row">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
                         {/* ---------- TARJETA FORMULARIO ---------- */}
                         <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl lg:w-[420px] lg:flex-shrink-0">
                             <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
@@ -281,7 +372,9 @@ export default function FinancialReport({
                                             <select
                                                 value={userId}
                                                 onChange={(e) =>
-                                                    setUserId(e.target.value)
+                                                    handleUserChange(
+                                                        e.target.value,
+                                                    )
                                                 }
                                                 className="w-full appearance-none rounded-lg border border-gray-400 bg-white py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
                                             >
@@ -310,6 +403,14 @@ export default function FinancialReport({
                                                 )}
                                             </select>
                                         </div>
+                                        {turnoVacio && (
+                                            <p className="mt-2 text-sm font-bold text-red-600">
+                                                ⚠️ No se registraron nuevos
+                                                movimientos (ingresos/egresos)
+                                                desde su último cierre. No hay
+                                                nada que cerrar.
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Fechas */}
@@ -327,7 +428,7 @@ export default function FinancialReport({
                                                     required
                                                     value={fechaInicio}
                                                     onChange={(e) =>
-                                                        setFechaInicio(
+                                                        handleFechaInicioChange(
                                                             e.target.value,
                                                         )
                                                     }
@@ -361,7 +462,7 @@ export default function FinancialReport({
                                     {/* Botón consultar en pantalla */}
                                     <button
                                         type="button"
-                                        onClick={handleConsultar}
+                                        onClick={() => handleConsultar()}
                                         disabled={
                                             !fechaInicio || !fechaFin || !userId
                                         }
@@ -464,7 +565,8 @@ export default function FinancialReport({
                                             isGenerating ||
                                             !fechaInicio ||
                                             !fechaFin ||
-                                            !userId
+                                            !userId ||
+                                            turnoVacio
                                         }
                                         className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
                                     >

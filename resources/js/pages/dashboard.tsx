@@ -275,13 +275,13 @@ export default function Dashboard({
             theme: 'amber',
             items: [
                 {
-                    name: 'Parte Diario',
+                    name: 'Reporte de Parte Diario',
                     icon: FileBarChart,
                     url: '/reports',
                     anyPerm: ['reportes.parte_diario'],
                 },
                 {
-                    name: 'Cierre de Caja',
+                    name: 'Reporte de Cierre de Caja',
                     icon: Wallet,
                     url: '/reports/financial',
                     anyPerm: ['reportes.cierre_caja'],

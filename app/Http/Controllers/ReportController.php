@@ -539,7 +539,27 @@ class ReportController extends Controller
                 : null;
         }
 
-        $operators = User::operadores()->get(['id', 'full_name', 'nickname']);
+        // Turno ABIERTO de cada operador (si tiene uno): el frontend lo usa
+        // para auto-completar "Fecha de Inicio" con la hora exacta de
+        // apertura apenas se elige el avatar, sin que el recepcionista
+        // tenga que calcularlo a mano.
+        $openShiftsByOperator = CashRegister::where('status', 'ABIERTA')
+            ->get(['user_id', 'opened_at'])
+            ->keyBy('user_id');
+
+        $operators = User::operadores()->get(['id', 'full_name', 'nickname'])
+            ->map(function ($op) use ($openShiftsByOperator) {
+                $openShift = $openShiftsByOperator->get($op->id);
+                return [
+                    'id' => $op->id,
+                    'full_name' => $op->full_name,
+                    'nickname' => $op->nickname,
+                    'active_shift_opened_at' => $openShift
+                        ? optional($openShift->opened_at)->toIso8601String()
+                        : null,
+                ];
+            })
+            ->values();
 
         $rangoInicio = $startDate . ' 00:00:00';
         $rangoFin    = $endDate . ' 23:59:59';
@@ -572,6 +592,7 @@ class ReportController extends Controller
                 ],
                 'users' => $operators,
                 'CanViewAll' => $puedeVerTodos,
+                'HasMovements' => false,
             ]);
         }
 
@@ -676,6 +697,10 @@ class ReportController extends Controller
             // elegir a quién revisar/cerrar.
             'users' => $operators,
             'CanViewAll' => $puedeVerTodos, // 👈 el frontend lo usa para mostrar/ocultar la opción "Todos"
+            // Turno sin ningún movimiento (ni pagos ni gastos): el frontend
+            // lo usa para bloquear "Generar y Revisar" / "Cerrar Caja" y
+            // mostrar la alerta de "nada que cerrar".
+            'HasMovements' => $payments->count() > 0 || $expenses->count() > 0,
         ]);
     }
 
@@ -759,6 +784,14 @@ class ReportController extends Controller
         $aperturaQuery = CashRegister::whereBetween('opened_at', [$rangoInicio, $rangoFin]);
         if ($userId !== 'todos') $aperturaQuery->where('user_id', $userId);
         $totalApertura = $aperturaQuery->sum('opening_amount');
+
+        // 🛑 Turno sin ningún movimiento (ni pagos ni gastos): no tiene
+        // sentido generar/imprimir un cierre en blanco. 'todos' queda
+        // fuera de esta regla (vista agregada de supervisión, no un cierre
+        // de turno puntual).
+        if ($userId !== 'todos' && $payments->isEmpty() && $gastos->isEmpty()) {
+            abort(422, 'No se registraron nuevos movimientos (ingresos/egresos) desde su último cierre. No hay nada que cerrar.');
+        }
 
         // ==========================================
         // 3. GENERACIÓN DEL PDF
@@ -913,6 +946,19 @@ class ReportController extends Controller
             $pdf->Cell(50, 7, utf8_decode('TOTAL EN BANCOS (QR):'), 1, 0, 'R', true);
             $pdf->Cell(40, 7, number_format($granTotalQR, 2) . ' Bs', 1, 1, 'R', true);
         }
+
+        // TOTAL GENERAL: Efectivo + QR (todos los ingresos, sin importar el
+        // medio) menos los gastos del turno. Es un neto de "cuánto entró
+        // menos cuánto salió", distinto de "EFECTIVO EN CAJA" (que además
+        // suma la apertura, porque ese sí representa el billete físico que
+        // debe cuadrar en el cajón).
+        $totalGeneralNeto = $granTotalEfectivo + $granTotalQR - $totalGastos;
+        $pdf->Ln(2);
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->SetFillColor(230, 230, 230);
+        $pdf->Cell(106, 8, '', 0, 0);
+        $pdf->Cell(50, 8, utf8_decode('TOTAL:'), 1, 0, 'R', true);
+        $pdf->Cell(40, 8, number_format($totalGeneralNeto, 2) . ' Bs', 1, 1, 'R', true);
 
         $pdf->Ln(25);
         $pdf->SetFont('Arial', '', 10);

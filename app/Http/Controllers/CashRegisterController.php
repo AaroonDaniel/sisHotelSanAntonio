@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\CashRegister;
+use App\Models\Expense;
+use App\Models\Payment;
 use App\Models\User;
 use App\Traits\BuildsShiftClosingData;
 use Illuminate\Support\Facades\Auth;
@@ -89,6 +91,15 @@ class CashRegisterController extends Controller
 
                 if (!$activeRegister) {
                     throw new RuntimeException('Este operador no tiene ningún turno abierto para cerrar.');
+                }
+
+                // 🛑 Turno sin ningún movimiento (ni pagos ni gastos): no
+                // se permite cerrar en blanco.
+                $tieneMovimientos = Payment::where('cash_register_id', $activeRegister->id)->exists()
+                    || Expense::where('cash_register_id', $activeRegister->id)->exists();
+
+                if (!$tieneMovimientos) {
+                    throw new RuntimeException('⚠️ No se registraron nuevos movimientos (ingresos/egresos) desde su último cierre. No hay nada que cerrar.');
                 }
 
                 $activeRegister->update([

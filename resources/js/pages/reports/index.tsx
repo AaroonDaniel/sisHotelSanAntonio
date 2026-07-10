@@ -2,18 +2,18 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
+    ArrowRightCircle,
+    Calendar,
     CheckSquare,
+    Eye,
+    FileText,
+    History,
     Printer,
     Search,
     Square,
-    ArrowRightCircle,
     UserCheck,
-    FileText,
-    Calendar,
+    X,
     Zap,
-    History,
-    Eye,
-    X
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -54,15 +54,27 @@ const civilStatusTranslations: Record<string, string> = {
     WIDOWED: 'VIUDO',
 };
 
-export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Salientes = [], TargetDate }: Props) {
+export default function ReportsIndex({
+    auth,
+    Entrantes = [],
+    Quedantes = [],
+    Salientes = [],
+    TargetDate,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-    const [selectedDate, setSelectedDate] = useState(TargetDate || new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(
+        TargetDate || new Date().toISOString().split('T')[0],
+    );
 
     // --- HISTORIAL DE PARTES DIARIOS ---
-    const [viewMode, setViewMode] = useState<'generator' | 'history'>('generator');
-    const [history, setHistory] = useState<{ date: string; total: number }[]>([]);
+    const [viewMode, setViewMode] = useState<'generator' | 'history'>(
+        'generator',
+    );
+    const [history, setHistory] = useState<{ date: string; total: number }[]>(
+        [],
+    );
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [modalDate, setModalDate] = useState<string | null>(null);
 
@@ -75,7 +87,9 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
         setViewMode('history');
         setLoadingHistory(true);
         try {
-            const res = await fetch('/reports/history', { headers: { Accept: 'application/json' } });
+            const res = await fetch('/reports/history', {
+                headers: { Accept: 'application/json' },
+            });
             setHistory(await res.json());
         } catch {
             setHistory([]);
@@ -88,7 +102,9 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
     const baseDate = new Date(2026, 3, 18);
     const [y, m, d] = selectedDate.split('-');
     const todayForCalc = new Date(Number(y), Number(m) - 1, Number(d));
-    const diffDays = Math.floor((todayForCalc.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor(
+        (todayForCalc.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
     const numeroSerie = (6608 + diffDays).toString().padStart(6, '0');
 
     // Cambiar fecha
@@ -97,30 +113,48 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
         setSelectedDate(newDate);
         setSelectedIds([]);
         setPdfUrl(null);
-        router.get('/reports', { date: newDate }, { preserveState: true, preserveScroll: true });
+        router.get(
+            '/reports',
+            { date: newDate },
+            { preserveState: true, preserveScroll: true },
+        );
     };
 
     // Función de filtrado por búsqueda
     const filterBySearch = (guests: Guest[]) => {
-        return guests.filter((guest) =>
-            guest.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            guest.identification_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            guest.room_number.toString().includes(searchTerm),
+        return guests.filter(
+            (guest) =>
+                guest.full_name
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase()) ||
+                guest.identification_number
+                    ?.toLowerCase()
+                    .includes(searchTerm.toLowerCase()) ||
+                guest.room_number.toString().includes(searchTerm),
         );
     };
 
     const filteredEntrantes = filterBySearch(Entrantes);
     const filteredQuedantes = filterBySearch(Quedantes);
     const filteredSalientes = filterBySearch(Salientes);
-    const totalFiltered = filteredEntrantes.length + filteredQuedantes.length + filteredSalientes.length;
+    const totalFiltered =
+        filteredEntrantes.length +
+        filteredQuedantes.length +
+        filteredSalientes.length;
 
     // Lista total para la vista previa
     const allGuests = [...Entrantes, ...Quedantes, ...Salientes];
 
     // Filtro para vista previa de derecha
-    const selectedEntrantes = Entrantes.filter((g) => selectedIds.includes(g.id));
-    const selectedQuedantes = Quedantes.filter((g) => selectedIds.includes(g.id));
-    const selectedSalientes = Salientes.filter((g) => selectedIds.includes(g.id));
+    const selectedEntrantes = Entrantes.filter((g) =>
+        selectedIds.includes(g.id),
+    );
+    const selectedQuedantes = Quedantes.filter((g) =>
+        selectedIds.includes(g.id),
+    );
+    const selectedSalientes = Salientes.filter((g) =>
+        selectedIds.includes(g.id),
+    );
 
     const toggleSelection = (id: number) => {
         if (selectedIds.includes(id)) {
@@ -133,15 +167,19 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
     const toggleSelectAll = () => {
         if (totalFiltered === 0) return;
         const allVisibleIds = [
-            ...filteredEntrantes.map(g => g.id),
-            ...filteredQuedantes.map(g => g.id),
-            ...filteredSalientes.map(g => g.id)
+            ...filteredEntrantes.map((g) => g.id),
+            ...filteredQuedantes.map((g) => g.id),
+            ...filteredSalientes.map((g) => g.id),
         ];
 
-        const allSelected = allVisibleIds.every((id) => selectedIds.includes(id));
+        const allSelected = allVisibleIds.every((id) =>
+            selectedIds.includes(id),
+        );
 
         if (allSelected) {
-            setSelectedIds(selectedIds.filter((id) => !allVisibleIds.includes(id)));
+            setSelectedIds(
+                selectedIds.filter((id) => !allVisibleIds.includes(id)),
+            );
         } else {
             const newIds = [...selectedIds];
             allVisibleIds.forEach((id) => {
@@ -151,21 +189,30 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
         }
     };
 
-    const isAllSelected = totalFiltered > 0 &&
-        [...filteredEntrantes, ...filteredQuedantes, ...filteredSalientes].every(g => selectedIds.includes(g.id));
+    const isAllSelected =
+        totalFiltered > 0 &&
+        [
+            ...filteredEntrantes,
+            ...filteredQuedantes,
+            ...filteredSalientes,
+        ].every((g) => selectedIds.includes(g.id));
 
     // ACCIÓN: Generar PDF Manual (Solo los chequeados)
     const handleGenerateManual = () => {
         if (selectedIds.length === 0) return;
         const idsQuery = selectedIds.join(',');
-        setPdfUrl(`/reports/generate-pdf?ids=${idsQuery}&date=${selectedDate}&t=${Date.now()}`);
+        setPdfUrl(
+            `/reports/generate-pdf?ids=${idsQuery}&date=${selectedDate}&t=${Date.now()}`,
+        );
     };
 
     // ACCIÓN: Generar PDF Automático (Agarra a TODOS en la tabla)
     const handleGenerateAuto = () => {
         if (allGuests.length === 0) return;
-        const allIds = allGuests.map(g => g.id).join(',');
-        setPdfUrl(`/reports/generate-pdf?ids=${allIds}&date=${selectedDate}&t=${Date.now()}`);
+        const allIds = allGuests.map((g) => g.id).join(',');
+        setPdfUrl(
+            `/reports/generate-pdf?ids=${allIds}&date=${selectedDate}&t=${Date.now()}`,
+        );
     };
 
     // Componente auxiliar para pintar filas izquierdas
@@ -179,27 +226,53 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
             >
                 <td className="border-r px-4 py-2 text-center">
                     <div className="flex justify-center">
-                        {isSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-gray-300" />}
+                        {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                            <Square className="h-4 w-4 text-gray-300" />
+                        )}
                     </div>
                 </td>
-                <td className="border-r bg-gray-50 px-2 py-3 text-center font-bold text-gray-900">{guest.room_number}</td>
-                <td className="px-4 py-3 font-medium text-gray-900 truncate max-w-[150px]" title={guest.full_name}>{guest.full_name}</td>
+                <td className="border-r bg-gray-50 px-2 py-3 text-center font-bold text-gray-900">
+                    {guest.room_number}
+                </td>
+                <td
+                    className="max-w-[150px] truncate px-4 py-3 font-medium text-gray-900"
+                    title={guest.full_name}
+                >
+                    {guest.full_name}
+                </td>
             </tr>
         );
     };
 
     // Componente auxiliar para pintar filas derechas (Vista Previa)
     const renderPreviewRow = (guest: Guest, index: number) => (
-        <tr key={guest.id} className="hover:bg-emerald-50/30 transition-colors">
-            <td className="border-r border-gray-100 px-2 py-3 text-center font-bold text-emerald-600 bg-emerald-50/20">{index + 1}</td>
-            <td className="border-r border-gray-100 bg-gray-50/50 px-3 py-3 text-center font-bold text-gray-900">{guest.room_number}</td>
-            <td className="px-4 py-3 font-bold text-gray-900">{guest.full_name}</td>
+        <tr key={guest.id} className="transition-colors hover:bg-emerald-50/30">
+            <td className="border-r border-gray-100 bg-emerald-50/20 px-2 py-3 text-center font-bold text-emerald-600">
+                {index + 1}
+            </td>
+            <td className="border-r border-gray-100 bg-gray-50/50 px-3 py-3 text-center font-bold text-gray-900">
+                {guest.room_number}
+            </td>
+            <td className="px-4 py-3 font-bold text-gray-900">
+                {guest.full_name}
+            </td>
             <td className="px-2 py-3 text-center font-mono">{guest.age}</td>
             <td className="px-4 py-3">{guest.nationality || '-'}</td>
             <td className="px-4 py-3">{guest.profession || '-'}</td>
-            <td className="px-4 py-3">{guest.civil_status ? (civilStatusTranslations[guest.civil_status] || guest.civil_status) : '-'}</td>
-            <td className="px-4 py-3 font-bold uppercase text-gray-700">{guest.origin || '-'}</td>
-            <td className="px-4 py-3 font-mono text-emerald-700 font-medium">{guest.identification_number || '-'}</td>
+            <td className="px-4 py-3">
+                {guest.civil_status
+                    ? civilStatusTranslations[guest.civil_status] ||
+                      guest.civil_status
+                    : '-'}
+            </td>
+            <td className="px-4 py-3 font-bold text-gray-700 uppercase">
+                {guest.origin || '-'}
+            </td>
+            <td className="px-4 py-3 font-mono font-medium text-emerald-700">
+                {guest.identification_number || '-'}
+            </td>
             <td className="px-4 py-3">{guest.issued_in || '-'}</td>
         </tr>
     );
@@ -208,7 +281,10 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
         <AuthenticatedLayout user={auth.user}>
             <Head title="Reportes" />
             <div className="mx-auto max-w-[98%] px-4 sm:px-6 lg:px-8">
-                <button onClick={() => router.visit('/dashboard')} className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white">
+                <button
+                    onClick={() => router.visit('/dashboard')}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
                         <ArrowLeft className="h-4 w-4" />
                     </div>
@@ -217,29 +293,42 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
 
                 <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                        <h2 className="text-3xl font-bold text-white">Generador de Parte Diario</h2>
+                        <h2 className="text-3xl font-bold text-white">
+                            Generador de Parte Diario
+                        </h2>
                         <div className="flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1.5 shadow-sm">
-                            <span className="text-sm font-black tracking-widest text-emerald-300">Nº {numeroSerie}</span>
+                            <span className="text-sm font-black tracking-widest text-emerald-300">
+                                Nº {numeroSerie}
+                            </span>
                         </div>
                         <button
-                            onClick={() => (viewMode === 'history' ? setViewMode('generator') : openHistory())}
+                            onClick={() =>
+                                viewMode === 'history'
+                                    ? setViewMode('generator')
+                                    : openHistory()
+                            }
                             className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 shadow-sm transition hover:bg-emerald-500/20"
                         >
                             {viewMode === 'history' ? (
-                                <><ArrowLeft className="h-4 w-4" /> Volver a Reportes</>
+                                <>
+                                    <ArrowLeft className="h-4 w-4" /> Volver a
+                                    Reportes
+                                </>
                             ) : (
-                                <><History className="h-4 w-4" /> Historial</>
+                                <>
+                                    <History className="h-4 w-4" /> Historial
+                                </>
                             )}
                         </button>
                     </div>
-                    <div className="flex items-center gap-2 rounded-xl bg-white/10 p-2 pr-4 backdrop-blur-md shadow-md border border-white/5">
-                        <Calendar className="h-5 w-5 text-emerald-400 ml-2" />
+                    <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/10 p-2 pr-4 shadow-md backdrop-blur-md">
+                        <Calendar className="ml-2 h-5 w-5 text-emerald-400" />
                         <input
                             type="date"
                             value={selectedDate}
                             onChange={handleDateChange}
                             max={new Date().toISOString().split('T')[0]}
-                            className="bg-transparent border-none text-white font-bold focus:ring-0 cursor-pointer"
+                            className="cursor-pointer border-none bg-transparent font-bold text-white focus:ring-0"
                         />
                     </div>
                 </div>
@@ -247,16 +336,18 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                 <div className="py-6">
                     {viewMode === 'history' ? (
                         /* ===================== VISTA HISTORIAL ===================== */
-                        <div className="animate-in fade-in duration-200">
+                        <div className="animate-in duration-200 fade-in">
                             <div className="mb-4 flex items-center justify-between">
                                 <h3 className="flex items-center gap-2 text-lg font-bold text-white">
-                                    <History className="h-5 w-5 text-emerald-400" /> Historial de Partes Diarios
+                                    <History className="h-5 w-5 text-emerald-400" />{' '}
+                                    Historial de Partes Diarios
                                 </h3>
                                 <button
                                     onClick={() => setViewMode('generator')}
                                     className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
                                 >
-                                    <ArrowLeft className="h-4 w-4" /> Volver al Generador
+                                    <ArrowLeft className="h-4 w-4" /> Volver al
+                                    Generador
                                 </button>
                             </div>
 
@@ -264,29 +355,62 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                 <table className="w-full text-sm">
                                     <thead className="bg-gray-50 text-gray-600">
                                         <tr>
-                                            <th className="px-6 py-3 text-left font-bold">Fecha del Reporte</th>
-                                            <th className="px-6 py-3 text-center font-bold">Huéspedes</th>
-                                            <th className="px-6 py-3 text-right font-bold">Acciones</th>
+                                            <th className="px-6 py-3 text-left font-bold">
+                                                Fecha del Reporte
+                                            </th>
+                                            <th className="px-6 py-3 text-center font-bold">
+                                                Huéspedes
+                                            </th>
+                                            <th className="px-6 py-3 text-right font-bold">
+                                                Acciones
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {loadingHistory ? (
-                                            <tr><td colSpan={3} className="px-6 py-10 text-center text-gray-400">Cargando historial...</td></tr>
+                                            <tr>
+                                                <td
+                                                    colSpan={3}
+                                                    className="px-6 py-10 text-center text-gray-400"
+                                                >
+                                                    Cargando historial...
+                                                </td>
+                                            </tr>
                                         ) : history.length === 0 ? (
-                                            <tr><td colSpan={3} className="px-6 py-10 text-center text-gray-400">No hay reportes en el periodo.</td></tr>
+                                            <tr>
+                                                <td
+                                                    colSpan={3}
+                                                    className="px-6 py-10 text-center text-gray-400"
+                                                >
+                                                    No hay reportes en el
+                                                    periodo.
+                                                </td>
+                                            </tr>
                                         ) : (
                                             history.map((h) => (
-                                                <tr key={h.date} className="transition-colors hover:bg-emerald-50/40">
-                                                    <td className="px-6 py-4 font-semibold text-gray-800">{formatDate(h.date)}</td>
+                                                <tr
+                                                    key={h.date}
+                                                    className="transition-colors hover:bg-emerald-50/40"
+                                                >
+                                                    <td className="px-6 py-4 font-semibold text-gray-800">
+                                                        {formatDate(h.date)}
+                                                    </td>
                                                     <td className="px-6 py-4 text-center">
-                                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{h.total}</span>
+                                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                                            {h.total}
+                                                        </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
                                                         <button
-                                                            onClick={() => setModalDate(h.date)}
+                                                            onClick={() =>
+                                                                setModalDate(
+                                                                    h.date,
+                                                                )
+                                                            }
                                                             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
                                                         >
-                                                            <Eye className="h-4 w-4" /> Ver detalles
+                                                            <Eye className="h-4 w-4" />{' '}
+                                                            Ver detalles
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -298,7 +422,7 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                         </div>
                     ) : pdfUrl ? (
                         /* ===================== VISTA PREVIA PDF ===================== */
-                        <div className="flex h-[calc(100vh-15rem)] -mt-6 w-full animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
+                        <div className="-mt-6 flex w-full animate-in flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl duration-200 zoom-in-95">
                             <div className="flex flex-col items-center justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-6 py-4 sm:flex-row">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-900">
                                     <div className="rounded-lg bg-emerald-100 p-1.5 text-emerald-600">
@@ -306,25 +430,41 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                     </div>
                                     Paso 2: Revisa tu Parte Diario
                                 </h2>
-                                <button onClick={() => setPdfUrl(null)} className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100">
-                                    <ArrowLeft className="h-4 w-4" /> Volver a Selección
+                                <button
+                                    onClick={() => setPdfUrl(null)}
+                                    className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100"
+                                >
+                                    <ArrowLeft className="h-4 w-4" /> Volver a
+                                    Selección
                                 </button>
                             </div>
                             <div className="flex items-center justify-center gap-2 border-b border-yellow-200 bg-yellow-50 px-6 py-2 text-sm text-yellow-800">
                                 <Printer className="h-4 w-4" />
-                                <p>No olvides <b>imprimir el PDF</b> usando el botón de la impresora dentro del visor.</p>
+                                <p>
+                                    No olvides <b>imprimir el PDF</b> usando el
+                                    botón de la impresora dentro del visor.
+                                </p>
                             </div>
-                            <div className="flex-1 bg-gray-300/50 p-2">
-                                <iframe src={pdfUrl} className="h-full w-full rounded border border-gray-300 bg-white shadow-inner" title="Reporte PDF" />
+                            {/* min-h en píxeles (no h-auto/h-full, que el
+                                visor de PDF nativo del navegador ignora):
+                                el iframe se expande con su contenido y es
+                                la página la que scrollea, sin overflow-hidden
+                                ni overflow-y-auto en los contenedores padre. */}
+                            <div className="bg-gray-300/50 p-2">
+                                <iframe
+                                    src={pdfUrl}
+                                    className="min-h-[1200px] w-full rounded border-0 bg-white shadow-inner"
+                                    title="Reporte PDF"
+                                />
                             </div>
                         </div>
                     ) : (
                         /* ===================== VISTA SELECCIÓN ===================== */
                         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                             {/* COLUMNA IZQUIERDA (SELECCIÓN) */}
-                            <div className="lg:col-span-5 flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl lg:col-span-5">
                                 <div className="border-b border-gray-200 bg-gray-50 p-4">
-                                    <h3 className="mb-4 text-lg font-bold text-gray-800 flex items-center gap-2">
+                                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800">
                                         <Search className="h-5 w-5 text-gray-500" />
                                         Buscar y Seleccionar
                                     </h3>
@@ -335,50 +475,100 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                                         <input
                                             type="text"
                                             value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            onChange={(e) =>
+                                                setSearchTerm(e.target.value)
+                                            }
                                             placeholder="Buscar por nombre, CI o habitación..."
-                                            className="block w-full rounded-xl border-gray-300 bg-white py-2.5 pl-10 text-sm text-black focus:border-emerald-500 focus:ring-emerald-500 shadow-sm"
+                                            className="block w-full rounded-xl border-gray-300 bg-white py-2.5 pl-10 text-sm text-black shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                                         />
                                     </div>
                                     <div className="mt-2 text-xs font-medium text-gray-500">
-                                        {totalFiltered} huéspedes en total con datos completos
+                                        {totalFiltered} huéspedes en total con
+                                        datos completos
                                     </div>
                                 </div>
 
-                               <div className="flex-1">
+                                <div className="flex-1">
                                     <table className="w-full text-left text-xs text-gray-600">
-                                        <thead className="bg-gray-100 text-xs font-bold text-gray-700 uppercase sticky top-0 z-10 shadow-sm">
+                                        <thead className="sticky top-0 z-10 bg-gray-100 text-xs font-bold text-gray-700 uppercase shadow-sm">
                                             <tr>
-                                                <th className="w-8 border-r px-4 py-3 text-center bg-gray-100">
-                                                    <button onClick={toggleSelectAll}>
-                                                        {isAllSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-gray-400" />}
+                                                <th className="w-8 border-r bg-gray-100 px-4 py-3 text-center">
+                                                    <button
+                                                        onClick={
+                                                            toggleSelectAll
+                                                        }
+                                                    >
+                                                        {isAllSelected ? (
+                                                            <CheckSquare className="h-4 w-4 text-emerald-600" />
+                                                        ) : (
+                                                            <Square className="h-4 w-4 text-gray-400" />
+                                                        )}
                                                     </button>
                                                 </th>
-                                                <th className="border-r px-2 py-3 text-center bg-gray-100 w-16">Hab</th>
-                                                <th className="px-4 py-3 bg-gray-100">Huésped</th>
+                                                <th className="w-16 border-r bg-gray-100 px-2 py-3 text-center">
+                                                    Hab
+                                                </th>
+                                                <th className="bg-gray-100 px-4 py-3">
+                                                    Huésped
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
                                             {filteredEntrantes.length > 0 && (
                                                 <>
-                                                    <tr className="bg-gray-200"><td colSpan={3} className="font-bold text-center py-2 text-gray-700 uppercase tracking-widest border-y border-gray-300">Entrantes</td></tr>
-                                                    {filteredEntrantes.map(renderGuestRow)}
+                                                    <tr className="bg-gray-200">
+                                                        <td
+                                                            colSpan={3}
+                                                            className="border-y border-gray-300 py-2 text-center font-bold tracking-widest text-gray-700 uppercase"
+                                                        >
+                                                            Entrantes
+                                                        </td>
+                                                    </tr>
+                                                    {filteredEntrantes.map(
+                                                        renderGuestRow,
+                                                    )}
                                                 </>
                                             )}
                                             {filteredQuedantes.length > 0 && (
                                                 <>
-                                                    <tr className="bg-gray-200"><td colSpan={3} className="font-bold text-center py-2 text-gray-700 uppercase tracking-widest border-y border-gray-300">Quedantes</td></tr>
-                                                    {filteredQuedantes.map(renderGuestRow)}
+                                                    <tr className="bg-gray-200">
+                                                        <td
+                                                            colSpan={3}
+                                                            className="border-y border-gray-300 py-2 text-center font-bold tracking-widest text-gray-700 uppercase"
+                                                        >
+                                                            Quedantes
+                                                        </td>
+                                                    </tr>
+                                                    {filteredQuedantes.map(
+                                                        renderGuestRow,
+                                                    )}
                                                 </>
                                             )}
                                             {filteredSalientes.length > 0 && (
                                                 <>
-                                                    <tr className="bg-gray-200"><td colSpan={3} className="font-bold text-center py-2 text-gray-700 uppercase tracking-widest border-y border-gray-300">Salientes</td></tr>
-                                                    {filteredSalientes.map(renderGuestRow)}
+                                                    <tr className="bg-gray-200">
+                                                        <td
+                                                            colSpan={3}
+                                                            className="border-y border-gray-300 py-2 text-center font-bold tracking-widest text-gray-700 uppercase"
+                                                        >
+                                                            Salientes
+                                                        </td>
+                                                    </tr>
+                                                    {filteredSalientes.map(
+                                                        renderGuestRow,
+                                                    )}
                                                 </>
                                             )}
                                             {totalFiltered === 0 && (
-                                                <tr><td colSpan={3} className="p-8 text-center text-gray-500">Nadie con datos completos en esta fecha.</td></tr>
+                                                <tr>
+                                                    <td
+                                                        colSpan={3}
+                                                        className="p-8 text-center text-gray-500"
+                                                    >
+                                                        Nadie con datos
+                                                        completos en esta fecha.
+                                                    </td>
+                                                </tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -386,84 +576,161 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                             </div>
 
                             {/* COLUMNA DERECHA (VISTA PREVIA) */}
-                            <div className="lg:col-span-7 flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-xl ring-1 ring-emerald-100">
+                            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-xl ring-1 ring-emerald-100 lg:col-span-7">
                                 <div className="flex flex-col justify-between gap-4 border-b border-emerald-100 bg-emerald-50/50 p-4 xl:flex-row xl:items-center">
                                     <div>
-                                        <h3 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
-                                            <UserCheck className="h-5 w-5 text-emerald-600" /> Vista Previa del Documento
+                                        <h3 className="flex items-center gap-2 text-lg font-bold text-emerald-900">
+                                            <UserCheck className="h-5 w-5 text-emerald-600" />{' '}
+                                            Vista Previa del Documento
                                         </h3>
-                                        <p className="text-xs text-emerald-600 font-medium mt-1">{selectedIds.length} Huéspedes seleccionados</p>
+                                        <p className="mt-1 text-xs font-medium text-emerald-600">
+                                            {selectedIds.length} Huéspedes
+                                            seleccionados
+                                        </p>
                                     </div>
 
                                     <div className="flex items-center gap-2 xl:ml-auto">
-                                            <button
-                                                onClick={handleGenerateManual}
-                                                disabled={selectedIds.length === 0}
-                                                className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold whitespace-nowrap shadow-sm transition-all ${
-                                                    selectedIds.length > 0 ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95' : 'cursor-not-allowed border-gray-300 bg-gray-400 text-white opacity-50'
-                                                }`}
-                                            >
-                                                <Printer className="h-4 w-4" /> Selección Manual
-                                            </button>
+                                        <button
+                                            onClick={handleGenerateManual}
+                                            disabled={selectedIds.length === 0}
+                                            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold whitespace-nowrap shadow-sm transition-all ${
+                                                selectedIds.length > 0
+                                                    ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95'
+                                                    : 'cursor-not-allowed border-gray-300 bg-gray-400 text-white opacity-50'
+                                            }`}
+                                        >
+                                            <Printer className="h-4 w-4" />{' '}
+                                            Selección Manual
+                                        </button>
 
-                                            {/* EL NUEVO BOTÓN AUTOMÁTICO */}
-                                            <button
-                                                onClick={handleGenerateAuto}
-                                                disabled={allGuests.length === 0}
-                                                className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold whitespace-nowrap shadow-sm transition-all ${
-                                                    allGuests.length > 0 ? 'border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-500 active:scale-95 ring-2 ring-indigo-300 ring-offset-1' : 'cursor-not-allowed border-gray-300 bg-gray-400 text-white opacity-50'
-                                                }`}
-                                            >
-                                                <Zap className="h-4 w-4" /> Todo Automático
-                                            </button>
-                                        </div>
+                                        {/* EL NUEVO BOTÓN AUTOMÁTICO */}
+                                        <button
+                                            onClick={handleGenerateAuto}
+                                            disabled={allGuests.length === 0}
+                                            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold whitespace-nowrap shadow-sm transition-all ${
+                                                allGuests.length > 0
+                                                    ? 'border-indigo-600 bg-indigo-600 text-white ring-2 ring-indigo-300 ring-offset-1 hover:bg-indigo-500 active:scale-95'
+                                                    : 'cursor-not-allowed border-gray-300 bg-gray-400 text-white opacity-50'
+                                            }`}
+                                        >
+                                            <Zap className="h-4 w-4" /> Todo
+                                            Automático
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="flex-1 bg-white pb-4">
                                     {selectedIds.length > 0 ? (
-                                        <table className="w-full text-left text-xs text-gray-600 whitespace-nowrap">
-                                            <thead className="bg-emerald-50 text-xs font-bold text-emerald-800 uppercase sticky top-0 z-10 shadow-sm">
+                                        <table className="w-full text-left text-xs whitespace-nowrap text-gray-600">
+                                            <thead className="sticky top-0 z-10 bg-emerald-50 text-xs font-bold text-emerald-800 uppercase shadow-sm">
                                                 <tr>
-                                                    <th className="w-8 border-r border-emerald-100 px-2 py-3 text-center">#</th>
-                                                    <th className="border-r border-emerald-100 px-3 py-3 text-center">Hab</th>
-                                                    <th className="px-4 py-3">Nombre Completo</th>
-                                                    <th className="px-2 py-3 text-center">Edad</th>
-                                                    <th className="px-4 py-3">Nacionalidad</th>
-                                                    <th className="px-4 py-3">Profesión</th>
-                                                    <th className="px-4 py-3">Est. Civil</th>
-                                                    <th className="px-4 py-3">Procedencia</th>
-                                                    <th className="px-4 py-3">CI / Pasaporte</th>
-                                                    <th className="px-4 py-3">Otorgado</th>
+                                                    <th className="w-8 border-r border-emerald-100 px-2 py-3 text-center">
+                                                        #
+                                                    </th>
+                                                    <th className="border-r border-emerald-100 px-3 py-3 text-center">
+                                                        Hab
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Nombre Completo
+                                                    </th>
+                                                    <th className="px-2 py-3 text-center">
+                                                        Edad
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Nacionalidad
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Profesión
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Est. Civil
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Procedencia
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        CI / Pasaporte
+                                                    </th>
+                                                    <th className="px-4 py-3">
+                                                        Otorgado
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-200">
-                                                {selectedEntrantes.length > 0 && (
+                                                {selectedEntrantes.length >
+                                                    0 && (
                                                     <>
-                                                        <tr className="bg-gray-100"><td colSpan={10} className="font-bold text-center py-2 text-gray-700 tracking-widest border-y border-gray-200">ENTRANTES</td></tr>
-                                                        {selectedEntrantes.map((guest, idx) => renderPreviewRow(guest, idx))}
+                                                        <tr className="bg-gray-100">
+                                                            <td
+                                                                colSpan={10}
+                                                                className="border-y border-gray-200 py-2 text-center font-bold tracking-widest text-gray-700"
+                                                            >
+                                                                ENTRANTES
+                                                            </td>
+                                                        </tr>
+                                                        {selectedEntrantes.map(
+                                                            (guest, idx) =>
+                                                                renderPreviewRow(
+                                                                    guest,
+                                                                    idx,
+                                                                ),
+                                                        )}
                                                     </>
                                                 )}
-                                                {selectedQuedantes.length > 0 && (
+                                                {selectedQuedantes.length >
+                                                    0 && (
                                                     <>
-                                                        <tr className="bg-gray-100"><td colSpan={10} className="font-bold text-center py-2 text-gray-700 tracking-widest border-y border-gray-200">QUEDANTES</td></tr>
-                                                        {selectedQuedantes.map((guest, idx) => renderPreviewRow(guest, idx))}
+                                                        <tr className="bg-gray-100">
+                                                            <td
+                                                                colSpan={10}
+                                                                className="border-y border-gray-200 py-2 text-center font-bold tracking-widest text-gray-700"
+                                                            >
+                                                                QUEDANTES
+                                                            </td>
+                                                        </tr>
+                                                        {selectedQuedantes.map(
+                                                            (guest, idx) =>
+                                                                renderPreviewRow(
+                                                                    guest,
+                                                                    idx,
+                                                                ),
+                                                        )}
                                                     </>
                                                 )}
-                                                {selectedSalientes.length > 0 && (
+                                                {selectedSalientes.length >
+                                                    0 && (
                                                     <>
-                                                        <tr className="bg-gray-100"><td colSpan={10} className="font-bold text-center py-2 text-gray-700 tracking-widest border-y border-gray-200">SALIENTES</td></tr>
-                                                        {selectedSalientes.map((guest, idx) => renderPreviewRow(guest, idx))}
+                                                        <tr className="bg-gray-100">
+                                                            <td
+                                                                colSpan={10}
+                                                                className="border-y border-gray-200 py-2 text-center font-bold tracking-widest text-gray-700"
+                                                            >
+                                                                SALIENTES
+                                                            </td>
+                                                        </tr>
+                                                        {selectedSalientes.map(
+                                                            (guest, idx) =>
+                                                                renderPreviewRow(
+                                                                    guest,
+                                                                    idx,
+                                                                ),
+                                                        )}
                                                     </>
                                                 )}
                                             </tbody>
                                         </table>
                                     ) : (
-                                        <div className="flex h-full flex-col items-center justify-center p-10 text-center text-gray-400 min-h-[300px]">
-                                            <div className="rounded-full bg-gray-100 p-4 mb-3">
+                                        <div className="flex h-full min-h-[300px] flex-col items-center justify-center p-10 text-center text-gray-400">
+                                            <div className="mb-3 rounded-full bg-gray-100 p-4">
                                                 <ArrowRightCircle className="h-8 w-8 text-gray-300" />
                                             </div>
-                                            <p className="font-medium">Lista vacía</p>
-                                            <p className="text-xs mt-1">Haga click en "Todo Automático" o seleccione huéspedes.</p>
+                                            <p className="font-medium">
+                                                Lista vacía
+                                            </p>
+                                            <p className="mt-1 text-xs">
+                                                Haga click en "Todo Automático"
+                                                o seleccione huéspedes.
+                                            </p>
                                         </div>
                                     )}
                                 </div>
@@ -483,9 +750,13 @@ export default function ReportsIndex({ auth, Entrantes = [], Quedantes = [], Sal
                             >
                                 <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50 px-6 py-4">
                                     <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-900">
-                                        <FileText className="h-5 w-5" /> Parte Diario — {formatDate(modalDate)}
+                                        <FileText className="h-5 w-5" /> Parte
+                                        Diario — {formatDate(modalDate)}
                                     </h2>
-                                    <button onClick={() => setModalDate(null)} className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100">
+                                    <button
+                                        onClick={() => setModalDate(null)}
+                                        className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+                                    >
                                         <X className="h-5 w-5" />
                                     </button>
                                 </div>

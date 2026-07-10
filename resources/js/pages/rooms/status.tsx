@@ -1897,7 +1897,7 @@ export default function RoomsStatus({
                                 type="button"
                                 disabled={!previewOperatorId}
                                 onClick={confirmQuickPreview}
-                                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50"
+                                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 disabled:opacity-50"
                             >
                                 Ver
                             </button>
