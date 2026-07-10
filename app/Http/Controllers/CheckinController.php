@@ -1251,6 +1251,10 @@ class CheckinController extends Controller
                     ? null
                     : ($validated['qr_bank'] ?? $checkin->qr_bank),
 
+                // Corrige errores manuales de asignación de operador (edición
+                // posterior al check-in). Si no vino en el request, se
+                // conserva el que ya tenía guardado.
+                'checkin_operator_id' => $validated['checkin_operator_id'] ?? $checkin->checkin_operator_id,
             ];
 
            // actualiza servicios consumidos si vienen del request
