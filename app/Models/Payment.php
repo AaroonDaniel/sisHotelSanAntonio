@@ -38,6 +38,14 @@ class Payment extends Model
     }
 
     /**
+     * Adelanto cobrado directamente sobre una reserva (antes del check-in).
+     */
+    public function reservation(): BelongsTo
+    {
+        return $this->belongsTo(Reservation::class);
+    }
+
+    /**
      * Si este pago fue hecho contra una Cuenta Maestra corporativa (grupo
      * de habitaciones), no contra una habitación puntual.
      */

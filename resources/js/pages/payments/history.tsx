@@ -1,34 +1,22 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
-    ArrowLeft,
     ArrowDownRight,
+    ArrowLeft,
     ArrowUpRight,
+    Receipt,
     Search,
-    Receipt
 } from 'lucide-react';
 import { useState } from 'react';
 
 export interface Payment {
     id: number;
-    amount: string | number;
-    method: string;
-    type: string;
-    payment_date: string;
-    status: string;
-    user?: {
-        id: number;
-        name: string;
-        full_name?: string;
-        nickname?: string;
-    };
-    checkin?: {
-        id: number;
-        room?: {
-            name: string;
-            number: string;
-        };
-    };
+    date: string; // ISO 8601, ya resuelto en el backend (payment_date o created_at)
+    room_number: string; // Número de habitación, o "N/A"
+    type: string; // PAGO | ADELANTO | DEVOLUCION
+    method: string; // Ej. "EFECTIVO" o "QR (BNB)"
+    amount: number;
+    operator_name: string;
 }
 
 interface Props {
@@ -36,8 +24,39 @@ interface Props {
     // Laravel paginate() envía los datos dentro de un objeto con la propiedad "data"
     payments: {
         data: Payment[];
+        total?: number;
     };
 }
+
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('es-BO', {
+        style: 'currency',
+        currency: 'BOB',
+    }).format(amount);
+
+// Formato explícito DD/MM/YYYY, HH:MM a.m./p.m. — nunca debe devolver "-":
+// el backend ya garantiza que `date` siempre trae un valor (payment_date o,
+// si ese venía vacío, created_at).
+const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Sin fecha';
+
+    const datePart = date.toLocaleDateString('es-BO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
+    const timePart = date
+        .toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        })
+        .replace('a. m.', 'a.m.')
+        .replace('p. m.', 'p.m.');
+
+    return `${datePart}, ${timePart}`;
+};
 
 export default function PaymentHistory({ auth, payments }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -45,29 +64,15 @@ export default function PaymentHistory({ auth, payments }: Props) {
     // Filtro básico en el cliente (para la página actual)
     const filteredPayments = payments.data.filter((payment) => {
         const term = searchTerm.toLowerCase();
-        const receiverName = (payment.user?.full_name || payment.user?.name || '').toLowerCase();
-        
+
         return (
             payment.method?.toLowerCase().includes(term) ||
             payment.type?.toLowerCase().includes(term) ||
-            receiverName.includes(term) ||
+            payment.room_number?.toLowerCase().includes(term) ||
+            payment.operator_name?.toLowerCase().includes(term) ||
             payment.amount.toString().includes(term)
         );
     });
-
-    // Formateador de fecha y hora
-    const formatDateTime = (dateString?: string) => {
-        if (!dateString) return '-';
-        const date = new Date(dateString);
-        return date.toLocaleString('es-ES', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-    };
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -84,7 +89,9 @@ export default function PaymentHistory({ auth, payments }: Props) {
                 </button>
 
                 <div>
-                    <h2 className="text-3xl font-bold text-white">Historial de Transacciones</h2>
+                    <h2 className="text-3xl font-bold text-white">
+                        Historial de Transacciones
+                    </h2>
                     <p className="mt-1 text-sm text-gray-400">
                         Registro de todos los pagos y devoluciones procesados
                     </p>
@@ -101,15 +108,18 @@ export default function PaymentHistory({ auth, payments }: Props) {
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Buscar por método, tipo, usuario..."
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
+                                    placeholder="Buscar por habitación, método, tipo, operador..."
                                     className="block w-full rounded-xl border-gray-300 bg-gray-50 py-2.5 pl-10 text-sm text-black focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
-                            
-                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-medium text-sm">
+
+                            <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
                                 <Receipt className="h-5 w-5" />
-                                Total Registros: {payments.data.length}
+                                Total Registros:{' '}
+                                {payments.total ?? payments.data.length}
                             </div>
                         </div>
 
@@ -118,43 +128,80 @@ export default function PaymentHistory({ auth, payments }: Props) {
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">Fecha y Hora</th>
-                                        <th className="px-6 py-4">Tipo / Método</th>
+                                        <th className="px-6 py-4">
+                                            Fecha y Hora
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Habitación
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Tipo / Método
+                                        </th>
                                         <th className="px-6 py-4">Monto</th>
-                                        <th className="px-6 py-4">Recibido por</th>
+                                        <th className="px-6 py-4">
+                                            Recibido por
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredPayments.length > 0 ? (
                                         filteredPayments.map((payment) => {
-                                            // Determinamos si es pago o devolución para el color
-                                            const isRefund = payment.type?.toLowerCase() === 'devolución' || payment.type?.toLowerCase() === 'refund';
-                                            
+                                            // Determinamos si es devolución para el color (rojo = sale dinero)
+                                            const isRefund =
+                                                payment.type?.toUpperCase() ===
+                                                    'DEVOLUCION' ||
+                                                payment.type?.toUpperCase() ===
+                                                    'DEVOLUCIÓN';
+
                                             return (
-                                                <tr key={payment.id} className="transition-colors hover:bg-gray-50">
-                                                    <td className="px-6 py-4 font-medium text-gray-900">
-                                                        {formatDateTime(payment.payment_date)}
+                                                <tr
+                                                    key={payment.id}
+                                                    className="transition-colors hover:bg-gray-50"
+                                                >
+                                                    <td className="px-6 py-4 font-medium whitespace-nowrap text-gray-900">
+                                                        {formatDateTime(
+                                                            payment.date,
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 font-bold text-gray-900">
+                                                        {payment.room_number}
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-2">
                                                             {isRefund ? (
-                                                                <ArrowUpRight className="h-4 w-4 text-red-500" />
+                                                                <ArrowUpRight className="h-4 w-4 shrink-0 text-red-500" />
                                                             ) : (
-                                                                <ArrowDownRight className="h-4 w-4 text-green-500" />
+                                                                <ArrowDownRight className="h-4 w-4 shrink-0 text-green-500" />
                                                             )}
-                                                            <span className={`font-semibold ${isRefund ? 'text-red-700' : 'text-green-700'}`}>
-                                                                {payment.type || 'Pago'}
+                                                            <span
+                                                                className={`font-semibold whitespace-nowrap ${isRefund ? 'text-red-700' : 'text-green-700'}`}
+                                                            >
+                                                                {payment.type?.toUpperCase() ||
+                                                                    'PAGO'}
                                                             </span>
-                                                            <span className="text-gray-400 mx-1">-</span>
-                                                            <span className="text-gray-600 capitalize">{payment.method}</span>
+                                                            <span className="mx-1 text-gray-400">
+                                                                -
+                                                            </span>
+                                                            <span className="whitespace-nowrap text-gray-600">
+                                                                {payment.method}
+                                                            </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 font-bold text-gray-900">
-                                                        Bs. {Number(payment.amount).toFixed(2)}
+                                                    <td
+                                                        className={`px-6 py-4 font-bold whitespace-nowrap ${isRefund ? 'text-red-600' : 'text-green-600'}`}
+                                                    >
+                                                        {isRefund && '- '}
+                                                        {formatCurrency(
+                                                            Math.abs(
+                                                                payment.amount,
+                                                            ),
+                                                        )}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-                                                            {payment.user?.full_name || payment.user?.nickname || payment.user?.name || 'Sistema'}
+                                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 uppercase">
+                                                            {
+                                                                payment.operator_name
+                                                            }
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -162,8 +209,13 @@ export default function PaymentHistory({ auth, payments }: Props) {
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={4} className="p-8 text-center text-gray-500">
-                                                {searchTerm ? 'No se encontraron resultados.' : 'No hay transacciones registradas.'}
+                                            <td
+                                                colSpan={5}
+                                                className="p-8 text-center text-gray-500"
+                                            >
+                                                {searchTerm
+                                                    ? 'No se encontraron resultados.'
+                                                    : 'No hay transacciones registradas.'}
                                             </td>
                                         </tr>
                                     )}

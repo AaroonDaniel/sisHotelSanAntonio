@@ -604,6 +604,77 @@ export default function OccupiedRoomModal({
                                             )}
                                         </div>
 
+                                        {/* --- HISTORIAL DE PAGOS: para cada
+                                            movimiento (pago/adelanto/devolución),
+                                            se ve el método y, si fue QR, el
+                                            banco exacto donde se hizo. --- */}
+                                        {paymentHistory.length > 0 && (
+                                            <div className="mb-2 max-h-28 space-y-1 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                                                {paymentHistory.map(
+                                                    (p: any) => {
+                                                        const isRefund =
+                                                            p.type ===
+                                                            'DEVOLUCION';
+                                                        const dateStr =
+                                                            new Date(
+                                                                p.payment_date ||
+                                                                    p.created_at,
+                                                            ).toLocaleString(
+                                                                'es-BO',
+                                                                {
+                                                                    day: '2-digit',
+                                                                    month: '2-digit',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                    hour12: false,
+                                                                },
+                                                            );
+                                                        const methodLabel =
+                                                            p.method
+                                                                ? `${p.method}${p.bank_name ? ` (${p.bank_name})` : ''}`
+                                                                : 'N/D';
+
+                                                        return (
+                                                            <div
+                                                                key={p.id}
+                                                                className="flex items-center justify-between gap-2 text-[11px]"
+                                                            >
+                                                                <div className="flex min-w-0 flex-col">
+                                                                    <span className="truncate font-semibold text-gray-700">
+                                                                        {p.type ||
+                                                                            'PAGO'}{' '}
+                                                                        ·{' '}
+                                                                        {
+                                                                            methodLabel
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-[10px] text-gray-400">
+                                                                        {
+                                                                            dateStr
+                                                                        }
+                                                                    </span>
+                                                                </div>
+                                                                <span
+                                                                    className={`shrink-0 font-bold ${isRefund ? 'text-red-500' : 'text-green-600'}`}
+                                                                >
+                                                                    {isRefund
+                                                                        ? '- '
+                                                                        : ''}
+                                                                    {formatCurrency(
+                                                                        Math.abs(
+                                                                            parseFloat(
+                                                                                p.amount,
+                                                                            ),
+                                                                        ),
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    },
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* --- BOTÓN / FORMULARIO DE ADELANTO --- */}
                                         {!showPaymentForm ? (
                                             <button

@@ -149,7 +149,7 @@ export default function Gastos({
                         value={selectedOperatorId ?? ''}
                         onChange={handleOperatorChange}
                         compact
-                        size="md"
+                        size="lg"
                         label=""
                     />
                 </div>

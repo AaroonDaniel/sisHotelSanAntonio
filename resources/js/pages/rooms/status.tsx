@@ -1867,7 +1867,7 @@ export default function RoomsStatus({
             />
             {previewPickerOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-2xl bg-white p-7 shadow-3xl">
+                    <div className="shadow-3xl w-full max-w-md rounded-2xl bg-white p-7">
                         <h3 className="mb-1 text-lg font-bold text-gray-800">
                             Ver mi caja hasta ahora
                         </h3>
@@ -3836,6 +3836,14 @@ function FinancialHistoryModal({
                                                     }`}
                                                 >
                                                     {p.method || p.type}
+                                                    {/* Aquí agregamos la validación del banco */}
+                                                    {p.method?.toLowerCase() ===
+                                                        'qr' &&
+                                                        p.bank_name && (
+                                                            <span className="ml-1 opacity-80">
+                                                                ({p.bank_name})
+                                                            </span>
+                                                        )}
                                                 </span>
                                             </td>
                                             <td
