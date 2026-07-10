@@ -25,6 +25,27 @@ class RoleAndPermissionSeeder extends Seeder
             ]
         );
 
+        // ── Terminal Compartida (Kiosk Mode): cuenta genérica de recepción.
+        //    Ya no se inicia sesión con cuentas individuales en el mostrador;
+        //    la trazabilidad real (quién hizo qué) vive en el operator_id
+        //    elegido en el OperatorSelector, no en Auth::id(). Este usuario
+        //    NO debe aparecer como avatar seleccionable — scopeOperadores()
+        //    lo excluye explícitamente por nickname. ──
+        $recepcion = User::firstOrCreate(
+            ['nickname' => 'recepcion'],
+            [
+                'full_name' => 'Recepción',
+                'phone' => '00000000',
+                'address' => 'Terminal de Recepción',
+                'password' => Hash::make('recepcion123'),
+                'shift' => 'Terminal',
+                'is_active' => true,
+            ]
+        );
+        if (!$recepcion->hasRole('recepcionista')) {
+            $recepcion->assignRole('recepcionista');
+        }
+
         // ── 1) Normalizar TODOS los roles a minúsculas (conserva ids y asignaciones) ──
         foreach (Role::all() as $r) {
             $lower = strtolower($r->name);

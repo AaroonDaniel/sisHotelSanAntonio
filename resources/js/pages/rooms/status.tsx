@@ -2,6 +2,7 @@ import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
+import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector from '@/components/OperatorSelector';
 import ReservationsPopover from '@/components/Reservationspopover';
 import ToleranceModal from '@/components/ToleranceModal';
@@ -1924,6 +1925,13 @@ function CheckoutConfirmationModal({
         setTimeout(() => setOperatorAlertPulse(false), 1600);
     };
 
+    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
+
     if (!checkin) return null;
 
     const [tolModal, setTolModal] = useState<{
@@ -2296,10 +2304,18 @@ function CheckoutConfirmationModal({
 
             setPdfUrl(url);
         } catch (error: any) {
-            alert(
-                error?.response?.data?.message ||
-                    'Error al procesar la salida.',
-            );
+            if (error?.response?.data?.needs_shift_opening) {
+                setShiftModal({
+                    show: true,
+                    operatorId: String(error.response.data.operator_id),
+                    operatorName: error.response.data.operator_name,
+                });
+            } else {
+                alert(
+                    error?.response?.data?.message ||
+                        'Error al procesar la salida.',
+                );
+            }
         } finally {
             setProcessing(false);
         }
@@ -2358,7 +2374,7 @@ function CheckoutConfirmationModal({
     return (
         <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
             <div
-                className={`relative w-full ${
+                className={`relative w-full overflow-visible ${
                     pdfUrl
                         ? 'max-w-[470px]'
                         : tipoDocumento === 'factura'
@@ -2367,26 +2383,25 @@ function CheckoutConfirmationModal({
                 }`}
             >
                 {/* ===================================================== */}
-                {/* 🔴 SELECTOR FLOTANTE DE OPERADOR — mismo patrón que      */}
-                {/* checkinModal: fuera de la caja blanca, flotando arriba  */}
-                {/* a la derecha, bottom-full + mb-3 (se auto-ajusta a la   */}
-                {/* altura real, sin adivinar un -top-[Npx] fijo).          */}
+                {/* 🔴 PANEL LATERAL DE OPERADOR — side-toolbar flotando a   */}
+                {/* la derecha de la caja blanca (mismo patrón que           */}
+                {/* checkinModal). left-full + ml-4 ancla justo después del  */}
+                {/* borde derecho de la caja sin adivinar su ancho a mano.   */}
                 {/* ===================================================== */}
                 {!pdfUrl && (
                     <div
-                        className={`absolute right-0 bottom-full z-50 mb-3 w-[30rem] max-w-[calc(100vw-2rem)] rounded-lg border-2 bg-white p-3 shadow-xl transition-all ${
+                        className={`absolute top-0 left-full z-50 ml-4 max-h-[80vh] w-28 overflow-y-auto rounded-lg border-2 p-3 shadow-lg transition-all ${
                             checkoutOperatorId
-                                ? 'border-green-500 bg-green-50'
-                                : 'border-red-500 bg-red-50'
+                                ? 'border-green-200 bg-green-50'
+                                : 'border-red-200 bg-red-50'
                         } ${operatorAlertPulse ? 'animate-pulse ring-4 ring-red-400' : ''}`}
                     >
                         <p
-                            className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-bold ${checkoutOperatorId ? 'text-green-700' : 'text-red-700'}`}
+                            className={`mb-3 text-center text-[11px] font-bold text-balance ${checkoutOperatorId ? 'text-green-700' : 'text-red-700'}`}
                         >
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             {checkoutOperatorId
-                                ? 'Operador seleccionado correctamente'
-                                : 'Seleccione su nombre para finalizar la estadía'}
+                                ? 'Operador seleccionado'
+                                : 'Seleccione su nombre'}
                         </p>
                         <OperatorSelector
                             operators={operators}
@@ -2394,6 +2409,7 @@ function CheckoutConfirmationModal({
                             onChange={setCheckoutOperatorId}
                             compact
                             size="lg"
+                            orientation="col"
                             label=""
                         />
                     </div>
@@ -3660,6 +3676,18 @@ function CheckoutConfirmationModal({
                     minutes: tolModal.minutes,
                     action: 'exit', // Importante: 'exit' para mensaje de salida
                 }}
+            />
+            <OpenShiftModal
+                show={shiftModal.show}
+                operatorId={shiftModal.operatorId}
+                operatorName={shiftModal.operatorName}
+                onClose={() =>
+                    setShiftModal({
+                        show: false,
+                        operatorId: null,
+                        operatorName: null,
+                    })
+                }
             />
         </div>
     );

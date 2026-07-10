@@ -1,4 +1,3 @@
-import OpenRegisterModal from '@/components/OpenRegisterModal';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -9,7 +8,6 @@ import {
     LogOut,
     Menu,
     User as UserIcon,
-    Users, // <-- IMPORTANTE: Importamos el icono Users
     X,
 } from 'lucide-react';
 import { PropsWithChildren, useEffect, useState } from 'react';
@@ -48,7 +46,6 @@ export default function AuthenticatedLayout({
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const [showLogoutWarning, setShowLogoutWarning] = useState(false);
 
     // --- Toast global de flash (visible en TODAS las páginas) ---
     const [flashVisible, setFlashVisible] = useState(false);
@@ -69,33 +66,15 @@ export default function AuthenticatedLayout({
     const getInitials = (name: string) =>
         name ? name.substring(0, 2).toUpperCase() : 'US';
 
-    // Función normal de Cerrar Sesión (Exige cerrar caja SOLO a recepcionistas)
+    // Terminal Compartida (Kiosk Mode): la sesión de 'recepcion' es
+    // compartida por todos los recepcionistas de la terminal. Cerrarla ya
+    // NO depende de "tener caja abierta" (eso ahora vive por operador en
+    // cash_registers, no en la sesión de Laravel) — cualquiera puede cerrar
+    // sesión libremente sin afectar los turnos abiertos de otros
+    // operadores.
     const handleLogout = (e: React.MouseEvent) => {
         e.preventDefault();
-
-        // 1. Verificamos si el usuario activo tiene el rol de recepcionista
-        const isRecepcionista = auth?.user?.roles?.includes('recepcionista');
-
-        // 2. Bloqueamos la salida SOLO si tiene caja abierta Y es recepcionista
-        if (auth.active_register && isRecepcionista) {
-            setShowLogoutWarning(true);
-            setShowUserMenu(false);
-        } else {
-            // Si el suplente, un administrador, o personal de limpieza cierra sesión, 
-            // cerramos directo y limpiamos el storage.
-            localStorage.removeItem('relay_mode_active');
-            router.post('/logout');
-        }
-    };
-
-    // FUNCIÓN ACTUALIZADA: Cambio de usuario rápido
-    const handleSwitchUser = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setShowUserMenu(false);
-
-        // ACTIVAMOS EL PASE LIBRE (Modo Relevo)
-        localStorage.setItem('relay_mode_active', 'true');
-
+        localStorage.removeItem('relay_mode_active'); // limpieza de un flag legacy
         router.post('/logout');
     };
     return (
@@ -174,35 +153,25 @@ export default function AuthenticatedLayout({
                                 >
                                     Gastos
                                 </Link>
-                                {auth?.user?.permissions?.includes('auditoria.ver') && (
-                                <Link
-                                    href="/auditoria"
-                                    className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
-                                        url.startsWith('/auditoria')
-                                            ? 'border-red-500 text-white'
-                                            : 'border-transparent text-white hover:border-white/50'
-                                    }`}
-                                >
-                                    Auditoría
-                                </Link>
+                                {auth?.user?.permissions?.includes(
+                                    'auditoria.ver',
+                                ) && (
+                                    <Link
+                                        href="/auditoria"
+                                        className={`inline-flex items-center border-b-4 px-1 pt-1 text-base font-semibold transition duration-150 ease-in-out ${
+                                            url.startsWith('/auditoria')
+                                                ? 'border-red-500 text-white'
+                                                : 'border-transparent text-white hover:border-white/50'
+                                        }`}
+                                    >
+                                        Auditoría
+                                    </Link>
                                 )}
                             </div>
                         </div>
 
                         {/* Menú Usuario */}
                         <div className="hidden gap-4 sm:ml-6 sm:flex sm:items-center">
-                            {/* NUEVO BOTÓN: Cambio de Usuario */}
-                            <button
-                                onClick={handleSwitchUser}
-                                className="flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-base font-bold text-white shadow-md transition-all hover:bg-red-500 hover:shadow-lg active:scale-95"
-                                title="Cambiar de cuenta sin cerrar la caja actual"
-                            >
-                                <Users className="h-4 w-4" />
-                                <span className="hidden md:block">
-                                    Cambio de usuario
-                                </span>
-                            </button>
-
                             <div className="relative ml-3">
                                 <div
                                     onClick={() =>
@@ -283,11 +252,10 @@ export default function AuthenticatedLayout({
             {/* --- BODY (Contenido Principal) --- */}
             <main className="relative z-10 py-10">
                 {children}
-                <OpenRegisterModal />
 
                 {/* --- Toast global de flash: visible en TODAS las páginas --- */}
                 {flashVisible && (
-                    <div className="fixed bottom-6 right-6 z-[80] w-full max-w-sm animate-in space-y-3 slide-in-from-bottom-4">
+                    <div className="fixed right-6 bottom-6 z-[80] w-full max-w-sm animate-in space-y-3 slide-in-from-bottom-4">
                         {flash?.success && (
                             <div className="flex items-start gap-3 rounded-xl border border-green-300 bg-green-50 p-4 shadow-lg">
                                 <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
@@ -344,52 +312,6 @@ export default function AuthenticatedLayout({
                                     >
                                         Entendido
                                     </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {showLogoutWarning && (
-                    <div className="fixed inset-0 z-[9999] flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
-                        <div className="w-full max-w-md animate-in overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
-                            <div className="p-6 text-center">
-                                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
-                                    <AlertTriangle className="h-8 w-8" />
-                                </div>
-                                <h3 className="mb-2 text-xl font-bold text-gray-800">
-                                    ¡Turno Aún Abierto!
-                                </h3>
-                                <p className="text-bold text-base leading-relaxed text-gray-600">
-                                    <b className="text-gray-700">
-                                        {user.nickname || auth?.user?.name}
-                                    </b>
-                                    , el sistema detecta que aún tienes dinero
-                                    bajo tu responsabilidad. No puedes abandonar
-                                    el sistema sin antes imprimir tu{' '}
-                                    <b className="text-red-500">Parte Diario</b>{' '}
-                                    y cerrar la caja.
-                                </p>
-
-                                <div className="mt-8 flex justify-center gap-3">
-                                    <button
-                                        onClick={() =>
-                                            setShowLogoutWarning(false)
-                                        }
-                                        className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
-                                    >
-                                        Volver al sistema
-                                    </button>
-
-                                    <Link
-                                        href="/reports/financial"
-                                        onClick={() =>
-                                            setShowLogoutWarning(false)
-                                        }
-                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95"
-                                    >
-                                        <LogOut className="h-4 w-4" /> Ir a
-                                        Cerrar Caja
-                                    </Link>
                                 </div>
                             </div>
                         </div>

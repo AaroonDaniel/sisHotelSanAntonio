@@ -15,6 +15,8 @@ use App\Models\Invoice;
 use App\Models\InvoiceDetail;
 use App\Models\SiatCredential;
 use App\Exceptions\SiatOfflineException;
+use App\Exceptions\ShiftNotOpenException;
+use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +33,8 @@ use Illuminate\Support\Str;
 
 class CheckinController extends Controller
 {
+    use RequiresOpenShift;
+
     public function index()
     {
         // Se carga SIEMPRE la relación 'payments' para que el frontend (index y
@@ -237,15 +241,14 @@ class CheckinController extends Controller
         // valida ANTES de abrir la transacción para devolver un error
         // amigable (withErrors) en vez de una excepción 500. Si no piden
         // adelanto, la asignación se sigue creando libremente sin caja.
+        // Terminal Compartida: el dueño del turno es el operador elegido
+        // en el OperatorSelector (checkin_operator_id), NO Auth::id() (que
+        // siempre es la cuenta genérica 'recepcion').
         if (($validatedCheckin['advance_payment'] ?? 0) > 0) {
-            $tieneCajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
-                ->where('status', 'ABIERTA')
-                ->exists();
-
-            if (!$tieneCajaAbierta) {
-                return back()->withErrors([
-                    'error' => 'No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la asignación.',
-                ]);
+            try {
+                $this->findOpenShift((int) $validatedCheckin['checkin_operator_id']);
+            } catch (ShiftNotOpenException $e) {
+                return $this->shiftRequiredRedirect($e);
             }
         }
 
@@ -253,6 +256,7 @@ class CheckinController extends Controller
         // 5. INICIO DE TRANSACCIÓN (ahora envuelve TAMBIÉN la creación del huésped)
         //    Si algo falla más adelante, el huésped también se revierte.
         // =========================================================
+        try {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $isAssigningSalon) {
 
             // =========================================================
@@ -444,10 +448,12 @@ class CheckinController extends Controller
                 $specialAgreementId = $agreement->id;
             }
 
-            // Buscamos la caja abierta del usuario UNA sola vez: sirve tanto
-            // para vincular la asignación como el adelanto inicial (si lo
-            // hay) al mismo turno.
-            $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+            // Buscamos la caja abierta del OPERADOR (checkin_operator_id,
+            // no $userId/Auth::id(): bajo Terminal Compartida ese es
+            // siempre 'recepcion') UNA sola vez: sirve tanto para vincular
+            // la asignación como el adelanto inicial (si lo hay) al mismo
+            // turno.
+            $cajaAbierta = \App\Models\CashRegister::where('user_id', $validatedCheckin['checkin_operator_id'])
                 ->where('status', 'ABIERTA')
                 ->first();
 
@@ -480,9 +486,16 @@ class CheckinController extends Controller
                 // cualquier cuadre de turno (cobro fantasma): se bloquea la
                 // asignación completa, igual que ya ocurre con gastos y
                 // adelantos posteriores. Si no hay adelanto, la asignación
-                // se sigue creando libremente sin caja abierta.
+                // se sigue creando libremente sin caja abierta. (Red de
+                // seguridad: el caso normal ya se valida ANTES de la
+                // transacción, más arriba; esto solo cubre la rarísima
+                // condición de carrera de que el turno se cierre justo
+                // entre ambas verificaciones.)
                 if (!$cajaAbierta) {
-                    throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la asignación.');
+                    throw new ShiftNotOpenException(
+                        (int) $validatedCheckin['checkin_operator_id'],
+                        'El operador',
+                    );
                 }
 
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
@@ -634,6 +647,9 @@ class CheckinController extends Controller
                 return redirect()->back()->with('success', 'Asignación registrada. ATENCIÓN: ' . $mensaje);
             }
         });
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredRedirect($e);
+        }
     }
 
     public function transfer(Request $request, Checkin $checkin)
@@ -1505,14 +1521,12 @@ class CheckinController extends Controller
 
         // Sin caja abierta, este pago quedaría invisible en cualquier cuadre
         // de turno: se bloquea, igual que ya ocurre con los gastos.
-        $activeRegister = \App\Models\CashRegister::where('user_id', Auth::id())
-            ->where('status', 'ABIERTA')
-            ->first();
-
-        if (!$activeRegister) {
-            return back()->withErrors([
-                'error' => 'No puedes registrar un pago. Debes tener una Caja Registradora abierta.',
-            ]);
+        // Terminal Compartida: el dueño del turno es operator_id (el avatar
+        // elegido), NO Auth::id() (siempre la cuenta genérica 'recepcion').
+        try {
+            $activeRegister = $this->findOpenShift((int) $request->operator_id);
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredRedirect($e);
         }
 
         // 2. Transacción
@@ -1549,6 +1563,7 @@ class CheckinController extends Controller
             'amount' => 'required|numeric|gt:0',
             'method' => 'required|in:efectivo,qr,transferencia,tarjeta',
             'notes'  => 'required|string|max:500',
+            'operator_id' => 'required|exists:users,id',
         ], [
             'amount.gt'       => 'El monto a devolver debe ser mayor a cero.',
             'method.in'       => 'El método de devolución seleccionado no es válido.',
@@ -1557,15 +1572,13 @@ class CheckinController extends Controller
 
         $userId = Auth::id();
 
-        // 2. Verificar que el usuario tenga una caja activa
-        $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
-            ->where('status', 'ABIERTA')
-            ->first();
-
-        if (!$cajaAbierta) {
-            return back()->withErrors([
-                'amount' => 'No tiene una caja abierta. Debe aperturar caja antes de registrar una devolución.',
-            ]);
+        // 2. Verificar que el OPERADOR (no Auth::id(), que bajo Terminal
+        // Compartida es siempre la cuenta genérica 'recepcion') tenga una
+        // caja activa.
+        try {
+            $cajaAbierta = $this->findOpenShift((int) $validated['operator_id']);
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredRedirect($e);
         }
 
         // 3. Registro financiero de la devolución (monto ESTRICTAMENTE NEGATIVO)
@@ -1584,6 +1597,7 @@ class CheckinController extends Controller
             Payment::create([
                 'checkin_id'       => $checkin->id,
                 'user_id'          => $userId,
+                'operator_id'      => $validated['operator_id'],
                 'cash_register_id' => $cajaAbierta->id,
                 'amount'           => $montoNegativo,
                 'method'           => $metodo,
@@ -1717,15 +1731,12 @@ class CheckinController extends Controller
                     ? ($montoEfectivoSolicitado > 0 || $montoQrSolicitado > 0)
                     : $saldoPendienteFinal > 0;
 
+                // Terminal Compartida: el dueño del turno es
+                // checkout_operator_id (el avatar elegido), NO $userId
+                // (Auth::id(), siempre la cuenta genérica 'recepcion').
                 $cajaAbierta = null;
                 if ($hayCobroPendiente) {
-                    $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
-                        ->where('status', 'ABIERTA')
-                        ->first();
-
-                    if (!$cajaAbierta) {
-                        throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar el saldo de esta estadía.');
-                    }
+                    $cajaAbierta = $this->findOpenShift((int) $request->input('checkout_operator_id'));
                 }
 
                 // --- Mapeo del método principal para la factura/caja ---
@@ -1842,6 +1853,8 @@ class CheckinController extends Controller
 
                 return $invoice;
             });
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredJson($e);
         } catch (\Throwable $e) {
             // Si la FASE 1 falla, sí devolvemos 500 — porque la BD quedó intacta
             // y el problema NO es el SIAT, es lógica/datos.
@@ -3209,6 +3222,7 @@ class CheckinController extends Controller
             'checkout_operator_id' => 'required|exists:users,id',
         ]);
 
+        try {
         return DB::transaction(function () use ($request) {
             // 1. Traemos todos los checkins solicitados con sus relaciones necesarias
             $checkins = Checkin::with(['guest', 'room.price', 'room.roomType', 'checkinDetails.service', 'schedule', 'companions', 'payments'])
@@ -3328,20 +3342,16 @@ class CheckinController extends Controller
 
             // Sin caja abierta, cualquier cobro de saldo aquí quedaría
             // invisible en el cuadre de turno (cobro fantasma). Solo se
-            // exige si REALMENTE hay dinero por cobrar.
+            // exige si REALMENTE hay dinero por cobrar. Terminal Compartida:
+            // el dueño del turno es checkout_operator_id, NO $userId
+            // (Auth::id(), siempre la cuenta genérica 'recepcion').
             $hayCobroPendiente = $request->metodo_pago === 'ambos'
                 ? ($request->monto_efectivo > 0 || $request->monto_qr > 0)
                 : $saldoPagar > 0;
 
             $cajaAbierta = null;
             if ($hayCobroPendiente) {
-                $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
-                    ->where('status', 'ABIERTA')
-                    ->first();
-
-                if (!$cajaAbierta) {
-                    throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar el saldo de estas estadías.');
-                }
+                $cajaAbierta = $this->findOpenShift((int) $request->checkout_operator_id);
             }
 
             if ($request->metodo_pago === 'ambos') {
@@ -3606,6 +3616,9 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf');
         });
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredJson($e);
+        }
     }
 
     /**

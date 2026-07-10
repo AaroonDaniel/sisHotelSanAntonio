@@ -100,11 +100,13 @@ class User extends Authenticatable
     /**
      * Usuarios activos disponibles para ser seleccionados como "operador"
      * en el selector de la sesión global de recepción (Check-in, Pagos,
-     * Gastos, Checkout...).
+     * Gastos, Checkout...). Excluye a 'recepcion': es la cuenta genérica de
+     * la Terminal Compartida (Kiosk Mode), no una persona física real.
      */
     public function scopeOperadores($query)
     {
-       return $query->where('is_active', true);
+        return $query->where('is_active', true)
+            ->where('nickname', '!=', 'recepcion');
     }
 
     /*Configuraxion de la bitacora de actividades*/

@@ -188,6 +188,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement')->middleware('permission:reportes.financiero');
 
+    // Administración: Aperturas y Cierres (historial de turnos + informe consolidado por día)
+    Route::get('/admin/shift-reports', [App\Http\Controllers\ShiftReportController::class, 'index'])->name('admin.shift-reports.index')->middleware('permission:reportes.financiero');
+
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');
     Route::post('/cash-registers/close', [CashRegisterController::class, 'close'])->name('cash-registers.close');
     Route::get('/cash-registers/{cashRegister}', [CashRegisterController::class, 'show'])->name('cash-registers.show');

@@ -1,3 +1,4 @@
+import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, {
     Operator as SharedOperator,
 } from '@/components/OperatorSelector';
@@ -126,6 +127,30 @@ export default function OccupiedRoomModal({
     const [paymentOperatorError, setPaymentOperatorError] = useState<
         string | null
     >(null);
+
+    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
+    // Compartido por el formulario de adelanto y el de devolución de este
+    // mismo modal.
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
+
+    const detectShiftRequired = (errors: any): boolean => {
+        if (!errors?.shift_required) return false;
+        try {
+            const info = JSON.parse(errors.shift_required);
+            setShiftModal({
+                show: true,
+                operatorId: String(info.operator_id),
+                operatorName: info.operator_name,
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     // --- FORMULARIO DE ANULACIÓN DE CONVENIO ---
     const { post: postCancelAgreement, processing: processingCancel } = useForm(
@@ -369,6 +394,7 @@ export default function OccupiedRoomModal({
             },
             onError: (errors) => {
                 console.error('Error backend:', errors);
+                detectShiftRequired(errors);
             },
             onFinish: () => setShowConfirmModal(false),
         });
@@ -1080,6 +1106,7 @@ export default function OccupiedRoomModal({
                                     <div className="mt-3">
                                         <RefundDialog
                                             checkinId={liveCheckin.id}
+                                            operators={operators}
                                         />
                                     </div>
                                 </div>
@@ -1213,6 +1240,19 @@ export default function OccupiedRoomModal({
                 }}
                 checkins={liveCheckin ? [liveCheckin] : []}
                 services={services}
+            />
+
+            <OpenShiftModal
+                show={shiftModal.show}
+                operatorId={shiftModal.operatorId}
+                operatorName={shiftModal.operatorName}
+                onClose={() =>
+                    setShiftModal({
+                        show: false,
+                        operatorId: null,
+                        operatorName: null,
+                    })
+                }
             />
         </>
     );
@@ -1353,21 +1393,29 @@ function InfoBox({ label, value }: { label: string; value: string }) {
 // =====================================================================
 interface RefundDialogProps {
     checkinId: number;
+    operators: SharedOperator[];
 }
 
 type RefundMethod = 'efectivo' | 'qr' | 'transferencia' | 'tarjeta';
 
-function RefundDialog({ checkinId }: RefundDialogProps) {
+function RefundDialog({ checkinId, operators }: RefundDialogProps) {
     const [open, setOpen] = useState<boolean>(false);
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
 
     const { data, setData, post, processing, errors, reset } = useForm<{
         amount: string;
         method: RefundMethod;
         notes: string;
+        operator_id: string;
     }>({
         amount: '',
         method: 'efectivo',
         notes: '',
+        operator_id: '',
     });
 
     const handleClose = (): void => {
@@ -1385,6 +1433,20 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
             onSuccess: () => {
                 reset();
                 setOpen(false);
+            },
+            onError: (errs: any) => {
+                if (errs?.shift_required) {
+                    try {
+                        const info = JSON.parse(errs.shift_required);
+                        setShiftModal({
+                            show: true,
+                            operatorId: String(info.operator_id),
+                            operatorName: info.operator_name,
+                        });
+                    } catch {
+                        // ignorar: no era el error de turno
+                    }
+                }
             },
         });
     };
@@ -1502,6 +1564,19 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                             )}
                         </div>
 
+                        {/* OPERADOR (obligatorio: quién ejecuta la devolución) */}
+                        <div className="space-y-1.5">
+                            <Label>Operador</Label>
+                            <OperatorSelector
+                                operators={operators}
+                                value={data.operator_id}
+                                onChange={(id) => setData('operator_id', id)}
+                                compact
+                                size="sm"
+                                label=""
+                            />
+                        </div>
+
                         {/* ACCIONES */}
                         <div className="flex justify-end gap-3 pt-2">
                             <Button
@@ -1514,7 +1589,7 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                             </Button>
                             <Button
                                 type="submit"
-                                disabled={processing}
+                                disabled={processing || !data.operator_id}
                                 className="bg-orange-600 font-bold text-white hover:bg-orange-700"
                             >
                                 {processing
@@ -1525,6 +1600,19 @@ function RefundDialog({ checkinId }: RefundDialogProps) {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            <OpenShiftModal
+                show={shiftModal.show}
+                operatorId={shiftModal.operatorId}
+                operatorName={shiftModal.operatorName}
+                onClose={() =>
+                    setShiftModal({
+                        show: false,
+                        operatorId: null,
+                        operatorName: null,
+                    })
+                }
+            />
         </>
     );
 }

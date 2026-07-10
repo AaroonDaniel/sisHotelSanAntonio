@@ -26,6 +26,7 @@ import {
     User,
     UserCog,
     Users,
+    Vault,
     Wallet,
     Wrench,
     X,
@@ -284,6 +285,12 @@ export default function Dashboard({
                     icon: Wallet,
                     url: '/reports/financial',
                     anyPerm: ['reportes.cierre_caja'],
+                },
+                {
+                    name: 'Aperturas y Cierres',
+                    icon: Vault,
+                    url: '/admin/shift-reports',
+                    anyPerm: ['reportes.financiero'],
                 },
                 /*
                 {

@@ -1,3 +1,5 @@
+import OpenShiftModal from '@/components/OpenShiftModal';
+import OperatorSelector, { Operator } from '@/components/OperatorSelector';
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router, useForm } from '@inertiajs/react';
@@ -24,9 +26,17 @@ interface Props {
     auth: { user: User };
     activeRegister: any | null;
     gastos: Expense[];
+    operators: Operator[];
+    selectedOperatorId: number | null;
 }
 
-export default function Gastos({ auth, activeRegister, gastos }: Props) {
+export default function Gastos({
+    auth,
+    activeRegister,
+    gastos,
+    operators,
+    selectedOperatorId,
+}: Props) {
     const { hasRole } = useCan();
     const [editingId, setEditingId] = useState<number | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -34,12 +44,31 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
         null,
     );
 
+    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
+
     // Formulario unificado para Crear/Editar
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({
             description: '',
             amount: '',
+            operator_id: selectedOperatorId ? String(selectedOperatorId) : '',
         });
+
+    // Cambiar de operador recarga la página con SU caja y SUS gastos
+    // (ya no existe "mi caja": bajo Terminal Compartida cualquier
+    // recepcionista puede estar frente a la pantalla).
+    const handleOperatorChange = (operatorId: string) => {
+        setData('operator_id', operatorId);
+        router.get('/gastos', operatorId ? { operator_id: operatorId } : {}, {
+            preserveState: false,
+            preserveScroll: true,
+        });
+    };
 
     // Manejador del formulario (Sabe si está creando o editando)
     const submit: FormEventHandler = (e) => {
@@ -53,7 +82,23 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
         } else {
             // Modo Creación
             post('/gastos', {
-                onSuccess: () => reset(),
+                onSuccess: () => {
+                    reset('description', 'amount');
+                },
+                onError: (errs: any) => {
+                    if (errs?.shift_required) {
+                        try {
+                            const info = JSON.parse(errs.shift_required);
+                            setShiftModal({
+                                show: true,
+                                operatorId: String(info.operator_id),
+                                operatorName: info.operator_name,
+                            });
+                        } catch {
+                            // ignorar: no era el error de turno
+                        }
+                    }
+                },
             });
         }
     };
@@ -65,12 +110,17 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
         setData({
             description: gasto.description,
             amount: String(gasto.amount),
+            operator_id: data.operator_id,
         });
     };
 
     const cancelEdit = () => {
         setEditingId(null);
-        reset();
+        setData({
+            description: '',
+            amount: '',
+            operator_id: data.operator_id,
+        });
         clearErrors();
     };
 
@@ -110,22 +160,46 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
                     </h2>
                 </div>
 
-                {!activeRegister ? (
-                    /* ALERTA: Si no tiene caja abierta */
+                {/* SELECTOR DE OPERADOR: quién está registrando el gasto */}
+                <div className="mb-8 rounded-2xl border border-gray-700 bg-gray-800 p-5">
+                    <h3 className="mb-3 text-center text-xs font-bold tracking-wider text-gray-400 uppercase">
+                        ¿Quién está registrando gastos?
+                    </h3>
+                    <OperatorSelector
+                        operators={operators}
+                        value={selectedOperatorId ?? ''}
+                        onChange={handleOperatorChange}
+                        compact
+                        size="md"
+                        label=""
+                    />
+                </div>
+
+                {!selectedOperatorId ? (
+                    <div className="animate-in rounded-2xl border border-gray-700 bg-gray-800/50 p-8 text-center backdrop-blur-sm fade-in">
+                        <AlertCircle className="mx-auto mb-4 h-12 w-12 text-gray-500" />
+                        <p className="text-gray-300">
+                            Selecciona tu avatar arriba para ver y registrar tus
+                            gastos.
+                        </p>
+                    </div>
+                ) : !activeRegister ? (
+                    /* ALERTA: Si el operador elegido no tiene caja abierta */
                     <div className="animate-in rounded-2xl border border-red-500/20 bg-red-500/10 p-8 text-center backdrop-blur-sm fade-in">
                         <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-400" />
                         <h3 className="mb-2 text-xl font-bold text-white">
                             ¡Caja Cerrada!
                         </h3>
                         <p className="text-red-200">
-                            No puedes registrar gastos porque actualmente no
-                            tienes un turno ni una caja abierta. Ve a la
-                            pantalla principal para iniciar tu turno.
+                            Este operador no tiene un turno abierto. Al intentar
+                            registrar un gasto se te pedirá abrir su caja.
                         </p>
                     </div>
-                ) : (
+                ) : null}
+
+                {selectedOperatorId && (
                     /* CONTENIDO: Formulario y Tabla */
-                    <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-3">
+                    <div className="mt-8 grid grid-cols-1 items-start gap-8 xl:grid-cols-3">
                         {/* ================================================== */}
                         {/* COLUMNA IZQUIERDA: Formulario Dinámico (Crear/Editar) */}
                         {/* ================================================== */}
@@ -135,7 +209,7 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
                                 <div className="mb-2 flex items-center gap-3 opacity-80">
                                     <Wallet className="h-5 w-5" />
                                     <h4 className="text-sm font-bold tracking-wider uppercase">
-                                        Total Gastado Hoy
+                                        Total Gastado del Turno
                                     </h4>
                                 </div>
                                 <p className="text-4xl font-black">
@@ -331,7 +405,9 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
                                                             ).toFixed(2)}{' '}
                                                             Bs
                                                         </td>
-                                                        {hasRole('administrador') && (
+                                                        {hasRole(
+                                                            'administrador',
+                                                        ) && (
                                                             <td className="px-6 py-4 text-right">
                                                                 <div className="flex justify-end gap-2">
                                                                     {/* Botón Editar */}
@@ -382,7 +458,19 @@ export default function Gastos({ auth, activeRegister, gastos }: Props) {
                     </div>
                 )}
             </div>
+
+            <OpenShiftModal
+                show={shiftModal.show}
+                operatorId={shiftModal.operatorId}
+                operatorName={shiftModal.operatorName}
+                onClose={() =>
+                    setShiftModal({
+                        show: false,
+                        operatorId: null,
+                        operatorName: null,
+                    })
+                }
+            />
         </AuthenticatedLayout>
     );
 }
-

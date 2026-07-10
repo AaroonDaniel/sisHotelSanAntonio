@@ -29,6 +29,13 @@ interface OperatorSelectorProps {
     compact?: boolean;
     /** Tamaño del avatar en modo compacto: 'sm' = w-8, 'md' = w-10, 'lg' = w-16 */
     size?: 'sm' | 'md' | 'lg';
+    /**
+     * Solo aplica en modo compacto. 'row' (default) = fila que se envuelve
+     * en varias líneas si no caben. 'col' = columna vertical, pensada para
+     * un panel lateral tipo side-toolbar (ej. flotando al costado de un
+     * modal donde sobra ancho pero falta alto).
+     */
+    orientation?: 'row' | 'col';
 }
 
 const getDisplayName = (op: Operator) =>
@@ -75,6 +82,7 @@ export default function OperatorSelector({
     error,
     compact = false,
     size = 'sm',
+    orientation = 'row',
 }: OperatorSelectorProps) {
     if (operators.length === 0) {
         return (
@@ -98,9 +106,15 @@ export default function OperatorSelector({
 
         return (
             <div
-                // flex-wrap + justify-center: los avatares se acomodan
-                // naturalmente en varias filas si no caben, SIN scrollbar.
-                className="flex flex-wrap justify-center gap-4"
+                // 'row': flex-wrap + justify-center, los avatares se
+                // acomodan naturalmente en varias filas si no caben, SIN
+                // scrollbar. 'col': columna vertical (side-toolbar), sin
+                // wrap porque el panel ya es angosto y crece hacia abajo.
+                className={
+                    orientation === 'col'
+                        ? 'flex flex-col items-center gap-4'
+                        : 'flex flex-wrap justify-center gap-4'
+                }
                 role="group"
                 aria-label={label}
             >

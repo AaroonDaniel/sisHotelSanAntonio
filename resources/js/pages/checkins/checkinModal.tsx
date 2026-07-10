@@ -1,3 +1,4 @@
+import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, {
     Operator as SharedOperator,
 } from '@/components/OperatorSelector';
@@ -369,6 +370,32 @@ export default function CheckinModal({
     const [operatorToastError, setOperatorToastError] = useState<string | null>(
         null,
     );
+
+    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
+    // Si el backend responde que el operador elegido no tiene caja
+    // abierta, se dispara este modal en vez de guardar. El formulario
+    // queda intacto: tras abrir el turno, el usuario vuelve a presionar
+    // "Guardar" manualmente (sin reintento automático).
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
+
+    const detectShiftRequired = (errors: any): boolean => {
+        if (!errors?.shift_required) return false;
+        try {
+            const info = JSON.parse(errors.shift_required);
+            setShiftModal({
+                show: true,
+                operatorId: String(info.operator_id),
+                operatorName: info.operator_name,
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1319,6 +1346,7 @@ export default function CheckinModal({
         // Camino de Error (onError)
         const onError = (errors: any) => {
             console.error('❌ EL SERVIDOR RECHAZÓ LOS DATOS. RAZONES:', errors);
+            if (detectShiftRequired(errors)) return;
             if (errors.guest_id) {
                 setGuestConflictError(errors.guest_id);
                 setTimeout(() => {
@@ -1661,25 +1689,29 @@ export default function CheckinModal({
     // =========================================================================
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
-            {/* relative: ancla del selector flotante de operador. NO lleva
-                overflow-hidden (eso se queda solo en la tarjeta blanca de
-                abajo), así el flotante nunca se recorta. */}
-            <div className="relative w-full max-w-5xl">
+            {/* relative + overflow-visible: ancla del panel lateral de
+                operador. El overflow-hidden se queda SOLO en la tarjeta
+                blanca de abajo, así el panel lateral nunca se recorta
+                aunque quede fuera del ancho de esta caja. */}
+            <div className="relative w-full max-w-5xl overflow-visible">
                 {/* ===================================================== */}
-                {/* 🔴 SELECTOR FLOTANTE DE OPERADOR — fuera de la caja      */}
-                {/* blanca del modal, "flotando" arriba a la derecha. Solo  */}
-                {/* aplica a asignaciones NUEVAS o sin operador guardado    */}
-                {/* todavía; si ya hay uno guardado, se reemplaza por el    */}
-                {/* texto "asignado por:" junto a la X (más abajo).         */}
-                {/* bottom-full + mb-3: se auto-ajusta a la altura real     */}
-                {/* del contenido (no hay que adivinar un -top-[Npx] fijo). */}
+                {/* 🔴 PANEL LATERAL DE OPERADOR — side-toolbar flotando a   */}
+                {/* la derecha de la caja blanca (no arriba): en laptops     */}
+                {/* (1366x768) sobra ancho pero falta alto, así que un        */}
+                {/* panel vertical pegado al borde derecho nunca choca con   */}
+                {/* los bordes superior/inferior del navegador. left-full +  */}
+                {/* ml-4 (en vez de un -right-[Npx] fijo) hace que se ancle  */}
+                {/* justo después del borde derecho de la caja SIN adivinar  */}
+                {/* su ancho a mano. Solo aplica a asignaciones NUEVAS o sin */}
+                {/* operador guardado todavía; si ya hay uno, se reemplaza   */}
+                {/* por el texto "asignado por:" junto a la X (más abajo).   */}
                 {/* ===================================================== */}
                 {!hasSavedOperator && (
                     <div
-                        className={`absolute right-0 bottom-full z-50 mb-3 w-[30rem] max-w-[calc(100vw-2rem)] rounded-lg border-2 bg-white p-3 shadow-xl transition-all ${
+                        className={`absolute top-0 left-full z-50 ml-4 max-h-[80vh] w-28 overflow-y-auto rounded-lg border-2 p-3 shadow-lg transition-all ${
                             data.checkin_operator_id
-                                ? 'border-green-500 bg-green-50'
-                                : 'border-red-500 bg-red-50'
+                                ? 'border-green-200 bg-green-50'
+                                : 'border-red-200 bg-red-50'
                         } ${
                             operatorAlertPulse
                                 ? 'animate-pulse ring-4 ring-red-400'
@@ -1687,16 +1719,15 @@ export default function CheckinModal({
                         }`}
                     >
                         <p
-                            className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-bold ${
+                            className={`mb-3 text-center text-[11px] font-bold text-balance ${
                                 data.checkin_operator_id
                                     ? 'text-green-700'
                                     : 'text-red-700'
                             }`}
                         >
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             {data.checkin_operator_id
-                                ? 'Operador seleccionado correctamente'
-                                : 'Seleccione su nombre para realizar la asignación'}
+                                ? 'Operador seleccionado'
+                                : 'Seleccione su nombre'}
                         </p>
                         <OperatorSelector
                             operators={operators}
@@ -1707,6 +1738,7 @@ export default function CheckinModal({
                             error={errors.checkin_operator_id}
                             compact
                             size="lg"
+                            orientation="col"
                             label=""
                         />
                     </div>
@@ -4017,6 +4049,19 @@ export default function CheckinModal({
                 onClose={() => setShowCancelModal(false)}
                 onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
+            />
+
+            <OpenShiftModal
+                show={shiftModal.show}
+                operatorId={shiftModal.operatorId}
+                operatorName={shiftModal.operatorName}
+                onClose={() =>
+                    setShiftModal({
+                        show: false,
+                        operatorId: null,
+                        operatorName: null,
+                    })
+                }
             />
         </div>
     );

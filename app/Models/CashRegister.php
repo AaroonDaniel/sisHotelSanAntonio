@@ -17,11 +17,14 @@ class CashRegister extends Model
         'status',
         'opened_at',
         'closed_at',
+        'snapshot_data',
+        'document_path',
     ];
 
     protected $casts = [
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
+        'snapshot_data' => 'array',
     ];
 
     // Relación: Esta caja le pertenece a un Usuario (Recepcionista)

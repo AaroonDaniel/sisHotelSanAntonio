@@ -4,34 +4,47 @@ namespace App\Http\Controllers;
 
 use App\Models\Expense;
 use App\Models\CashRegister;
+use App\Models\User;
+use App\Exceptions\ShiftNotOpenException;
+use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia; // <-- Importante para enviar a React
 
 class ExpenseController extends Controller
 {
-    // ==========================================
-    // VISTA: GASTOS DEL TURNO ACTUAL (CAJERO)
-    // ==========================================
-    public function index()
-    {
-        // Buscamos la caja abierta del usuario
-        $activeRegister = CashRegister::where('user_id', Auth::id())
-                                      ->where('status', 'ABIERTA')
-                                      ->first();
+    use RequiresOpenShift;
 
-        // Si tiene caja abierta, traemos sus gastos. Si no, un arreglo vacío.
+    // ==========================================
+    // VISTA: GASTOS DEL TURNO (POR OPERADOR)
+    // ==========================================
+    // Terminal Compartida: ya no hay "mi caja" ligada a Auth::id() (siempre
+    // la cuenta genérica 'recepcion'). El recepcionista elige su avatar en
+    // el OperatorSelector; recién ahí se busca SU caja abierta y sus gastos.
+    public function index(Request $request)
+    {
+        $operatorId = $request->query('operator_id');
+
+        $activeRegister = null;
         $gastos = [];
-        if ($activeRegister) {
-            $gastos = Expense::where('cash_register_id', $activeRegister->id)
-                             ->orderBy('created_at', 'desc') // Los más nuevos primero
-                             ->get();
+
+        if ($operatorId) {
+            $activeRegister = CashRegister::where('user_id', $operatorId)
+                ->where('status', 'ABIERTA')
+                ->first();
+
+            if ($activeRegister) {
+                $gastos = Expense::where('cash_register_id', $activeRegister->id)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+            }
         }
 
-        // Enviamos los datos a la vista
         return Inertia::render('expenses/expense', [
             'activeRegister' => $activeRegister,
             'gastos' => $gastos,
+            'operators' => User::operadores()->get(['id', 'full_name', 'nickname']),
+            'selectedOperatorId' => $operatorId ? (int) $operatorId : null,
         ]);
     }
 
@@ -58,21 +71,19 @@ class ExpenseController extends Controller
         $request->validate([
             'description' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.1',
+            'operator_id' => 'required|exists:users,id',
         ]);
 
-        $activeRegister = CashRegister::where('user_id', Auth::id())
-                                      ->where('status', 'ABIERTA')
-                                      ->first();
-
-        if (!$activeRegister) {
-            return back()->withErrors([
-                'error' => 'No puedes registrar un gasto. Debes tener una Caja Registradora abierta.'
-            ]);
+        try {
+            $activeRegister = $this->findOpenShift((int) $request->operator_id);
+        } catch (ShiftNotOpenException $e) {
+            return $this->shiftRequiredRedirect($e);
         }
 
         Expense::create([
             'cash_register_id' => $activeRegister->id,
             'user_id' => Auth::id(),
+            'operator_id' => $request->operator_id,
             'description' => $request->description,
             'amount' => $request->amount,
         ]);
