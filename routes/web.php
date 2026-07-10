@@ -138,6 +138,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/add-payment', [CheckinController::class, 'addPayment'])->name('checkins.addPayment');
     Route::post('/checkins/from-reservation', [CheckinController::class, 'storeFromReservation'])->name('checkins.fromReservation');
     Route::post('/checkins/{checkin}/refund', [CheckinController::class, 'refund'])->name('checkins.refund');
+    Route::post('/checkins/{checkin}/restore', [CheckinController::class, 'restore'])->name('checkins.restore');
 
     // Ruta de Merge
     Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');

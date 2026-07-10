@@ -1,6 +1,15 @@
+import RestoreCheckinModal from '@/components/RestoreCheckinModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, BedDouble, Calendar, History, Users } from 'lucide-react';
+import {
+    ArrowLeft,
+    BedDouble,
+    Calendar,
+    History,
+    Undo2,
+    Users,
+} from 'lucide-react';
+import { useState } from 'react';
 
 interface RoomOption {
     id: number;
@@ -60,6 +69,9 @@ export default function RoomHistoryIndex({
     SelectedRoom,
     Checkins,
 }: Props) {
+    const [restoreTarget, setRestoreTarget] =
+        useState<CheckinHistoryRow | null>(null);
+
     const handleRoomChange = (roomId: string) => {
         router.get('/room-history', roomId ? { room_id: roomId } : {}, {
             preserveState: true,
@@ -75,7 +87,7 @@ export default function RoomHistoryIndex({
             <Head title="Historial de Habitaciones" />
 
             <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-                 <button
+                <button
                     onClick={() => router.visit('/dashboard')}
                     className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
                 >
@@ -84,14 +96,13 @@ export default function RoomHistoryIndex({
                     </div>
                     <span>Volver</span>
                 </button>
-        
+
                 <div className="mb-6 flex items-center gap-3">
-                    
                     <div className="rounded-lg bg-red-100 p-2 text-red-600">
                         <History className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-write">
+                        <h1 className="text-write text-2xl font-bold">
                             Historial de Habitaciones
                         </h1>
                     </div>
@@ -198,13 +209,16 @@ export default function RoomHistoryIndex({
                                             <th className="px-4 py-3">
                                                 Estado
                                             </th>
+                                            <th className="px-4 py-3 text-right">
+                                                Acciones
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {Checkins.length === 0 && (
                                             <tr>
                                                 <td
-                                                    colSpan={9}
+                                                    colSpan={10}
                                                     className="px-4 py-10 text-center text-gray-400 italic"
                                                 >
                                                     Esta habitación todavía no
@@ -230,15 +244,15 @@ export default function RoomHistoryIndex({
                                                         c.check_out_date,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-center text-bold text-gray-600">
+                                                <td className="text-bold px-4 py-3 text-center text-gray-600">
                                                     {c.duration_days}
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-gray-600 text-bold">
+                                                <td className="text-bold px-4 py-3 text-right text-gray-600">
                                                     {formatCurrency(
                                                         c.agreed_price,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-gray-600 text-bold">
+                                                <td className="text-bold px-4 py-3 text-right text-gray-600">
                                                     {formatCurrency(
                                                         c.total_services,
                                                     )}
@@ -248,7 +262,7 @@ export default function RoomHistoryIndex({
                                                         c.total_charged,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-xs text-gray-800 text-bold">
+                                                <td className="text-bold px-4 py-3 text-xs text-gray-800">
                                                     <div>
                                                         In:{' '}
                                                         {c.checkin_operator_name ??
@@ -272,6 +286,24 @@ export default function RoomHistoryIndex({
                                                         {c.status}
                                                     </span>
                                                 </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    {c.status ===
+                                                        'finalizado' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setRestoreTarget(
+                                                                    c,
+                                                                )
+                                                            }
+                                                            title="Restaurar Asignación (Undo Checkout)"
+                                                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+                                                        >
+                                                            <Undo2 className="h-3.5 w-3.5" />
+                                                            Restaurar
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -281,6 +313,13 @@ export default function RoomHistoryIndex({
                     </>
                 )}
             </div>
+
+            <RestoreCheckinModal
+                show={!!restoreTarget}
+                checkinId={restoreTarget?.id ?? null}
+                guestName={restoreTarget?.guest_name ?? null}
+                onClose={() => setRestoreTarget(null)}
+            />
         </AuthenticatedLayout>
     );
 }

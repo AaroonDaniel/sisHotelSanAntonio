@@ -1834,6 +1834,49 @@ class CheckinController extends Controller
     }
 
     /**
+     * Restaurar Asignación (Undo Checkout): revierte un check-out hecho por
+     * error. Vuelve la estadía a 'activo' y la habitación a 'OCUPADO', sin
+     * tocar payments/expenses — el dinero ya cobrado se queda en caja tal
+     * cual, la cuenta de la habitación simplemente se reabre.
+     */
+    public function restore(Checkin $checkin)
+    {
+        if ($checkin->status !== 'finalizado') {
+            return redirect()->back()->with(
+                'error',
+                'Solo se pueden restaurar estadías que ya fueron finalizadas (checkout).'
+            );
+        }
+
+        // Bloqueo de seguridad: si la habitación ya tiene OTRO huésped con
+        // una estadía activa (se reasignó después del checkout), restaurar
+        // esta estadía vieja duplicaría la ocupación de la habitación.
+        $yaOcupadaPorOtro = Checkin::where('room_id', $checkin->room_id)
+            ->where('status', 'activo')
+            ->where('id', '!=', $checkin->id)
+            ->exists();
+
+        if ($yaOcupadaPorOtro) {
+            return redirect()->back()->with(
+                'error',
+                'No se puede restaurar. La habitación ya fue ocupada por otro huésped.'
+            );
+        }
+
+        DB::transaction(function () use ($checkin) {
+            $checkin->update([
+                'status'               => 'activo',
+                'check_out_date'       => null,
+                'checkout_operator_id' => null,
+            ]);
+
+            Room::where('id', $checkin->room_id)->update(['status' => 'OCUPADO']);
+        });
+
+        return redirect()->back()->with('success', 'Estadía restaurada. La habitación vuelve a estar OCUPADA.');
+    }
+
+    /**
      * Mapea el método de pago de UI a los acrónimos de caja (varchar(2))
      * y al código del catálogo SIAT.
      *

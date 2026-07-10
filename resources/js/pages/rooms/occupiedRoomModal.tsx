@@ -608,6 +608,7 @@ export default function OccupiedRoomModal({
                                             movimiento (pago/adelanto/devolución),
                                             se ve el método y, si fue QR, el
                                             banco exacto donde se hizo. --- */}
+                                        {/*}    
                                         {paymentHistory.length > 0 && (
                                             <div className="mb-2 max-h-28 space-y-1 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
                                                 {paymentHistory.map(
@@ -674,6 +675,7 @@ export default function OccupiedRoomModal({
                                                 )}
                                             </div>
                                         )}
+                                        {*/}
 
                                         {/* --- BOTÓN / FORMULARIO DE ADELANTO --- */}
                                         {!showPaymentForm ? (
@@ -694,7 +696,7 @@ export default function OccupiedRoomModal({
                                                 <div className="mb-2 flex items-center justify-between">
                                                     <span className="flex items-center gap-1 text-[12px] font-bold text-green-700 uppercase">
                                                         <Wallet className="h-3 w-3" />{' '}
-                                                        Nuevo Pago
+                                                        Nuevo Pago / Adelanto
                                                     </span>
                                                     <button
                                                         type="button"
