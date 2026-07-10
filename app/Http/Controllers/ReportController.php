@@ -17,6 +17,31 @@ use Carbon\Carbon;
 
 class ReportController extends Controller
 {
+    /**
+     * Encuentra el turno (CashRegister) del usuario cuya ventana activa
+     * [opened_at, closed_at ?? ahora] se SOLAPA con el rango de calendario
+     * solicitado [$rangoInicio, $rangoFin].
+     *
+     * Reemplaza la heurística anterior (buscar por `created_at` dentro del
+     * día calendario), que fallaba en turnos que cruzan la medianoche: un
+     * turno abierto a las 20:00 y cerrado al día siguiente a las 10:00 no
+     * aparecía al consultar "hoy" (el día del cierre), porque su
+     * `created_at` pertenecía al día anterior. El solapamiento de rangos
+     * es correcto sin importar de qué lado de la medianoche caiga la
+     * fecha consultada.
+     */
+    private function findShiftOverlapping(string $userId, string $rangoInicio, string $rangoFin): ?CashRegister
+    {
+        return CashRegister::where('user_id', $userId)
+            ->where('opened_at', '<=', $rangoFin)
+            ->where(function ($q) use ($rangoInicio) {
+                $q->whereNull('closed_at')
+                    ->orWhere('closed_at', '>=', $rangoInicio);
+            })
+            ->orderByDesc('opened_at')
+            ->first();
+    }
+
     public function index(Request $request)
     {
         $targetDate = $request->query('date', now()->toDateString());
@@ -486,10 +511,7 @@ class ReportController extends Controller
         $rangoFin    = $endDate . ' 23:59:59';
 
         if ($userId !== 'todos' && $startDate === $endDate) {
-            $ultimaCaja = CashRegister::where('user_id', $userId)
-                ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                ->orderBy('id', 'desc')
-                ->first();
+            $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
 
             if ($ultimaCaja) {
                 $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
@@ -637,10 +659,7 @@ class ReportController extends Controller
             $rangoFin    = $endDate . ' 23:59:59';
 
             if ($userId !== 'todos' && $startDate === $endDate) {
-                $ultimaCaja = CashRegister::where('user_id', $userId)
-                    ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                    ->orderBy('id', 'desc')
-                    ->first();
+                $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
 
                 if ($ultimaCaja) {
                     $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
@@ -700,7 +719,10 @@ class ReportController extends Controller
         $pdf->Cell(0, 5, utf8_decode('Tipo de Registro: ' . $tipoTexto), 0, 1, 'C');
         $cajeroTexto = $userId === 'todos' ? 'TODOS LOS RECEPCIONISTAS' : ($payments->first()->user->name ?? 'Usuario');
         $pdf->Cell(0, 5, utf8_decode('Cajero / Usuario: ' . strtoupper($cajeroTexto)), 0, 1, 'C');
-        $rangoTexto = "Desde: " . \Carbon\Carbon::parse($startDate)->format('d/m/Y') . "  Hasta: " . \Carbon\Carbon::parse($endDate)->format('d/m/Y');
+        // Estampa de tiempo EXACTA (Día/Mes/Año Hora:Minuto) de apertura y
+        // cierre, no solo la fecha: crítico para auditar turnos que cruzan
+        // la medianoche, donde "Desde/Hasta" sin hora sería ambiguo.
+        $rangoTexto = "Desde: " . \Carbon\Carbon::parse($rangoInicio)->format('d/m/Y H:i') . "  Hasta: " . \Carbon\Carbon::parse($rangoFin)->format('d/m/Y H:i');
         $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'C');
         $pdf->Ln(6);
 
@@ -906,10 +928,7 @@ class ReportController extends Controller
         // --- LÓGICA DE TURNO INTELIGENTE ---
         // Si la vista previa es de "hoy", buscamos el último turno abierto por este usuario
         if ($targetDate === now()->toDateString()) {
-            $ultimaCaja = CashRegister::where('user_id', $userId)
-                ->whereBetween('created_at', [$targetDate . ' 00:00:00', $targetDate . ' 23:59:59'])
-                ->orderBy('id', 'desc')
-                ->first();
+            $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
 
             if ($ultimaCaja) {
                 $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;

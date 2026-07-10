@@ -232,6 +232,23 @@ class CheckinController extends Controller
         $roomToAssign = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
         $isAssigningSalon = $roomToAssign && str_contains(strtoupper($roomToAssign->roomType->name ?? ''), 'SALON');
 
+        // Sin caja abierta, un adelanto cobrado en la asignación quedaría
+        // invisible en cualquier cuadre de turno (cobro fantasma). Se
+        // valida ANTES de abrir la transacción para devolver un error
+        // amigable (withErrors) en vez de una excepción 500. Si no piden
+        // adelanto, la asignación se sigue creando libremente sin caja.
+        if (($validatedCheckin['advance_payment'] ?? 0) > 0) {
+            $tieneCajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
+                ->where('status', 'ABIERTA')
+                ->exists();
+
+            if (!$tieneCajaAbierta) {
+                return back()->withErrors([
+                    'error' => 'No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la asignación.',
+                ]);
+            }
+        }
+
         // =========================================================
         // 5. INICIO DE TRANSACCIÓN (ahora envuelve TAMBIÉN la creación del huésped)
         //    Si algo falla más adelante, el huésped también se revierte.
@@ -459,13 +476,22 @@ class CheckinController extends Controller
             // =========================================================
             $montoInicial = $validatedCheckin['advance_payment'] ?? 0;
             if ($montoInicial > 0) {
+                // Sin caja abierta, este adelanto quedaría invisible en
+                // cualquier cuadre de turno (cobro fantasma): se bloquea la
+                // asignación completa, igual que ya ocurre con gastos y
+                // adelantos posteriores. Si no hay adelanto, la asignación
+                // se sigue creando libremente sin caja abierta.
+                if (!$cajaAbierta) {
+                    throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la asignación.');
+                }
+
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
 
                 // Guardar el pago relacionándolo con la caja y registrando la fecha
                 \App\Models\Payment::create([
                     'checkin_id' => $checkin->id,
                     'user_id' => $userId,
-                    'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null, // Conexión a caja
+                    'cash_register_id' => $cajaAbierta->id, // Conexión a caja
                     'amount' => $montoInicial,
                     'method' => $request->payment_method,
                     'bank_name' => $banco,
@@ -812,8 +838,20 @@ class CheckinController extends Controller
             'description' => 'nullable|string|max:150',
         ]);
 
+        // Sin caja abierta, este pago quedaría invisible en cualquier
+        // cuadre de turno (cobro fantasma).
+        $cajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
+            ->where('status', 'ABIERTA')
+            ->first();
+
+        if (!$cajaAbierta) {
+            return back()->withErrors([
+                'error' => 'No tiene una caja abierta. Debe aperturar caja antes de registrar un pago.',
+            ]);
+        }
+
         // 2. PROCESAMIENTO
-        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $request, $checkin) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $request, $checkin, $cajaAbierta) {
 
             $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
@@ -825,6 +863,7 @@ class CheckinController extends Controller
             \App\Models\Payment::create([
                 'checkin_id' => $checkin->id,
                 'user_id'    => $userId, // Importante: Guarda QUIÉN está cobrando ahora
+                'cash_register_id' => $cajaAbierta->id,
                 'amount'     => $validated['amount'],
                 'method'     => $validated['payment_method'],
                 'bank_name'  => $bankName,
@@ -1667,6 +1706,28 @@ class CheckinController extends Controller
                 $bancoRecibido  = strtoupper($request->input('qr_bank', ''));
                 $userId         = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
+                // Sin caja abierta, cualquier cobro de saldo en el checkout
+                // quedaría invisible en el cuadre de turno (cobro fantasma).
+                // Solo se exige si REALMENTE hay dinero por cobrar; si el
+                // saldo ya está en 0, el checkout no mueve caja y no debe
+                // bloquearse por esto.
+                $montoEfectivoSolicitado = (float) $request->input('monto_efectivo', 0);
+                $montoQrSolicitado       = (float) $request->input('monto_qr', 0);
+                $hayCobroPendiente = $metodoRecibido === 'ambos'
+                    ? ($montoEfectivoSolicitado > 0 || $montoQrSolicitado > 0)
+                    : $saldoPendienteFinal > 0;
+
+                $cajaAbierta = null;
+                if ($hayCobroPendiente) {
+                    $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+                        ->where('status', 'ABIERTA')
+                        ->first();
+
+                    if (!$cajaAbierta) {
+                        throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar el saldo de esta estadía.');
+                    }
+                }
+
                 // --- Mapeo del método principal para la factura/caja ---
                 // payment_method (BD varchar(2)): EF / QR / TC / TR
                 // payment_method_code (catálogo SIAT): 1=Efectivo, 7=Tarjeta crédito (QR/digital), 2=Tarjeta, 6=Transferencia
@@ -1680,6 +1741,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $montoEfectivo,
                             'method'     => 'EFECTIVO',
                             'type'       => 'PAGO',
@@ -1689,6 +1751,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $montoQr,
                             'method'     => 'QR',
                             'bank_name'  => $bancoRecibido ?: 'OTROS',
@@ -1714,6 +1777,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $saldoPendienteFinal,
                             'method'     => $metodoUpper,
                             'bank_name'  => ($metodoUpper === 'EFECTIVO') ? null : $bancoRecibido,
@@ -3262,11 +3326,30 @@ class CheckinController extends Controller
                 $metodoRecibido = 'QR';
             }
 
+            // Sin caja abierta, cualquier cobro de saldo aquí quedaría
+            // invisible en el cuadre de turno (cobro fantasma). Solo se
+            // exige si REALMENTE hay dinero por cobrar.
+            $hayCobroPendiente = $request->metodo_pago === 'ambos'
+                ? ($request->monto_efectivo > 0 || $request->monto_qr > 0)
+                : $saldoPagar > 0;
+
+            $cajaAbierta = null;
+            if ($hayCobroPendiente) {
+                $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+                    ->where('status', 'ABIERTA')
+                    ->first();
+
+                if (!$cajaAbierta) {
+                    throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar el saldo de estas estadías.');
+                }
+            }
+
             if ($request->metodo_pago === 'ambos') {
                 if ($request->monto_efectivo > 0) {
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'cash_register_id' => $cajaAbierta->id,
                         'amount' => $request->monto_efectivo,
                         'method' => 'EFECTIVO',
                         'description' => 'PAGO FINAL MÚLTIPLE (MIXTO)',
@@ -3277,6 +3360,7 @@ class CheckinController extends Controller
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'cash_register_id' => $cajaAbierta->id,
                         'amount' => $request->monto_qr,
                         'method' => 'QR',
                         'bank_name' => $bancoRecibido,
@@ -3289,6 +3373,7 @@ class CheckinController extends Controller
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'cash_register_id' => $cajaAbierta->id,
                         'amount' => $saldoPagar,
                         'method' => $metodoRecibido,
                         'bank_name' => $metodoRecibido === 'QR' ? $bancoRecibido : null,

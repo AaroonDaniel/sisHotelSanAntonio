@@ -1,3 +1,5 @@
+import DashboardKpis from '@/components/dashboard-kpis';
+import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
@@ -12,6 +14,7 @@ import {
     Coins,
     FileBarChart,
     FileText,
+    History,
     Hotel,
     Key,
     Layers,
@@ -28,9 +31,6 @@ import {
     X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Can } from '@/components/can';
-import { useCan } from '@/hooks/use-can';
-import DashboardKpis from '@/components/dashboard-kpis';
 
 // Interfaces Locales
 interface User {
@@ -73,7 +73,13 @@ interface DashboardProps {
     // Si el usuario es Recepcionista no se usan y no rompen nada.
     kpis?: DashboardKpisData;
     ingresosMes?: Array<{ fecha: string; ingresos: number; egresos: number }>;
-    ocupacionTipo?: Array<{ nombre: string; total: number; ocupadas: number; libres: number; porcentaje: number }>;
+    ocupacionTipo?: Array<{
+        nombre: string;
+        total: number;
+        ocupadas: number;
+        libres: number;
+        porcentaje: number;
+    }>;
     rankingTipos?: Array<{ nombre: string; total: number }>;
     pagosMetodo?: Array<{ metodo: string; total: number }>;
 }
@@ -95,8 +101,7 @@ export default function Dashboard({
     );
     // Gerencia = Administrador o Gerente (ven KPIs y reportes)
     const isGerencia =
-        isAdmin ||
-        userRoles.some((r) => r.toLowerCase() === 'gerente');
+        isAdmin || userRoles.some((r) => r.toLowerCase() === 'gerente');
     // Helpers de permisos para mostrar/ocultar módulos del menú
     const { can, canAny } = useCan();
     const puedeVer = (item: any): boolean => {
@@ -122,15 +127,60 @@ export default function Dashboard({
             title: 'Parámetros',
             theme: 'blue',
             items: [
-                { name: 'Bloques', icon: Building, url: '/bloques', perm: 'bloques.gestionar' },
-                { name: 'Pisos', icon: Layers, url: '/pisos', perm: 'pisos.gestionar' },
-                { name: 'Tipos Hab.', icon: BedDouble, url: '/tipohabitacion', perm: 'tipos_habitaciones.gestionar' },
-                { name: 'Precios', icon: Tag, url: '/precios', perm: 'precios.gestionar' },
-                { name: 'Habitaciones', icon: Hotel, url: '/habitaciones', adminOnly: true },
-                { name: 'Servicios', icon: ClipboardList, url: '/servicios', adminOnly: true },
-                { name: 'Huéspedes', icon: Users, url: '/invitados', anyPerm: ['huespedes.ver', 'huespedes.buscar'] },
-                { name: 'Horarios', icon: Clock, url: '/horarios', adminOnly: true },
-                { name: 'Personal', icon: User, url: '/usuarios', perm: 'usuarios.ver' },
+                {
+                    name: 'Bloques',
+                    icon: Building,
+                    url: '/bloques',
+                    perm: 'bloques.gestionar',
+                },
+                {
+                    name: 'Pisos',
+                    icon: Layers,
+                    url: '/pisos',
+                    perm: 'pisos.gestionar',
+                },
+                {
+                    name: 'Tipos Hab.',
+                    icon: BedDouble,
+                    url: '/tipohabitacion',
+                    perm: 'tipos_habitaciones.gestionar',
+                },
+                {
+                    name: 'Precios',
+                    icon: Tag,
+                    url: '/precios',
+                    perm: 'precios.gestionar',
+                },
+                {
+                    name: 'Habitaciones',
+                    icon: Hotel,
+                    url: '/habitaciones',
+                    adminOnly: true,
+                },
+                {
+                    name: 'Servicios',
+                    icon: ClipboardList,
+                    url: '/servicios',
+                    adminOnly: true,
+                },
+                {
+                    name: 'Huéspedes',
+                    icon: Users,
+                    url: '/invitados',
+                    anyPerm: ['huespedes.ver', 'huespedes.buscar'],
+                },
+                {
+                    name: 'Horarios',
+                    icon: Clock,
+                    url: '/horarios',
+                    adminOnly: true,
+                },
+                {
+                    name: 'Personal',
+                    icon: User,
+                    url: '/usuarios',
+                    perm: 'usuarios.ver',
+                },
 
                 ...(isAdmin
                     ? [
@@ -154,19 +204,63 @@ export default function Dashboard({
                     url: '/admin/reservas',
                     anyPerm: ['reservas.crear', 'reservas.ver_todos'],
                 },
-                { name: 'Asignación', icon: BedDouble, url: '/checks', anyPerm: ['checkin.realizar', 'checkins.ver_todos'] },
-                { name: 'Cuentas Corporativas', icon: Building, url: '/corporate-accounts', anyPerm: ['checkin.realizar', 'checkins.ver_todos'] },
+                {
+                    name: 'Asignación',
+                    icon: BedDouble,
+                    url: '/checks',
+                    anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
+                },
+                {
+                    name: 'Cuentas Corporativas',
+                    icon: Building,
+                    url: '/corporate-accounts',
+                    anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
+                },
                 {
                     name: 'Detalles de asignación',
                     icon: Briefcase,
                     url: '/checkindetails',
                     anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
                 },
-                { name: 'Facturación', icon: Receipt, url: '/facturacion', anyPerm: ['facturar.emitir', 'checkout.realizar', 'anulaciones.autorizar'] },
+                {
+                    name: 'Facturación',
+                    icon: Receipt,
+                    url: '/facturacion',
+                    anyPerm: [
+                        'facturar.emitir',
+                        'checkout.realizar',
+                        'anulaciones.autorizar',
+                    ],
+                },
+                {
+                    name: 'Historial de Habitaciones',
+                    icon: History,
+                    url: '/room-history',
+                    anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
+                },
 
-                { name: 'Mantenimiento', icon: Wrench, url: '/mantenimientos', anyPerm: ['mantenimiento.notificar_averia'] },
-                { name: 'Gastos', icon: FileText, url: '/historial-gastos', anyPerm: ['gastos.ver', 'gastos.registrar', 'gastos.aprobar'] },
-                { name: 'Adelantos y Devoluciones', icon: Coins, url: '/historial-pagos', anyPerm: ['caja.registrar_pago', 'huespedes.historial'] },
+                {
+                    name: 'Mantenimiento',
+                    icon: Wrench,
+                    url: '/mantenimientos',
+                    anyPerm: ['mantenimiento.notificar_averia'],
+                },
+                {
+                    name: 'Gastos',
+                    icon: FileText,
+                    url: '/historial-gastos',
+                    anyPerm: [
+                        'gastos.ver',
+                        'gastos.registrar',
+                        'gastos.aprobar',
+                    ],
+                },
+                {
+                    name: 'Adelantos y Devoluciones',
+                    icon: Coins,
+                    url: '/historial-pagos',
+                    anyPerm: ['caja.registrar_pago', 'huespedes.historial'],
+                },
                 {
                     name: 'Eventos Significativos',
                     icon: ShieldAlert,
@@ -179,7 +273,12 @@ export default function Dashboard({
             title: 'Reportes',
             theme: 'amber',
             items: [
-                { name: 'Parte Diario', icon: FileBarChart, url: '/reports', anyPerm: ['reportes.parte_diario'] },
+                {
+                    name: 'Parte Diario',
+                    icon: FileBarChart,
+                    url: '/reports',
+                    anyPerm: ['reportes.parte_diario'],
+                },
                 {
                     name: 'Cierre de Caja',
                     icon: Wallet,
@@ -270,7 +369,8 @@ export default function Dashboard({
                                         Panel Gerencial
                                     </h2>
                                     <p className="mt-2 text-gray-100">
-                                        Indicadores clave consolidados en tiempo real
+                                        Indicadores clave consolidados en tiempo
+                                        real
                                     </p>
                                 </>
                             )}
@@ -282,9 +382,11 @@ export default function Dashboard({
                             <button
                                 type="button"
                                 onClick={() =>
-                                    setVista(vista === 'menu' ? 'panel' : 'menu')
+                                    setVista(
+                                        vista === 'menu' ? 'panel' : 'menu',
+                                    )
                                 }
-                                className="mb-1 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2 focus:ring-offset-gray-900"
+                                className="mb-1 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-green-700 focus:ring-2 focus:ring-green-400 focus:ring-offset-2 focus:ring-offset-gray-900 focus:outline-none"
                                 title={
                                     vista === 'menu'
                                         ? 'Ver Panel Gerencial con KPIs'
@@ -333,53 +435,58 @@ export default function Dashboard({
                     Vista por defecto. Recepcionistas siempre la ven.
                     Gerencia la ve hasta que pulsa el toggle. */}
                 {vista === 'menu' && (
-                <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-                    {hotelModules.map((group, groupIndex) => (
-                        <div key={groupIndex} className="flex flex-col gap-6">
-                            {/* Título de Columna */}
-                            <div className="flex items-center gap-4">
-                                <div
-                                    className={`h-8 w-1 rounded-full bg-${group.theme}-500 shadow-[0_0_10px_currentColor] text-${group.theme}-500`}
-                                ></div>
-                                <h3 className="text-xl font-bold tracking-wider text-white uppercase">
-                                    {group.title}
-                                </h3>
-                            </div>
+                    <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+                        {hotelModules.map((group, groupIndex) => (
+                            <div
+                                key={groupIndex}
+                                className="flex flex-col gap-6"
+                            >
+                                {/* Título de Columna */}
+                                <div className="flex items-center gap-4">
+                                    <div
+                                        className={`h-8 w-1 rounded-full bg-${group.theme}-500 shadow-[0_0_10px_currentColor] text-${group.theme}-500`}
+                                    ></div>
+                                    <h3 className="text-xl font-bold tracking-wider text-white uppercase">
+                                        {group.title}
+                                    </h3>
+                                </div>
 
-                            {/* Contenedor de Botones */}
-                            <div className="grid grid-cols-2 gap-3 px-2 pb-8">
-                                {group.items.map((item, itemIndex) => (
-                                    <button
-                                        key={itemIndex}
-                                        onClick={() => handleItemClick(item)}
-                                        disabled={
-                                            loading &&
-                                            item.name === 'Libro Diario'
-                                        }
-                                        className={`group relative flex h-28 w-full flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 p-3 text-center backdrop-blur-md transition-all duration-300 hover:z-20 hover:scale-105 hover:shadow-2xl hover:brightness-110 ${getThemeClasses(group.theme)} disabled:cursor-wait disabled:opacity-70`}
-                                    >
-                                        <div className="absolute -top-10 -right-6 h-32 w-32 rounded-full bg-white/10 blur-2xl transition-all group-hover:scale-150"></div>
-
-                                        <div className="relative z-10 mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black/20 text-white shadow-inner backdrop-blur-sm transition-transform group-hover:scale-110 group-hover:rotate-12">
-                                            <item.icon
-                                                className={`h-6 w-6 ${loading && item.name === 'Libro Diario' ? 'animate-pulse' : ''}`}
-                                            />
-                                        </div>
-
-                                        <div className="relative z-10 flex flex-col justify-center">
-                                            <span className="text-sm leading-tight font-bold text-white drop-shadow-md">
-                                                {loading &&
+                                {/* Contenedor de Botones */}
+                                <div className="grid grid-cols-2 gap-3 px-2 pb-8">
+                                    {group.items.map((item, itemIndex) => (
+                                        <button
+                                            key={itemIndex}
+                                            onClick={() =>
+                                                handleItemClick(item)
+                                            }
+                                            disabled={
+                                                loading &&
                                                 item.name === 'Libro Diario'
-                                                    ? 'Verificando...'
-                                                    : item.name}
-                                            </span>
-                                        </div>
-                                    </button>
-                                ))}
+                                            }
+                                            className={`group relative flex h-28 w-full flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 p-3 text-center backdrop-blur-md transition-all duration-300 hover:z-20 hover:scale-105 hover:shadow-2xl hover:brightness-110 ${getThemeClasses(group.theme)} disabled:cursor-wait disabled:opacity-70`}
+                                        >
+                                            <div className="absolute -top-10 -right-6 h-32 w-32 rounded-full bg-white/10 blur-2xl transition-all group-hover:scale-150"></div>
+
+                                            <div className="relative z-10 mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black/20 text-white shadow-inner backdrop-blur-sm transition-transform group-hover:scale-110 group-hover:rotate-12">
+                                                <item.icon
+                                                    className={`h-6 w-6 ${loading && item.name === 'Libro Diario' ? 'animate-pulse' : ''}`}
+                                                />
+                                            </div>
+
+                                            <div className="relative z-10 flex flex-col justify-center">
+                                                <span className="text-sm leading-tight font-bold text-white drop-shadow-md">
+                                                    {loading &&
+                                                    item.name === 'Libro Diario'
+                                                        ? 'Verificando...'
+                                                        : item.name}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
                 )}
             </div>
 

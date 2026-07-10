@@ -410,9 +410,25 @@ export default function MultiCheckoutModal({
             });
             const url = window.URL.createObjectURL(pdfBlob);
             setPdfUrl(url);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error procesando checkout múltiple:', error);
-            alert('Hubo un error al generar la salida múltiple.');
+            // responseType: 'blob' hace que axios también entregue el
+            // cuerpo del error como Blob (no como JSON ya parseado), así
+            // que hay que leerlo manualmente para mostrar el mensaje real
+            // del backend (ej. "No tiene una caja abierta...").
+            let message = 'Hubo un error al generar la salida múltiple.';
+            const data = error?.response?.data;
+            if (data instanceof Blob) {
+                try {
+                    const parsed = JSON.parse(await data.text());
+                    message = parsed?.message || message;
+                } catch {
+                    // el blob no era JSON parseable; se usa el mensaje genérico
+                }
+            } else if (data?.message) {
+                message = data.message;
+            }
+            alert(message);
         } finally {
             setProcessing(false);
         }

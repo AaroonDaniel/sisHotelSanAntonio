@@ -204,6 +204,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Registro de pagos y devoluciones
     Route::get('/historial-pagos', [PaymentHistoryController::class, 'index'])->name('payments.history');
 
+    // Trazabilidad de activo: historial de estadías por habitación
+    Route::get('/room-history', [App\Http\Controllers\RoomHistoryController::class, 'index'])->name('room-history.index');
+
     // Mantenimiento
     Route::get('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'index'])->name('maintenances.index');
     Route::post('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'store'])->name('maintenances.store');

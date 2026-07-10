@@ -238,11 +238,17 @@ class ReservationController extends Controller
                         ->where('status', 'ABIERTA')
                         ->first();
 
+                    // Sin caja abierta, este adelanto quedaría invisible en
+                    // cualquier cuadre de turno (cobro fantasma).
+                    if (!$cajaAbierta) {
+                        throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la reserva.');
+                    }
+
                     // 2. Guardar el pago relacionándolo con la caja y la reserva
                     \App\Models\Payment::create([
                         'reservation_id' => $reservation->id,
                         'user_id' => \Illuminate\Support\Facades\Auth::id(),
-                        'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null, // Conexión a la caja para auditoría
+                        'cash_register_id' => $cajaAbierta->id, // Conexión a la caja para auditoría
                         'amount' => $request->advance_payment,
                         'method' => $request->payment_type,
                         'bank_name' => ($request->payment_type === 'EFECTIVO') ? null : $request->qr_bank,

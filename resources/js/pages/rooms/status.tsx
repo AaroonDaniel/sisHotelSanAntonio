@@ -2295,8 +2295,11 @@ function CheckoutConfirmationModal({
             );
 
             setPdfUrl(url);
-        } catch (error) {
-            alert('Error al procesar la salida.');
+        } catch (error: any) {
+            alert(
+                error?.response?.data?.message ||
+                    'Error al procesar la salida.',
+            );
         } finally {
             setProcessing(false);
         }
