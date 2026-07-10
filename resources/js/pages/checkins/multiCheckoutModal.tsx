@@ -1,4 +1,3 @@
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, { Operator } from '@/components/OperatorSelector';
 import { router } from '@inertiajs/react';
 import axios from 'axios';
@@ -45,12 +44,6 @@ export default function MultiCheckoutModal({
         setTimeout(() => setOperatorAlertPulse(false), 1600);
     };
 
-    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
     // Estados de Formulario de Facturación y Buscador
     const [tipoDocumento, setTipoDocumento] = useState<
         'factura' | 'recibo' | null
@@ -425,29 +418,19 @@ export default function MultiCheckoutModal({
             // que hay que leerlo manualmente para mostrar el mensaje real
             // del backend (ej. "No tiene una caja abierta...").
             let message = 'Hubo un error al generar la salida múltiple.';
-            let parsed: any = null;
             const data = error?.response?.data;
             if (data instanceof Blob) {
                 try {
-                    parsed = JSON.parse(await data.text());
+                    const parsed = JSON.parse(await data.text());
                     message = parsed?.message || message;
                 } catch {
                     // el blob no era JSON parseable; se usa el mensaje genérico
                 }
             } else if (data?.message) {
-                parsed = data;
                 message = data.message;
             }
 
-            if (parsed?.needs_shift_opening) {
-                setShiftModal({
-                    show: true,
-                    operatorId: String(parsed.operator_id),
-                    operatorName: parsed.operator_name,
-                });
-            } else {
-                alert(message);
-            }
+            alert(message);
         } finally {
             setProcessing(false);
         }
@@ -1483,18 +1466,6 @@ export default function MultiCheckoutModal({
                     </div>
                 </div>
             </div>
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
-            />
         </div>
     );
 }

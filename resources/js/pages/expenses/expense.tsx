@@ -1,4 +1,3 @@
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, { Operator } from '@/components/OperatorSelector';
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
@@ -24,7 +23,6 @@ interface Expense {
 
 interface Props {
     auth: { user: User };
-    activeRegister: any | null;
     gastos: Expense[];
     operators: Operator[];
     selectedOperatorId: number | null;
@@ -32,7 +30,6 @@ interface Props {
 
 export default function Gastos({
     auth,
-    activeRegister,
     gastos,
     operators,
     selectedOperatorId,
@@ -43,13 +40,6 @@ export default function Gastos({
     const [deletingExpenseId, setDeletingExpenseId] = useState<number | null>(
         null,
     );
-
-    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
 
     // Formulario unificado para Crear/Editar
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
@@ -80,24 +70,13 @@ export default function Gastos({
                 onSuccess: () => cancelEdit(),
             });
         } else {
-            // Modo Creación
+            // Modo Creación. Apertura silenciosa: si el operador no tenía
+            // turno abierto, el backend le crea uno automáticamente al
+            // registrar este primer gasto — no hace falta manejar ningún
+            // error especial aquí.
             post('/gastos', {
                 onSuccess: () => {
                     reset('description', 'amount');
-                },
-                onError: (errs: any) => {
-                    if (errs?.shift_required) {
-                        try {
-                            const info = JSON.parse(errs.shift_required);
-                            setShiftModal({
-                                show: true,
-                                operatorId: String(info.operator_id),
-                                operatorName: info.operator_name,
-                            });
-                        } catch {
-                            // ignorar: no era el error de turno
-                        }
-                    }
                 },
             });
         }
@@ -175,7 +154,7 @@ export default function Gastos({
                     />
                 </div>
 
-                {!selectedOperatorId ? (
+                {!selectedOperatorId && (
                     <div className="animate-in rounded-2xl border border-gray-700 bg-gray-800/50 p-8 text-center backdrop-blur-sm fade-in">
                         <AlertCircle className="mx-auto mb-4 h-12 w-12 text-gray-500" />
                         <p className="text-gray-300">
@@ -183,19 +162,7 @@ export default function Gastos({
                             gastos.
                         </p>
                     </div>
-                ) : !activeRegister ? (
-                    /* ALERTA: Si el operador elegido no tiene caja abierta */
-                    <div className="animate-in rounded-2xl border border-red-500/20 bg-red-500/10 p-8 text-center backdrop-blur-sm fade-in">
-                        <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-400" />
-                        <h3 className="mb-2 text-xl font-bold text-white">
-                            ¡Caja Cerrada!
-                        </h3>
-                        <p className="text-red-200">
-                            Este operador no tiene un turno abierto. Al intentar
-                            registrar un gasto se te pedirá abrir su caja.
-                        </p>
-                    </div>
-                ) : null}
+                )}
 
                 {selectedOperatorId && (
                     /* CONTENIDO: Formulario y Tabla */
@@ -458,19 +425,6 @@ export default function Gastos({
                     </div>
                 )}
             </div>
-
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
-            />
         </AuthenticatedLayout>
     );
 }

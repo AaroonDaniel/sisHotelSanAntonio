@@ -70,14 +70,15 @@ class CashRegisterController extends Controller
     {
         $validated = $request->validate([
             'operator_id' => 'required|exists:users,id',
-            // NULL = no contestó (no debería pasar desde el frontend, que
-            // siempre exige Sí/No); 0 = "no dejo nada"; >0 = monto dejado
-            // en caja física para el siguiente operador.
-            'left_amount' => 'nullable|numeric|min:0',
+            // Obligatorio: el frontend siempre exige que el operador
+            // declare explícitamente cuánto efectivo deja en caja (puede
+            // ser 0). El siguiente operador hereda este valor como su
+            // apertura automática (ver RequiresOpenShift::autoOpenShift()).
+            'left_amount' => 'required|numeric|min:0',
         ]);
 
         $operatorId = (int) $validated['operator_id'];
-        $leftAmount = array_key_exists('left_amount', $validated) ? $validated['left_amount'] : null;
+        $leftAmount = $validated['left_amount'];
         $cashRegisterId = null;
 
         try {

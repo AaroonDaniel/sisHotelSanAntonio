@@ -1,4 +1,3 @@
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector from '@/components/OperatorSelector';
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
@@ -121,11 +120,6 @@ export default function CheckinsIndex({
     const [checkoutTarget, setCheckoutTarget] = useState<Checkin | null>(null);
     const [checkoutOperatorId, setCheckoutOperatorId] = useState('');
     const [checkoutProcessing, setCheckoutProcessing] = useState(false);
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
 
     useEffect(() => {
         if (editingCheckin) {
@@ -197,18 +191,10 @@ export default function CheckinsIndex({
             router.reload({ only: ['Checkins'] });
             window.open(`/checks/${finishedId}/checkout-receipt`, '_blank');
         } catch (error: any) {
-            if (error?.response?.data?.needs_shift_opening) {
-                setShiftModal({
-                    show: true,
-                    operatorId: String(error.response.data.operator_id),
-                    operatorName: error.response.data.operator_name,
-                });
-            } else {
-                alert(
-                    error?.response?.data?.message ||
-                        'Error al procesar la salida.',
-                );
-            }
+            alert(
+                error?.response?.data?.message ||
+                    'Error al procesar la salida.',
+            );
         } finally {
             setCheckoutProcessing(false);
         }
@@ -593,19 +579,6 @@ export default function CheckinsIndex({
                         </div>
                     </div>
                 )}
-
-                <OpenShiftModal
-                    show={shiftModal.show}
-                    operatorId={shiftModal.operatorId}
-                    operatorName={shiftModal.operatorName}
-                    onClose={() =>
-                        setShiftModal({
-                            show: false,
-                            operatorId: null,
-                            operatorName: null,
-                        })
-                    }
-                />
             </div>
         </AuthenticatedLayout>
     );

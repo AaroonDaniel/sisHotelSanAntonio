@@ -1,4 +1,3 @@
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, {
     Operator as SharedOperator,
 } from '@/components/OperatorSelector';
@@ -127,30 +126,6 @@ export default function OccupiedRoomModal({
     const [paymentOperatorError, setPaymentOperatorError] = useState<
         string | null
     >(null);
-
-    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
-    // Compartido por el formulario de adelanto y el de devolución de este
-    // mismo modal.
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
-
-    const detectShiftRequired = (errors: any): boolean => {
-        if (!errors?.shift_required) return false;
-        try {
-            const info = JSON.parse(errors.shift_required);
-            setShiftModal({
-                show: true,
-                operatorId: String(info.operator_id),
-                operatorName: info.operator_name,
-            });
-            return true;
-        } catch {
-            return false;
-        }
-    };
 
     // --- FORMULARIO DE ANULACIÓN DE CONVENIO ---
     const { post: postCancelAgreement, processing: processingCancel } = useForm(
@@ -394,7 +369,6 @@ export default function OccupiedRoomModal({
             },
             onError: (errors) => {
                 console.error('Error backend:', errors);
-                detectShiftRequired(errors);
             },
             onFinish: () => setShowConfirmModal(false),
         });
@@ -1241,19 +1215,6 @@ export default function OccupiedRoomModal({
                 checkins={liveCheckin ? [liveCheckin] : []}
                 services={services}
             />
-
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
-            />
         </>
     );
 }
@@ -1400,11 +1361,6 @@ type RefundMethod = 'efectivo' | 'qr' | 'transferencia' | 'tarjeta';
 
 function RefundDialog({ checkinId, operators }: RefundDialogProps) {
     const [open, setOpen] = useState<boolean>(false);
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
 
     const { data, setData, post, processing, errors, reset } = useForm<{
         amount: string;
@@ -1433,20 +1389,6 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
             onSuccess: () => {
                 reset();
                 setOpen(false);
-            },
-            onError: (errs: any) => {
-                if (errs?.shift_required) {
-                    try {
-                        const info = JSON.parse(errs.shift_required);
-                        setShiftModal({
-                            show: true,
-                            operatorId: String(info.operator_id),
-                            operatorName: info.operator_name,
-                        });
-                    } catch {
-                        // ignorar: no era el error de turno
-                    }
-                }
             },
         });
     };
@@ -1600,19 +1542,6 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
                     </form>
                 </DialogContent>
             </Dialog>
-
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
-            />
         </>
     );
 }

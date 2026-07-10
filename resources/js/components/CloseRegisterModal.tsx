@@ -1,6 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { Lock } from 'lucide-react';
-import { FormEventHandler, useEffect, useState } from 'react';
+import { FormEventHandler, useEffect } from 'react';
 
 interface CloseRegisterModalProps {
     show: boolean;
@@ -21,11 +21,6 @@ export default function CloseRegisterModal({
         left_amount: '',
     });
 
-    // Sí/No: ¿deja un monto físico en caja para el siguiente operador?
-    // Se pide explícitamente en cada cierre (no se asume nada) para que
-    // quede registrado en el cuadre, sea la respuesta la que sea.
-    const [leavesAmount, setLeavesAmount] = useState<'yes' | 'no' | null>(null);
-
     // El modal se queda montado (controlado por `show`), así que si el
     // operador seleccionado en la página cambia, hay que reflejarlo aquí.
     useEffect(() => {
@@ -33,26 +28,26 @@ export default function CloseRegisterModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [operatorId]);
 
-    // Cada vez que se abre el modal para un nuevo cierre, se reinicia la
-    // pregunta: no debe arrastrar la respuesta del cierre anterior.
+    // Cada vez que se abre el modal para un nuevo cierre, se reinicia el
+    // monto: no debe arrastrar el valor del cierre anterior.
     useEffect(() => {
         if (show) {
-            setLeavesAmount(null);
             setData('left_amount', '');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [show]);
 
+    // El monto es obligatorio (puede ser 0, pero debe escribirse
+    // explícitamente): así el siguiente turno hereda automáticamente este
+    // valor como su apertura, sin volver a preguntarle nada.
     const canSubmit =
         !!data.operator_id &&
-        (leavesAmount === 'no' ||
-            (leavesAmount === 'yes' && Number(data.left_amount) > 0));
+        data.left_amount !== '' &&
+        Number(data.left_amount) >= 0;
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!canSubmit) return;
-
-        setData('left_amount', leavesAmount === 'no' ? '0' : data.left_amount);
 
         post('/cash-registers/close', {
             preserveScroll: true,
@@ -89,63 +84,35 @@ export default function CloseRegisterModal({
                         . Volverás al panel de habitaciones.
                     </p>
 
-                    {/* Pregunta: ¿deja monto en caja? */}
+                    {/* Monto obligatorio: el siguiente turno lo hereda como
+                        apertura automática, sin volver a preguntar nada. */}
                     <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
-                        <p className="mb-3 text-sm font-bold text-amber-800">
-                            ¿Dejas un monto en caja para el siguiente operador?
+                        <label className="mb-1 block text-sm font-bold text-amber-800">
+                            ¿Cuánto efectivo dejas en caja para el siguiente
+                            turno?
+                        </label>
+                        <p className="mb-3 text-xs text-amber-700">
+                            Escribe 0 si no dejas nada. El siguiente operador
+                            arrancará automáticamente con este monto.
                         </p>
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setLeavesAmount('yes')}
-                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
-                                    leavesAmount === 'yes'
-                                        ? 'border-amber-600 bg-amber-100 text-amber-800'
-                                        : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                                }`}
-                            >
-                                Sí
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLeavesAmount('no')}
-                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
-                                    leavesAmount === 'no'
-                                        ? 'border-gray-600 bg-gray-100 text-gray-800'
-                                        : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                                }`}
-                            >
-                                No
-                            </button>
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-3 flex items-center font-black text-gray-400">
+                                Bs
+                            </span>
+                            <input
+                                type="number"
+                                step="0.50"
+                                min="0"
+                                required
+                                autoFocus
+                                value={data.left_amount}
+                                onChange={(e) =>
+                                    setData('left_amount', e.target.value)
+                                }
+                                className="w-full rounded-lg border-2 border-gray-200 py-2 pr-3 pl-9 text-base font-bold text-gray-800 focus:border-amber-500 focus:ring-amber-500"
+                                placeholder="0.00"
+                            />
                         </div>
-
-                        {leavesAmount === 'yes' && (
-                            <div className="mt-3">
-                                <label className="mb-1 block text-xs font-bold tracking-wide text-amber-700 uppercase">
-                                    Monto dejado en caja
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-3 flex items-center font-black text-gray-400">
-                                        Bs
-                                    </span>
-                                    <input
-                                        type="number"
-                                        step="0.50"
-                                        min="0"
-                                        autoFocus
-                                        value={data.left_amount}
-                                        onChange={(e) =>
-                                            setData(
-                                                'left_amount',
-                                                e.target.value,
-                                            )
-                                        }
-                                        className="w-full rounded-lg border-2 border-gray-200 py-2 pr-3 pl-9 text-base font-bold text-gray-800 focus:border-amber-500 focus:ring-amber-500"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* Formulario / Botones */}

@@ -15,7 +15,6 @@ use App\Models\Invoice;
 use App\Models\InvoiceDetail;
 use App\Models\SiatCredential;
 use App\Exceptions\SiatOfflineException;
-use App\Exceptions\ShiftNotOpenException;
 use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -236,27 +235,21 @@ class CheckinController extends Controller
         $roomToAssign = \App\Models\Room::with('roomType')->find($validatedCheckin['room_id']);
         $isAssigningSalon = $roomToAssign && str_contains(strtoupper($roomToAssign->roomType->name ?? ''), 'SALON');
 
-        // Sin caja abierta, un adelanto cobrado en la asignación quedaría
-        // invisible en cualquier cuadre de turno (cobro fantasma). Se
-        // valida ANTES de abrir la transacción para devolver un error
-        // amigable (withErrors) en vez de una excepción 500. Si no piden
-        // adelanto, la asignación se sigue creando libremente sin caja.
-        // Terminal Compartida: el dueño del turno es el operador elegido
-        // en el OperatorSelector (checkin_operator_id), NO Auth::id() (que
-        // siempre es la cuenta genérica 'recepcion').
+        // Apertura silenciosa: si el adelanto viene con la asignación, nos
+        // aseguramos de que el operador elegido en el OperatorSelector
+        // (checkin_operator_id, NO Auth::id() — bajo Terminal Compartida
+        // eso siempre es la cuenta genérica 'recepcion') tenga un turno
+        // abierto ANTES de iniciar la transacción de abajo, abriéndoselo
+        // automáticamente si hace falta. Si no piden adelanto, la
+        // asignación se sigue creando libremente sin caja.
         if (($validatedCheckin['advance_payment'] ?? 0) > 0) {
-            try {
-                $this->findOpenShift((int) $validatedCheckin['checkin_operator_id']);
-            } catch (ShiftNotOpenException $e) {
-                return $this->shiftRequiredRedirect($e);
-            }
+            $this->findOpenShift((int) $validatedCheckin['checkin_operator_id']);
         }
 
         // =========================================================
         // 5. INICIO DE TRANSACCIÓN (ahora envuelve TAMBIÉN la creación del huésped)
         //    Si algo falla más adelante, el huésped también se revierte.
         // =========================================================
-        try {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $validatedCheckin, $cleanOrigin, $isTitularComplete, $missingField, $isAssigningSalon) {
 
             // =========================================================
@@ -482,20 +475,13 @@ class CheckinController extends Controller
             // =========================================================
             $montoInicial = $validatedCheckin['advance_payment'] ?? 0;
             if ($montoInicial > 0) {
-                // Sin caja abierta, este adelanto quedaría invisible en
-                // cualquier cuadre de turno (cobro fantasma): se bloquea la
-                // asignación completa, igual que ya ocurre con gastos y
-                // adelantos posteriores. Si no hay adelanto, la asignación
-                // se sigue creando libremente sin caja abierta. (Red de
-                // seguridad: el caso normal ya se valida ANTES de la
-                // transacción, más arriba; esto solo cubre la rarísima
+                // Red de seguridad: la apertura ya se garantizó ANTES de la
+                // transacción (más arriba); esto solo cubre la rarísima
                 // condición de carrera de que el turno se cierre justo
-                // entre ambas verificaciones.)
+                // entre ambas verificaciones. Se reabre en silencio en vez
+                // de interrumpir el checkin.
                 if (!$cajaAbierta) {
-                    throw new ShiftNotOpenException(
-                        (int) $validatedCheckin['checkin_operator_id'],
-                        'El operador',
-                    );
+                    $cajaAbierta = $this->findOpenShift((int) $validatedCheckin['checkin_operator_id']);
                 }
 
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
@@ -647,9 +633,6 @@ class CheckinController extends Controller
                 return redirect()->back()->with('success', 'Asignación registrada. ATENCIÓN: ' . $mensaje);
             }
         });
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredRedirect($e);
-        }
     }
 
     public function transfer(Request $request, Checkin $checkin)
@@ -1462,15 +1445,11 @@ class CheckinController extends Controller
             'operator_id' => 'required|exists:users,id',
         ]);
 
-        // Sin caja abierta, este pago quedaría invisible en cualquier cuadre
-        // de turno: se bloquea, igual que ya ocurre con los gastos.
-        // Terminal Compartida: el dueño del turno es operator_id (el avatar
-        // elegido), NO Auth::id() (siempre la cuenta genérica 'recepcion').
-        try {
-            $activeRegister = $this->findOpenShift((int) $request->operator_id);
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredRedirect($e);
-        }
+        // Apertura silenciosa: si operator_id (el avatar elegido en el
+        // OperatorSelector, NO Auth::id() — bajo Terminal Compartida
+        // siempre es la cuenta genérica 'recepcion') no tiene turno
+        // abierto, se le crea uno automáticamente aquí mismo.
+        $activeRegister = $this->findOpenShift((int) $request->operator_id);
 
         // 2. Transacción
         DB::transaction(function () use ($request, $checkin, $activeRegister) {
@@ -1515,14 +1494,10 @@ class CheckinController extends Controller
 
         $userId = Auth::id();
 
-        // 2. Verificar que el OPERADOR (no Auth::id(), que bajo Terminal
-        // Compartida es siempre la cuenta genérica 'recepcion') tenga una
-        // caja activa.
-        try {
-            $cajaAbierta = $this->findOpenShift((int) $validated['operator_id']);
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredRedirect($e);
-        }
+        // 2. Apertura silenciosa: el OPERADOR (no Auth::id(), que bajo
+        // Terminal Compartida es siempre la cuenta genérica 'recepcion')
+        // recibe un turno automáticamente si todavía no tenía uno abierto.
+        $cajaAbierta = $this->findOpenShift((int) $validated['operator_id']);
 
         // 3. Registro financiero de la devolución (monto ESTRICTAMENTE NEGATIVO)
         DB::transaction(function () use ($validated, $checkin, $userId, $cajaAbierta) {
@@ -1796,8 +1771,6 @@ class CheckinController extends Controller
 
                 return $invoice;
             });
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredJson($e);
         } catch (\Throwable $e) {
             // Si la FASE 1 falla, sí devolvemos 500 — porque la BD quedó intacta
             // y el problema NO es el SIAT, es lógica/datos.
@@ -3165,7 +3138,6 @@ class CheckinController extends Controller
             'checkout_operator_id' => 'required|exists:users,id',
         ]);
 
-        try {
         return DB::transaction(function () use ($request) {
             // 1. Traemos todos los checkins solicitados con sus relaciones necesarias
             $checkins = Checkin::with(['guest', 'room.price', 'room.roomType', 'checkinDetails.service', 'schedule', 'companions', 'payments'])
@@ -3559,9 +3531,6 @@ class CheckinController extends Controller
             return response($pdf->Output('S'), 200)
                 ->header('Content-Type', 'application/pdf');
         });
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredJson($e);
-        }
     }
 
     /**

@@ -1,4 +1,3 @@
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector, {
     Operator as SharedOperator,
 } from '@/components/OperatorSelector';
@@ -370,32 +369,6 @@ export default function CheckinModal({
     const [operatorToastError, setOperatorToastError] = useState<string | null>(
         null,
     );
-
-    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
-    // Si el backend responde que el operador elegido no tiene caja
-    // abierta, se dispara este modal en vez de guardar. El formulario
-    // queda intacto: tras abrir el turno, el usuario vuelve a presionar
-    // "Guardar" manualmente (sin reintento automático).
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
-
-    const detectShiftRequired = (errors: any): boolean => {
-        if (!errors?.shift_required) return false;
-        try {
-            const info = JSON.parse(errors.shift_required);
-            setShiftModal({
-                show: true,
-                operatorId: String(info.operator_id),
-                operatorName: info.operator_name,
-            });
-            return true;
-        } catch {
-            return false;
-        }
-    };
 
     // REFS PARA DETECTAR CLICS FUERA
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1346,7 +1319,6 @@ export default function CheckinModal({
         // Camino de Error (onError)
         const onError = (errors: any) => {
             console.error('❌ EL SERVIDOR RECHAZÓ LOS DATOS. RAZONES:', errors);
-            if (detectShiftRequired(errors)) return;
             if (errors.guest_id) {
                 setGuestConflictError(errors.guest_id);
                 setTimeout(() => {
@@ -4006,19 +3978,6 @@ export default function CheckinModal({
                 onClose={() => setShowCancelModal(false)}
                 onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
-            />
-
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
             />
         </div>
     );

@@ -2,7 +2,6 @@ import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
-import OpenShiftModal from '@/components/OpenShiftModal';
 import OperatorSelector from '@/components/OperatorSelector';
 import ReservationsPopover from '@/components/Reservationspopover';
 import ToleranceModal from '@/components/ToleranceModal';
@@ -1977,13 +1976,6 @@ function CheckoutConfirmationModal({
         setTimeout(() => setOperatorAlertPulse(false), 1600);
     };
 
-    // Terminal Compartida (Kiosk Mode): apertura de turno "bajo demanda".
-    const [shiftModal, setShiftModal] = useState<{
-        show: boolean;
-        operatorId: string | null;
-        operatorName: string | null;
-    }>({ show: false, operatorId: null, operatorName: null });
-
     if (!checkin) return null;
 
     const [tolModal, setTolModal] = useState<{
@@ -2356,18 +2348,10 @@ function CheckoutConfirmationModal({
 
             setPdfUrl(url);
         } catch (error: any) {
-            if (error?.response?.data?.needs_shift_opening) {
-                setShiftModal({
-                    show: true,
-                    operatorId: String(error.response.data.operator_id),
-                    operatorName: error.response.data.operator_name,
-                });
-            } else {
-                alert(
-                    error?.response?.data?.message ||
-                        'Error al procesar la salida.',
-                );
-            }
+            alert(
+                error?.response?.data?.message ||
+                    'Error al procesar la salida.',
+            );
         } finally {
             setProcessing(false);
         }
@@ -3728,18 +3712,6 @@ function CheckoutConfirmationModal({
                     minutes: tolModal.minutes,
                     action: 'exit', // Importante: 'exit' para mensaje de salida
                 }}
-            />
-            <OpenShiftModal
-                show={shiftModal.show}
-                operatorId={shiftModal.operatorId}
-                operatorName={shiftModal.operatorName}
-                onClose={() =>
-                    setShiftModal({
-                        show: false,
-                        operatorId: null,
-                        operatorName: null,
-                    })
-                }
             />
         </div>
     );

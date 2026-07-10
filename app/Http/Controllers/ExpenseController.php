@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\CashRegister;
 use App\Models\User;
-use App\Exceptions\ShiftNotOpenException;
 use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -74,11 +73,10 @@ class ExpenseController extends Controller
             'operator_id' => 'required|exists:users,id',
         ]);
 
-        try {
-            $activeRegister = $this->findOpenShift((int) $request->operator_id);
-        } catch (ShiftNotOpenException $e) {
-            return $this->shiftRequiredRedirect($e);
-        }
+        // Apertura silenciosa: si el operador no tiene turno abierto, se le
+        // crea uno automáticamente aquí mismo, sin interrumpir el registro
+        // del gasto.
+        $activeRegister = $this->findOpenShift((int) $request->operator_id);
 
         Expense::create([
             'cash_register_id' => $activeRegister->id,
