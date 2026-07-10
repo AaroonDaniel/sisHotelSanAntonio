@@ -42,8 +42,13 @@ trait RequiresOpenShift
     {
         $operator = User::findOrFail($operatorId);
 
-        if (!$operator->hasRole('recepcionista')) {
-            throw new RuntimeException("{$operator->full_name} no tiene el rol de recepcionista; no puede operar caja.");
+        // Candado de seguridad: sigue bloqueando a personal sin nada que
+        // ver con dinero (limpieza, mantenimiento), pero permite operar
+        // caja a quien realmente puede hacerlo — recepcionista y también
+        // administrador/gerente (roles reales del sistema, ver
+        // RoleAndPermissionSeeder).
+        if (!$operator->hasAnyRole(['recepcionista', 'administrador', 'gerente'])) {
+            throw new RuntimeException("{$operator->full_name} no tiene permisos para operar caja.");
         }
 
         return DB::transaction(function () use ($operatorId) {
