@@ -1867,7 +1867,7 @@ export default function RoomsStatus({
             />
             {previewPickerOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-7 shadow-3xl">
                         <h3 className="mb-1 text-lg font-bold text-gray-800">
                             Ver mi caja hasta ahora
                         </h3>
@@ -1881,7 +1881,7 @@ export default function RoomsStatus({
                             value={previewOperatorId}
                             onChange={setPreviewOperatorId}
                             compact
-                            size="md"
+                            size="lg"
                             label=""
                         />
 

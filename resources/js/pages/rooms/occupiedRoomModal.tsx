@@ -851,7 +851,7 @@ export default function OccupiedRoomModal({
                                                             );
                                                         }}
                                                         compact
-                                                        size="md"
+                                                        size="lg"
                                                         label=""
                                                     />
                                                     {paymentOperatorError && (
@@ -1514,7 +1514,7 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
                                 value={data.operator_id}
                                 onChange={(id) => setData('operator_id', id)}
                                 compact
-                                size="sm"
+                                size="lg"
                                 label=""
                             />
                         </div>
