@@ -1,12 +1,14 @@
 import CloseRegisterModal from '@/components/CloseRegisterModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import {
     ArrowDownCircle,
     ArrowLeft,
     ArrowUpCircle,
     Banknote,
     Calendar,
+    Eye,
     FileSpreadsheet,
     FileText,
     History,
@@ -19,6 +21,7 @@ import {
     Scale,
     User as UserIcon,
     Wallet,
+    X,
 } from 'lucide-react';
 import { FormEventHandler, useMemo, useState } from 'react';
 
@@ -58,6 +61,13 @@ interface OperatorOption extends User {
     active_shift_opened_at: string | null;
 }
 
+interface HistoryShiftRow {
+    id: number;
+    operator_name: string;
+    opened_at: string | null;
+    closed_at: string | null;
+}
+
 interface Props {
     auth: {
         user: User;
@@ -83,6 +93,18 @@ const bs = (n: number) =>
         maximumFractionDigits: 2,
     }).format(n ?? 0);
 
+const formatDateTime = (value: string | null) => {
+    if (!value) return '—';
+    return new Date(value).toLocaleString('es-BO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+};
+
 export default function FinancialReport({
     auth,
     users = [],
@@ -95,6 +117,36 @@ export default function FinancialReport({
 }: Props) {
     // Modal de Cierre de Caja
     const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+
+    // Historial de Turnos: modal con TODOS los turnos ya cerrados. Se
+    // carga bajo demanda (no en cada visita a la pantalla) para no jalar
+    // todo el histórico en cada carga de Cierre de Caja.
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyShifts, setHistoryShifts] = useState<HistoryShiftRow[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    // true cuando el PDF que se está mostrando viene del historial (por
+    // cash_register_id), no del formulario de arriba: oculta el botón
+    // "Cerrar Caja" (ese turno ya está cerrado) y ajusta el título.
+    const [isHistoryPreview, setIsHistoryPreview] = useState(false);
+
+    const openHistoryModal = () => {
+        setIsHistoryModalOpen(true);
+        setLoadingHistory(true);
+        axios
+            .get('/reports/financial/history')
+            .then((res) => setHistoryShifts(res.data.Shifts ?? []))
+            .catch(() => setHistoryShifts([]))
+            .finally(() => setLoadingHistory(false));
+    };
+
+    const viewHistoryShiftPdf = (shiftId: number) => {
+        setIsHistoryModalOpen(false);
+        setIsHistoryPreview(true);
+        setFormato('pdf');
+        setPdfUrl(
+            `/reports/financial/pdf?cash_register_id=${shiftId}&record_type=ambos`,
+        );
+    };
 
     // Estados del formulario. Por defecto ambas fechas son HOY: el backend
     // (findShiftOverlapping) ya detecta automáticamente el turno completo
@@ -264,22 +316,19 @@ export default function FinancialReport({
                         <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
                             Cierre de Caja
                         </h2>
-                        {/* Historial: TODOS los cierres de caja guardados
-                            hasta ahora (turno, operador, montos), ya
-                            construido en /admin/shift-reports. Solo se
-                            muestra a quien tenga reportes.financiero, mismo
-                            permiso que habilita la vista agregada "Todos" en
-                            esta misma pantalla. */}
+                        {/* Historial de Turnos: TODOS los cierres de caja
+                            guardados hasta ahora (turno, operador, fechas).
+                            Solo se muestra a quien tenga reportes.financiero,
+                            mismo permiso que habilita la vista agregada
+                            "Todos" en esta misma pantalla. */}
                         {CanViewAll && (
                             <button
                                 type="button"
-                                onClick={() =>
-                                    router.visit('/admin/shift-reports')
-                                }
+                                onClick={openHistoryModal}
                                 className="flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm font-bold text-gray-200 shadow-sm transition hover:bg-gray-700"
                             >
                                 <History className="h-4 w-4" />
-                                Historial
+                                Historial de Turnos
                             </button>
                         )}
                     </div>
@@ -293,16 +342,21 @@ export default function FinancialReport({
                                 <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                                     <FileText className="h-5 w-5" />
                                 </div>
-                                Paso 2: Revisa tu Parte Diario
+                                {isHistoryPreview
+                                    ? 'Turno del Historial'
+                                    : 'Paso 2: Revisa tu Parte Diario'}
                             </h2>
                             <div className="flex flex-wrap items-center justify-center gap-3">
                                 <button
-                                    onClick={() => setPdfUrl(null)}
+                                    onClick={() => {
+                                        setPdfUrl(null);
+                                        setIsHistoryPreview(false);
+                                    }}
                                     className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100"
                                 >
                                     <ArrowLeft className="h-4 w-4" /> Cerrar
                                 </button>
-                                {userId !== 'todos' && (
+                                {!isHistoryPreview && userId !== 'todos' && (
                                     <button
                                         type="button"
                                         onClick={() =>
@@ -866,6 +920,104 @@ export default function FinancialReport({
                 }
                 onClose={() => setIsCloseModalOpen(false)}
             />
+
+            {/* ============ MODAL: HISTORIAL DE TURNOS ============ */}
+            {isHistoryModalOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                    onClick={() => setIsHistoryModalOpen(false)}
+                >
+                    <div
+                        className="flex h-[80vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                            <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                <div className="rounded-lg bg-gray-200 p-1.5 text-gray-700">
+                                    <History className="h-5 w-5" />
+                                </div>
+                                Historial de Turnos
+                            </h2>
+                            <button
+                                onClick={() => setIsHistoryModalOpen(false)}
+                                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {loadingHistory ? (
+                                <div className="flex h-full items-center justify-center gap-2 text-gray-400">
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                    Cargando historial...
+                                </div>
+                            ) : historyShifts.length === 0 ? (
+                                <div className="flex h-full items-center justify-center text-center text-gray-400">
+                                    Todavía no hay turnos cerrados registrados.
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-gray-50 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3">
+                                                    Operador
+                                                </th>
+                                                <th className="px-4 py-3">
+                                                    Fecha/Hora Inicio
+                                                </th>
+                                                <th className="px-4 py-3">
+                                                    Fecha/Hora Cierre
+                                                </th>
+                                                <th className="px-4 py-3 text-right">
+                                                    Acciones
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {historyShifts.map((s) => (
+                                                <tr
+                                                    key={s.id}
+                                                    className="hover:bg-gray-50"
+                                                >
+                                                    <td className="px-4 py-3 font-bold text-gray-800">
+                                                        {s.operator_name}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-gray-600">
+                                                        {formatDateTime(
+                                                            s.opened_at,
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-gray-600">
+                                                        {formatDateTime(
+                                                            s.closed_at,
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                viewHistoryShiftPdf(
+                                                                    s.id,
+                                                                )
+                                                            }
+                                                            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100"
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                            Ver PDF
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

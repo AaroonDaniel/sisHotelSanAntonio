@@ -106,7 +106,7 @@ export default function CashRegisterShow({
             <Head title={`Cierre de Caja #${CashRegister.id}`} />
 
             <div className="mx-auto w-full max-w-4xl print:max-w-full">
-                {/* Barra de acciones (oculta al imprimir) */}
+                {/* ===== 1. BARRA SUPERIOR DE ACCIONES ===== */}
                 <div className="mb-4 flex items-center justify-between print:hidden">
                     <button
                         onClick={() => router.visit('/dashboard')}
@@ -124,61 +124,63 @@ export default function CashRegisterShow({
                     </button>
                 </div>
 
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg print:rounded-none print:border-none print:shadow-none">
-                    {/* ENCABEZADO */}
-                    <div className="mb-6 flex items-start justify-between border-b border-dashed border-gray-300 pb-4">
+                {/* ===== 2. TARJETA PRINCIPAL ===== */}
+                <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm md:p-8 print:rounded-none print:border-none print:shadow-none">
+                    {/* ===== 3. CABECERA + ESTADO ===== */}
+                    <div className="flex items-start justify-between">
                         <div>
-                            <h1 className="text-lg font-black tracking-widest text-gray-800 uppercase">
+                            <h1 className="text-lg font-bold tracking-widest text-gray-800 uppercase">
                                 Hotel San Antonio
                             </h1>
-                            <p className="text-sm font-bold text-gray-500 uppercase">
+                            <p className="text-sm text-gray-500 uppercase">
                                 Cierre de Caja — Turno #{CashRegister.id}
                             </p>
                         </div>
                         <span
-                            className={`rounded-full px-3 py-1 text-xs font-black tracking-wider uppercase ${
+                            className={`rounded-full px-3 py-1 text-xs font-bold tracking-wider uppercase ${
                                 isClosed
-                                    ? 'bg-gray-200 text-gray-700'
-                                    : 'bg-emerald-100 text-emerald-700'
+                                    ? 'bg-gray-100 text-gray-700'
+                                    : 'bg-green-100 text-green-700'
                             }`}
                         >
                             {isClosed ? 'Cerrado' : 'Abierto'}
                         </span>
                     </div>
+                    <div className="mt-4 border-b border-dashed border-gray-200 pb-4" />
 
-                    {/* DATOS DEL TURNO */}
-                    <div className="mb-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+                    {/* ===== 4. GRID DE INFORMACIÓN GENERAL (4 COLUMNAS) ===== */}
+                    <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
                         <div>
-                            <p className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Operador
                             </p>
-                            <p className="font-bold text-gray-800">
+                            <p className="mt-0.5 font-semibold text-gray-800">
                                 {operatorName}
                             </p>
                         </div>
                         <div>
-                            <p className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Hora de Inicio
                             </p>
-                            <p className="font-bold text-gray-800">
+                            <p className="mt-0.5 font-semibold text-gray-800">
                                 {formatDateTime(CashRegister.opened_at)}
                             </p>
                         </div>
                         <div>
-                            <p className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Hora de Fin
                             </p>
-                            <p className="font-bold text-gray-800">
+                            <p className="mt-0.5 font-semibold text-gray-800">
                                 {isClosed
                                     ? formatDateTime(CashRegister.closed_at)
                                     : 'Turno en curso'}
                             </p>
                         </div>
                         <div>
-                            <p className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Saldo Inicial
                             </p>
-                            <p className="font-bold text-gray-800">
+                            <p className="mt-0.5 font-semibold text-gray-800">
                                 {formatCurrency(
                                     Number(CashRegister.opening_amount),
                                 )}
@@ -186,50 +188,50 @@ export default function CashRegisterShow({
                         </div>
                     </div>
 
-                    {/* CUADRE FINAL */}
-                    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
-                            <p className="text-[10px] font-bold tracking-wider text-gray-500 uppercase">
+                    {/* ===== 5. TARJETAS DE RESUMEN FINANCIERO (3 COLUMNAS) ===== */}
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="rounded-xl border border-gray-200 p-4 text-center">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Total Cobrado/Adelantos
                             </p>
-                            <p className="mt-1 text-xl font-black text-emerald-600">
+                            <p className="mt-1 text-2xl font-bold text-green-600">
                                 {formatCurrency(TotalIncome)}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
-                            <p className="text-[10px] font-bold tracking-wider text-gray-500 uppercase">
+                        <div className="rounded-xl border border-gray-200 p-4 text-center">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">
                                 Total Gastos
                             </p>
-                            <p className="mt-1 text-xl font-black text-red-600">
+                            <p className="mt-1 text-2xl font-bold text-red-600">
                                 {formatCurrency(TotalExpenses)}
                             </p>
                         </div>
-                        <div className="rounded-xl border-2 border-gray-800 bg-gray-900 p-4 text-center">
-                            <p className="text-[10px] font-bold tracking-wider text-gray-300 uppercase">
+                        <div className="rounded-xl bg-gray-900 p-4 text-center">
+                            <p className="text-xs font-semibold text-gray-300 uppercase">
                                 Efectivo Esperado en Caja
                             </p>
-                            <p className="mt-1 text-2xl font-black text-white">
+                            <p className="mt-1 text-2xl font-bold text-white">
                                 {formatCurrency(ExpectedCash)}
                             </p>
                         </div>
                     </div>
 
                     {isClosed && LeftAmount !== null && (
-                        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
-                            <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">
+                        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                            <p className="text-xs font-semibold text-amber-700 uppercase">
                                 {LeftAmount > 0
                                     ? 'Monto dejado en caja para el siguiente turno'
                                     : 'El operador no dejó monto en caja'}
                             </p>
                             {LeftAmount > 0 && (
-                                <p className="mt-1 text-xl font-black text-amber-800">
+                                <p className="mt-1 text-xl font-bold text-amber-800">
                                     {formatCurrency(LeftAmount)}
                                 </p>
                             )}
                         </div>
                     )}
 
-                    {/* DESGLOSE POR MÉTODO */}
+                    {/* ===== 6. TABLAS DE DESGLOSE ===== */}
                     <Section title="Desglose por Método de Pago">
                         <Table
                             head={[
@@ -244,17 +246,14 @@ export default function CashRegisterShow({
                                 <EmptyRow colSpan={5} />
                             ) : (
                                 ByMethod.map((m) => (
-                                    <tr
-                                        key={m.method}
-                                        className="border-b border-gray-100"
-                                    >
+                                    <tr key={m.method}>
                                         <td className="px-3 py-2 font-bold text-gray-800">
                                             {m.method}
                                         </td>
                                         <td className="px-3 py-2 text-center">
                                             {m.count}
                                         </td>
-                                        <td className="px-3 py-2 text-right text-emerald-600">
+                                        <td className="px-3 py-2 text-right text-green-600">
                                             {formatCurrency(m.collections)}
                                         </td>
                                         <td className="px-3 py-2 text-right text-red-500">
@@ -271,7 +270,6 @@ export default function CashRegisterShow({
                         </Table>
                     </Section>
 
-                    {/* PAGOS / ADELANTOS DETALLADOS */}
                     <Section title="Cobros y Adelantos del Turno">
                         <Table
                             head={[
@@ -287,10 +285,7 @@ export default function CashRegisterShow({
                                 <EmptyRow colSpan={6} />
                             ) : (
                                 Payments.map((p) => (
-                                    <tr
-                                        key={p.id}
-                                        className="border-b border-gray-100"
-                                    >
+                                    <tr key={p.id}>
                                         <td className="px-3 py-2 text-gray-600">
                                             {p.payment_date ?? '—'}
                                         </td>
@@ -320,7 +315,6 @@ export default function CashRegisterShow({
                         </Table>
                     </Section>
 
-                    {/* CONSUMOS / SERVICIOS */}
                     <Section title="Consumos y Servicios">
                         <Table
                             head={[
@@ -336,10 +330,7 @@ export default function CashRegisterShow({
                                 <EmptyRow colSpan={6} />
                             ) : (
                                 Services.map((s, idx) => (
-                                    <tr
-                                        key={idx}
-                                        className="border-b border-gray-100"
-                                    >
+                                    <tr key={idx}>
                                         <td className="px-3 py-2 text-gray-600">
                                             {s.consumed_at}
                                         </td>
@@ -364,7 +355,6 @@ export default function CashRegisterShow({
                         </Table>
                     </Section>
 
-                    {/* GASTOS */}
                     <Section title="Gastos del Turno">
                         <Table
                             head={['Fecha', 'Descripción', 'Operador', 'Monto']}
@@ -373,10 +363,7 @@ export default function CashRegisterShow({
                                 <EmptyRow colSpan={4} />
                             ) : (
                                 Expenses.map((e) => (
-                                    <tr
-                                        key={e.id}
-                                        className="border-b border-gray-100"
-                                    >
+                                    <tr key={e.id}>
                                         <td className="px-3 py-2 text-gray-600">
                                             {e.created_at ?? '—'}
                                         </td>
@@ -420,8 +407,8 @@ function Section({
     children: React.ReactNode;
 }) {
     return (
-        <div className="mb-6 break-inside-avoid">
-            <h2 className="mb-2 border-b border-gray-200 pb-1 text-xs font-black tracking-wider text-gray-600 uppercase">
+        <div className="mt-8 mb-4 break-inside-avoid">
+            <h2 className="mb-4 border-b border-gray-200 pb-2 text-sm font-bold text-gray-700 uppercase">
                 {title}
             </h2>
             {children}
@@ -439,7 +426,7 @@ function Table({
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 text-[10px] font-bold tracking-wider text-gray-500 uppercase print:bg-transparent">
+                <thead className="text-[10px] font-bold tracking-wider text-gray-500 uppercase">
                     <tr>
                         {head.map((h) => (
                             <th key={h} className="px-3 py-2">
@@ -448,7 +435,7 @@ function Table({
                         ))}
                     </tr>
                 </thead>
-                <tbody>{children}</tbody>
+                <tbody className="divide-y divide-gray-100">{children}</tbody>
             </table>
         </div>
     );

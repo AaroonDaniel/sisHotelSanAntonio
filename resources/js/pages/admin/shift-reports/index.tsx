@@ -94,14 +94,10 @@ export default function ShiftReportsIndex({
                         <Vault className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">
+                        <h1 className="text-2xl font-bold text-write">
                             Aperturas y Cierres
                         </h1>
-                        <p className="text-sm text-gray-500">
-                            Historial de turnos de caja e informe consolidado
-                            por día, sin importar el operador ni el cambio de
-                            fecha en turnos nocturnos.
-                        </p>
+                       
                     </div>
                 </div>
 

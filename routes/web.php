@@ -185,6 +185,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
+    Route::get('/reports/financial/history', [ReportController::class, 'shiftsHistory'])->name('reports.financialHistory')->middleware('permission:reportes.financiero');
     Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement')->middleware('permission:reportes.financiero');
 
     // Administración: Aperturas y Cierres (historial de turnos + informe consolidado por día)

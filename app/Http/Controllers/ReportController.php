@@ -704,6 +704,31 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Historial de turnos CERRADOS (para el modal "Historial de Turnos" en
+     * la vista de Cierre de Caja). Solo trae lo necesario para la tabla —
+     * el detalle financiero completo se genera bajo demanda con
+     * generateFinancialReportPdf(cash_register_id=...) al hacer clic en
+     * "Ver PDF", reutilizando exactamente la misma lógica del cierre.
+     */
+    public function shiftsHistory()
+    {
+        $shifts = CashRegister::with('user')
+            ->where('status', 'CERRADA')
+            ->orderByDesc('closed_at')
+            ->get()
+            ->map(function (CashRegister $cr) {
+                return [
+                    'id' => $cr->id,
+                    'operator_name' => $cr->user->full_name ?? $cr->user->nickname ?? 'N/D',
+                    'opened_at' => optional($cr->opened_at)->toIso8601String(),
+                    'closed_at' => optional($cr->closed_at)->toIso8601String(),
+                ];
+            });
+
+        return response()->json(['Shifts' => $shifts]);
+    }
+
     public function generateFinancialReportPdf(Request $request)
     {
         $cashRegisterId = $request->query('cash_register_id');
@@ -788,8 +813,11 @@ class ReportController extends Controller
         // 🛑 Turno sin ningún movimiento (ni pagos ni gastos): no tiene
         // sentido generar/imprimir un cierre en blanco. 'todos' queda
         // fuera de esta regla (vista agregada de supervisión, no un cierre
-        // de turno puntual).
-        if ($userId !== 'todos' && $payments->isEmpty() && $gastos->isEmpty()) {
+        // de turno puntual) y también el modo cash_register_id: eso es
+        // HISTORIAL (un turno que ya fue cerrado en el pasado, quizás sin
+        // movimientos), no un intento de generar/cerrar uno nuevo — se debe
+        // poder revisar igual.
+        if (!$cashRegisterId && $userId !== 'todos' && $payments->isEmpty() && $gastos->isEmpty()) {
             abort(422, 'No se registraron nuevos movimientos (ingresos/egresos) desde su último cierre. No hay nada que cerrar.');
         }
 

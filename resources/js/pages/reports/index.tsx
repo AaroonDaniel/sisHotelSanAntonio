@@ -342,13 +342,7 @@ export default function ReportsIndex({
                                     <History className="h-5 w-5 text-emerald-400" />{' '}
                                     Historial de Partes Diarios
                                 </h3>
-                                <button
-                                    onClick={() => setViewMode('generator')}
-                                    className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
-                                >
-                                    <ArrowLeft className="h-4 w-4" /> Volver al
-                                    Generador
-                                </button>
+                                
                             </div>
 
                             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
