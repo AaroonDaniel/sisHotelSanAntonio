@@ -759,6 +759,9 @@ class ReportController extends Controller
             $rangoFin = $cashRegister->closed_at ?? now();
             $startDate = \Carbon\Carbon::parse($rangoInicio)->toDateString();
             $endDate = \Carbon\Carbon::parse($rangoFin)->toDateString();
+            // Turno exacto ya identificado por su ID: sirve para imprimir
+            // el left_amount más abajo.
+            $cashRegisterResuelto = $cashRegister;
         } else {
             // ==========================================
             // MODO ORIGINAL: por rango de fechas (histórico/supervisores)
@@ -769,6 +772,7 @@ class ReportController extends Controller
 
             $rangoInicio = $startDate . ' 00:00:00';
             $rangoFin    = $endDate . ' 23:59:59';
+            $cashRegisterResuelto = null;
 
             if ($userId !== 'todos' && $startDate === $endDate) {
                 $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
@@ -776,6 +780,9 @@ class ReportController extends Controller
                 if ($ultimaCaja) {
                     $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
                     $rangoFin = $ultimaCaja->closed_at ?? now();
+                    // Turno único identificado por solapamiento de fechas:
+                    // también sirve para imprimir el left_amount.
+                    $cashRegisterResuelto = $ultimaCaja;
                 }
             }
         }
@@ -987,6 +994,19 @@ class ReportController extends Controller
         $pdf->Cell(106, 8, '', 0, 0);
         $pdf->Cell(50, 8, utf8_decode('TOTAL:'), 1, 0, 'R', true);
         $pdf->Cell(40, 8, number_format($totalGeneralNeto, 2) . ' Bs', 1, 1, 'R', true);
+
+        // Constancia impresa de cuánto efectivo físico declaró dejar el
+        // operador en el cajón para el siguiente turno (left_amount): solo
+        // se conoce cuando el turno específico quedó identificado (por
+        // cash_register_id o por solapamiento de un único día).
+        if ($cashRegisterResuelto && $cashRegisterResuelto->left_amount !== null) {
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', 'B', 11);
+            $pdf->SetFillColor(255, 243, 205);
+            $pdf->Cell(106, 7, '', 0, 0);
+            $pdf->Cell(50, 7, utf8_decode('EFECTIVO DEJADO PARA EL SIGUIENTE TURNO:'), 1, 0, 'R', true);
+            $pdf->Cell(40, 7, number_format($cashRegisterResuelto->left_amount, 2) . ' Bs', 1, 1, 'R', true);
+        }
 
         $pdf->Ln(25);
         $pdf->SetFont('Arial', '', 10);

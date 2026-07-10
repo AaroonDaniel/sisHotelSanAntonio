@@ -1,34 +1,35 @@
+import { Operator } from '@/components/OperatorSelector';
+import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { useCan } from '@/hooks/use-can';
 import {
     ArrowLeft,
     Calendar,
+    CalendarRange,
     CheckCircle,
     Clock,
     DollarSign,
     Filter,
+    LayoutGrid,
     Pencil,
     Plus,
     Search,
+    Table as TableIcon,
     Trash2,
     XCircle,
-    CalendarRange,
-    LayoutGrid,
-    Table as TableIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReservationModal, { Guest, Reservation, Room } from './reservationModal';
 // 1. IMPORTAMOS LOS MODALES COMPARTIDOS
 import CancelModal from '@/components/cancelModal'; // Importamos el de cancelar
 import ConfirmModal from '@/components/confirmModal'; // Importamos el de confirmar
-import DeleteModal from './deleteModal';
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import DeleteModal from './deleteModal';
 
 // =====================================================================
 // TIPOS E INTERFACES EXTRAS PARA EL CALENDARIO Y EL USUARIO
@@ -45,6 +46,7 @@ interface Props {
     Reservations: Reservation[];
     Guests: Guest[];
     Rooms: Room[];
+    Operators?: Operator[];
 }
 
 type ViewMode = 'table' | 'calendar';
@@ -86,7 +88,10 @@ const formatCurrency = (amount: number): string =>
         currency: 'BOB',
     }).format(amount);
 
-const CALENDAR_STATUS_STYLES: Record<string, { block: string; dot: string; label: string }> = {
+const CALENDAR_STATUS_STYLES: Record<
+    string,
+    { block: string; dot: string; label: string }
+> = {
     pendiente: {
         block: 'bg-blue-500 hover:bg-blue-600 border-blue-600',
         dot: 'bg-blue-500',
@@ -106,31 +111,40 @@ const getCalendarStatusStyle = (status: string) =>
         label: status || 'Otro',
     };
 
-
 export default function ReservationsIndex({
     auth,
     Reservations,
     Guests,
     Rooms,
+    Operators = [],
 }: Props) {
     const { hasRole } = useCan();
     const [view, setView] = useState<ViewMode>('table');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
-    const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+    const [editingReservation, setEditingReservation] =
+        useState<Reservation | null>(null);
 
     // Estados para los modales
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [deletingReservationId, setDeletingReservationId] = useState<number | null>(null);
+    const [deletingReservationId, setDeletingReservationId] = useState<
+        number | null
+    >(null);
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-    const [cancelingReservationId, setCancelingReservationId] = useState<number | null>(null);
+    const [cancelingReservationId, setCancelingReservationId] = useState<
+        number | null
+    >(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [confirmingReservationId, setConfirmingReservationId] = useState<number | null>(null);
+    const [confirmingReservationId, setConfirmingReservationId] = useState<
+        number | null
+    >(null);
 
     useEffect(() => {
         if (editingReservation) {
-            const updated = Reservations.find((r) => r.id === editingReservation.id);
+            const updated = Reservations.find(
+                (r) => r.id === editingReservation.id,
+            );
             if (updated) setEditingReservation(updated);
         }
     }, [Reservations]);
@@ -171,7 +185,7 @@ export default function ReservationsIndex({
         <AuthenticatedLayout user={auth.user}>
             <Head title="Reservas" />
 
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                 <button
                     onClick={() => router.visit('/dashboard')}
                     className="group mb-6 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
@@ -189,7 +203,8 @@ export default function ReservationsIndex({
                             Reservas
                         </h2>
                         <p className="mt-1 text-sm text-gray-400">
-                            Gestiona las reservas y visualiza el calendario de ocupación.
+                            Gestiona las reservas y visualiza el calendario de
+                            ocupación.
                         </p>
                     </div>
 
@@ -222,7 +237,6 @@ export default function ReservationsIndex({
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                    
                     {/* BARRA DE BÚSQUEDA Y FILTROS (Solo visible en modo tabla) */}
                     {view === 'table' && (
                         <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-100 bg-gray-50/50 p-6 sm:flex-row sm:items-center">
@@ -233,7 +247,9 @@ export default function ReservationsIndex({
                                 <input
                                     type="text"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     placeholder="Buscar por nombre, CI o ID..."
                                     className="block w-full rounded-xl border-gray-800 bg-white py-2.5 pl-10 text-base text-gray-900 focus:border-green-500 focus:ring-green-500"
                                 />
@@ -245,13 +261,21 @@ export default function ReservationsIndex({
                                 </div>
                                 <select
                                     value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    onChange={(e) =>
+                                        setStatusFilter(e.target.value)
+                                    }
                                     className="block w-full rounded-xl border-gray-800 bg-white py-2.5 pl-10 text-sm text-gray-950 focus:border-green-500 focus:ring-green-500"
                                 >
                                     <option value="">Todos los Estados</option>
-                                    <option value="pendiente">Reservados</option>
-                                    <option value="confirmada">Confirmados</option>
-                                    <option value="cancelada">Cancelados</option>
+                                    <option value="pendiente">
+                                        Reservados
+                                    </option>
+                                    <option value="confirmada">
+                                        Confirmados
+                                    </option>
+                                    <option value="cancelada">
+                                        Cancelados
+                                    </option>
                                 </select>
                             </div>
 
@@ -271,12 +295,22 @@ export default function ReservationsIndex({
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs font-bold tracking-wider text-gray-500 uppercase">
                                     <tr>
-                                        <th className="px-6 py-4">ID / Huésped</th>
-                                        <th className="px-6 py-4">Fechas y Estadía</th>
-                                        <th className="px-6 py-4">Habitaciones</th>
+                                        <th className="px-6 py-4">
+                                            ID / Huésped
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Fechas y Estadía
+                                        </th>
+                                        <th className="px-6 py-4">
+                                            Habitaciones
+                                        </th>
                                         <th className="px-6 py-4">Adelanto</th>
-                                        <th className="px-6 py-4 text-center">Estado</th>
-                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                        <th className="px-6 py-4 text-center">
+                                            Estado
+                                        </th>
+                                        <th className="px-6 py-4 text-right">
+                                            Acciones
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -290,10 +324,15 @@ export default function ReservationsIndex({
                                                     <div className="flex items-center gap-3">
                                                         <div>
                                                             <div className="font-bold text-gray-900">
-                                                                {res.guest?.full_name || 'Sin Nombre'}
+                                                                {res.guest
+                                                                    ?.full_name ||
+                                                                    'Sin Nombre'}
                                                             </div>
                                                             <div className="text-xs text-gray-500">
-                                                                CI: {res.guest?.identification_number || 'S/N'}
+                                                                CI:{' '}
+                                                                {res.guest
+                                                                    ?.identification_number ||
+                                                                    'S/N'}
                                                             </div>
                                                             <div className="mt-0.5 inline-block rounded bg-gray-100 px-1.5 text-[10px] font-bold text-gray-500">
                                                                 ID: #{res.id}
@@ -306,57 +345,108 @@ export default function ReservationsIndex({
                                                     <div className="flex flex-col gap-1.5">
                                                         <div className="flex items-center gap-2 text-gray-700">
                                                             <Calendar className="h-4 w-4 text-gray-400" />
-                                                            <span className="font-semibold">{res.arrival_date}</span>
+                                                            <span className="font-semibold">
+                                                                {
+                                                                    res.arrival_date
+                                                                }
+                                                            </span>
                                                         </div>
                                                         <div className="flex items-center gap-2 text-xs text-gray-500">
                                                             <Clock className="h-3.5 w-3.5" />
-                                                            <span>{res.arrival_time} • {res.duration_days} Noche(s)</span>
+                                                            <span>
+                                                                {
+                                                                    res.arrival_time
+                                                                }{' '}
+                                                                •{' '}
+                                                                {
+                                                                    res.duration_days
+                                                                }{' '}
+                                                                Noche(s)
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </td>
 
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-wrap gap-1">
-                                                        {res.details && res.details.length > 0 ? (
-                                                            res.details.map((d, idx) => (
-                                                                <div key={idx} className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 shadow-sm">
-                                                                    <span className="text-[10px] font-bold text-gray-400">HAB</span>
-                                                                    <span className="text-sm font-bold text-gray-800">{d.room?.number || '?'}</span>
-                                                                </div>
-                                                            ))
+                                                        {res.details &&
+                                                        res.details.length >
+                                                            0 ? (
+                                                            res.details.map(
+                                                                (d, idx) => (
+                                                                    <div
+                                                                        key={
+                                                                            idx
+                                                                        }
+                                                                        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 shadow-sm"
+                                                                    >
+                                                                        <span className="text-[10px] font-bold text-gray-400">
+                                                                            HAB
+                                                                        </span>
+                                                                        <span className="text-sm font-bold text-gray-800">
+                                                                            {d
+                                                                                .room
+                                                                                ?.number ||
+                                                                                '?'}
+                                                                        </span>
+                                                                    </div>
+                                                                ),
+                                                            )
                                                         ) : (
-                                                            <span className="text-xs text-gray-400 italic">Sin asignar</span>
+                                                            <span className="text-xs text-gray-400 italic">
+                                                                Sin asignar
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>
 
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-1.5">
-                                                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${res.advance_payment > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                        <div
+                                                            className={`flex h-8 w-8 items-center justify-center rounded-full ${res.advance_payment > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}
+                                                        >
                                                             <DollarSign className="h-4 w-4" />
                                                         </div>
                                                         <div className="flex flex-col">
-                                                            <span className={`font-bold ${res.advance_payment > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                                                                {res.advance_payment} Bs
+                                                            <span
+                                                                className={`font-bold ${res.advance_payment > 0 ? 'text-green-700' : 'text-gray-400'}`}
+                                                            >
+                                                                {
+                                                                    res.advance_payment
+                                                                }{' '}
+                                                                Bs
                                                             </span>
-                                                            <span className="text-[10px] text-gray-400 uppercase">{res.payment_type}</span>
+                                                            <span className="text-[10px] text-gray-400 uppercase">
+                                                                {
+                                                                    res.payment_type
+                                                                }
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </td>
 
                                                 <td className="px-6 py-4 text-center">
-                                                    <span className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-bold uppercase shadow-sm ${statusStyles[res.status] || 'bg-gray-100 text-gray-600'}`}>
-                                                        {statusLabels[res.status] || res.status}
+                                                    <span
+                                                        className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-bold uppercase shadow-sm ${statusStyles[res.status] || 'bg-gray-100 text-gray-600'}`}
+                                                    >
+                                                        {statusLabels[
+                                                            res.status
+                                                        ] || res.status}
                                                     </span>
                                                 </td>
 
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        {res.status === 'pendiente' && (
+                                                        {res.status ===
+                                                            'pendiente' && (
                                                             <button
                                                                 onClick={() => {
-                                                                    setConfirmingReservationId(res.id);
-                                                                    setIsConfirmModalOpen(true);
+                                                                    setConfirmingReservationId(
+                                                                        res.id,
+                                                                    );
+                                                                    setIsConfirmModalOpen(
+                                                                        true,
+                                                                    );
                                                                 }}
                                                                 className="group relative rounded-lg p-2 text-green-500 transition hover:bg-green-50 hover:text-green-700"
                                                                 title="Confirmar Llegada / Ocupar"
@@ -366,18 +456,27 @@ export default function ReservationsIndex({
                                                         )}
 
                                                         <button
-                                                            onClick={() => openEditModal(res)}
+                                                            onClick={() =>
+                                                                openEditModal(
+                                                                    res,
+                                                                )
+                                                            }
                                                             className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-blue-50 hover:text-blue-600"
                                                             title="Editar"
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </button>
 
-                                                        {res.status !== 'cancelado' && (
+                                                        {res.status !==
+                                                            'cancelado' && (
                                                             <button
                                                                 onClick={() => {
-                                                                    setCancelingReservationId(res.id);
-                                                                    setIsCancelModalOpen(true);
+                                                                    setCancelingReservationId(
+                                                                        res.id,
+                                                                    );
+                                                                    setIsCancelModalOpen(
+                                                                        true,
+                                                                    );
                                                                 }}
                                                                 className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
                                                                 title="Cancelar"
@@ -386,26 +485,42 @@ export default function ReservationsIndex({
                                                             </button>
                                                         )}
 
-{hasRole('administrador') && (
-                                                        <button
-                                                            onClick={() => openDeleteModal(res.id)}
-                                                            className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
-                                                            title="Eliminar permanentemente"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-)}
+                                                        {hasRole(
+                                                            'administrador',
+                                                        ) && (
+                                                            <button
+                                                                onClick={() =>
+                                                                    openDeleteModal(
+                                                                        res.id,
+                                                                    )
+                                                                }
+                                                                className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                                                                title="Eliminar permanentemente"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="py-12 text-center">
+                                            <td
+                                                colSpan={6}
+                                                className="py-12 text-center"
+                                            >
                                                 <div className="flex flex-col items-center justify-center text-gray-400">
                                                     <Calendar className="h-12 w-12 opacity-20" />
-                                                    <p className="mt-2 text-sm font-medium">No se encontraron reservas.</p>
-                                                    <p className="text-xs">Intenta cambiar los filtros o crea una nueva.</p>
+                                                    <p className="mt-2 text-sm font-medium">
+                                                        No se encontraron
+                                                        reservas.
+                                                    </p>
+                                                    <p className="text-xs">
+                                                        Intenta cambiar los
+                                                        filtros o crea una
+                                                        nueva.
+                                                    </p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -425,6 +540,7 @@ export default function ReservationsIndex({
                     reservationToEdit={editingReservation}
                     guests={Guests}
                     rooms={Rooms}
+                    operators={Operators}
                 />
 
                 <DeleteModal
@@ -436,13 +552,21 @@ export default function ReservationsIndex({
                 <CancelModal
                     show={isCancelModalOpen}
                     onClose={() => setIsCancelModalOpen(false)}
-                    actionUrl={cancelingReservationId ? `/reservas/${cancelingReservationId}` : null}
+                    actionUrl={
+                        cancelingReservationId
+                            ? `/reservas/${cancelingReservationId}`
+                            : null
+                    }
                 />
 
                 <ConfirmModal
                     show={isConfirmModalOpen}
                     onClose={() => setIsConfirmModalOpen(false)}
-                    actionUrl={confirmingReservationId ? `/reservas/${confirmingReservationId}` : null}
+                    actionUrl={
+                        confirmingReservationId
+                            ? `/reservas/${confirmingReservationId}`
+                            : null
+                    }
                 />
             </div>
         </AuthenticatedLayout>
@@ -482,8 +606,10 @@ function TapeChart({
         const map: Record<number, any[]> = {};
         for (const r of reservations) {
             // Usa arrival_date para saber cuándo entran, o calcula la de check out con duration_days
-            const startStr = r.arrival_date ? r.arrival_date : new Date().toISOString();
-            
+            const startStr = r.arrival_date
+                ? r.arrival_date
+                : new Date().toISOString();
+
             // Calculamos end sumando los días a arrival_date
             const startObj = parseLocalDate(startStr);
             const endObj = new Date(startObj);
@@ -492,18 +618,22 @@ function TapeChart({
 
             const start = parseLocalDate(startStr);
             const end = parseLocalDate(endStr);
-            
+
             if (end < today || start > rangeEnd) continue;
-            
+
             // Asigna el bloque a CADA habitación de esta reserva
             if (r.details) {
-                 r.details.forEach((detail: any) => {
-                     const roomId = Number(detail.room_id); // Forzamos a que sea un Número estricto
-                     if (roomId) {
-                         if (!map[roomId]) map[roomId] = [];
-                         map[roomId].push({...r, chartStart: startStr, chartEnd: endStr});
-                     }
-                 });
+                r.details.forEach((detail: any) => {
+                    const roomId = Number(detail.room_id); // Forzamos a que sea un Número estricto
+                    if (roomId) {
+                        if (!map[roomId]) map[roomId] = [];
+                        map[roomId].push({
+                            ...r,
+                            chartStart: startStr,
+                            chartEnd: endStr,
+                        });
+                    }
+                });
             }
         }
         return map;
@@ -514,7 +644,7 @@ function TapeChart({
 
     return (
         <TooltipProvider delayDuration={120}>
-            <div className="p-6 space-y-4 bg-gray-50/50">
+            <div className="space-y-4 bg-gray-50/50 p-6">
                 {/* LEYENDA */}
                 <div className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
                     <span className="flex items-center gap-2 text-xs font-bold text-gray-500">
@@ -522,7 +652,10 @@ function TapeChart({
                         Próximos {DAYS_WINDOW} días
                     </span>
                     {Object.entries(CALENDAR_STATUS_STYLES).map(([key, s]) => (
-                        <span key={key} className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                        <span
+                            key={key}
+                            className="flex items-center gap-1.5 text-xs font-medium text-gray-500"
+                        >
                             <span className={`h-3 w-3 rounded-sm ${s.dot}`} />
                             {s.label}
                         </span>
@@ -532,24 +665,36 @@ function TapeChart({
                 {/* TAPE CHART */}
                 <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
                     <div className="min-w-[900px]">
-                        <div className="grid border-b border-gray-200 bg-gray-50" style={{ gridTemplateColumns: gridTemplate }}>
+                        <div
+                            className="grid border-b border-gray-200 bg-gray-50"
+                            style={{ gridTemplateColumns: gridTemplate }}
+                        >
                             <div className="flex items-center px-4 py-3 text-[11px] font-bold tracking-wider text-gray-400 uppercase">
                                 Habitación
                             </div>
                             {days.map((d, i) => {
                                 const isToday = daysBetween(today, d) === 0;
-                                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                                const isWeekend =
+                                    d.getDay() === 0 || d.getDay() === 6;
                                 return (
                                     <div
                                         key={i}
                                         className={`flex flex-col items-center justify-center border-l border-gray-100 py-2 ${
-                                            isToday ? 'bg-green-50' : isWeekend ? 'bg-gray-100/60' : ''
+                                            isToday
+                                                ? 'bg-green-50'
+                                                : isWeekend
+                                                  ? 'bg-gray-100/60'
+                                                  : ''
                                         }`}
                                     >
-                                        <span className={`text-[10px] font-bold uppercase ${isToday ? 'text-green-600' : 'text-gray-400'}`}>
+                                        <span
+                                            className={`text-[10px] font-bold uppercase ${isToday ? 'text-green-600' : 'text-gray-400'}`}
+                                        >
                                             {weekdayLabels[d.getDay()]}
                                         </span>
-                                        <span className={`text-sm font-black ${isToday ? 'text-green-700' : 'text-gray-700'}`}>
+                                        <span
+                                            className={`text-sm font-black ${isToday ? 'text-green-700' : 'text-gray-700'}`}
+                                        >
                                             {d.getDate()}
                                         </span>
                                     </div>
@@ -570,7 +715,9 @@ function TapeChart({
                                     today={today}
                                     rangeEnd={rangeEnd}
                                     gridTemplate={gridTemplate}
-                                    reservations={mapReservationsToChart[room.id] ?? []}
+                                    reservations={
+                                        mapReservationsToChart[room.id] ?? []
+                                    }
                                 />
                             ))
                         )}
@@ -593,17 +740,35 @@ interface TapeRowProps {
     reservations: any[];
 }
 
-function TapeRow({ room, days, today, rangeEnd, gridTemplate, reservations }: TapeRowProps) {
+function TapeRow({
+    room,
+    days,
+    today,
+    rangeEnd,
+    gridTemplate,
+    reservations,
+}: TapeRowProps) {
     return (
-        <div className="grid border-b border-gray-100 last:border-b-0 hover:bg-gray-50/30 transition-colors" style={{ gridTemplateColumns: gridTemplate }}>
-            <div className="flex flex-col justify-center border-r border-gray-200 bg-white px-4 py-3 shadow-sm z-10 relative">
-                <span className="text-sm font-black text-gray-800">{room.number}</span>
+        <div
+            className="grid border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50/30"
+            style={{ gridTemplateColumns: gridTemplate }}
+        >
+            <div className="relative z-10 flex flex-col justify-center border-r border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <span className="text-sm font-black text-gray-800">
+                    {room.number}
+                </span>
                 <span className="truncate text-[10px] font-medium tracking-wide text-gray-400 uppercase">
                     {room.room_type?.name ?? 'Habitación'}
                 </span>
             </div>
 
-            <div className="relative col-span-full grid" style={{ gridColumn: `2 / span ${days.length}`, gridTemplateColumns: `repeat(${days.length}, minmax(64px, 1fr))` }}>
+            <div
+                className="relative col-span-full grid"
+                style={{
+                    gridColumn: `2 / span ${days.length}`,
+                    gridTemplateColumns: `repeat(${days.length}, minmax(64px, 1fr))`,
+                }}
+            >
                 {days.map((d, i) => {
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     const isToday = daysBetween(today, d) === 0;
@@ -622,7 +787,10 @@ function TapeRow({ room, days, today, rangeEnd, gridTemplate, reservations }: Ta
                     const clampedEnd = end > rangeEnd ? rangeEnd : end;
 
                     const colStart = daysBetween(today, clampedStart) + 1;
-                    const span = Math.max(1, daysBetween(clampedStart, clampedEnd));
+                    const span = Math.max(
+                        1,
+                        daysBetween(clampedStart, clampedEnd),
+                    );
 
                     if (colStart < 1 || colStart > days.length) return null;
 
@@ -637,17 +805,36 @@ function TapeRow({ room, days, today, rangeEnd, gridTemplate, reservations }: Ta
                             <TooltipTrigger asChild>
                                 <div
                                     className={`pointer-events-auto z-10 m-1.5 flex cursor-pointer items-center overflow-hidden rounded-lg border px-2 text-white shadow-sm transition-all hover:z-20 hover:scale-[1.02] hover:shadow-md ${style.block} ${overflowLeft ? 'rounded-l-none border-l-0' : ''} ${overflowRight ? 'rounded-r-none border-r-0' : ''}`}
-                                    style={{ gridColumn: `${colStart} / span ${span}`, gridRow: 1 }}
+                                    style={{
+                                        gridColumn: `${colStart} / span ${span}`,
+                                        gridRow: 1,
+                                    }}
                                 >
-                                    <span className="truncate text-xs font-bold">{guestName}</span>
+                                    <span className="truncate text-xs font-bold">
+                                        {guestName}
+                                    </span>
                                 </div>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="rounded-lg border-none bg-gray-900 px-3 py-2 text-white shadow-xl">
+                            <TooltipContent
+                                side="top"
+                                className="rounded-lg border-none bg-gray-900 px-3 py-2 text-white shadow-xl"
+                            >
                                 <div className="space-y-0.5">
-                                    <p className="text-sm font-black">{guestName}</p>
-                                    <p className="text-[11px] text-gray-300">Hab. {room.number} · {style.label}</p>
-                                    <p className="text-[11px] text-gray-300">{r.arrival_date} ({r.duration_days} Noches)</p>
-                                    <p className={`text-[11px] font-bold text-green-300`}>Adelanto: {formatCurrency(balance)}</p>
+                                    <p className="text-sm font-black">
+                                        {guestName}
+                                    </p>
+                                    <p className="text-[11px] text-gray-300">
+                                        Hab. {room.number} · {style.label}
+                                    </p>
+                                    <p className="text-[11px] text-gray-300">
+                                        {r.arrival_date} ({r.duration_days}{' '}
+                                        Noches)
+                                    </p>
+                                    <p
+                                        className={`text-[11px] font-bold text-green-300`}
+                                    >
+                                        Adelanto: {formatCurrency(balance)}
+                                    </p>
                                 </div>
                             </TooltipContent>
                         </Tooltip>

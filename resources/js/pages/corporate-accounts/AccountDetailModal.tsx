@@ -1,7 +1,8 @@
+import OperatorSelector, { Operator } from '@/components/OperatorSelector';
 import { router } from '@inertiajs/react';
 import { Banknote, Building2, Plus, Save, X } from 'lucide-react';
 import { useState } from 'react';
-import { AvailableCheckin, CashRegisterOption } from './CreateMasterAccountModal';
+import { AvailableCheckin } from './CreateMasterAccountModal';
 
 export interface CorporateAccountRoomBalance {
     checkin_id: number;
@@ -31,7 +32,7 @@ interface Props {
     onClose: () => void;
     account: CorporateAccount | null;
     availableCheckins: AvailableCheckin[];
-    cashRegisters: CashRegisterOption[];
+    operators: Operator[];
 }
 
 const PAYMENT_METHODS = ['EFECTIVO', 'QR', 'TARJETA', 'TRANSFERENCIA'];
@@ -41,13 +42,16 @@ export default function AccountDetailModal({
     onClose,
     account,
     availableCheckins,
-    cashRegisters,
+    operators,
 }: Props) {
     // --- Formulario de pago ---
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('EFECTIVO');
     const [paymentBank, setPaymentBank] = useState('');
-    const [paymentCashRegister, setPaymentCashRegister] = useState('');
+    // Terminal Compartida: quién recibe el pago (avatar del
+    // OperatorSelector). Ya no se elige una caja a mano — apertura
+    // silenciosa si el operador no tiene turno abierto.
+    const [paymentOperatorId, setPaymentOperatorId] = useState('');
     const [isSavingPayment, setIsSavingPayment] = useState(false);
 
     // --- Agregar habitaciones ---
@@ -59,6 +63,7 @@ export default function AccountDetailModal({
 
     const registerPayment = () => {
         if (!paymentAmount || Number(paymentAmount) <= 0) return;
+        if (!paymentOperatorId) return;
         setIsSavingPayment(true);
         router.post(
             `/corporate-accounts/${account.id}/payments`,
@@ -66,7 +71,7 @@ export default function AccountDetailModal({
                 amount: paymentAmount,
                 method: paymentMethod,
                 bank_name: paymentMethod === 'EFECTIVO' ? null : paymentBank,
-                cash_register_id: paymentCashRegister || null,
+                operator_id: paymentOperatorId,
             },
             {
                 preserveScroll: true,
@@ -81,9 +86,7 @@ export default function AccountDetailModal({
 
     const toggleAttach = (id: number) => {
         setAttachIds((prev) =>
-            prev.includes(id)
-                ? prev.filter((c) => c !== id)
-                : [...prev, id],
+            prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
         );
     };
 
@@ -118,8 +121,8 @@ export default function AccountDetailModal({
                             {account.company_name}
                         </h2>
                         <p className="mt-0.5 text-xs text-gray-500">
-                            Cuota cada {account.payment_frequency_days}{' '}
-                            día(s) · Convenio #{account.id}
+                            Cuota cada {account.payment_frequency_days} día(s) ·
+                            Convenio #{account.id}
                         </p>
                     </div>
                     <button
@@ -180,9 +183,7 @@ export default function AccountDetailModal({
                                 <tr>
                                     <th className="px-4 py-3">Habitación</th>
                                     <th className="px-4 py-3">Tarifa/día</th>
-                                    <th className="px-4 py-3">
-                                        % del grupo
-                                    </th>
+                                    <th className="px-4 py-3">% del grupo</th>
                                     <th className="px-4 py-3">
                                         Asignado del pago
                                     </th>
@@ -197,8 +198,8 @@ export default function AccountDetailModal({
                                             colSpan={6}
                                             className="px-4 py-6 text-center text-gray-500"
                                         >
-                                            Esta cuenta no tiene
-                                            habitaciones activas.
+                                            Esta cuenta no tiene habitaciones
+                                            activas.
                                         </td>
                                     </tr>
                                 )}
@@ -216,10 +217,7 @@ export default function AccountDetailModal({
                                             Bs {r.daily_rate.toFixed(2)}
                                         </td>
                                         <td className="px-4 py-3 text-gray-600">
-                                            {(r.share_ratio * 100).toFixed(
-                                                1,
-                                            )}
-                                            %
+                                            {(r.share_ratio * 100).toFixed(1)}%
                                         </td>
                                         <td className="px-4 py-3 text-gray-600">
                                             Bs {r.allocated_paid.toFixed(2)}
@@ -285,31 +283,47 @@ export default function AccountDetailModal({
                                     className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:ring-emerald-500"
                                 />
                             )}
-                            <select
-                                value={paymentCashRegister}
-                                onChange={(e) =>
-                                    setPaymentCashRegister(e.target.value)
-                                }
-                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:ring-emerald-500"
-                            >
-                                <option value="">(Sin caja)</option>
-                                {cashRegisters.map((cr) => (
-                                    <option
-                                        key={cr.id}
-                                        value={String(cr.id)}
-                                    >
-                                        {cr.label}
-                                    </option>
-                                ))}
-                            </select>
                         </div>
+
+                        {/* Terminal Compartida: obligatorio elegir quién
+                            recibe el pago — ya no se puede dejar "sin
+                            caja". */}
+                        <div
+                            className={`mt-3 rounded-lg border-2 p-3 ${
+                                paymentOperatorId
+                                    ? 'border-emerald-200 bg-emerald-50'
+                                    : 'border-red-200 bg-red-50'
+                            }`}
+                        >
+                            <p
+                                className={`mb-2 text-center text-[10px] font-bold uppercase ${
+                                    paymentOperatorId
+                                        ? 'text-emerald-700'
+                                        : 'text-red-700'
+                                }`}
+                            >
+                                {paymentOperatorId
+                                    ? 'Operador seleccionado'
+                                    : '¿Quién recibe el pago?'}
+                            </p>
+                            <OperatorSelector
+                                operators={operators}
+                                value={paymentOperatorId}
+                                onChange={setPaymentOperatorId}
+                                compact
+                                size="sm"
+                                label=""
+                            />
+                        </div>
+
                         <div className="mt-3 flex justify-end">
                             <button
                                 onClick={registerPayment}
                                 disabled={
                                     isSavingPayment ||
                                     !paymentAmount ||
-                                    Number(paymentAmount) <= 0
+                                    Number(paymentAmount) <= 0 ||
+                                    !paymentOperatorId
                                 }
                                 className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                             >
@@ -334,8 +348,8 @@ export default function AccountDetailModal({
                             <div className="mt-3">
                                 {availableCheckins.length === 0 ? (
                                     <p className="text-sm text-gray-500">
-                                        No hay habitaciones activas sin
-                                        convenio disponibles.
+                                        No hay habitaciones activas sin convenio
+                                        disponibles.
                                     </p>
                                 ) : (
                                     <>
@@ -356,8 +370,7 @@ export default function AccountDetailModal({
                                                         className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                                                     />
                                                     <span className="font-semibold text-gray-800">
-                                                        Hab.{' '}
-                                                        {c.room_number}
+                                                        Hab. {c.room_number}
                                                     </span>
                                                     <span className="text-gray-500">
                                                         {c.guest_name}

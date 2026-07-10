@@ -26,7 +26,6 @@ import {
     User,
     UserCog,
     Users,
-    Vault,
     Wallet,
     Wrench,
     X,
@@ -292,9 +291,7 @@ export default function Dashboard({
                     icon: Vault,
                     url: '/admin/shift-reports',
                     anyPerm: ['reportes.financiero'],
-                },
-                */
-                /*
+                },              
                 {
                     name: 'Ingresos y Egresos diarios',
                     icon: FileText,

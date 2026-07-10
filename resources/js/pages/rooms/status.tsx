@@ -1795,6 +1795,7 @@ export default function RoomsStatus({
                 reservationToEdit={null} // Ponemos null porque será una reserva nueva
                 guests={Guests as any} // Usamos "as any" para evitar errores de TypeScript
                 rooms={Rooms as any}
+                operators={Operators}
             />
             <OccupiedRoomModal
                 show={isOccupiedModalOpen}

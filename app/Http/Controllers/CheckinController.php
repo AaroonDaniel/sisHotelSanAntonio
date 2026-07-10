@@ -490,6 +490,7 @@ class CheckinController extends Controller
                 \App\Models\Payment::create([
                     'checkin_id' => $checkin->id,
                     'user_id' => $userId,
+                    'operator_id' => (int) $validatedCheckin['checkin_operator_id'],
                     'cash_register_id' => $cajaAbierta->id, // Conexión a caja
                     'amount' => $montoInicial,
                     'method' => $request->payment_method,
@@ -935,6 +936,7 @@ class CheckinController extends Controller
                 'qr_bank' => 'nullable|string',
                 'advance_payment' => 'nullable|numeric|min:0',
                 'selected_services' => 'nullable|array',
+                'checkin_operator_id' => 'nullable|exists:users,id',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ [UPDATE-DEBUG] Validacion RECHAZADA. Campos:', $e->errors());
@@ -1277,16 +1279,22 @@ class CheckinController extends Controller
                         'bank_name' => $banco,
                     ]);
                 } elseif ($nuevoMonto > 0) {
-                    // Si no había pago y ahora agregaron un monto
+                    // Si no había pago y ahora agregaron un monto: dinero
+                    // NUEVO entrando a caja. Terminal Compartida: el dueño
+                    // del turno es el operador real (checkin_operator_id,
+                    // enviado por el formulario de edición o, si no vino,
+                    // el que quedó guardado en el checkin), NO Auth::id()
+                    // (siempre la cuenta genérica 'recepcion'). Apertura
+                    // silenciosa si ese operador no tiene turno abierto.
+                    $operatorId = (int) ($request->input('checkin_operator_id') ?: $checkin->checkin_operator_id);
+                    $cajaAbierta = $this->findOpenShift($operatorId);
                     $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
-                    $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
-                        ->where('status', 'ABIERTA')
-                        ->first();
 
                     \App\Models\Payment::create([
                         'checkin_id'       => $checkin->id,
                         'user_id'          => $userId,
-                        'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null,
+                        'operator_id'      => $operatorId,
+                        'cash_register_id' => $cajaAbierta->id,
                         'amount'           => $nuevoMonto,
                         'method'           => $metodo,
                         'bank_name'        => $banco,
@@ -1670,6 +1678,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'operator_id' => (int) $request->input('checkout_operator_id'),
                             'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $montoEfectivo,
                             'method'     => 'EFECTIVO',
@@ -1680,6 +1689,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'operator_id' => (int) $request->input('checkout_operator_id'),
                             'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $montoQr,
                             'method'     => 'QR',
@@ -1706,6 +1716,7 @@ class CheckinController extends Controller
                         Payment::create([
                             'checkin_id' => $checkin->id,
                             'user_id'    => $userId,
+                            'operator_id' => (int) $request->input('checkout_operator_id'),
                             'cash_register_id' => $cajaAbierta->id,
                             'amount'     => $saldoPendienteFinal,
                             'method'     => $metodoUpper,
@@ -3274,6 +3285,7 @@ class CheckinController extends Controller
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'operator_id' => (int) $request->checkout_operator_id,
                         'cash_register_id' => $cajaAbierta->id,
                         'amount' => $request->monto_efectivo,
                         'method' => 'EFECTIVO',
@@ -3285,6 +3297,7 @@ class CheckinController extends Controller
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'operator_id' => (int) $request->checkout_operator_id,
                         'cash_register_id' => $cajaAbierta->id,
                         'amount' => $request->monto_qr,
                         'method' => 'QR',
@@ -3298,6 +3311,7 @@ class CheckinController extends Controller
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
+                        'operator_id' => (int) $request->checkout_operator_id,
                         'cash_register_id' => $cajaAbierta->id,
                         'amount' => $saldoPagar,
                         'method' => $metodoRecibido,

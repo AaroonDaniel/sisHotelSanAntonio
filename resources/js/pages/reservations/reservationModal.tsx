@@ -1,3 +1,6 @@
+import OperatorSelector, {
+    Operator as SharedOperator,
+} from '@/components/OperatorSelector';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -101,6 +104,9 @@ interface ReservationFormData {
     is_corporate: boolean;
     is_delegation: boolean;
     details: DetailItem[];
+    // Terminal Compartida: quién recibe el adelanto (avatar del
+    // OperatorSelector). Solo es obligatorio si hay adelanto > 0.
+    operator_id: string;
 }
 
 interface Props {
@@ -109,6 +115,7 @@ interface Props {
     reservationToEdit?: Reservation | null;
     guests: Guest[];
     rooms: Room[];
+    operators?: SharedOperator[];
 }
 
 // --- FUNCIONES AUXILIARES ---
@@ -154,6 +161,7 @@ export default function ReservationModal({
     reservationToEdit,
     guests,
     rooms,
+    operators = [],
 }: Props) {
     const [guestQuery, setGuestQuery] = useState('');
     const [isGuestDropdownOpen, setIsGuestDropdownOpen] = useState(false);
@@ -178,6 +186,7 @@ export default function ReservationModal({
         post,
         put,
         processing,
+        errors,
         reset,
         clearErrors,
         transform,
@@ -197,6 +206,7 @@ export default function ReservationModal({
         is_corporate: false,
         is_delegation: false,
         details: [],
+        operator_id: '',
     });
 
     const [autoAssignFilter, setAutoAssignFilter] = useState<
@@ -706,6 +716,12 @@ export default function ReservationModal({
             );
             return;
         }
+        // Terminal Compartida: si hay adelanto (general o corporativo),
+        // es obligatorio saber quién lo recibe.
+        if (totalAdvancePayment > 0 && !data.operator_id) {
+            alert('⚠️ Seleccione quién está recibiendo el adelanto.');
+            return;
+        }
 
         transform((currentData) => ({
             ...currentData,
@@ -1065,6 +1081,39 @@ export default function ReservationModal({
 
                         {/* Bloque Financiero Inferior */}
                         <div className="space-y-3 border-t border-gray-200 pt-4">
+                            {totalAdvancePayment > 0 && (
+                                <div
+                                    className={`rounded-xl border-2 p-3 ${
+                                        data.operator_id
+                                            ? 'border-green-200 bg-green-50'
+                                            : 'border-red-200 bg-red-50'
+                                    }`}
+                                >
+                                    <p
+                                        className={`mb-2 text-center text-[10px] font-bold uppercase ${
+                                            data.operator_id
+                                                ? 'text-green-700'
+                                                : 'text-red-700'
+                                        }`}
+                                    >
+                                        {data.operator_id
+                                            ? 'Operador seleccionado'
+                                            : '¿Quién recibe el adelanto?'}
+                                    </p>
+                                    <OperatorSelector
+                                        operators={operators}
+                                        value={data.operator_id}
+                                        onChange={(id) =>
+                                            setData('operator_id', id)
+                                        }
+                                        error={errors.operator_id}
+                                        compact
+                                        size="sm"
+                                        label=""
+                                    />
+                                </div>
+                            )}
+
                             {!isCorporateToggle && (
                                 <div>
                                     <label className="mb-1 block text-[10px] font-bold text-gray-600 uppercase">

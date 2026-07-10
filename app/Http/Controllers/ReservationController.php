@@ -8,6 +8,8 @@ use App\Models\Guest;
 use App\Models\Room;
 use App\Models\Payment;
 use App\Models\Checkin;
+use App\Models\User;
+use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +19,8 @@ use Carbon\Carbon;
 
 class ReservationController extends Controller
 {
+    use RequiresOpenShift;
+
 
     public function index()
     {
@@ -46,6 +50,10 @@ class ReservationController extends Controller
 
             // 4. Con "r" minúscula (antes solo recibía las pendientes, AHORA recibe todas)
             'reservations' => $allReservations,
+
+            // Operadores reales (excluye 'recepcion'/'sistema_web') para el
+            // OperatorSelector del adelanto en el modal de reservas.
+            'Operators' => User::operadores()->get(['id', 'full_name', 'nickname']),
         ]);
     }
 
@@ -65,6 +73,11 @@ class ReservationController extends Controller
                 'payment_type' => 'required|string',
                 'qr_bank' => 'nullable|string',
                 'advance_payment' => 'nullable|numeric|min:0', // Aseguramos la validación del adelanto
+                // Terminal Compartida: quién recibe el adelanto. Se exige
+                // manualmente más abajo, SOLO si REALMENTE hay dinero
+                // entrando (mismo criterio que checkin/checkout/gastos) —
+                // required_if no soporta comparaciones ">" contra otro campo.
+                'operator_id' => 'nullable|exists:users,id',
 
                 // --- NUEVOS CAMPOS (y mantenemos los viejos por compatibilidad con React por ahora) ---
                 'is_corporate' => 'boolean|nullable',
@@ -95,6 +108,15 @@ class ReservationController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ Falló validación:', $e->errors());
             return redirect()->back()->withErrors($e->errors());
+        }
+
+        // Terminal Compartida: si hay adelanto, es obligatorio saber quién
+        // lo recibe (el avatar elegido en el OperatorSelector), NO Auth::id()
+        // (siempre la cuenta genérica 'recepcion').
+        if (($validatedData['advance_payment'] ?? 0) > 0 && empty($validatedData['operator_id'])) {
+            return redirect()->back()->withErrors([
+                'operator_id' => 'Seleccione quién está recibiendo el adelanto.',
+            ]);
         }
 
         try {
@@ -233,21 +255,19 @@ class ReservationController extends Controller
                 // --- PAGOS (MODIFICADO PARA MÓDULO 1) ---
                 // =========================================================
                 if ($request->advance_payment > 0) {
-                    // 1. Buscar la caja abierta del usuario activo
-                    $cajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
-                        ->where('status', 'ABIERTA')
-                        ->first();
-
-                    // Sin caja abierta, este adelanto quedaría invisible en
-                    // cualquier cuadre de turno (cobro fantasma).
-                    if (!$cajaAbierta) {
-                        throw new \RuntimeException('No tiene una caja abierta. Debe aperturar caja antes de cobrar un adelanto en la reserva.');
-                    }
+                    // Apertura silenciosa: si el operador elegido (avatar
+                    // del OperatorSelector) no tiene turno abierto, se le
+                    // crea uno automáticamente aquí mismo. NO Auth::id()
+                    // (siempre la cuenta genérica 'recepcion' bajo Terminal
+                    // Compartida).
+                    $operatorId = (int) $request->operator_id;
+                    $cajaAbierta = $this->findOpenShift($operatorId);
 
                     // 2. Guardar el pago relacionándolo con la caja y la reserva
                     \App\Models\Payment::create([
                         'reservation_id' => $reservation->id,
                         'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                        'operator_id' => $operatorId,
                         'cash_register_id' => $cajaAbierta->id, // Conexión a la caja para auditoría
                         'amount' => $request->advance_payment,
                         'method' => $request->payment_type,

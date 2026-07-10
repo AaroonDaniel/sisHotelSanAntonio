@@ -833,7 +833,7 @@ export default function OccupiedRoomModal({
 
                                                 {/* Operador: solo se pide al momento de cobrar un adelanto */}
                                                 <div className="mb-3">
-                                                    <label className="mb-1 block text-center text-[12px] font-bold text-gray-500 uppercase">
+                                                    <label className="mb-1 block text-center text-[14px] font-bold text-gray-500 uppercase">
                                                         Operador
                                                     </label>
                                                     <OperatorSelector
@@ -851,11 +851,11 @@ export default function OccupiedRoomModal({
                                                             );
                                                         }}
                                                         compact
-                                                        size="sm"
+                                                        size="md"
                                                         label=""
                                                     />
                                                     {paymentOperatorError && (
-                                                        <p className="mt-1 text-center text-[11px] font-bold text-red-600">
+                                                        <p className="mt-1 text-center text-[12px] font-bold text-red-600">
                                                             {
                                                                 paymentOperatorError
                                                             }
@@ -873,7 +873,7 @@ export default function OccupiedRoomModal({
                                                             'QR' &&
                                                             !paymentData.qr_bank)
                                                     }
-                                                    className="w-full rounded bg-green-600 py-1.5 text-xs font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                                                    className="w-full rounded bg-green-600 py-1.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
                                                 >
                                                     {processingPayment
                                                         ? 'Guardando...'
@@ -1507,7 +1507,7 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
                         </div>
 
                         {/* OPERADOR (obligatorio: quién ejecuta la devolución) */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                             <Label>Operador</Label>
                             <OperatorSelector
                                 operators={operators}

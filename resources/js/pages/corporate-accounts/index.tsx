@@ -1,3 +1,4 @@
+import { Operator } from '@/components/OperatorSelector';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
@@ -9,24 +10,23 @@ import {
     Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import AccountDetailModal, { CorporateAccount } from './AccountDetailModal';
 import CreateMasterAccountModal, {
     AvailableCheckin,
-    CashRegisterOption,
 } from './CreateMasterAccountModal';
-import AccountDetailModal, { CorporateAccount } from './AccountDetailModal';
 
 interface Props {
     auth: { user: User };
     CorporateAccounts: CorporateAccount[];
     AvailableCheckins: AvailableCheckin[];
-    CashRegisters: CashRegisterOption[];
+    Operators: Operator[];
 }
 
 export default function CorporateAccountsIndex({
     auth,
     CorporateAccounts,
     AvailableCheckins,
-    CashRegisters,
+    Operators,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -34,9 +34,7 @@ export default function CorporateAccountsIndex({
     // CorporateAccounts (tras registrar un pago o agregar habitaciones), el
     // modal siempre muestra el saldo recién calculado en vez de quedarse
     // con una copia obsoleta del momento en que se abrió.
-    const [accountToViewId, setAccountToViewId] = useState<number | null>(
-        null,
-    );
+    const [accountToViewId, setAccountToViewId] = useState<number | null>(null);
     const accountToView =
         CorporateAccounts.find((a) => a.id === accountToViewId) ?? null;
 
@@ -67,8 +65,8 @@ export default function CorporateAccountsIndex({
                     </h2>
                     <p className="mt-1 text-sm text-gray-400">
                         Grupos de habitaciones facturados a nombre de una
-                        empresa, con pagos en cuotas periódicas repartidos
-                        entre las habitaciones del grupo.
+                        empresa, con pagos en cuotas periódicas repartidos entre
+                        las habitaciones del grupo.
                     </p>
                 </div>
 
@@ -147,15 +145,13 @@ export default function CorporateAccountsIndex({
                                         <div className="flex items-center gap-1.5 text-xs text-gray-500">
                                             <CalendarClock className="h-3.5 w-3.5" />
                                             Cuota cada{' '}
-                                            {acc.payment_frequency_days}{' '}
-                                            día(s)
+                                            {acc.payment_frequency_days} día(s)
                                         </div>
 
                                         <div className="flex items-center gap-1.5 text-xs text-gray-500">
                                             <Users className="h-3.5 w-3.5" />
-                                            {acc.rooms.length} habitación(es)
-                                            · Bs{' '}
-                                            {acc.total_daily_rate.toFixed(2)}
+                                            {acc.rooms.length} habitación(es) ·
+                                            Bs {acc.total_daily_rate.toFixed(2)}
                                             /día grupo
                                         </div>
 
@@ -193,7 +189,7 @@ export default function CorporateAccountsIndex({
                 onClose={() => setAccountToViewId(null)}
                 account={accountToView}
                 availableCheckins={AvailableCheckins}
-                cashRegisters={CashRegisters}
+                operators={Operators}
             />
         </AuthenticatedLayout>
     );

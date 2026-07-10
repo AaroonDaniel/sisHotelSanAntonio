@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CashRegister;
 use App\Models\Checkin;
 use App\Models\SpecialAgreement;
+use App\Models\User;
 use App\Services\CorporateBillingService;
+use App\Traits\RequiresOpenShift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -22,6 +23,8 @@ use Inertia\Inertia;
  */
 class CorporateAccountController extends Controller
 {
+    use RequiresOpenShift;
+
     public function __construct(private CorporateBillingService $billing)
     {
     }
@@ -71,18 +74,13 @@ class CorporateAccountController extends Controller
                 'duration_days' => $c->duration_days,
             ]);
 
-        $cashRegisters = CashRegister::where('status', 'ABIERTA')
-            ->with('user:id,full_name,nickname')
-            ->get()
-            ->map(fn (CashRegister $cr) => [
-                'id' => $cr->id,
-                'label' => sprintf('#%d · %s', $cr->id, $cr->user->full_name ?? $cr->user->nickname ?? 'N/D'),
-            ]);
-
         return Inertia::render('corporate-accounts/index', [
             'CorporateAccounts' => $accounts,
             'AvailableCheckins' => $availableCheckins,
-            'CashRegisters' => $cashRegisters,
+            // Operadores reales (excluye 'recepcion'/'sistema_web') para el
+            // OperatorSelector del pago: ya no se elige un cash_register_id
+            // a mano (eso permitía dejarlo en blanco = pago fantasma).
+            'Operators' => User::operadores()->get(['id', 'full_name', 'nickname']),
         ]);
     }
 
@@ -175,23 +173,31 @@ class CorporateAccountController extends Controller
      * una habitación puntual).
      *
      * POST /corporate-accounts/{corporateAccount}/payments
-     * { "amount": 4500, "cash_register_id": 3, "method": "TRANSFERENCIA" }
+     * { "amount": 4500, "operator_id": 7, "method": "TRANSFERENCIA" }
      */
     public function registerPayment(Request $request, SpecialAgreement $corporateAccount)
     {
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01',
-            'cash_register_id' => 'nullable|exists:cash_registers,id',
+            // Terminal Compartida: quién recibe el pago (avatar del
+            // OperatorSelector), NO un cash_register_id elegido a mano —
+            // eso permitía dejarlo en blanco ("Sin caja") y crear un pago
+            // fantasma. Apertura silenciosa si no tiene turno abierto.
+            'operator_id' => 'required|exists:users,id',
             'method' => 'nullable|string|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'bank_name' => 'nullable|string|max:50',
         ]);
 
+        $operatorId = (int) $validated['operator_id'];
+        $cajaAbierta = $this->findOpenShift($operatorId);
+
         $payment = $this->billing->registerCorporatePayment(
             $corporateAccount,
             (float) $validated['amount'],
-            $validated['cash_register_id'] ?? null,
+            $cajaAbierta->id,
             $validated['method'] ?? 'EFECTIVO',
             $validated['bank_name'] ?? null,
+            $operatorId,
         );
 
         return redirect()->back()->with(
