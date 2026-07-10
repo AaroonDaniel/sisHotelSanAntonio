@@ -129,6 +129,10 @@ trait BuildsShiftClosingData
             'TotalExpenses' => $totalExpenses,
             'ByMethod'      => $byMethod,
             'ExpectedCash'  => $expectedCash,
+            // Monto físico que el operador declaró dejar en caja para el
+            // siguiente turno (NULL = no se le preguntó todavía / turno
+            // antiguo; 0 = contestó que no deja nada).
+            'LeftAmount'    => $cashRegister->left_amount !== null ? (float) $cashRegister->left_amount : null,
         ];
     }
 

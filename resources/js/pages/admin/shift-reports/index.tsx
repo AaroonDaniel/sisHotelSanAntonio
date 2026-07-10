@@ -11,6 +11,7 @@ interface ShiftRow {
     closed_at: string | null;
     status: string;
     final_balance: number | null;
+    left_amount: number | null;
 }
 
 interface DayReportRow {
@@ -159,6 +160,9 @@ export default function ShiftReportsIndex({
                                             Saldo Final
                                         </th>
                                         <th className="px-4 py-3 text-right">
+                                            Dejó en Caja
+                                        </th>
+                                        <th className="px-4 py-3 text-right">
                                             Documento
                                         </th>
                                     </tr>
@@ -167,7 +171,7 @@ export default function ShiftReportsIndex({
                                     {Shifts.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={7}
+                                                colSpan={8}
                                                 className="px-4 py-10 text-center text-gray-400 italic"
                                             >
                                                 Todavía no hay turnos
@@ -207,6 +211,13 @@ export default function ShiftReportsIndex({
                                                 {s.final_balance !== null
                                                     ? formatCurrency(
                                                           s.final_balance,
+                                                      )
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-gray-600">
+                                                {s.left_amount !== null
+                                                    ? formatCurrency(
+                                                          s.left_amount,
                                                       )
                                                     : '—'}
                                             </td>

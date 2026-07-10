@@ -57,6 +57,7 @@ interface Props {
     TotalExpenses: number;
     ByMethod: ByMethodRow[];
     ExpectedCash: number;
+    LeftAmount: number | null;
 }
 
 const formatCurrency = (amount: number) =>
@@ -92,6 +93,7 @@ export default function CashRegisterShow({
     TotalExpenses,
     ByMethod,
     ExpectedCash,
+    LeftAmount,
 }: Props) {
     const isClosed = CashRegister.status === 'CERRADA';
     const operatorName =
@@ -211,6 +213,21 @@ export default function CashRegisterShow({
                             </p>
                         </div>
                     </div>
+
+                    {isClosed && LeftAmount !== null && (
+                        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                            <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">
+                                {LeftAmount > 0
+                                    ? 'Monto dejado en caja para el siguiente turno'
+                                    : 'El operador no dejó monto en caja'}
+                            </p>
+                            {LeftAmount > 0 && (
+                                <p className="mt-1 text-xl font-black text-amber-800">
+                                    {formatCurrency(LeftAmount)}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* DESGLOSE POR MÉTODO */}
                     <Section title="Desglose por Método de Pago">

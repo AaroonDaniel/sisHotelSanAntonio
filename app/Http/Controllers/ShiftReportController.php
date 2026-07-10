@@ -49,6 +49,7 @@ class ShiftReportController extends Controller
                     'closed_at' => optional($cr->closed_at)->toIso8601String(),
                     'status' => $cr->status,
                     'final_balance' => $finalBalance !== null ? (float) $finalBalance : null,
+                    'left_amount' => $cr->left_amount !== null ? (float) $cr->left_amount : null,
                 ];
             });
     }

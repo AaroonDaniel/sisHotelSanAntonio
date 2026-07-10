@@ -66,15 +66,20 @@ class CashRegisterController extends Controller
 
     public function close(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'operator_id' => 'required|exists:users,id',
+            // NULL = no contestó (no debería pasar desde el frontend, que
+            // siempre exige Sí/No); 0 = "no dejo nada"; >0 = monto dejado
+            // en caja física para el siguiente operador.
+            'left_amount' => 'nullable|numeric|min:0',
         ]);
 
-        $operatorId = (int) $request->operator_id;
+        $operatorId = (int) $validated['operator_id'];
+        $leftAmount = array_key_exists('left_amount', $validated) ? $validated['left_amount'] : null;
         $cashRegisterId = null;
 
         try {
-            DB::transaction(function () use ($operatorId, &$cashRegisterId) {
+            DB::transaction(function () use ($operatorId, $leftAmount, &$cashRegisterId) {
                 DB::table('users')->where('id', $operatorId)->lockForUpdate()->first();
 
                 $activeRegister = CashRegister::query()
@@ -87,8 +92,9 @@ class CashRegisterController extends Controller
                 }
 
                 $activeRegister->update([
-                    'status'    => 'CERRADA',
-                    'closed_at' => now(),
+                    'status'      => 'CERRADA',
+                    'closed_at'   => now(),
+                    'left_amount' => $leftAmount,
                 ]);
 
                 $cashRegisterId = $activeRegister->id;

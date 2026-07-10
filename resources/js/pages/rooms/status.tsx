@@ -208,18 +208,30 @@ export default function RoomsStatus({
     // Vista previa de reporte de cierre de caja
     const [quickPreviewUrl, setQuickPreviewUrl] = useState<string | null>(null);
 
+    // Terminal Compartida: Auth::id() es siempre la cuenta genérica
+    // 'recepcion', nunca representa a un operador real, así que no hay un
+    // "turno activo" único de la sesión. Antes de generar la vista previa
+    // se pregunta a QUIÉN (avatar) pertenece el turno a revisar — así cada
+    // operador puede ver exactamente lo que él lleva registrado hasta
+    // ahora en su propio turno.
+    const [previewPickerOpen, setPreviewPickerOpen] = useState(false);
+    const [previewOperatorId, setPreviewOperatorId] = useState('');
+
     const handleOpenQuickPreview = () => {
-        const activeRegister = (auth as any).active_register;
+        setPreviewOperatorId('');
+        setPreviewPickerOpen(true);
+    };
 
-        if (!activeRegister?.id) {
-            alert('No tienes un turno de caja abierto.');
-            return;
-        }
-
+    const confirmQuickPreview = () => {
+        if (!previewOperatorId) return;
+        const today = new Date().toISOString().slice(0, 10);
         const params = new URLSearchParams({
-            cash_register_id: activeRegister.id.toString(), // 👈 clave: aísla exactamente este turno
+            user_id: previewOperatorId,
+            start_date: today,
+            end_date: today,
             record_type: 'ambos',
         });
+        setPreviewPickerOpen(false);
         setQuickPreviewUrl(
             `/reports/financial/pdf?${params.toString()}&t=${Date.now()}`,
         );
@@ -1853,6 +1865,46 @@ export default function RoomsStatus({
                 onClose={() => setIsActionModalOpen(false)}
                 item={selectedItem}
             />
+            {previewPickerOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                        <h3 className="mb-1 text-lg font-bold text-gray-800">
+                            Ver mi caja hasta ahora
+                        </h3>
+                        <p className="mb-4 text-sm text-gray-500">
+                            Selecciona tu avatar para ver lo que llevas
+                            registrado en tu turno actual.
+                        </p>
+
+                        <OperatorSelector
+                            operators={Operators}
+                            value={previewOperatorId}
+                            onChange={setPreviewOperatorId}
+                            compact
+                            size="md"
+                            label=""
+                        />
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPreviewPickerOpen(false)}
+                                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!previewOperatorId}
+                                onClick={confirmQuickPreview}
+                                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50"
+                            >
+                                Ver
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {quickPreviewUrl && (
                 <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
                     <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">

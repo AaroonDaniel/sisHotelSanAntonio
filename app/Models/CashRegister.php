@@ -17,6 +17,7 @@ class CashRegister extends Model
         'status',
         'opened_at',
         'closed_at',
+        'left_amount',
         'snapshot_data',
         'document_path',
     ];
@@ -24,6 +25,7 @@ class CashRegister extends Model
     protected $casts = [
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
+        'left_amount' => 'decimal:2',
         'snapshot_data' => 'array',
     ];
 

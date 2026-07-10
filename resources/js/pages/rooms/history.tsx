@@ -224,15 +224,15 @@ export default function RoomHistoryIndex({
                                                         c.check_out_date,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
+                                                <td className="px-4 py-3 text-center text-bold text-gray-600">
                                                     {c.duration_days}
                                                 </td>
-                                                <td className="px-4 py-3 text-right">
+                                                <td className="px-4 py-3 text-right text-gray-600 text-bold">
                                                     {formatCurrency(
                                                         c.agreed_price,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-right">
+                                                <td className="px-4 py-3 text-right text-gray-600 text-bold">
                                                     {formatCurrency(
                                                         c.total_services,
                                                     )}
@@ -242,7 +242,7 @@ export default function RoomHistoryIndex({
                                                         c.total_charged,
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-xs text-gray-500">
+                                                <td className="px-4 py-3 text-xs text-gray-800 text-bold">
                                                     <div>
                                                         In:{' '}
                                                         {c.checkin_operator_name ??
