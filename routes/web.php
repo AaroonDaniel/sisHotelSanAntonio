@@ -120,7 +120,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
-    Route::post('/checkins/{checkin}/payments', [CheckinController::class, 'storePayment'])->name('checkins.payments.store');
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
     Route::get('/search/issued-in', [GuestController::class, 'searchIssuedIn'])->name('search.issued-in');

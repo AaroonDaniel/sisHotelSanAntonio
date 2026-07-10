@@ -841,63 +841,6 @@ class CheckinController extends Controller
         });
     }
     /**
-     * Registra un pago adicional (amortización) a una estadía existente.
-     */
-    public function storePayment(Request $request, \App\Models\Checkin $checkin)
-    {
-        // 1. VALIDACIÓN
-        $validated = $request->validate([
-            'amount' => 'required|numeric|min:0.10',
-            'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
-            // El banco es obligatorio SOLO si el método NO es efectivo
-            'qr_bank' => 'nullable|required_if:payment_method,QR,TRANSFERENCIA|string',
-            'description' => 'nullable|string|max:150',
-        ]);
-
-        // Sin caja abierta, este pago quedaría invisible en cualquier
-        // cuadre de turno (cobro fantasma).
-        $cajaAbierta = \App\Models\CashRegister::where('user_id', \Illuminate\Support\Facades\Auth::id())
-            ->where('status', 'ABIERTA')
-            ->first();
-
-        if (!$cajaAbierta) {
-            return back()->withErrors([
-                'error' => 'No tiene una caja abierta. Debe aperturar caja antes de registrar un pago.',
-            ]);
-        }
-
-        // 2. PROCESAMIENTO
-        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $request, $checkin, $cajaAbierta) {
-
-            $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
-
-            // Limpieza: Si es efectivo, el banco debe ser NULL aunque envíen texto basura
-            $bankName = ($validated['payment_method'] === 'EFECTIVO') ? null : $validated['qr_bank'];
-
-            // A. INSERTAR EN LA TABLA DE PAGOS (La Billetera)
-            // Esto es lo que usará tu nuevo reporte de cierre de caja
-            \App\Models\Payment::create([
-                'checkin_id' => $checkin->id,
-                'user_id'    => $userId, // Importante: Guarda QUIÉN está cobrando ahora
-                'cash_register_id' => $cajaAbierta->id,
-                'amount'     => $validated['amount'],
-                'method'     => $validated['payment_method'],
-                'bank_name'  => $bankName,
-                'type'       => 'PAGO', // Según tu default en BD
-                // Si no envían descripción, ponemos una por defecto
-                'description' => $request->description ?? 'AMORTIZACIÓN / PAGO A CUENTA'
-            ]);
-
-            // B. ACTUALIZAR EL TOTAL EN LA ESTADÍA (Compatibilidad Legacy)
-            // Sumamos este nuevo monto al campo 'advance_payment' de la tabla checkins
-            // para que en la vista rápida de habitaciones se vea el saldo actualizado.
-            $checkin->increment('advance_payment', $validated['amount']);
-        });
-
-        return redirect()->back()->with('success', 'Pago registrado exitosamente.');
-    }
-
-    /**
      * Anula el convenio corporativo de un check-in activo (Punto 3.13).
      *
      * Regla de negocio:

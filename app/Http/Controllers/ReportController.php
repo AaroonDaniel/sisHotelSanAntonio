@@ -495,22 +495,56 @@ class ReportController extends Controller
         return response()->json(['can_generate' => true]);
     }
 
+    /**
+     * Filtra pagos/gastos por el operador REAL. Bajo Terminal Compartida el
+     * dinero se atribuye vía `operator_id` (el avatar elegido en el
+     * OperatorSelector), no `user_id` (que en filas nuevas es siempre la
+     * cuenta genérica 'recepcion'). El fallback a `user_id` cuando
+     * `operator_id` es NULL cubre filas creadas ANTES de este campo
+     * existir, donde `user_id` sí era la identidad real.
+     */
+    private function scopeByOperator($query, string $operatorId): void
+    {
+        $query->where(function ($q) use ($operatorId) {
+            $q->where('operator_id', $operatorId)
+                ->orWhere(function ($q2) use ($operatorId) {
+                    $q2->whereNull('operator_id')->where('user_id', $operatorId);
+                });
+        });
+    }
+
     public function financialIndex(Request $request)
     {
-        // 🛑 Si el usuario NO tiene permiso de ver reportes de todos,
-        // se le bloquea a SU PROPIO id sin importar qué mande la URL.
+        // 'reportes.financiero' habilita la vista agregada "Todos" (todos los
+        // operadores a la vez). La ruta ya exige 'reportes.cierre_caja',
+        // que alcanza para elegir y revisar/cerrar el turno de UN operador
+        // puntual: bajo Terminal Compartida, Auth::id() es siempre la
+        // cuenta genérica 'recepcion' y nunca representa a un operador
+        // real, así que ya no se puede forzar la selección a Auth::id()
+        // como antes (eso dejaba al recepcionista sin poder elegir a
+        // nadie).
         $puedeVerTodos = Auth::user()->can('reportes.financiero');
 
         $startDate = $request->query('start_date', now()->toDateString());
         $endDate   = $request->query('end_date', now()->toDateString());
-        $userId    = $puedeVerTodos
-            ? $request->query('user_id', 'todos')
-            : (string) Auth::id();
+
+        $requestedUserId = $request->query('user_id');
+        if ($puedeVerTodos) {
+            $userId = $requestedUserId ?: 'todos';
+        } else {
+            // 'todos' queda vedado sin el permiso agregado; sin selección
+            // explícita del operador, no hay nada que consultar todavía.
+            $userId = ($requestedUserId && $requestedUserId !== 'todos')
+                ? $requestedUserId
+                : null;
+        }
+
+        $operators = User::operadores()->get(['id', 'full_name', 'nickname']);
 
         $rangoInicio = $startDate . ' 00:00:00';
         $rangoFin    = $endDate . ' 23:59:59';
 
-        if ($userId !== 'todos' && $startDate === $endDate) {
+        if ($userId && $userId !== 'todos' && $startDate === $endDate) {
             $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
 
             if ($ultimaCaja) {
@@ -519,17 +553,38 @@ class ReportController extends Controller
             }
         }
 
+        // Recepcionista que todavía no eligió avatar: nada que mostrar.
+        if ($userId === null) {
+            return Inertia::render('reports/financial', [
+                'Payments' => [],
+                'Expenses' => [],
+                'Summary'  => [
+                    'apertura'     => 0,
+                    'ingresos'     => 0,
+                    'devoluciones' => 0,
+                    'gastos'       => 0,
+                    'liquidacion'  => 0,
+                ],
+                'Filters' => [
+                    'start_date' => $startDate,
+                    'end_date'   => $endDate,
+                    'user_id'    => null,
+                ],
+                'users' => $operators,
+                'CanViewAll' => $puedeVerTodos,
+            ]);
+        }
 
         // =========================================================
         // 1. INGRESOS Y DEVOLUCIONES (tabla payments)
         // Las devoluciones ya vienen como valores negativos, por lo que
         // un sum('amount') refleja la caja real automáticamente.
         // =========================================================
-        $paymentsQuery = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+        $paymentsQuery = Payment::with(['user', 'operador', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 
         if ($userId !== 'todos') {
-            $paymentsQuery->where('user_id', $userId);
+            $this->scopeByOperator($paymentsQuery, $userId);
         }
 
         $payments = $paymentsQuery->orderBy('created_at', 'desc')
@@ -543,7 +598,7 @@ class ReportController extends Controller
 
                 return [
                     'id'          => $p->id,
-                    'user_name'   => $p->user->name ?? 'Desconocido',
+                    'user_name'   => $p->operador->name ?? $p->user->name ?? 'Desconocido',
                     'amount'      => $montoReal,
                     'method'      => $p->method,
                     'bank_name'   => $p->bank_name,
@@ -558,11 +613,11 @@ class ReportController extends Controller
         // =========================================================
         // 2. EGRESOS / GASTOS (tabla expenses)
         // =========================================================
-        $expensesQuery = Expense::with(['user'])
+        $expensesQuery = Expense::with(['user', 'operador'])
             ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 
         if ($userId !== 'todos') {
-            $expensesQuery->where('user_id', $userId);
+            $this->scopeByOperator($expensesQuery, $userId);
         }
 
         $expenses = $expensesQuery->orderBy('created_at', 'desc')
@@ -570,7 +625,7 @@ class ReportController extends Controller
             ->map(function ($e) {
                 return [
                     'id'          => $e->id,
-                    'user_name'   => $e->user->name ?? 'Desconocido',
+                    'user_name'   => $e->operador->name ?? $e->user->name ?? 'Desconocido',
                     'amount'      => (float) $e->amount,
                     'description' => $e->description,
                     'date'        => $e->created_at->format('d/m/Y'),
@@ -580,6 +635,8 @@ class ReportController extends Controller
 
         // =========================================================
         // 3. APERTURA DE CAJA (monto inicial del turno)
+        // CashRegister.user_id YA es el operador real (así se abre el
+        // turno desde el OperatorSelector), no hace falta el fallback.
         // =========================================================
         $aperturaQuery = CashRegister::whereBetween('opened_at', [$rangoInicio, $rangoFin]);
         if ($userId !== 'todos') {
@@ -613,11 +670,12 @@ class ReportController extends Controller
                 'end_date'   => $endDate,
                 'user_id'    => $userId,
             ],
-            // 🛑 Si no puede ver todos, la lista solo trae su propio usuario
-            'users' => $puedeVerTodos
-                ? User::where('is_active', true)->get(['id', 'full_name', 'nickname'])
-                : User::where('id', Auth::id())->get(['id', 'full_name', 'nickname']),
-            'CanViewAll' => $puedeVerTodos, // 👈 NUEVO: el frontend lo usa para bloquear el <select>
+            // Lista de OPERADORES reales (excluye 'recepcion' y
+            // 'sistema_web', que nunca abren turno propio): cualquiera que
+            // llegue a esta pantalla (recepcionista o gerente/admin) puede
+            // elegir a quién revisar/cerrar.
+            'users' => $operators,
+            'CanViewAll' => $puedeVerTodos, // 👈 el frontend lo usa para mostrar/ocultar la opción "Todos"
         ]);
     }
 
@@ -634,9 +692,13 @@ class ReportController extends Controller
             // ==========================================
             $cashRegister = CashRegister::findOrFail($cashRegisterId);
 
-            // 🛑 Un recepcionista solo puede generar SU PROPIO turno
+            // Bajo Terminal Compartida, Auth::id() ya no identifica al
+            // operador dueño del turno (siempre es la cuenta 'recepcion').
+            // Cualquier recepcionista de la terminal puede imprimir el
+            // cierre que se acaba de generar; el detalle completo por
+            // rango de fechas sigue restringido a reportes.financiero.
             if (
-                $cashRegister->user_id !== Auth::id() &&
+                !Auth::user()->hasRole('recepcionista') &&
                 !Auth::user()->can('reportes.financiero')
             ) {
                 abort(403, 'No tienes permiso para generar este reporte.');
@@ -671,10 +733,10 @@ class ReportController extends Controller
         // ==========================================
         // 2. APLICAR RANGOS A LAS CONSULTAS (sin cambios de aquí en adelante)
         // ==========================================
-        $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+        $query = Payment::with(['user', 'operador', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 
-        if ($userId !== 'todos') $query->where('user_id', $userId);
+        if ($userId !== 'todos') $this->scopeByOperator($query, $userId);
         if ($recordType === 'efectivo') $query->where('method', 'EFECTIVO');
         elseif ($recordType === 'bancos') $query->where('method', '!=', 'EFECTIVO');
 
@@ -689,7 +751,7 @@ class ReportController extends Controller
 
         // --- Gastos ---
         $expensesQuery = Expense::whereBetween('created_at', [$rangoInicio, $rangoFin]);
-        if ($userId !== 'todos') $expensesQuery->where('user_id', $userId);
+        if ($userId !== 'todos') $this->scopeByOperator($expensesQuery, $userId);
         $gastos = $expensesQuery->orderBy('created_at')->get();
         $totalGastos = $gastos->sum('amount');
 
@@ -717,7 +779,9 @@ class ReportController extends Controller
 
         $pdf->SetFont('Arial', '', 9);
         $pdf->Cell(0, 5, utf8_decode('Tipo de Registro: ' . $tipoTexto), 0, 1, 'C');
-        $cajeroTexto = $userId === 'todos' ? 'TODOS LOS RECEPCIONISTAS' : ($payments->first()->user->name ?? 'Usuario');
+        $cajeroTexto = $userId === 'todos'
+            ? 'TODOS LOS RECEPCIONISTAS'
+            : (User::find($userId)->full_name ?? 'Usuario');
         $pdf->Cell(0, 5, utf8_decode('Cajero / Usuario: ' . strtoupper($cajeroTexto)), 0, 1, 'C');
         // Estampa de tiempo EXACTA (Día/Mes/Año Hora:Minuto) de apertura y
         // cierre, no solo la fecha: crítico para auditar turnos que cruzan
@@ -750,7 +814,7 @@ class ReportController extends Controller
                 $pdf->Cell(10, 5, $p->created_at->format('H:i'), 1, 0, 'C');
                 $pdf->Cell(10, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
                 $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
-                $pdf->Cell(32, 5, utf8_decode(substr($p->user->name ?? '', 0, 18)), 1, 0, 'L');
+                $pdf->Cell(32, 5, utf8_decode(substr($p->operador->name ?? $p->user->name ?? '', 0, 18)), 1, 0, 'L');
                 if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
                 $pdf->Cell(30, 5, utf8_decode($p->type), 1, 0, 'C');
                 $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');
@@ -868,10 +932,10 @@ class ReportController extends Controller
         $endDate = $request->query('end_date', now()->toDateString());
         $userId = $request->query('user_id', 'todos');
 
-        $query = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+        $query = Payment::with(['user', 'operador', 'checkin.room', 'checkin.guest'])
             ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
 
-        if ($userId !== 'todos') $query->where('user_id', $userId);
+        if ($userId !== 'todos') $this->scopeByOperator($query, $userId);
 
         $payments = $query->orderBy('user_id')->orderBy('created_at')->get();
         $fileName = 'cierre-caja-' . $startDate . '.csv';
@@ -898,7 +962,7 @@ class ReportController extends Controller
                 $row = [
                     $p->created_at->format('d/m/Y'),
                     $p->created_at->format('H:i'),
-                    $p->user->name ?? 'Desconocido',
+                    $p->operador->name ?? $p->user->name ?? 'Desconocido',
                     $p->checkin->room->number ?? '-',
                     $p->checkin->guest->full_name ?? 'Sin Huésped',
                     $p->method,

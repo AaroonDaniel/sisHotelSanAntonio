@@ -1,6 +1,9 @@
+import OpenShiftModal from '@/components/OpenShiftModal';
+import OperatorSelector from '@/components/OperatorSelector';
+import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { useCan } from '@/hooks/use-can';
+import axios from 'axios';
 import {
     ArrowLeft,
     BedDouble,
@@ -14,10 +17,8 @@ import {
     Trash2,
     User as UserIcon,
     Users,
-    AlertCircle,
-    MapPin,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import CheckinModal, { Operator } from './checkinModal';
 import DeleteModal from './deleteModal';
 
@@ -51,7 +52,7 @@ interface Checkin {
     check_out_date?: string | null;
     duration_days: number;
     advance_payment: number;
-    
+
     // 👇 AÑADIDOS PARA QUE COINCIDA CON EL MODAL
     agreed_price: number;
     discount?: number;
@@ -80,8 +81,8 @@ export interface CheckinData {
     guest_id: number;
     room_id: number;
     check_in_date: string;
-    actual_arrival_date?: string | null; 
-    schedule_id?: number | null;         
+    actual_arrival_date?: string | null;
+    schedule_id?: number | null;
     duration_days: number;
     advance_payment: number;
     notes?: string;
@@ -98,7 +99,7 @@ export default function CheckinsIndex({
     Rooms,
     Schedules,
     RoomTypes,
-    Operators
+    Operators,
 }: Props) {
     const { hasRole } = useCan();
     const [searchTerm, setSearchTerm] = useState('');
@@ -115,11 +116,24 @@ export default function CheckinsIndex({
         null,
     );
 
+    // Confirmación de checkout: bajo Terminal Compartida, cualquier acción
+    // que mueva dinero exige elegir el operador (avatar) que la ejecuta.
+    const [checkoutTarget, setCheckoutTarget] = useState<Checkin | null>(null);
+    const [checkoutOperatorId, setCheckoutOperatorId] = useState('');
+    const [checkoutProcessing, setCheckoutProcessing] = useState(false);
+    const [shiftModal, setShiftModal] = useState<{
+        show: boolean;
+        operatorId: string | null;
+        operatorName: string | null;
+    }>({ show: false, operatorId: null, operatorName: null });
+
     useEffect(() => {
         if (editingCheckin) {
             // Buscamos el checkin actualizado en la lista nueva que llegó del servidor
-            const freshCheckin = Checkins.find((c) => c.id === editingCheckin.id);
-            
+            const freshCheckin = Checkins.find(
+                (c) => c.id === editingCheckin.id,
+            );
+
             // Si existe (no fue eliminado), actualizamos el estado del modal
             if (freshCheckin) {
                 setEditingCheckin(freshCheckin);
@@ -161,16 +175,42 @@ export default function CheckinsIndex({
 
     // --- 2. ACCIONES ---
     const handleCheckout = (checkin: Checkin) => {
-        if (
-            confirm(
-                `¿Finalizar la estadía de la habitación ${checkin.room?.number}?`,
-            )
-        ) {
-            router.patch(
-                `/checks/${checkin.id}/checkout`,
-                {},
-                { preserveScroll: true },
-            );
+        setCheckoutOperatorId('');
+        setCheckoutTarget(checkin);
+    };
+
+    // El endpoint /checks/{id}/checkout siempre responde JSON crudo (no
+    // Inertia), igual que en rooms/status.tsx: por eso se usa axios en vez
+    // de router.put/patch (Inertia trataría la respuesta como una página
+    // inválida). El método registrado en el backend es PUT.
+    const confirmCheckout = async () => {
+        if (!checkoutTarget) return;
+        if (!checkoutOperatorId) return;
+
+        setCheckoutProcessing(true);
+        try {
+            await axios.put(`/checks/${checkoutTarget.id}/checkout`, {
+                checkout_operator_id: checkoutOperatorId,
+            });
+            const finishedId = checkoutTarget.id;
+            setCheckoutTarget(null);
+            router.reload({ only: ['Checkins'] });
+            window.open(`/checks/${finishedId}/checkout-receipt`, '_blank');
+        } catch (error: any) {
+            if (error?.response?.data?.needs_shift_opening) {
+                setShiftModal({
+                    show: true,
+                    operatorId: String(error.response.data.operator_id),
+                    operatorName: error.response.data.operator_name,
+                });
+            } else {
+                alert(
+                    error?.response?.data?.message ||
+                        'Error al procesar la salida.',
+                );
+            }
+        } finally {
+            setCheckoutProcessing(false);
         }
     };
 
@@ -214,8 +254,8 @@ export default function CheckinsIndex({
         if (!dateString) return '-';
         return new Date(dateString).toLocaleDateString('es-BO', {
             day: '2-digit',
-            month: '2-digit', 
-            year: 'numeric'
+            month: '2-digit',
+            year: 'numeric',
         });
     };
 
@@ -226,7 +266,6 @@ export default function CheckinsIndex({
             minute: '2-digit',
         });
     };
-    
 
     // --- 3. HELPER PARA RENDERIZAR FILAS (Row Renderer) ---
     // Esto renderiza una fila idéntica sea titular o acompañante
@@ -290,7 +329,6 @@ export default function CheckinsIndex({
                         </span>
                         {isTitular && origin && (
                             <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
-                                
                                 <span>{origin}</span>
                             </div>
                         )}
@@ -507,6 +545,66 @@ export default function CheckinsIndex({
                     show={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
                     checkinId={deletingCheckinId}
+                />
+
+                {checkoutTarget && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                            <h3 className="mb-1 text-lg font-bold text-gray-800">
+                                ¿Finalizar estadía?
+                            </h3>
+                            <p className="mb-4 text-sm text-gray-500">
+                                Habitación{' '}
+                                <strong>{checkoutTarget.room?.number}</strong>.
+                                Selecciona quién está haciendo el checkout.
+                            </p>
+
+                            <OperatorSelector
+                                operators={Operators}
+                                value={checkoutOperatorId}
+                                onChange={setCheckoutOperatorId}
+                                compact
+                                size="md"
+                                label=""
+                            />
+
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setCheckoutTarget(null)}
+                                    className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={
+                                        !checkoutOperatorId ||
+                                        checkoutProcessing
+                                    }
+                                    onClick={confirmCheckout}
+                                    className="rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 disabled:opacity-50"
+                                >
+                                    {checkoutProcessing
+                                        ? 'Procesando...'
+                                        : 'Confirmar salida'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <OpenShiftModal
+                    show={shiftModal.show}
+                    operatorId={shiftModal.operatorId}
+                    operatorName={shiftModal.operatorName}
+                    onClose={() =>
+                        setShiftModal({
+                            show: false,
+                            operatorId: null,
+                            operatorName: null,
+                        })
+                    }
                 />
             </div>
         </AuthenticatedLayout>

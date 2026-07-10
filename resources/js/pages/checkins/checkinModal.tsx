@@ -9,7 +9,7 @@ import {
     NACIONALIDADES,
     paisDe,
 } from '@/lib/catalogos';
-import { router, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertCircle,
@@ -1539,49 +1539,6 @@ export default function CheckinModal({
     // La variable que usarás para el .map en el dropdown ahora es originSuggestions
     // (Ya no necesitas 'filteredOrigins' porque el filtro lo hace la BD)
 
-    const handleCheckout = () => {
-        if (!checkinToEdit) return;
-
-        if (
-            confirm(
-                '¿Confirmar salida? Se generará el recibo final y pasará a limpieza.',
-            )
-        ) {
-            // 1. Preparamos el dinero y el método de pago que el recepcionista llenó
-            // (Asegúrate de que 'data' sea el nombre de tu variable del formulario useForm)
-            const metodo = data.payment_method || 'EFECTIVO';
-            const payload: any = {
-                check_out_date: new Date().toISOString(),
-                payment_method: metodo,
-                qr_bank: data.qr_bank,
-            };
-
-            // 2. Lógica para dividir el pago si selecciona "AMBOS"
-            if (metodo === 'AMBOS') {
-                payload.amount = 0;
-                payload.monto_efectivo = Number(data.monto_efectivo) || 0;
-                payload.monto_qr = Number(data.monto_qr) || 0;
-            } else {
-                // Si pagó todo en Efectivo o todo en QR (Usa el input donde escribes el monto final)
-                payload.amount = Number(data.advance_payment) || 0;
-            }
-
-            // 3. Enviamos la petición con el payload lleno (ya no las {})
-            router.put(
-                `/checks/${checkinToEdit.id}/checkout`,
-                payload, // <--- AQUÍ ENVIAMOS EL DINERO
-                {
-                    onSuccess: () => {
-                        onClose();
-                        window.open(
-                            `/checks/${checkinToEdit.id}/checkout-receipt`,
-                            '_blank',
-                        );
-                    },
-                },
-            );
-        }
-    };
     // Visuales
     const durationVal = Number(data.duration_days) || 0;
     const estimatedCheckout = new Date(data.check_in_date);

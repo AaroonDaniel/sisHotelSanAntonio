@@ -64,7 +64,7 @@ interface Props {
     Filters?: {
         start_date?: string;
         end_date?: string;
-        user_id?: string;
+        user_id?: string | null;
     };
     CanViewAll?: boolean;
 }
@@ -91,9 +91,7 @@ export default function FinancialReport({
     // Estados del formulario
     const [fechaInicio, setFechaInicio] = useState(Filters?.start_date || '');
     const [fechaFin, setFechaFin] = useState(Filters?.end_date || '');
-    const [userId, setUserId] = useState(
-        Filters?.user_id || auth.user.id.toString(),
-    );
+    const [userId, setUserId] = useState(Filters?.user_id || '');
     const [tipoRegistro, setTipoRegistro] = useState<
         'efectivo' | 'bancos' | 'ambos'
     >('ambos');
@@ -137,14 +135,14 @@ export default function FinancialReport({
     const handleLimpiar = () => {
         setFechaInicio('');
         setFechaFin('');
-        setUserId(auth.user.id.toString());
+        setUserId('');
         setTipoRegistro('ambos');
         setFormato('pdf');
     };
 
     /* Carga las transacciones en pantalla (Inertia recarga financialIndex) */
     const handleConsultar = () => {
-        if (!fechaInicio || !fechaFin) return;
+        if (!fechaInicio || !fechaFin || !userId) return;
         router.get(
             '/reports/financial',
             {
@@ -158,7 +156,7 @@ export default function FinancialReport({
 
     const handleGenerar: FormEventHandler = (e) => {
         e.preventDefault();
-        if (!fechaInicio || !fechaFin) return;
+        if (!fechaInicio || !fechaFin || !userId) return;
 
         setIsGenerating(true);
         setPdfUrl(null);
@@ -177,7 +175,7 @@ export default function FinancialReport({
                     `/reports/financial/pdf?${params.toString()}&t=${Date.now()}`,
                 );
             } else {
-                window.location.href = `/reports/financial/excel?${params.toString()}`;
+                window.location.href = `/reports/financial/csv?${params.toString()}`;
             }
         }, 600);
     };
@@ -220,7 +218,7 @@ export default function FinancialReport({
                                 >
                                     <ArrowLeft className="h-4 w-4" /> Cerrar
                                 </button>
-                                {auth.active_register && (
+                                {userId !== 'todos' && (
                                     <button
                                         type="button"
                                         onClick={() =>
@@ -229,7 +227,7 @@ export default function FinancialReport({
                                         className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-500 active:scale-95"
                                     >
                                         <LogOut className="h-4 w-4" /> Todo en
-                                        orden: Cerrar Caja y Salir
+                                        orden: Cerrar Caja
                                     </button>
                                 )}
                             </div>
@@ -285,9 +283,11 @@ export default function FinancialReport({
                                                 onChange={(e) =>
                                                     setUserId(e.target.value)
                                                 }
-                                                disabled={!CanViewAll}
-                                                className="w-full appearance-none rounded-lg border border-gray-400 bg-white py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                                                className="w-full appearance-none rounded-lg border border-gray-400 bg-white py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0"
                                             >
+                                                <option value="" disabled>
+                                                    Selecciona un operador...
+                                                </option>
                                                 {CanViewAll && (
                                                     <option value="todos">
                                                         Todos
@@ -299,19 +299,13 @@ export default function FinancialReport({
                                                             key={user.id}
                                                             value={user.id}
                                                         >
-                                                            {user.full_name}{' '}
-                                                            {user.id ===
-                                                            auth.user.id
-                                                                ? '(Tú)'
-                                                                : ''}
+                                                            {user.full_name}
                                                         </option>
                                                     ))
                                                 ) : (
-                                                    <option
-                                                        value={auth.user.id}
-                                                    >
-                                                        {auth.user.full_name}{' '}
-                                                        (Tú)
+                                                    <option value="" disabled>
+                                                        No hay operadores
+                                                        disponibles.
                                                     </option>
                                                 )}
                                             </select>
@@ -368,7 +362,9 @@ export default function FinancialReport({
                                     <button
                                         type="button"
                                         onClick={handleConsultar}
-                                        disabled={!fechaInicio || !fechaFin}
+                                        disabled={
+                                            !fechaInicio || !fechaFin || !userId
+                                        }
                                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
                                     >
                                         <Scale className="h-4 w-4" />
@@ -467,7 +463,8 @@ export default function FinancialReport({
                                         disabled={
                                             isGenerating ||
                                             !fechaInicio ||
-                                            !fechaFin
+                                            !fechaFin ||
+                                            !userId
                                         }
                                         className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:opacity-50"
                                     >
@@ -760,6 +757,11 @@ export default function FinancialReport({
 
             <CloseRegisterModal
                 show={isCloseModalOpen}
+                operatorId={userId}
+                operatorName={
+                    users.find((u) => String(u.id) === String(userId))
+                        ?.full_name
+                }
                 onClose={() => setIsCloseModalOpen(false)}
             />
         </AuthenticatedLayout>

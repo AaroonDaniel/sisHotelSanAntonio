@@ -100,13 +100,14 @@ class User extends Authenticatable
     /**
      * Usuarios activos disponibles para ser seleccionados como "operador"
      * en el selector de la sesión global de recepción (Check-in, Pagos,
-     * Gastos, Checkout...). Excluye a 'recepcion': es la cuenta genérica de
-     * la Terminal Compartida (Kiosk Mode), no una persona física real.
+     * Gastos, Checkout...). Excluye cuentas de sistema que no son personas
+     * físicas reales: 'recepcion' (Terminal Compartida / Kiosk Mode) y
+     * 'sistema_web' (reservas automáticas desde la web).
      */
     public function scopeOperadores($query)
     {
         return $query->where('is_active', true)
-            ->where('nickname', '!=', 'recepcion');
+            ->whereNotIn('nickname', ['recepcion', 'sistema_web']);
     }
 
     /*Configuraxion de la bitacora de actividades*/
