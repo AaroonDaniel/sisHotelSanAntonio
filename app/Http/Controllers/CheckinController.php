@@ -427,7 +427,14 @@ class CheckinController extends Controller
                 $specialAgreementId = $agreement->id;
             }
 
-            // GUARDAR EL CHECKIN 
+            // Buscamos la caja abierta del usuario UNA sola vez: sirve tanto
+            // para vincular la asignación como el adelanto inicial (si lo
+            // hay) al mismo turno.
+            $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
+                ->where('status', 'ABIERTA')
+                ->first();
+
+            // GUARDAR EL CHECKIN
             $checkin = \App\Models\Checkin::create([
                 'guest_id' => $guestId,
                 'room_id' => $validatedCheckin['room_id'],
@@ -444,6 +451,7 @@ class CheckinController extends Controller
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
                 'is_temporary' => $request->boolean('is_temporary'),
+                'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null,
             ]);
 
             // =========================================================
@@ -453,12 +461,7 @@ class CheckinController extends Controller
             if ($montoInicial > 0) {
                 $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
 
-                // 1. Buscar la caja abierta del usuario activo
-                $cajaAbierta = \App\Models\CashRegister::where('user_id', $userId)
-                    ->where('status', 'ABIERTA')
-                    ->first();
-
-                // 2. Guardar el pago relacionándolo con la caja y registrando la fecha
+                // Guardar el pago relacionándolo con la caja y registrando la fecha
                 \App\Models\Payment::create([
                     'checkin_id' => $checkin->id,
                     'user_id' => $userId,
@@ -1461,8 +1464,20 @@ class CheckinController extends Controller
             'operator_id' => 'required|exists:users,id',
         ]);
 
+        // Sin caja abierta, este pago quedaría invisible en cualquier cuadre
+        // de turno: se bloquea, igual que ya ocurre con los gastos.
+        $activeRegister = \App\Models\CashRegister::where('user_id', Auth::id())
+            ->where('status', 'ABIERTA')
+            ->first();
+
+        if (!$activeRegister) {
+            return back()->withErrors([
+                'error' => 'No puedes registrar un pago. Debes tener una Caja Registradora abierta.',
+            ]);
+        }
+
         // 2. Transacción
-        DB::transaction(function () use ($request, $checkin) {
+        DB::transaction(function () use ($request, $checkin, $activeRegister) {
 
             $banco = ($request->payment_method === 'EFECTIVO') ? null : $request->qr_bank;
 
@@ -1471,6 +1486,7 @@ class CheckinController extends Controller
                 'checkin_id' => $checkin->id,
                 'user_id' => Auth::id(),
                 'operator_id' => $request->operator_id,
+                'cash_register_id' => $activeRegister->id,
                 'amount' => $request->amount,
                 'method' => $request->payment_method,
                 'bank_name' => $banco,

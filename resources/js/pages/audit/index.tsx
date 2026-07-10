@@ -1,14 +1,15 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
+    Banknote,
     BedDouble,
+    Eye,
     Lock,
     Pencil,
     Save,
     ShieldAlert,
     Wallet,
     X,
-    Banknote,
 } from 'lucide-react';
 import { useState } from 'react';
 import FinanzasTab, { ExpenseAudit, PaymentAudit } from './FinanzasTab';
@@ -29,9 +30,20 @@ interface CashRegisterAudit {
     closed_at: string | null;
 }
 
+interface ClosedCashRegisterAudit {
+    id: number;
+    user_name: string;
+    opening_amount: number;
+    total_income: number;
+    total_expenses: number;
+    opened_at: string | null;
+    closed_at: string | null;
+}
+
 interface Props {
     auth: { user: User };
     CashRegisters: CashRegisterAudit[];
+    ClosedCashRegisters: ClosedCashRegisterAudit[];
     Checkins: CheckinAudit[];
     Payments: PaymentAudit[];
     Expenses: ExpenseAudit[];
@@ -69,6 +81,7 @@ const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
 export default function DataAuditIndex({
     auth,
     CashRegisters,
+    ClosedCashRegisters,
     Checkins,
     Payments,
     Expenses,
@@ -164,8 +177,8 @@ export default function DataAuditIndex({
                         <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-400">
                             <Lock className="h-3.5 w-3.5" />
                             Auditoría de Datos: corrige cajas, estadías y
-                            finanzas cuando los reportes no cuadran. Cada
-                            cambio queda registrado en la bitácora.
+                            finanzas cuando los reportes no cuadran. Cada cambio
+                            queda registrado en la bitácora.
                         </p>
                     </div>
                 </div>
@@ -194,57 +207,147 @@ export default function DataAuditIndex({
 
                 {/* --- TAB: CAJAS Y TURNOS --- */}
                 {activeTab === 'cajas' && (
-                    <div className="rounded-2xl border border-gray-800 bg-gray-900 shadow-xl">
-                        <div className="border-b border-gray-800 px-5 py-4">
-                            <h2 className="text-sm font-bold text-gray-200">
-                                Cajas abiertas o con inconsistencias
-                            </h2>
-                            <p className="mt-1 text-xs text-gray-500">
-                                Se listan las cajas en estado ABIERTA y
-                                cualquier registro con fechas inconsistentes
-                                (cierre antes de apertura, sin fecha de
-                                cierre, etc.)
-                            </p>
-                        </div>
+                    <div className="space-y-6">
+                        <div className="rounded-2xl border border-gray-800 bg-gray-900 shadow-xl">
+                            <div className="border-b border-gray-800 px-5 py-4">
+                                <h2 className="text-sm font-bold text-gray-200">
+                                    Cajas abiertas o con inconsistencias
+                                </h2>
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Se listan las cajas en estado ABIERTA y
+                                    cualquier registro con fechas inconsistentes
+                                    (cierre antes de apertura, sin fecha de
+                                    cierre, etc.)
+                                </p>
+                            </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-800/60 text-xs tracking-wider text-gray-400 uppercase">
-                                    <tr>
-                                        <th className="px-4 py-3">ID</th>
-                                        <th className="px-4 py-3">Usuario</th>
-                                        <th className="px-4 py-3">
-                                            Monto apertura
-                                        </th>
-                                        <th className="px-4 py-3">Estado</th>
-                                        <th className="px-4 py-3">Apertura</th>
-                                        <th className="px-4 py-3">Cierre</th>
-                                        <th className="px-4 py-3 text-right">
-                                            Acciones
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-800">
-                                    {CashRegisters.length === 0 && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-800/60 text-xs tracking-wider text-gray-400 uppercase">
                                         <tr>
-                                            <td
-                                                colSpan={7}
-                                                className="px-4 py-8 text-center text-gray-500"
-                                            >
-                                                No hay cajas abiertas ni con
-                                                errores. Todo cuadra. ✅
-                                            </td>
+                                            <th className="px-4 py-3">ID</th>
+                                            <th className="px-4 py-3">
+                                                Usuario
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Monto apertura
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Estado
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Apertura
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Cierre
+                                            </th>
+                                            <th className="px-4 py-3 text-right">
+                                                Acciones
+                                            </th>
                                         </tr>
-                                    )}
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-800">
+                                        {CashRegisters.length === 0 && (
+                                            <tr>
+                                                <td
+                                                    colSpan={7}
+                                                    className="px-4 py-8 text-center text-gray-500"
+                                                >
+                                                    No hay cajas abiertas ni con
+                                                    errores. Todo cuadra. ✅
+                                                </td>
+                                            </tr>
+                                        )}
 
-                                    {CashRegisters.map((cr) => {
-                                        const isEditing = editingId === cr.id;
+                                        {CashRegisters.map((cr) => {
+                                            const isEditing =
+                                                editingId === cr.id;
 
-                                        if (!isEditing) {
+                                            if (!isEditing) {
+                                                return (
+                                                    <tr
+                                                        key={cr.id}
+                                                        className="hover:bg-gray-800/40"
+                                                    >
+                                                        <td className="px-4 py-3 font-mono text-gray-400">
+                                                            #{cr.id}
+                                                        </td>
+                                                        <td className="px-4 py-3 font-semibold text-white">
+                                                            {cr.user_name}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            Bs{' '}
+                                                            {cr.opening_amount.toFixed(
+                                                                2,
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span
+                                                                className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                                                                    cr.status ===
+                                                                    'ABIERTA'
+                                                                        ? 'bg-amber-500/20 text-amber-400'
+                                                                        : 'bg-emerald-500/20 text-emerald-400'
+                                                                }`}
+                                                            >
+                                                                {cr.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-gray-400">
+                                                            {cr.opened_at
+                                                                ? new Date(
+                                                                      cr.opened_at,
+                                                                  ).toLocaleString(
+                                                                      'es-BO',
+                                                                  )
+                                                                : '—'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-gray-400">
+                                                            {cr.closed_at
+                                                                ? new Date(
+                                                                      cr.closed_at,
+                                                                  ).toLocaleString(
+                                                                      'es-BO',
+                                                                  )
+                                                                : '—'}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex justify-end gap-2">
+                                                                {cr.status ===
+                                                                    'ABIERTA' && (
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            forceClose(
+                                                                                cr,
+                                                                            )
+                                                                        }
+                                                                        className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-900/60"
+                                                                        title="Forzar cierre ahora"
+                                                                    >
+                                                                        Forzar
+                                                                        cierre
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() =>
+                                                                        startEdit(
+                                                                            cr,
+                                                                        )
+                                                                    }
+                                                                    className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-gray-700"
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+
                                             return (
                                                 <tr
                                                     key={cr.id}
-                                                    className="hover:bg-gray-800/40"
+                                                    className="bg-gray-800/60"
                                                 >
                                                     <td className="px-4 py-3 font-mono text-gray-400">
                                                         #{cr.id}
@@ -253,78 +356,186 @@ export default function DataAuditIndex({
                                                         {cr.user_name}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        Bs{' '}
-                                                        {cr.opening_amount.toFixed(
-                                                            2,
-                                                        )}
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={
+                                                                editForm.opening_amount
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEditForm(
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        opening_amount:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                        />
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <span
-                                                            className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                                                                cr.status ===
-                                                                'ABIERTA'
-                                                                    ? 'bg-amber-500/20 text-amber-400'
-                                                                    : 'bg-emerald-500/20 text-emerald-400'
-                                                            }`}
+                                                        <select
+                                                            value={
+                                                                editForm.status
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEditForm(
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        status: e
+                                                                            .target
+                                                                            .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                         >
-                                                            {cr.status}
-                                                        </span>
+                                                            <option value="ABIERTA">
+                                                                ABIERTA
+                                                            </option>
+                                                            <option value="CERRADA">
+                                                                CERRADA
+                                                            </option>
+                                                        </select>
                                                     </td>
-                                                    <td className="px-4 py-3 text-gray-400">
-                                                        {cr.opened_at
-                                                            ? new Date(
-                                                                  cr.opened_at,
-                                                              ).toLocaleString(
-                                                                  'es-BO',
-                                                              )
-                                                            : '—'}
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={
+                                                                editForm.opened_at
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEditForm(
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        opened_at:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                        />
                                                     </td>
-                                                    <td className="px-4 py-3 text-gray-400">
-                                                        {cr.closed_at
-                                                            ? new Date(
-                                                                  cr.closed_at,
-                                                              ).toLocaleString(
-                                                                  'es-BO',
-                                                              )
-                                                            : '—'}
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={
+                                                                editForm.closed_at
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEditForm(
+                                                                    (prev) => ({
+                                                                        ...prev,
+                                                                        closed_at:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                        />
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <div className="flex justify-end gap-2">
-                                                            {cr.status ===
-                                                                'ABIERTA' && (
-                                                                <button
-                                                                    onClick={() =>
-                                                                        forceClose(
-                                                                            cr,
-                                                                        )
-                                                                    }
-                                                                    className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-900/60"
-                                                                    title="Forzar cierre ahora"
-                                                                >
-                                                                    Forzar
-                                                                    cierre
-                                                                </button>
-                                                            )}
                                                             <button
+                                                                disabled={
+                                                                    isSaving
+                                                                }
                                                                 onClick={() =>
-                                                                    startEdit(
-                                                                        cr,
+                                                                    saveEdit(
+                                                                        cr.id,
                                                                     )
                                                                 }
-                                                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-gray-700"
+                                                                className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
                                                             >
-                                                                Editar
+                                                                <Save className="h-3.5 w-3.5" />
+                                                                Guardar
+                                                            </button>
+                                                            <button
+                                                                onClick={
+                                                                    cancelEdit
+                                                                }
+                                                                className="flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-gray-700"
+                                                            >
+                                                                <X className="h-3.5 w-3.5" />
+                                                                Cancelar
                                                             </button>
                                                         </div>
                                                     </td>
                                                 </tr>
                                             );
-                                        }
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
 
-                                        return (
+                        {/* --- HISTORIAL DE TURNOS CERRADOS --- */}
+                        <div className="rounded-2xl border border-gray-800 bg-gray-900 shadow-xl">
+                            <div className="border-b border-gray-800 px-5 py-4">
+                                <h2 className="text-sm font-bold text-gray-200">
+                                    Historial de Turnos Cerrados
+                                </h2>
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Turnos ya cerrados, identificados por ID y
+                                    operador. Se puede volver a ver o imprimir
+                                    el documento de cierre de cualquiera de
+                                    ellos.
+                                </p>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-800/60 text-xs tracking-wider text-gray-400 uppercase">
+                                        <tr>
+                                            <th className="px-4 py-3">Turno</th>
+                                            <th className="px-4 py-3">
+                                                Operador
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Apertura
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Cierre
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Saldo inicial
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Total cobrado
+                                            </th>
+                                            <th className="px-4 py-3">
+                                                Total gastos
+                                            </th>
+                                            <th className="px-4 py-3 text-right">
+                                                Acciones
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-800">
+                                        {ClosedCashRegisters.length === 0 && (
+                                            <tr>
+                                                <td
+                                                    colSpan={8}
+                                                    className="px-4 py-8 text-center text-gray-500"
+                                                >
+                                                    Todavía no hay turnos
+                                                    cerrados.
+                                                </td>
+                                            </tr>
+                                        )}
+
+                                        {ClosedCashRegisters.map((cr) => (
                                             <tr
                                                 key={cr.id}
-                                                className="bg-gray-800/60"
+                                                className="hover:bg-gray-800/40"
                                             >
                                                 <td className="px-4 py-3 font-mono text-gray-400">
                                                     #{cr.id}
@@ -332,123 +543,70 @@ export default function DataAuditIndex({
                                                 <td className="px-4 py-3 font-semibold text-white">
                                                     {cr.user_name}
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        min="0"
-                                                        value={
-                                                            editForm.opening_amount
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    opening_amount:
-                                                                        e
-                                                                            .target
-                                                                            .value,
-                                                                }),
-                                                            )
-                                                        }
-                                                        className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
-                                                    />
+                                                <td className="px-4 py-3 text-gray-300">
+                                                    {cr.opened_at
+                                                        ? new Date(
+                                                              cr.opened_at,
+                                                          ).toLocaleString(
+                                                              'es-BO',
+                                                              {
+                                                                  day: '2-digit',
+                                                                  month: '2-digit',
+                                                                  year: 'numeric',
+                                                                  hour: '2-digit',
+                                                                  minute: '2-digit',
+                                                                  hour12: false,
+                                                              },
+                                                          )
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-4 py-3 text-gray-300">
+                                                    {cr.closed_at
+                                                        ? new Date(
+                                                              cr.closed_at,
+                                                          ).toLocaleString(
+                                                              'es-BO',
+                                                              {
+                                                                  day: '2-digit',
+                                                                  month: '2-digit',
+                                                                  year: 'numeric',
+                                                                  hour: '2-digit',
+                                                                  minute: '2-digit',
+                                                                  hour12: false,
+                                                              },
+                                                          )
+                                                        : '—'}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <select
-                                                        value={
-                                                            editForm.status
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    status: e
-                                                                        .target
-                                                                        .value,
-                                                                }),
-                                                            )
-                                                        }
-                                                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                    Bs{' '}
+                                                    {cr.opening_amount.toFixed(
+                                                        2,
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-emerald-400">
+                                                    Bs{' '}
+                                                    {cr.total_income.toFixed(2)}
+                                                </td>
+                                                <td className="px-4 py-3 text-red-400">
+                                                    Bs{' '}
+                                                    {cr.total_expenses.toFixed(
+                                                        2,
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Link
+                                                        href={`/cash-registers/${cr.id}`}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-gray-700"
                                                     >
-                                                        <option value="ABIERTA">
-                                                            ABIERTA
-                                                        </option>
-                                                        <option value="CERRADA">
-                                                            CERRADA
-                                                        </option>
-                                                    </select>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <input
-                                                        type="datetime-local"
-                                                        value={
-                                                            editForm.opened_at
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    opened_at:
-                                                                        e
-                                                                            .target
-                                                                            .value,
-                                                                }),
-                                                            )
-                                                        }
-                                                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
-                                                    />
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <input
-                                                        type="datetime-local"
-                                                        value={
-                                                            editForm.closed_at
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    closed_at:
-                                                                        e
-                                                                            .target
-                                                                            .value,
-                                                                }),
-                                                            )
-                                                        }
-                                                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
-                                                    />
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            disabled={
-                                                                isSaving
-                                                            }
-                                                            onClick={() =>
-                                                                saveEdit(cr.id)
-                                                            }
-                                                            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                                                        >
-                                                            <Save className="h-3.5 w-3.5" />
-                                                            Guardar
-                                                        </button>
-                                                        <button
-                                                            onClick={
-                                                                cancelEdit
-                                                            }
-                                                            className="flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-gray-700"
-                                                        >
-                                                            <X className="h-3.5 w-3.5" />
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                        Ver / Imprimir
+                                                    </Link>
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -461,10 +619,10 @@ export default function DataAuditIndex({
                                 Todos los Check-ins
                             </h2>
                             <p className="mt-1 text-xs text-gray-500">
-                                Activos, finalizados, transferidos o
-                                cancelados. Edita cualquier campo (fechas,
-                                estado, precio, operador) y los pagos
-                                asociados sin restricciones de negocio.
+                                Activos, finalizados, transferidos o cancelados.
+                                Edita cualquier campo (fechas, estado, precio,
+                                operador) y los pagos asociados sin
+                                restricciones de negocio.
                             </p>
                         </div>
 
@@ -477,9 +635,7 @@ export default function DataAuditIndex({
                                         <th className="px-4 py-3">Hab.</th>
                                         <th className="px-4 py-3">Estado</th>
                                         <th className="px-4 py-3">Operador</th>
-                                        <th className="px-4 py-3">
-                                            Check-in
-                                        </th>
+                                        <th className="px-4 py-3">Check-in</th>
                                         <th className="px-4 py-3">Salida</th>
                                         <th className="px-4 py-3">Precio</th>
                                         <th className="px-4 py-3">Pagos</th>
@@ -529,8 +685,7 @@ export default function DataAuditIndex({
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-gray-400">
-                                                {c.checkin_operator_name ??
-                                                    '—'}
+                                                {c.checkin_operator_name ?? '—'}
                                             </td>
                                             <td className="px-4 py-3 text-gray-400">
                                                 {c.check_in_date

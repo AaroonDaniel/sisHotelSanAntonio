@@ -31,7 +31,8 @@ interface OperatorSelectorProps {
     size?: 'sm' | 'md' | 'lg';
 }
 
-const getDisplayName = (op: Operator) => op.full_name || op.nickname || 'Usuario';
+const getDisplayName = (op: Operator) =>
+    op.full_name || op.nickname || 'Usuario';
 
 const getShortName = (op: Operator) => {
     const firstWord = getDisplayName(op).trim().split(/\s+/)[0] ?? '';
@@ -90,7 +91,10 @@ export default function OperatorSelector({
                 : size === 'md'
                   ? 'h-10 w-10 text-xs'
                   : 'h-8 w-8 text-[10px]';
-        const nameSize = size === 'lg' ? 'max-w-[5.5rem] text-sm' : 'max-w-[3.75rem] text-[9px]';
+        const nameSize =
+            size === 'lg'
+                ? 'max-w-[5.5rem] text-sm'
+                : 'max-w-[3.75rem] text-[9px]';
 
         return (
             <div
@@ -102,6 +106,14 @@ export default function OperatorSelector({
             >
                 {operators.map((op) => {
                     const isSelected = String(value ?? '') === String(op.id);
+                    // Una vez que HAY una selección, el resto de los
+                    // operadores se apagan a gris (en vez de mantener su
+                    // color propio) para que el elegido resalte sin
+                    // ambigüedad.
+                    const hasSelection =
+                        value !== null &&
+                        value !== undefined &&
+                        String(value) !== '';
                     return (
                         <button
                             key={op.id}
@@ -112,10 +124,12 @@ export default function OperatorSelector({
                             className="flex shrink-0 flex-col items-center gap-1 transition-all active:scale-95"
                         >
                             <span
-                                className={`flex shrink-0 items-center justify-center rounded-full font-bold text-white ${avatarSize} ${getAvatarColor(op)} ${
+                                className={`flex shrink-0 items-center justify-center rounded-full font-bold text-white ${avatarSize} ${
                                     isSelected
-                                        ? 'scale-110 shadow-lg ring-2 ring-gray-800 ring-offset-2 ring-offset-white'
-                                        : 'opacity-60 hover:scale-105 hover:opacity-100'
+                                        ? `${getAvatarColor(op)} scale-110 shadow-lg ring-2 ring-gray-800 ring-offset-2 ring-offset-white`
+                                        : hasSelection
+                                          ? 'bg-gray-300 opacity-70 grayscale'
+                                          : `${getAvatarColor(op)} opacity-60 hover:scale-105 hover:opacity-100`
                                 }`}
                             >
                                 {getInitials(op)}
@@ -124,7 +138,9 @@ export default function OperatorSelector({
                                 className={`truncate leading-none font-semibold ${nameSize} ${
                                     isSelected
                                         ? 'text-gray-900'
-                                        : 'text-gray-500'
+                                        : hasSelection
+                                          ? 'text-gray-400'
+                                          : 'text-gray-500'
                                 }`}
                             >
                                 {op.nickname}

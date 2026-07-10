@@ -3618,6 +3618,7 @@ function CheckoutConfirmationModal({
                                         processing ||
                                         !tipoDocumento ||
                                         !displayData ||
+                                        !checkoutOperatorId ||
                                         (saldoPagar > 0 &&
                                             (!metodoPago ||
                                                 (metodoPago === 'qr' &&

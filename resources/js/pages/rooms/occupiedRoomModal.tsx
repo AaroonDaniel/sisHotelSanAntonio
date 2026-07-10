@@ -148,6 +148,7 @@ export default function OccupiedRoomModal({
         setData: setPaymentData,
         post: postPayment,
         processing: processingPayment,
+        errors: paymentErrors,
         reset: resetPayment,
     } = useForm({
         amount: '',
@@ -639,6 +640,18 @@ export default function OccupiedRoomModal({
                                                         <X className="h-3 w-3" />
                                                     </button>
                                                 </div>
+
+                                                {(paymentErrors as any)
+                                                    .error && (
+                                                    <div className="mb-2 flex items-center gap-1.5 rounded bg-red-50 p-1.5 text-[11px] font-bold text-red-600">
+                                                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                                        {
+                                                            (
+                                                                paymentErrors as any
+                                                            ).error
+                                                        }
+                                                    </div>
+                                                )}
 
                                                 <div className="relative mb-3">
                                                     <div className="flex flex-col gap-2">

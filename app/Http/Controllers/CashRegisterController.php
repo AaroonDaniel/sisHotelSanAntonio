@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\CashRegister;
+use App\Models\Expense;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -94,8 +95,8 @@ class CashRegisterController extends Controller
         }
 
         $payments = Payment::query()
-            ->where('cash_register_id', $cashRegister->id)
-            ->with('checkin.room')
+            ->where('payments.cash_register_id', $cashRegister->id)
+            ->with(['checkin.room', 'operador'])
             ->join('checkins', 'checkins.id', '=', 'payments.checkin_id')
             ->orderBy('payments.payment_date', 'desc')
             ->select('payments.*')
@@ -110,6 +111,7 @@ class CashRegisterController extends Controller
                     'payment_date'   => optional($p->payment_date)->format('d/m/Y H:i'),
                     'room_number'    => optional(optional($p->checkin)->room)->number ?? '-',
                     'guest_name'     => optional(optional($p->checkin)->guest)->full_name ?? '-',
+                    'operator_name'  => optional($p->operador)->full_name ?? optional($p->operador)->nickname ?? '-',
                 ];
             });
         $checkinIdsDelTurno = Payment::query()
@@ -178,15 +180,36 @@ class CashRegisterController extends Controller
             ->whereRaw("UPPER(method) = ?", ['EFECTIVO'])
             ->sum('amount');
 
-        $expectedCash = (float) $cashRegister->opening_amount + (float) $cashMovements;
+        // 4. Gastos del turno (se pagan en efectivo de la misma caja, por
+        // eso se restan del efectivo esperado).
+        $expenses = Expense::query()
+            ->where('cash_register_id', $cashRegister->id)
+            ->with('operador')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function ($e) {
+                return [
+                    'id'            => $e->id,
+                    'description'   => $e->description,
+                    'amount'        => (float) $e->amount,
+                    'created_at'    => optional($e->created_at)->format('d/m/Y H:i'),
+                    'operator_name' => optional($e->operador)->full_name ?? optional($e->operador)->nickname ?? '-',
+                ];
+            });
+
+        $totalExpenses = (float) $expenses->sum('amount');
+
+        $expectedCash = (float) $cashRegister->opening_amount + (float) $cashMovements - $totalExpenses;
 
         return Inertia::render('cash-registers/show', [
-            'CashRegister' => $cashRegister->load('user'), // 👈 FALTA: trae name, email, shift del recepcionista
-            'Payments'     => $payments,
-            'Services'     => $services->values(),
-            'TotalIncome'  => (float) $totalIncome,
-            'ByMethod'     => $byMethod,
-            'ExpectedCash' => $expectedCash,
+            'CashRegister'  => $cashRegister->load('user'),
+            'Payments'      => $payments,
+            'Services'      => $services->values(),
+            'Expenses'      => $expenses->values(),
+            'TotalIncome'   => (float) $totalIncome,
+            'TotalExpenses' => $totalExpenses,
+            'ByMethod'      => $byMethod,
+            'ExpectedCash'  => $expectedCash,
         ]);
     }
 }

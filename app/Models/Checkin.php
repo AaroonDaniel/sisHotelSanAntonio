@@ -36,6 +36,7 @@ class Checkin extends Model
         'special_agreement_id',
         'agreed_price',
         'price_effective_since',
+        'cash_register_id',
     ];
 
     protected $uppercaseFields = [
@@ -87,6 +88,12 @@ class Checkin extends Model
     public function checkoutOperator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'checkout_operator_id');
+    }
+
+    // La caja/turno que estaba abierta cuando se creó esta asignación
+    public function cashRegister(): BelongsTo
+    {
+        return $this->belongsTo(CashRegister::class);
     }
 
     // --- RELACIONES (HasMany) ---

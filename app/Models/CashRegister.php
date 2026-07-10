@@ -35,7 +35,20 @@ class CashRegister extends Model
     {
         return $this->hasMany(Expense::class);
     }
-    
+
+    // Relación: Esta caja tiene muchos Pagos/Adelantos registrados
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    // Relación: Esta caja tiene muchas Asignaciones (check-ins) creadas durante su turno
+    public function checkins()
+    {
+        return $this->hasMany(Checkin::class);
+    }
+
+
     public function getActivitylogOptions(): LogOptions 
     {
         return LogOptions::defaults()

@@ -43,6 +43,7 @@ class DataAuditController extends Controller
     {
         return Inertia::render('audit/index', [
             'CashRegisters' => $this->getCashRegistersForAudit(),
+            'ClosedCashRegisters' => $this->getClosedCashRegistersForAudit(),
             'Checkins' => $this->getCheckinsForAudit(),
             'Payments' => $this->getPaymentsForAudit(),
             'Expenses' => $this->getExpensesForAudit(),
@@ -84,6 +85,33 @@ class DataAuditController extends Controller
                     'user_name' => $cr->user->full_name ?? $cr->user->nickname ?? 'N/D',
                     'opening_amount' => (float) $cr->opening_amount,
                     'status' => $cr->status,
+                    'opened_at' => optional($cr->opened_at)->toIso8601String(),
+                    'closed_at' => optional($cr->closed_at)->toIso8601String(),
+                ];
+            });
+    }
+
+    /**
+     * Historial de turnos CERRADOS: identificados por ID de turno y
+     * operador (no por fecha), con un resumen rápido de ingresos/gastos
+     * para que el administrador pueda ver/reimprimir el cierre de
+     * cualquier turno pasado desde `cash-registers/show`.
+     */
+    private function getClosedCashRegistersForAudit()
+    {
+        return CashRegister::with('user')
+            ->withSum('payments as total_income', 'amount')
+            ->withSum('expenses as total_expenses', 'amount')
+            ->where('status', 'CERRADA')
+            ->orderByDesc('closed_at')
+            ->get()
+            ->map(function (CashRegister $cr) {
+                return [
+                    'id' => $cr->id,
+                    'user_name' => $cr->user->full_name ?? $cr->user->nickname ?? 'N/D',
+                    'opening_amount' => (float) $cr->opening_amount,
+                    'total_income' => (float) ($cr->total_income ?? 0),
+                    'total_expenses' => (float) ($cr->total_expenses ?? 0),
                     'opened_at' => optional($cr->opened_at)->toIso8601String(),
                     'closed_at' => optional($cr->closed_at)->toIso8601String(),
                 ];
