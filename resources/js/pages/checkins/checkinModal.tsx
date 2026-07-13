@@ -171,6 +171,11 @@ export interface CheckinData {
     check_in_date: string;
     duration_days: number;
     advance_payment: number;
+    // Adelanto ORIGINAL (solo el primer Payment, sin sumar pagos
+    // posteriores ni devoluciones). Es lo que debe mostrarse/editarse en
+    // este formulario — 'advance_payment' es el neto de TODOS los
+    // movimientos y no sirve para esto (ver Checkin::getInitialAdvancePaymentAttribute).
+    initial_advance_payment?: number;
     agreed_price: number;
     notes?: string;
     services?: string[];
@@ -693,7 +698,15 @@ export default function CheckinModal({
                         ? String(checkinToEdit.schedule_id)
                         : '',
                     origin: checkinToEdit.origin || '',
-                    advance_payment: checkinToEdit.advance_payment,
+                    // Solo el adelanto INICIAL (primer pago), no el neto de
+                    // todos los movimientos: si se guarda el formulario tal
+                    // cual, esto es lo que update() reescribe en ese pago
+                    // inicial — usar el neto acumulado aquí inflaría ese
+                    // pago con el monto de adelantos posteriores ya
+                    // registrados por separado.
+                    advance_payment:
+                        checkinToEdit.initial_advance_payment ??
+                        checkinToEdit.advance_payment,
                     notes: checkinToEdit.notes || '',
                     actual_arrival_date:
                         checkinToEdit.actual_arrival_date || '',
@@ -781,7 +794,9 @@ export default function CheckinModal({
                             ? checkinToEdit.payments[0].method
                             : checkinToEdit.payment_method || 'EFECTIVO') ===
                         'EFECTIVO'
-                            ? checkinToEdit.advance_payment || ''
+                            ? (checkinToEdit.initial_advance_payment ??
+                                  checkinToEdit.advance_payment) ||
+                              ''
                             : '',
 
                     monto_qr:
@@ -790,7 +805,9 @@ export default function CheckinModal({
                             ? checkinToEdit.payments[0].method
                             : checkinToEdit.payment_method || 'EFECTIVO') !==
                         'EFECTIVO'
-                            ? checkinToEdit.advance_payment || ''
+                            ? (checkinToEdit.initial_advance_payment ??
+                                  checkinToEdit.advance_payment) ||
+                              ''
                             : '',
                 }));
 

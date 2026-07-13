@@ -13,7 +13,7 @@ use Spatie\Activitylog\LogOptions;
 class Checkin extends Model
 {
     use AutoUpperCase, LogsActivity;
-    protected $appends = ['advance_payment'];
+    protected $appends = ['advance_payment', 'initial_advance_payment'];
 
     protected $fillable = [
         'room_id',
@@ -173,6 +173,22 @@ class Checkin extends Model
     public function getAdvancePaymentAttribute()
     {
         return (float) ($this->payments()->sum('amount') ?? 0);
+    }
+
+    /**
+     * El adelanto ORIGINAL dado al iniciar la estadía (el primer Payment
+     * registrado), sin sumar pagos posteriores ni devoluciones. A
+     * diferencia de advance_payment (el NETO de todos los movimientos),
+     * este es el valor que corresponde mostrar/editar en el formulario de
+     * "Editar Asignación" — mismo criterio que usa
+     * CheckinController::update() para localizar "el pago inicial" a
+     * modificar (Payment::orderBy('id')->first()). Consulta propia (no
+     * depende del orden de una relación ya cargada) para ser siempre
+     * correcta sin importar cómo se haya hecho eager load de 'payments'.
+     */
+    public function getInitialAdvancePaymentAttribute()
+    {
+        return (float) ($this->payments()->orderBy('id')->value('amount') ?? 0);
     }
 
     public function transfers()
