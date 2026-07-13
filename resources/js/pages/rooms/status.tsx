@@ -12,6 +12,7 @@ import {
     AlertTriangle,
     ArrowLeft,
     ArrowRightCircle,
+    Ban,
     Banknote,
     BedDouble,
     Brush,
@@ -2134,7 +2135,11 @@ function CheckoutConfirmationModal({
         setIsDropdownOpen(false);
     };
 
-    // Logica de tolerancia (getExitToleranceStatus)
+    // Lógica de tolerancia (getExitToleranceStatus)
+    // Ventana: desde la hora oficial de salida hasta las 23:59 del MISMO
+    // día. Al pasar la medianoche, "ahora" ya es el día siguiente, así que
+    // vuelve a quedar antes de la hora oficial de ESE día -> inhabilitado,
+    // hasta que se vuelva a alcanzar la hora de salida.
     const getExitToleranceStatus = () => {
         if (!checkin)
             return { isValid: false, message: 'No data', limitTime: '' };
@@ -2152,16 +2157,9 @@ function CheckoutConfirmationModal({
         const [hours, minutes] = schedule.check_out_time.split(':').map(Number);
         const exitDeadline = new Date();
         exitDeadline.setHours(hours, minutes, 0, 0);
-        const toleranceLimit = new Date(
-            exitDeadline.getTime() + schedule.exit_tolerance_minutes * 60000,
-        );
         return {
-            isValid: now <= toleranceLimit,
-            limitTime: toleranceLimit.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                hourCycle: 'h23',
-            }),
+            isValid: now >= exitDeadline,
+            limitTime: '23:59',
             officialTime: schedule.check_out_time.substring(0, 5),
         };
     };
@@ -2794,45 +2792,55 @@ function CheckoutConfirmationModal({
 
                                             {/* --- COLUMNA DERECHA: ACCIONES --- */}
                                             <div>
-                                                {exitToleranceStatus.isValid &&
-                                                    displayData &&
+                                                {displayData &&
                                                     displayData.duration_days >
                                                         1 && (
                                                         <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
                                                             <button
                                                                 type="button"
-                                                                // Solo ejecuta la función si no se ha aplicado la tolerancia
+                                                                // Solo ejecuta la función si está dentro de la ventana y no se aplicó todavía
                                                                 onClick={
+                                                                    exitToleranceStatus.isValid &&
                                                                     !waivePenalty
                                                                         ? handleApplyTolerance
                                                                         : undefined
                                                                 }
-                                                                // Deshabilitamos el botón nativamente en HTML
+                                                                // Deshabilitado nativamente: ya aplicada O fuera de la ventana [salida, 23:59]
                                                                 disabled={
-                                                                    waivePenalty
+                                                                    waivePenalty ||
+                                                                    !exitToleranceStatus.isValid
                                                                 }
                                                                 className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase shadow-sm transition-all active:scale-95 ${
                                                                     waivePenalty
                                                                         ? // Clases cuando YA SE APLICÓ (Desactivado/Gris)
                                                                           'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-500 opacity-70'
-                                                                        : // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
-                                                                          'animate-pulse cursor-pointer border-green-500 bg-emerald-100 text-green-700 hover:bg-emerald-200'
+                                                                        : exitToleranceStatus.isValid
+                                                                          ? // Clases cuando está ACTIVO (Verde, pulsante, clickeable)
+                                                                            'animate-pulse cursor-pointer border-green-500 bg-emerald-100 text-green-700 hover:bg-emerald-200'
+                                                                          : // Clases cuando está FUERA de la ventana (Inhabilitado hasta la próxima hora de salida)
+                                                                            'cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400 opacity-60'
                                                                 }`}
                                                                 title={
                                                                     waivePenalty
                                                                         ? 'La tolerancia ya ha sido aplicada.'
-                                                                        : `Clic para perdonar penalización (Válido hasta ${exitToleranceStatus.limitTime})`
+                                                                        : exitToleranceStatus.isValid
+                                                                          ? `Clic para perdonar penalización (Válido hasta las ${exitToleranceStatus.limitTime})`
+                                                                          : `No disponible. Se vuelve a habilitar a partir de las ${exitToleranceStatus.officialTime}.`
                                                                 }
                                                             >
                                                                 {waivePenalty ? (
                                                                     <CheckCircle2 className="h-3.5 w-3.5" />
-                                                                ) : (
+                                                                ) : exitToleranceStatus.isValid ? (
                                                                     <ArrowRightCircle className="h-3.5 w-3.5" />
+                                                                ) : (
+                                                                    <Ban className="h-3.5 w-3.5" />
                                                                 )}
                                                                 <span>
                                                                     {waivePenalty
                                                                         ? 'Tolerancia Aplicada'
-                                                                        : 'Aplicar Tolerancia'}
+                                                                        : exitToleranceStatus.isValid
+                                                                          ? 'Aplicar Tolerancia'
+                                                                          : 'Tolerancia No Disponible'}
                                                                 </span>
                                                             </button>
                                                         </div>

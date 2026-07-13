@@ -1356,19 +1356,26 @@ class CheckinController extends Controller
         $waivePenalty = $request->boolean('waive_penalty', false);
         $checkOutDate = now();
 
+        // 🛡️ Candado real: el frontend deshabilita el botón "Aplicar
+        // Tolerancia" fuera de la ventana [check_out_time, +exit_tolerance_minutes],
+        // pero eso es solo cosmético — un request directo a la API podía
+        // mandar waive_penalty=true sin importar cuántas horas de retraso
+        // hubiera, y calculateBillableDays() lo perdonaba igual (CASO A no
+        // valida ninguna ventana). Si el intento de perdón no es legítimo
+        // según la hora real del servidor, se ignora silenciosamente.
+        if ($waivePenalty && !$this->isWithinExitTolerance($checkin, $checkOutDate)) {
+            Log::warning('Intento de aplicar tolerancia de salida fuera de la ventana permitida.', [
+                'checkin_id' => $checkin->id,
+                'user_id' => Auth::id(),
+            ]);
+            $waivePenalty = false;
+        }
+
         $isLate = false;
         if (!$waivePenalty && $checkin->schedule) {
             $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
             if ($checkOutDate->greaterThan($horaOficial)) {
                 $isLate = true;
-            }
-        }
-
-        if ($waivePenalty && $checkin->schedule) {
-            $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
-            $horaLimite = $horaOficial->copy()->addMinutes($checkin->schedule->exit_tolerance_minutes);
-            if ($checkOutDate->greaterThan($horaLimite)) {
-                $checkOutDate = $horaLimite;
             }
         }
 
@@ -1593,7 +1600,21 @@ class CheckinController extends Controller
                     ? Carbon::parse($request->input('check_out_date'))
                     : now();
                 $waivePenalty = $request->boolean('waive_penalty', false);
-                $finalDays    = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+
+                // 🛡️ Misma validación server-side que getCheckoutDetails():
+                // no confiar en el waive_penalty del cliente sin verificar,
+                // contra la hora REAL del servidor (no contra $checkOutDate,
+                // que el cliente controla), que el perdón sigue siendo
+                // legítimo al momento de confirmar el checkout.
+                if ($waivePenalty && !$this->isWithinExitTolerance($checkin, now())) {
+                    Log::warning('Intento de confirmar checkout con tolerancia fuera de la ventana permitida.', [
+                        'checkin_id' => $checkin->id,
+                        'user_id' => Auth::id(),
+                    ]);
+                    $waivePenalty = false;
+                }
+
+                $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
 
                 // --- Precio acordado (con o sin rebaja manual) ---
                 $agreedPrice = $checkin->agreed_price;
@@ -2883,6 +2904,27 @@ class CheckinController extends Controller
                 'total_pagado' => $totalPagado
             ]
         ]);
+    }
+
+    /**
+     * Único punto de verdad para decidir si un "perdón" de penalidad por
+     * salida tardía (waive_penalty) es legítimo. Ventana: desde la hora
+     * oficial de salida hasta las 23:59:59 del MISMO día calendario — ya
+     * no depende de exit_tolerance_minutes. Como $momento nunca puede
+     * "pasarse" del día que le corresponde (a las 00:00 ya es otro día,
+     * con su propia hora oficial recalculada), basta comparar contra la
+     * hora oficial de ESE día: el límite superior (23:59) queda implícito.
+     * Sin horario asignado no hay ventana que validar.
+     */
+    private function isWithinExitTolerance(Checkin $checkin, Carbon $momento): bool
+    {
+        if (!$checkin->schedule) {
+            return false;
+        }
+
+        $horaOficial = $momento->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
+
+        return $momento->greaterThanOrEqualTo($horaOficial);
     }
 
     // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---

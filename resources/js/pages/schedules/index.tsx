@@ -1,4 +1,5 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
+import { formatMinutesToHM } from '@/lib/utils';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft, // Ícono para "Aplicar"
@@ -55,18 +56,20 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
 
     // Al cargar la página, verificamos si hay un horario "Aplicado" (Guardado en LocalStorage)
     useEffect(() => {
-    // Guardamos solo el ID como string plano, no un objeto JSON.
-    const storedScheduleId = localStorage.getItem('hotel_active_schedule_id');
-    if (storedScheduleId) {
-        const id = Number(storedScheduleId);
-        if (Number.isInteger(id) && id > 0) {
-            setAppliedScheduleId(id);
-        } else {
-            // Valor corrupto: lo limpiamos
-            localStorage.removeItem('hotel_active_schedule_id');
+        // Guardamos solo el ID como string plano, no un objeto JSON.
+        const storedScheduleId = localStorage.getItem(
+            'hotel_active_schedule_id',
+        );
+        if (storedScheduleId) {
+            const id = Number(storedScheduleId);
+            if (Number.isInteger(id) && id > 0) {
+                setAppliedScheduleId(id);
+            } else {
+                // Valor corrupto: lo limpiamos
+                localStorage.removeItem('hotel_active_schedule_id');
+            }
         }
-    }
-}, []);
+    }, []);
 
     // --- 2. LÓGICA DE FILTRADO ---
     const filteredSchedules = Schedules.filter((schedule) =>
@@ -266,22 +269,26 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
                                                     {/* Tolerancias */}
                                                     <td className="px-6 py-4 text-center">
                                                         <div className="flex items-center justify-center gap-2">
-                                                            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10 ring-inset">
+                                                            <span
+                                                                title="Tolerancia de entrada"
+                                                                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10 ring-inset"
+                                                            >
                                                                 -
-                                                                {
-                                                                    schedule.entry_tolerance_minutes
-                                                                }
-                                                                m
+                                                                {formatMinutesToHM(
+                                                                    schedule.entry_tolerance_minutes,
+                                                                )}
                                                             </span>
                                                             <span className="text-gray-300">
                                                                 /
                                                             </span>
-                                                            <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-orange-700/10 ring-inset">
+                                                            <span
+                                                                title="Tolerancia de salida"
+                                                                className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-orange-700/10 ring-inset"
+                                                            >
                                                                 +
-                                                                {
-                                                                    schedule.exit_tolerance_minutes
-                                                                }
-                                                                m
+                                                                {formatMinutesToHM(
+                                                                    schedule.exit_tolerance_minutes,
+                                                                )}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -384,4 +391,3 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
         </AuthenticatedLayout>
     );
 }
-

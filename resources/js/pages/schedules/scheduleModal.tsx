@@ -1,3 +1,4 @@
+import { formatMinutesToHM } from '@/lib/utils';
 import { useForm } from '@inertiajs/react';
 import { ArrowRightLeft, Clock, Hourglass, Save, Type, X } from 'lucide-react';
 import { FormEventHandler, useEffect } from 'react';
@@ -190,7 +191,7 @@ export default function ScheduleModal({
                         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3">
                             <h3 className="mb-3 flex items-center gap-2 text-xs font-bold tracking-wider text-gray-600 uppercase">
                                 <Hourglass className="h-3 w-3" />
-                                Configuración de Tolerancias (Min)
+                                Configuración de Tolerancias (minutos)
                             </h3>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -213,8 +214,12 @@ export default function ScheduleModal({
                                             className="w-full rounded-lg border border-gray-400 px-3 py-1.5 text-sm text-black focus:border-gray-600 focus:ring-0"
                                         />
                                     </div>
-                                    <p className="mt-1 text-[10px] text-gray-500">
-                                        Ej: 60 min antes
+                                    <p className="mt-1 text-[10px] font-semibold text-blue-600">
+                                        ≈{' '}
+                                        {formatMinutesToHM(
+                                            data.entry_tolerance_minutes,
+                                        )}{' '}
+                                        antes de la hora oficial
                                     </p>
                                 </div>
 
@@ -237,8 +242,12 @@ export default function ScheduleModal({
                                             className="w-full rounded-lg border border-gray-400 px-3 py-1.5 text-sm text-black focus:border-gray-600 focus:ring-0"
                                         />
                                     </div>
-                                    <p className="mt-1 text-[10px] text-gray-500">
-                                        Ej: 60 min gracia
+                                    <p className="mt-1 text-[10px] font-semibold text-orange-600">
+                                        ≈{' '}
+                                        {formatMinutesToHM(
+                                            data.exit_tolerance_minutes,
+                                        )}{' '}
+                                        de gracia tras la hora oficial
                                     </p>
                                 </div>
                             </div>
