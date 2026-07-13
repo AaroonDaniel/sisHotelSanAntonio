@@ -1702,7 +1702,6 @@ export default function CheckinModal({
                             </button>
                         </div>
                     </div>
-
                     {/* ===================================================== */}
                     {/* 🚀 ZONA DE TOASTS FLOTANTES (MÁS ABAJO Y LADO A LADO) */}
                     {/* ===================================================== */}

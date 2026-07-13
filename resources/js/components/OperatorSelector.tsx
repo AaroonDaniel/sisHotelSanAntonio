@@ -119,15 +119,12 @@ export default function OperatorSelector({
                 aria-label={label}
             >
                 {operators.map((op) => {
+                    // El estado "sin seleccionar" (ya sea porque todavía no
+                    // hay elección o porque el elegido es otro operador) se
+                    // muestra siempre en escala de grises y atenuado, para
+                    // que el operador activo sea el único punto de color y
+                    // resalte sin ambigüedad.
                     const isSelected = String(value ?? '') === String(op.id);
-                    // Una vez que HAY una selección, el resto de los
-                    // operadores se apagan a gris (en vez de mantener su
-                    // color propio) para que el elegido resalte sin
-                    // ambigüedad.
-                    const hasSelection =
-                        value !== null &&
-                        value !== undefined &&
-                        String(value) !== '';
                     return (
                         <button
                             key={op.id}
@@ -138,23 +135,19 @@ export default function OperatorSelector({
                             className="flex shrink-0 flex-col items-center gap-1 transition-all active:scale-95"
                         >
                             <span
-                                className={`flex shrink-0 items-center justify-center rounded-full font-bold text-white ${avatarSize} ${
+                                className={`flex shrink-0 items-center justify-center rounded-full font-bold text-white transition-all duration-200 ease-in-out ${avatarSize} ${
                                     isSelected
-                                        ? `${getAvatarColor(op)} scale-110 shadow-lg ring-2 ring-gray-800 ring-offset-2 ring-offset-white`
-                                        : hasSelection
-                                          ? 'bg-gray-300 opacity-70 grayscale'
-                                          : `${getAvatarColor(op)} opacity-60 hover:scale-105 hover:opacity-100`
+                                        ? `${getAvatarColor(op)} scale-110 opacity-100 shadow-lg ring-2 ring-gray-800 ring-offset-2 ring-offset-white grayscale-0`
+                                        : `${getAvatarColor(op)} opacity-60 grayscale hover:scale-105 hover:opacity-90 hover:grayscale-0`
                                 }`}
                             >
                                 {getInitials(op)}
                             </span>
                             <span
-                                className={`truncate leading-none font-semibold ${nameSize} ${
+                                className={`truncate leading-none font-semibold transition-colors duration-200 ease-in-out ${nameSize} ${
                                     isSelected
                                         ? 'text-gray-900'
-                                        : hasSelection
-                                          ? 'text-gray-400'
-                                          : 'text-gray-500'
+                                        : 'text-gray-400'
                                 }`}
                             >
                                 {op.nickname}
@@ -196,19 +189,19 @@ export default function OperatorSelector({
                             }`}
                         >
                             <span
-                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${getAvatarColor(op)} ${
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white transition-all duration-200 ease-in-out ${getAvatarColor(op)} ${
                                     isSelected
-                                        ? 'shadow ring-2 ring-white ring-offset-2 ring-offset-emerald-50'
-                                        : ''
+                                        ? 'scale-110 opacity-100 shadow ring-2 ring-white ring-offset-2 ring-offset-emerald-50 grayscale-0'
+                                        : 'opacity-60 grayscale hover:opacity-90 hover:grayscale-0'
                                 }`}
                             >
                                 {getInitials(op)}
                             </span>
                             <span
-                                className={`max-w-full truncate text-[11px] font-semibold ${
+                                className={`max-w-full truncate text-[11px] font-semibold transition-colors duration-200 ease-in-out ${
                                     isSelected
                                         ? 'text-emerald-700'
-                                        : 'text-gray-600'
+                                        : 'text-gray-400'
                                 }`}
                             >
                                 {getShortName(op)}
