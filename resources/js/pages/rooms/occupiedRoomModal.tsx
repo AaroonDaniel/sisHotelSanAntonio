@@ -1,3 +1,4 @@
+import ChangePriceModal from '@/components/ChangePriceModal';
 import OperatorSelector, {
     Operator as SharedOperator,
 } from '@/components/OperatorSelector';
@@ -14,6 +15,7 @@ import {
     CheckCircle2,
     ChevronDown,
     Clock,
+    Pencil,
     ShieldOff,
     Undo2,
     Utensils,
@@ -123,6 +125,7 @@ export default function OccupiedRoomModal({
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
+    const [showChangePriceModal, setShowChangePriceModal] = useState(false);
     const [paymentOperatorError, setPaymentOperatorError] = useState<
         string | null
     >(null);
@@ -213,11 +216,18 @@ export default function OccupiedRoomModal({
 
     // En occupiedRoomModal.tsx
     const calculateRealNights = () => {
-        // Usamos check_in_date porque es la fecha de inicio de cobro que tú manejas/modificas
-        if (!liveCheckin.check_in_date) return 1;
+        // Ancla: si hubo un traslado o un cambio de tarifa a mitad de
+        // estadía, price_effective_since marca desde cuándo cuenta la
+        // tarifa ACTUAL — las noches anteriores a eso ya quedaron
+        // congeladas en carried_balance (oldDebt) a su tarifa vieja.
+        // Contar todas las noches desde check_in_date aquí las duplicaría.
+        // Mismo criterio que CheckinController::calculateBillableDays().
+        const anchorDate =
+            liveCheckin.price_effective_since || liveCheckin.check_in_date;
+        if (!anchorDate) return 1;
 
         // 1. Convertimos la fecha de inicio de cobro a objeto Date
-        const checkInDate = new Date(liveCheckin.check_in_date);
+        const checkInDate = new Date(anchorDate);
         const now = new Date();
 
         // 2. Obtenemos la hora de salida del horario (Schedule) para el corte
@@ -529,15 +539,34 @@ export default function OccupiedRoomModal({
                                         {oldDebt > 0 && (
                                             <div className="flex justify-between rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
                                                 <span className="font-bold">
-                                                    DEUDA ANTERIOR
-                                                    (TRANSFERENCIA):
+                                                    SALDO ANTERIOR (ARRASTRADO):
                                                 </span>
                                                 <span className="font-bold">
                                                     {formatCurrency(oldDebt)}
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="flex justify-between text-xs text-gray-500">
+                                        <div className="flex items-center justify-between text-xs text-gray-500">
+                                            <span>Tarifa por Noche:</span>
+                                            <span className="flex items-center gap-1.5 font-bold text-gray-700">
+                                                {formatCurrency(pricePerNight)}
+                                                {!isSpecialGroup && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setShowChangePriceModal(
+                                                                true,
+                                                            )
+                                                        }
+                                                        title="Cambiar tarifa a partir de hoy"
+                                                        className="text-gray-400 transition hover:text-emerald-600"
+                                                    >
+                                                        <Pencil className="h-3 w-3" />
+                                                    </button>
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs text-gray-500">
                                             <span>
                                                 Hospedaje Actual ({days}{' '}
                                                 noches):
@@ -1287,6 +1316,21 @@ export default function OccupiedRoomModal({
                 }}
                 checkins={liveCheckin ? [liveCheckin] : []}
                 services={services}
+            />
+
+            {/* MODAL DE CAMBIO DE TARIFA A MITAD DE ESTADÍA */}
+            <ChangePriceModal
+                show={showChangePriceModal}
+                onClose={() => setShowChangePriceModal(false)}
+                checkinId={liveCheckin.id}
+                currentPrice={pricePerNight}
+                anchorDate={
+                    liveCheckin.price_effective_since ||
+                    liveCheckin.check_in_date
+                }
+                existingCarriedBalance={oldDebt}
+                servicesCost={servicesCost}
+                operators={operators}
             />
         </>
     );

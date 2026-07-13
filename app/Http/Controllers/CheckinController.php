@@ -21,6 +21,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB; // Importante para guardar Huésped y Checkin juntos
 use App\Models\SpecialAgreement;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 use App\Models\SignificantEvent;
@@ -1899,6 +1900,92 @@ class CheckinController extends Controller
         });
 
         return redirect()->back()->with('success', 'Estadía restaurada. La habitación vuelve a estar OCUPADA.');
+    }
+
+    /**
+     * Cambio de Tarifa a mitad de estadía. Reutiliza EXACTAMENTE el mismo
+     * mecanismo de "ancla de precio" que ya usan transfer()/merge():
+     * congela las noches ya transcurridas (a la tarifa vieja) dentro de
+     * carried_balance, y mueve price_effective_since a la fecha de
+     * vigencia — desde ahí, calculateBillableDays() solo cuenta noches
+     * nuevas a la tarifa nueva. No toca payments/expenses, así que los
+     * reportes financieros (que se basan en esas tablas) no se ven
+     * afectados.
+     */
+    public function changePrice(Request $request, Checkin $checkin)
+    {
+        $validated = $request->validate([
+            'new_price' => 'required|numeric|min:0',
+            'effective_date' => 'nullable|date',
+            'operator_id' => 'required|exists:users,id',
+        ]);
+
+        if ($checkin->status !== 'activo') {
+            return redirect()->back()->with('error', 'Solo se puede cambiar la tarifa de una estadía activa.');
+        }
+
+        $precioViejo = (float) ($checkin->agreed_price ?? 0);
+        $precioNuevo = (float) $validated['new_price'];
+
+        if (abs($precioNuevo - $precioViejo) < 0.01) {
+            return redirect()->back()->with('error', 'El nuevo precio es igual al actual.');
+        }
+
+        $vigenciaDesde = !empty($validated['effective_date'])
+            ? Carbon::parse($validated['effective_date'])
+            : now();
+
+        // No tiene sentido retroceder antes del ancla actual (ya
+        // facturada/congelada) ni adelantarse al futuro.
+        $anclaActual = Carbon::parse($checkin->price_effective_since ?? $checkin->check_in_date);
+        if ($vigenciaDesde->lessThan($anclaActual) || $vigenciaDesde->greaterThan(now())) {
+            return redirect()->back()->with('error', 'La fecha de vigencia debe estar entre el inicio de la tarifa actual y hoy.');
+        }
+
+        $operator = User::findOrFail($validated['operator_id']);
+
+        return DB::transaction(function () use ($checkin, $operator, $vigenciaDesde, $precioViejo, $precioNuevo) {
+            // waivePenalty=true: solo queremos el conteo de noches limpio
+            // (calendario), sin la penalidad de salida tardía —
+            // irrelevante para congelar tarifa a mitad de estadía.
+            $diasCongelados = $this->calculateBillableDays($checkin, $vigenciaDesde, true);
+            $deudaCongelada = $diasCongelados * $precioViejo;
+
+            $noteAddition = " | CAMBIO DE TARIFA: {$diasCongelados} noche(s) a {$precioViejo} Bs "
+                . '(= ' . number_format($deudaCongelada, 2) . ' Bs arrastrados). '
+                . "Nueva tarifa: {$precioNuevo} Bs/noche desde " . $vigenciaDesde->format('d/m/Y H:i')
+                . " (autorizado por {$operator->full_name}).";
+
+            if ($deudaCongelada > 0) {
+                $checkin->increment('carried_balance', $deudaCongelada);
+            }
+
+            $checkin->update([
+                'agreed_price' => $precioNuevo,
+                'price_effective_since' => $vigenciaDesde,
+                'notes' => $checkin->notes . $noteAddition,
+            ]);
+
+            // Log explícito con el OPERADOR REAL como causante (Terminal
+            // Compartida: Auth::id() siempre es la cuenta 'recepcion', el
+            // log automático de LogsActivity lo atribuiría mal).
+            activity('checkins')
+                ->causedBy($operator)
+                ->performedOn($checkin)
+                ->withProperties([
+                    'precio_anterior' => $precioViejo,
+                    'precio_nuevo' => $precioNuevo,
+                    'noches_congeladas' => $diasCongelados,
+                    'deuda_congelada' => $deudaCongelada,
+                    'vigente_desde' => $vigenciaDesde->toIso8601String(),
+                ])
+                ->log('Cambio de tarifa a mitad de estadía');
+
+            return redirect()->back()->with(
+                'success',
+                "Tarifa actualizada a {$precioNuevo} Bs/noche. {$diasCongelados} noche(s) anteriores quedaron a {$precioViejo} Bs."
+            );
+        });
     }
 
     /**
