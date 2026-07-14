@@ -2063,7 +2063,7 @@ export default function CheckinModal({
                                         ref={issuedInDropdownRef}
                                     >
                                         <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Expedido
+                                            Otorgado
                                         </label>
                                         {esExtranjero(
                                             currentPerson.nationality,

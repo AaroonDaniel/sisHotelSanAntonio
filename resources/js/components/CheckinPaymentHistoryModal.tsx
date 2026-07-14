@@ -165,8 +165,10 @@ export default function CheckinPaymentHistoryModal({
                                                         Math.abs(p.amount),
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 font-bold text-gray-700 uppercase">
-                                                    {p.operator_name}
+                                                <td className="px-4 py-3">
+                                                    <span className="text-sm font-black tracking-wide text-gray-800 uppercase">
+                                                        {p.operator_name}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         );

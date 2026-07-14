@@ -194,6 +194,8 @@ class CheckinController extends Controller
             'agreed_price' => 'nullable|numeric|min:0',
         ], [
             'payment_method.required_if' => 'Si registra un adelanto, debe elegir un método de pago.',
+            'checkin_operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'checkin_operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         // =========================================================
@@ -1463,6 +1465,9 @@ class CheckinController extends Controller
             'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
             'operator_id' => 'required|exists:users,id',
+        ], [
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         // Apertura silenciosa: si operator_id (el avatar elegido en el
@@ -1510,6 +1515,8 @@ class CheckinController extends Controller
             'amount.gt'       => 'El monto a devolver debe ser mayor a cero.',
             'method.in'       => 'El método de devolución seleccionado no es válido.',
             'notes.required'  => 'Debe indicar el motivo de la devolución.',
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         $userId = Auth::id();
@@ -1571,6 +1578,18 @@ class CheckinController extends Controller
      */
     function checkout(Request $request, Checkin $checkin)
     {
+        // 🛡️ Sin operador seleccionado no hay a quién atribuir el cobro
+        // (Terminal Compartida). Antes este método no validaba nada — un
+        // checkout sin saldo pendiente podía completarse con
+        // checkout_operator_id NULL, dejando la estadía sin auditoría de
+        // quién hizo la salida.
+        $request->validate([
+            'checkout_operator_id' => 'required|exists:users,id',
+        ], [
+            'checkout_operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'checkout_operator_id.exists' => 'Debe seleccionar un operador para continuar.',
+        ]);
+
         // 1. Cargamos las relaciones necesarias para los cálculos
         $checkin->load(['room.price', 'checkinDetails.service', 'payments', 'guest', 'companions']);
 
@@ -1918,6 +1937,9 @@ class CheckinController extends Controller
             'new_price' => 'required|numeric|min:0',
             'effective_date' => 'nullable|date',
             'operator_id' => 'required|exists:users,id',
+        ], [
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         if ($checkin->status !== 'activo') {
@@ -3323,6 +3345,9 @@ class CheckinController extends Controller
             'nit_factura' => 'nullable|string',
             'metodo_pago' => 'required|string',
             'checkout_operator_id' => 'required|exists:users,id',
+        ], [
+            'checkout_operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'checkout_operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         return DB::transaction(function () use ($request) {

@@ -3879,8 +3879,8 @@ function FinancialHistoryModal({
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 uppercase">
-                                                    <UserIcon className="mr-1 h-3 w-3 text-gray-400" />
+                                                <span className="inline-flex items-center gap-1.5 text-sm font-black tracking-wide text-gray-800 uppercase">
+                                                    <UserIcon className="h-4 w-4 text-indigo-500" />
                                                     {resolvePaymentOperatorName(
                                                         p,
                                                     )}

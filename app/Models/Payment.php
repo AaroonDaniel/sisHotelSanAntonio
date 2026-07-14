@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class Payment extends Model
 {
@@ -76,5 +77,20 @@ class Payment extends Model
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('pagos');
+    }
+
+    /**
+     * Redirige el causer del log automático al OPERADOR real (operator_id,
+     * el avatar elegido), no a Auth::user() (bajo Terminal Compartida,
+     * siempre la cuenta genérica 'recepcion'). Sin esto, toda la bitácora
+     * de auditoría de pagos le atribuiría el dinero a 'recepcion' en vez
+     * de a quien realmente lo cobró.
+     */
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        $operatorId = $this->operator_id ?? $this->user_id;
+        if ($operatorId && ($operator = User::find($operatorId))) {
+            $activity->causer()->associate($operator);
+        }
     }
 }

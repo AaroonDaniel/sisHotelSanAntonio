@@ -71,6 +71,9 @@ class ExpenseController extends Controller
             'description' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.1',
             'operator_id' => 'required|exists:users,id',
+        ], [
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         // Apertura silenciosa: si el operador no tiene turno abierto, se le

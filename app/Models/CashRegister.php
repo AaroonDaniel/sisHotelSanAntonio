@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class CashRegister extends Model
 {
@@ -54,12 +55,24 @@ class CashRegister extends Model
     }
 
 
-    public function getActivitylogOptions(): LogOptions 
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('cash_register');
+    }
+
+    /**
+     * Redirige el causer del log automático al OPERADOR dueño del turno
+     * (user_id — bajo Terminal Compartida ya se guarda como el operador
+     * real, nunca la cuenta genérica 'recepcion'), no a Auth::user().
+     */
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        if ($this->user_id && ($operator = User::find($this->user_id))) {
+            $activity->causer()->associate($operator);
+        }
     }
 }

@@ -9,6 +9,7 @@ use App\Traits\AutoUpperCase;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class Checkin extends Model
 {
@@ -203,6 +204,22 @@ class Checkin extends Model
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('checkins');
+    }
+
+    /**
+     * Redirige el causer del log automático al OPERADOR real, no a
+     * Auth::user() (siempre 'recepcion' bajo Terminal Compartida).
+     * Prioridad: checkout_operator_id (si ya se hizo checkout) >
+     * checkin_operator_id (quién hizo la asignación) — el más reciente en
+     * el ciclo de vida de la estadía es el más relevante para el evento
+     * que se está logueando.
+     */
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        $operatorId = $this->checkout_operator_id ?? $this->checkin_operator_id;
+        if ($operatorId && ($operator = User::find($operatorId))) {
+            $activity->causer()->associate($operator);
+        }
     }
 
 

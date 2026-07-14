@@ -29,6 +29,9 @@ class CashRegisterController extends Controller
         $request->validate([
             'operator_id' => 'required|exists:users,id',
             'opening_amount' => 'required|numeric|min:0',
+        ], [
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         $operatorId = (int) $request->operator_id;
@@ -75,6 +78,9 @@ class CashRegisterController extends Controller
             // ser 0). El siguiente operador hereda este valor como su
             // apertura automática (ver RequiresOpenShift::autoOpenShift()).
             'left_amount' => 'required|numeric|min:0',
+        ], [
+            'operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'operator_id.exists' => 'Debe seleccionar un operador para continuar.',
         ]);
 
         $operatorId = (int) $validated['operator_id'];
