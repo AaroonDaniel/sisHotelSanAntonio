@@ -26,9 +26,12 @@ class PaymentHistoryController extends Controller
                     'date' => optional($p->payment_date ?? $p->created_at)->toIso8601String(),
                     'room_number' => $this->resolveRoomNumber($p),
                     'type' => $p->type ?? 'PAGO',
-                    'method' => $p->method
-                        ? strtoupper($p->method) . ($p->bank_name ? " ({$p->bank_name})" : '')
-                        : 'N/D',
+                    // Crudos (no concatenados): el frontend arma la
+                    // representación visual (badge verde EFECTIVO, logo del
+                    // banco para QR) a partir de estos dos campos por
+                    // separado.
+                    'payment_method' => $p->method ? strtoupper($p->method) : 'N/D',
+                    'bank_name' => $p->bank_name ? strtoupper($p->bank_name) : null,
                     'amount' => (float) $p->amount,
                     // Terminal Compartida: quién recibió el pago de verdad es
                     // operator_id (el avatar elegido), no user_id (siempre la

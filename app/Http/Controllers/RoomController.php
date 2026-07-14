@@ -189,6 +189,14 @@ class RoomController
                         'payments' => function ($query) {
                             $query->orderBy('created_at', 'asc');
                         },
+                        // Terminal Compartida: quién cobró de verdad es
+                        // operador_id (el avatar elegido), no user_id
+                        // (siempre la cuenta genérica 'recepcion'). 'user'
+                        // queda como fallback para pagos viejos anteriores
+                        // a ese campo. Alimenta la columna "Operador" del
+                        // Historial Financiero (FinancialHistoryModal).
+                        'payments.operador:id,full_name,nickname',
+                        'payments.user:id,full_name,nickname',
                         'room.price',
                         'room.roomType',
                         'specialAgreement', // 🚀 LUGAR 1: Agregar esto (Alimenta las tarjetas visuales)
@@ -235,7 +243,9 @@ class RoomController
             'checkinOperator:id,full_name,nickname', // Quién hizo la asignación (para "asignado por:")
             'payments' => function ($query) {
                 $query->orderBy('created_at', 'asc');
-            }
+            },
+            'payments.operador:id,full_name,nickname',
+            'payments.user:id,full_name,nickname',
         ])
             ->where('status', 'activo')
             ->get();

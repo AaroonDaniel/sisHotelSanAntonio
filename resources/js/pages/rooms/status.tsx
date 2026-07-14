@@ -3743,6 +3743,16 @@ function FinancialHistoryModal({
         return new Date(dateString.replace(' ', 'T'));
     };
 
+    // Terminal Compartida: quién cobró de verdad es 'operador' (el avatar
+    // elegido), no 'user' (siempre la cuenta genérica 'recepcion'). 'user'
+    // solo se usa como respaldo en pagos viejos anteriores a ese campo.
+    const resolvePaymentOperatorName = (p: any) =>
+        p.operador?.full_name ||
+        p.operador?.nickname ||
+        p.user?.full_name ||
+        p.user?.nickname ||
+        'Sistema';
+
     const room = checkin.room;
 
     // Total realmente pagado. Las devoluciones YA se guardan con monto
@@ -3810,6 +3820,9 @@ function FinancialHistoryModal({
                                         <th className="px-4 py-3 text-right text-xs font-bold tracking-wider text-gray-600 uppercase">
                                             Monto
                                         </th>
+                                        <th className="px-4 py-3 text-xs font-bold tracking-wider text-gray-600 uppercase">
+                                            Operador
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -3864,6 +3877,14 @@ function FinancialHistoryModal({
                                                 {parseFloat(p.amount).toFixed(
                                                     2,
                                                 )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 uppercase">
+                                                    <UserIcon className="mr-1 h-3 w-3 text-gray-400" />
+                                                    {resolvePaymentOperatorName(
+                                                        p,
+                                                    )}
+                                                </span>
                                             </td>
                                         </tr>
                                     ))}

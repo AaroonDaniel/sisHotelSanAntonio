@@ -4,8 +4,11 @@ import {
     ArrowDownRight,
     ArrowLeft,
     ArrowUpRight,
+    Banknote,
+    CreditCard,
     Receipt,
     Search,
+    UserRound,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -14,9 +17,68 @@ export interface Payment {
     date: string; // ISO 8601, ya resuelto en el backend (payment_date o created_at)
     room_number: string; // Número de habitación, o "N/A"
     type: string; // PAGO | ADELANTO | DEVOLUCION
-    method: string; // Ej. "EFECTIVO" o "QR (BNB)"
+    payment_method: string; // EFECTIVO | QR | TARJETA | TRANSFERENCIA | N/D
+    bank_name: string | null; // YAPE | BNB | FIE | ECO (solo si payment_method === 'QR')
     amount: number;
     operator_name: string;
+}
+
+// Logos disponibles en public/images/bancos/. Si el banco no tiene logo
+// (o bank_name viene null/otro valor), se muestra solo el texto — el
+// onError del <img> también cubre el caso de un archivo faltante.
+const BANK_LOGOS: Record<string, string> = {
+    YAPE: '/images/bancos/yape.png',
+    BNB: '/images/bancos/bnb.png',
+    FIE: '/images/bancos/fie.png',
+    ECO: '/images/bancos/eco.png',
+};
+
+function PaymentMethodBadge({
+    method,
+    bankName,
+}: {
+    method: string;
+    bankName: string | null;
+}) {
+    const upperMethod = method?.toUpperCase();
+
+    if (upperMethod === 'EFECTIVO') {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-700">
+                <Banknote className="h-3.5 w-3.5" />
+                Efectivo
+            </span>
+        );
+    }
+
+    if (upperMethod === 'QR') {
+        const logo = bankName ? BANK_LOGOS[bankName] : undefined;
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                {logo && (
+                    <img
+                        src={logo}
+                        alt={bankName ?? 'QR'}
+                        className="h-5 w-auto object-contain"
+                        onError={(e) => {
+                            (
+                                e.currentTarget as HTMLImageElement
+                            ).style.display = 'none';
+                        }}
+                    />
+                )}
+                QR{bankName ? ` - ${bankName}` : ''}
+            </span>
+        );
+    }
+
+    // TARJETA / TRANSFERENCIA / N/D — método distinto a efectivo/QR.
+    return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-600">
+            <CreditCard className="h-3.5 w-3.5" />
+            {upperMethod || 'N/D'}
+        </span>
+    );
 }
 
 interface Props {
@@ -66,7 +128,8 @@ export default function PaymentHistory({ auth, payments }: Props) {
         const term = searchTerm.toLowerCase();
 
         return (
-            payment.method?.toLowerCase().includes(term) ||
+            payment.payment_method?.toLowerCase().includes(term) ||
+            payment.bank_name?.toLowerCase().includes(term) ||
             payment.type?.toLowerCase().includes(term) ||
             payment.room_number?.toLowerCase().includes(term) ||
             payment.operator_name?.toLowerCase().includes(term) ||
@@ -179,12 +242,14 @@ export default function PaymentHistory({ auth, payments }: Props) {
                                                                 {payment.type?.toUpperCase() ||
                                                                     'PAGO'}
                                                             </span>
-                                                            <span className="mx-1 text-gray-400">
-                                                                -
-                                                            </span>
-                                                            <span className="whitespace-nowrap text-gray-600">
-                                                                {payment.method}
-                                                            </span>
+                                                            <PaymentMethodBadge
+                                                                method={
+                                                                    payment.payment_method
+                                                                }
+                                                                bankName={
+                                                                    payment.bank_name
+                                                                }
+                                                            />
                                                         </div>
                                                     </td>
                                                     <td
@@ -198,7 +263,8 @@ export default function PaymentHistory({ auth, payments }: Props) {
                                                         )}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 uppercase">
+                                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 uppercase">
+                                                            <UserRound className="h-3.5 w-3.5 text-gray-400" />
                                                             {
                                                                 payment.operator_name
                                                             }

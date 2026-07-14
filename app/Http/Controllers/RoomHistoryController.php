@@ -36,11 +36,22 @@ class RoomHistoryController extends Controller
     if ($roomId) {
         $selectedRoom = Room::with('roomType')->find($roomId);
 
-        $checkins = Checkin::with(['guest', 'payments', 'checkinDetails.service', 'checkinOperator', 'checkoutOperator'])
+        $checkins = Checkin::with([
+                'guest',
+                // Terminal Compartida: quién cobró de verdad es
+                // operador_id (el avatar elegido), no user_id (siempre la
+                // cuenta genérica 'recepcion'). Se carga 'user' como
+                // fallback para filas viejas anteriores a ese campo.
+                'payments.operador:id,full_name,nickname',
+                'payments.user:id,full_name,nickname',
+                'checkinDetails.service',
+                'checkinOperator',
+                'checkoutOperator',
+            ])
             ->where('room_id', $roomId)
             ->orderByDesc('check_in_date')
             ->get()
-            ->map(function (Checkin $checkin) {
+            ->map(function (Checkin $checkin) use ($selectedRoom) {
                 // Total realmente cobrado: las devoluciones ya se guardan
                 // en negativo, así que un sum() simple refleja el neto.
                 $totalCobrado = (float) $checkin->payments->sum('amount');
@@ -49,9 +60,28 @@ class RoomHistoryController extends Controller
                     fn ($detail) => $detail->quantity * ($detail->selling_price ?? $detail->service->price ?? 0)
                 );
 
+                // Historial de pagos de ESTA estadía puntual, para el
+                // modal de "Historial Financiero de la Estadía".
+                $payments = $checkin->payments
+                    ->sortByDesc(fn ($p) => $p->payment_date ?? $p->created_at)
+                    ->values()
+                    ->map(fn ($p) => [
+                        'id' => $p->id,
+                        'payment_date' => optional($p->payment_date ?? $p->created_at)->toIso8601String(),
+                        'method' => $p->method,
+                        'bank_name' => $p->bank_name,
+                        'amount' => (float) $p->amount,
+                        'operator_name' => optional($p->operador)->full_name
+                            ?? optional($p->operador)->nickname
+                            ?? optional($p->user)->full_name
+                            ?? optional($p->user)->nickname
+                            ?? 'Sistema',
+                    ]);
+
                 return [
                     'id' => $checkin->id,
                     'guest_name' => $checkin->guest->full_name ?? 'Sin huésped',
+                    'room_number' => $selectedRoom->number,
                     'check_in_date' => optional($checkin->check_in_date)->toIso8601String(),
                     'check_out_date' => optional($checkin->check_out_date)->toIso8601String(),
                     'duration_days' => (int) $checkin->duration_days,
@@ -61,6 +91,7 @@ class RoomHistoryController extends Controller
                     'status' => $checkin->status,
                     'checkin_operator_name' => optional($checkin->checkinOperator)->full_name,
                     'checkout_operator_name' => optional($checkin->checkoutOperator)->full_name,
+                    'payments' => $payments,
                 ];
             });
     }

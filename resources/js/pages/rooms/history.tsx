@@ -1,3 +1,6 @@
+import CheckinPaymentHistoryModal, {
+    CheckinPaymentDetail,
+} from '@/components/CheckinPaymentHistoryModal';
 import RestoreCheckinModal from '@/components/RestoreCheckinModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
@@ -6,6 +9,7 @@ import {
     BedDouble,
     Calendar,
     History,
+    ReceiptText,
     Undo2,
     Users,
 } from 'lucide-react';
@@ -20,6 +24,7 @@ interface RoomOption {
 interface CheckinHistoryRow {
     id: number;
     guest_name: string;
+    room_number: string;
     check_in_date: string | null;
     check_out_date: string | null;
     duration_days: number;
@@ -29,6 +34,7 @@ interface CheckinHistoryRow {
     status: string;
     checkin_operator_name: string | null;
     checkout_operator_name: string | null;
+    payments: CheckinPaymentDetail[];
 }
 
 interface Props {
@@ -70,6 +76,8 @@ export default function RoomHistoryIndex({
     Checkins,
 }: Props) {
     const [restoreTarget, setRestoreTarget] =
+        useState<CheckinHistoryRow | null>(null);
+    const [paymentHistoryTarget, setPaymentHistoryTarget] =
         useState<CheckinHistoryRow | null>(null);
 
     const handleRoomChange = (roomId: string) => {
@@ -287,22 +295,37 @@ export default function RoomHistoryIndex({
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    {c.status ===
-                                                        'finalizado' && (
+                                                    <div className="flex justify-end gap-2">
                                                         <button
                                                             type="button"
                                                             onClick={() =>
-                                                                setRestoreTarget(
+                                                                setPaymentHistoryTarget(
                                                                     c,
                                                                 )
                                                             }
-                                                            title="Restaurar Asignación (Undo Checkout)"
-                                                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+                                                            title="Ver Historial de Pagos"
+                                                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
                                                         >
-                                                            <Undo2 className="h-3.5 w-3.5" />
-                                                            Restaurar
+                                                            <ReceiptText className="h-3.5 w-3.5" />
+                                                            Pagos
                                                         </button>
-                                                    )}
+                                                        {c.status ===
+                                                            'finalizado' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setRestoreTarget(
+                                                                        c,
+                                                                    )
+                                                                }
+                                                                title="Restaurar Asignación (Undo Checkout)"
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+                                                            >
+                                                                <Undo2 className="h-3.5 w-3.5" />
+                                                                Restaurar
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -319,6 +342,14 @@ export default function RoomHistoryIndex({
                 checkinId={restoreTarget?.id ?? null}
                 guestName={restoreTarget?.guest_name ?? null}
                 onClose={() => setRestoreTarget(null)}
+            />
+
+            <CheckinPaymentHistoryModal
+                show={!!paymentHistoryTarget}
+                onClose={() => setPaymentHistoryTarget(null)}
+                guestName={paymentHistoryTarget?.guest_name ?? null}
+                roomNumber={paymentHistoryTarget?.room_number ?? null}
+                payments={paymentHistoryTarget?.payments ?? []}
             />
         </AuthenticatedLayout>
     );
