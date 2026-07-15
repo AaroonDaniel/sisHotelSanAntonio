@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
 import CancelAssignmentModal from './cancelAssignmentModal';
+import UnderageWarningModal from './underageWarningModal';
 // --- DICCIONARIOS Y FUNCIONES ---
 const civilStatusOptions = [
     { value: 'SINGLE', label: 'SOLTERO(A)' },
@@ -350,6 +351,10 @@ export default function CheckinModal({
     //
 
     const [showCancelModal, setShowCancelModal] = useState(false);
+    // Advertencia de titular menor de edad: ya no bloquea de forma
+    // absoluta, permite continuar bajo confirmación explícita del
+    // recepcionista (ver candado en `submit`).
+    const [showUnderageWarning, setShowUnderageWarning] = useState(false);
     const [currentTime, setCurrentTime] = useState(Date.now());
 
     // Parpadeo del selector flotante de operador cuando se intenta asignar
@@ -1414,21 +1419,35 @@ export default function CheckinModal({
         // =========================================================
 
         // =========================================================
-        // 🛑 CANDADO: EL TITULAR DEBE SER MAYOR DE EDAD (18+)
-        // Un menor no puede ser el responsable de la asignación.
-        // (Los acompañantes sí pueden ser menores, junto a un adulto.)
+        // ⚠️ ADVERTENCIA: TITULAR MENOR DE EDAD
+        // Ya no bloquea de forma absoluta — el recepcionista puede
+        // confirmar y continuar (ej. delegaciones donde el titular
+        // registrado es un menor bajo tutela ya presente físicamente).
+        // No se pierden los datos ya escritos: solo se abre el modal de
+        // advertencia y se detiene el envío hasta que el usuario decida.
         // =========================================================
         if (data.birth_date) {
             const edadTitular = Number(calculateAge(data.birth_date));
             if (!isNaN(edadTitular) && edadTitular < 18) {
-                setGuestConflictError(
-                    'El titular debe ser mayor de edad (18 años o más). Un menor no puede ser el responsable de la habitación. Registre al adulto como titular y al menor como acompañante.',
-                );
-                return; // 🛑 No deja procesar la asignación.
+                setShowUnderageWarning(true);
+                return; // 🛑 Espera confirmación explícita antes de continuar.
             }
         }
 
         console.log('-> ✅ CANDADOS SUPERADOS. Ejecutando executeSubmit()...');
+        executeSubmit();
+    };
+
+    // El recepcionista corrige la fecha: solo cierra el aviso, no toca
+    // ningún otro dato del formulario.
+    const handleUnderageCancel = () => {
+        setShowUnderageWarning(false);
+    };
+
+    // El recepcionista confirma a sabiendas: cierra el aviso y envía el
+    // formulario directo, sin volver a pasar por el candado de edad.
+    const handleUnderageConfirm = () => {
+        setShowUnderageWarning(false);
         executeSubmit();
     };
 
@@ -3994,6 +4013,12 @@ export default function CheckinModal({
                 onClose={() => setShowCancelModal(false)}
                 onConfirm={() => onClose(false)}
                 checkinId={checkinToEdit?.id || null}
+            />
+
+            <UnderageWarningModal
+                show={showUnderageWarning}
+                onCancel={handleUnderageCancel}
+                onConfirm={handleUnderageConfirm}
             />
         </div>
     );
