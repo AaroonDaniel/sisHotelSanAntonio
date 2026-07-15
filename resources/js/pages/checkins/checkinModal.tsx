@@ -1548,8 +1548,42 @@ export default function CheckinModal({
     // (Ya no necesitas 'filteredOrigins' porque el filtro lo hace la BD)
 
     // Visuales
+    // 🚀 DÍA OPERATIVO (Business Date): una entrada de madrugada (antes de
+    // la hora de corte del horario elegido en el formulario, ej. 06:00)
+    // todavía pertenece a la noche del día calendario anterior — igual
+    // que resolveBusinessDate() en el backend (CheckinController). Evita
+    // que el preview le prometa al recepcionista una fecha de salida un
+    // día más tarde de la real.
+    const getBusinessDate = (date: Date, cutoffHour: number): Date => {
+        const businessDate = new Date(date);
+        businessDate.setHours(0, 0, 0, 0);
+        if (date.getHours() < cutoffHour) {
+            businessDate.setDate(businessDate.getDate() - 1);
+        }
+        return businessDate;
+    };
+
+    // ⚓ ANCLA: el horario PROPIO de este checkin (data.schedule_id) tiene
+    // prioridad — así el preview no cambia de golpe solo porque alguien
+    // active otro horario en el panel mientras se está llenando este
+    // formulario. Cae al horario activo, y luego a 06:00, si todavía no
+    // hay ninguno seleccionado (checkin nuevo sin horario elegido aún).
+    const scheduleForCutoff =
+        (schedules || []).find(
+            (s) => String(s.id) === String(data.schedule_id),
+        ) ??
+        (schedules || []).find(
+            (s) => s.is_active === true || s.is_active === 1,
+        );
+    const cutoffHour = scheduleForCutoff?.check_in_time
+        ? Number(scheduleForCutoff.check_in_time.split(':')[0])
+        : 6;
+
     const durationVal = Number(data.duration_days) || 0;
-    const estimatedCheckout = new Date(data.check_in_date);
+    const estimatedCheckout = getBusinessDate(
+        new Date(data.check_in_date),
+        cutoffHour,
+    );
     estimatedCheckout.setDate(estimatedCheckout.getDate() + durationVal);
     const checkoutString =
         durationVal > 0

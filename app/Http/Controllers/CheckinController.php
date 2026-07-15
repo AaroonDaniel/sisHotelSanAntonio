@@ -3105,6 +3105,36 @@ class CheckinController extends Controller
     }
 
     /**
+     * Resuelve el "Día Operativo" (Business Date) del hotel al que
+     * pertenece un instante. La hora oficial de entrada (ej. 06:00) marca
+     * el arranque del día hotelero: cualquier momento ANTES de esa hora
+     * todavía pertenece a la noche del día calendario anterior, no al
+     * arranque de un día nuevo — así una llegada de madrugada (ej. 02:00)
+     * no se cuenta como si fuera una entrada nueva a las 15:00, evitando
+     * regalar casi un día completo de habitación.
+     *
+     * ⚓ ANCLA: usa el Schedule PROPIO del checkin ($schedule, típicamente
+     * $checkin->schedule) — el que quedó fijado al momento de su ingreso
+     * — para que una estadía en curso no cambie de "día operativo" a
+     * mitad de camino solo porque alguien active/desactive otro horario
+     * en el panel (ScheduleController::toggleStatus() no tiene candado
+     * por huéspedes activos). Solo cae al horario ACTIVO global, y luego
+     * a 06:00, cuando el checkin no tiene ninguno propio asignado.
+     */
+    private function resolveBusinessDate(Carbon $momento, ?Schedule $schedule = null): Carbon
+    {
+        $horaCorte = $schedule?->check_in_time
+            ?? Schedule::where('is_active', true)->value('check_in_time')
+            ?? '06:00:00';
+
+        $corte = $momento->copy()->setTimeFromTimeString($horaCorte);
+
+        return $momento->lt($corte)
+            ? $momento->copy()->subDay()->startOfDay()
+            : $momento->copy()->startOfDay();
+    }
+
+    /**
      * Late Checkout escalonado: 0% hasta la hora oficial de salida, 50%
      * de agreed_price hasta 6 horas después (13:00→19:00 del ejemplo de
      * negocio), 100% pasado eso (incluye días calendario posteriores).
@@ -3140,18 +3170,21 @@ class CheckinController extends Controller
             }
         }
 
-        if ($checkOutMoment->copy()->startOfDay()->lt($ingreso->copy()->startOfDay())) {
+        if ($this->resolveBusinessDate($checkOutMoment, $checkin->schedule)->lt($this->resolveBusinessDate($ingreso, $checkin->schedule))) {
             return ['tier' => 'none', 'fee' => 0.0, 'label' => null];
         }
 
-        $diasBase = max(1, $ingreso->copy()->startOfDay()->diffInDays($checkOutMoment->copy()->startOfDay()));
+        // 🚀 DÍA OPERATIVO: mismo ancla que calculateBillableDays(), para
+        // que el recargo por salida tardía y las noches cobradas nunca se
+        // desincronicen en una entrada de madrugada.
+        $diasBase = max(1, $this->resolveBusinessDate($ingreso, $checkin->schedule)->diffInDays($this->resolveBusinessDate($checkOutMoment, $checkin->schedule)));
 
         // Momento en que "debería" haber salido: la hora oficial de
         // salida, en el día en que se cumplen las $diasBase noches ya
         // facturables. Cubre "días posteriores" automáticamente: si la
         // salida real cae después, ya excede las 6h del tramo de 50% y
         // cae directo en el tramo de 100%, sin casos especiales.
-        $horaLimiteEsperada = $ingreso->copy()->startOfDay()
+        $horaLimiteEsperada = $this->resolveBusinessDate($ingreso, $checkin->schedule)
             ->addDays($diasBase)
             ->setTimeFromTimeString($checkin->schedule->check_out_time);
 
@@ -3200,7 +3233,7 @@ class CheckinController extends Controller
 
         // 🛡️ BLINDAJE: la salida nunca puede ser anterior al ingreso (p. ej.
         // fechas mal cargadas en pruebas). Evita noches/montos negativos: mínimo 1.
-        if ($fechaSalidaReal->copy()->startOfDay()->lt($ingreso->copy()->startOfDay())) {
+        if ($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule)->lt($this->resolveBusinessDate($ingreso, $checkin->schedule))) {
             return 1;
         }
 
@@ -3208,13 +3241,17 @@ class CheckinController extends Controller
         // 🚀 CASO A: SI SE PRESIONÓ EL BOTÓN DE TOLERANCIA
         // =========================================================
         if ($waivePenalty) {
-            $diasCalendario = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
+            $diasCalendario = $this->resolveBusinessDate($ingreso, $checkin->schedule)->diffInDays($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule));
             // Retorna los días limpios, perdonando la noche extra
             return $diasCalendario == 0 ? 1 : $diasCalendario;
         }
 
-        // --- LÓGICA DE DÍAS CALENDARIO BASE ---
-        $diasBase = $ingreso->copy()->startOfDay()->diffInDays($fechaSalidaReal->copy()->startOfDay());
+        // --- LÓGICA DE DÍA OPERATIVO (Business Date, NO calendario ciego) ---
+        // Una entrada de madrugada (ej. 02:00, antes de la hora de corte
+        // del horario propio de este checkin) pertenece a la noche del
+        // día anterior — de lo contrario se regalan casi 24h de
+        // habitación (ver resolveBusinessDate()).
+        $diasBase = $this->resolveBusinessDate($ingreso, $checkin->schedule)->diffInDays($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule));
 
         if ($diasBase == 0) {
             return 1;
