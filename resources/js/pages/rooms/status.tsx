@@ -17,6 +17,7 @@ import {
     BedDouble,
     Brush,
     CheckCircle2,
+    Clock,
     Construction,
     FileEdit,
     FileText,
@@ -2016,11 +2017,19 @@ function CheckoutConfirmationModal({
             alert('Ingrese un monto valido');
             return;
         }
+        // El descuento se resta del SUBTOTAL (hospedaje + recargo por
+        // salida tardía), nunca puede superarlo.
+        if (val > subtotal) {
+            alert(
+                `El descuento no puede superar el subtotal (${subtotal.toFixed(2)} Bs, incluye el recargo por salida tardía si corresponde).`,
+            );
+            return;
+        }
         if (displayData) {
-            const limiteAdvertencia = displayData.accommodation_total * 0.3;
-            if (val < limiteAdvertencia) {
+            const limiteAdvertencia = subtotal * 0.3;
+            if (val > limiteAdvertencia) {
                 const confirmar = window.confirm(
-                    `Atención: El monto es de (${val} Bs).\n\n¿Estás seguro de que quiere aplicar el descuento?`,
+                    `Atención: el descuento es de ${val} Bs sobre un subtotal de ${subtotal.toFixed(2)} Bs.\n\n¿Estás seguro de que quiere aplicar el descuento?`,
                 );
                 if (!confirmar) return;
             }
@@ -2066,6 +2075,12 @@ function CheckoutConfirmationModal({
         guest: any;
         total_pagado?: number;
         is_late?: boolean; // <-- Añadido por si usas la lógica del backend para ocultar botón
+        // Late Checkout escalonado: 'none' | 'half' | 'full'. El monto ya
+        // viene incluido en grand_total/balance, pero se expone aparte
+        // para el banner y el candado de "Finalizar".
+        late_checkout_tier?: 'none' | 'half' | 'full';
+        late_checkout_fee?: number;
+        late_checkout_label?: string | null;
     } | null>(null);
 
     // =========================================================================
@@ -2076,24 +2091,33 @@ function CheckoutConfirmationModal({
     // 1. Creamos una variable 100% segura para los días
     const diasEstadia = Math.max(1, displayData?.duration_days || 1);
 
-    const hospedajeFinal = Math.max(
+    // =========================================================================
+    // 🚀 CADENA LINEAL DE CÁLCULO (cada paso depende SOLO del anterior)
+    // precioBase y penalidadLateCheckout son verdad del servidor (nunca se
+    // mutan); el descuento se aplica al final, sobre el subtotal completo,
+    // para que jamás pueda "esconder" o duplicar el recargo por salida
+    // tardía.
+    // =========================================================================
+    const precioBase = displayData?.accommodation_total || 0;
+    const penalidadLateCheckout = displayData?.late_checkout_fee || 0;
+
+    const subtotal = precioBase + penalidadLateCheckout;
+
+    const montoDescuento = Math.max(
         0,
-        rebajaConfirmada !== null
-            ? rebajaConfirmada
-            : displayData?.accommodation_total || 0,
+        Math.min(rebajaConfirmada ?? 0, subtotal),
     );
 
-    // 2. Usamos la variable segura (sin signos de exclamación)
-    const precioUnitarioFinal =
-        diasEstadia > 0 ? hospedajeFinal / diasEstadia : 0;
+    const totalFinal = Math.max(0, subtotal - montoDescuento);
+
+    // Precio unitario "de lista", solo para mostrar el detalle de hospedaje
+    // (nunca incluye recargo ni descuento).
+    const precioUnitarioFinal = diasEstadia > 0 ? precioBase / diasEstadia : 0;
 
     const consumoFinal = displayData?.services_total || 0;
     const adelantoFinal = (displayData as any)?.total_pagado || 0;
 
-    const saldoPagar = Math.max(
-        0,
-        hospedajeFinal + consumoFinal - adelantoFinal,
-    );
+    const saldoPagar = Math.max(0, totalFinal + consumoFinal - adelantoFinal);
 
     const totalIngresado =
         (parseFloat(montoEfectivo) || 0) + (parseFloat(montoQR) || 0);
@@ -2293,14 +2317,11 @@ function CheckoutConfirmationModal({
             return;
         }
 
-        if (rebaja && parseFloat(rebaja) > 0) {
-            const limiteAdvertencia = displayData.accommodation_total * 0.3;
-            if (parseFloat(rebaja) < limiteAdvertencia) {
-                const confirmar = window.confirm(
-                    `ATENCIÓN: ¿Esta seguro del monto de descuento?(${rebaja} Bs) Total es  ${displayData.accommodation_total.toFixed(2)} Bs).\n\n`,
-                );
-                if (!confirmar) return;
-            }
+        if (montoDescuento > subtotal) {
+            alert(
+                `El descuento (${montoDescuento.toFixed(2)} Bs) no puede superar el subtotal (${subtotal.toFixed(2)} Bs).`,
+            );
+            return;
         }
         setProcessing(true);
 
@@ -2327,7 +2348,10 @@ function CheckoutConfirmationModal({
                           : null,
                 monto_efectivo: parseFloat(montoEfectivo) || 0,
                 monto_qr: parseFloat(montoQR) || 0,
-                discount: rebajaConfirmada !== null ? rebajaConfirmada : null,
+                // Monto plano restado del subtotal (hospedaje + recargo por
+                // salida tardía) — el backend lo recalcula todo desde cero,
+                // nunca confía en un total armado en el cliente.
+                discount_amount: montoDescuento > 0 ? montoDescuento : null,
                 checkout_operator_id: checkoutOperatorId,
             });
 
@@ -2554,7 +2578,7 @@ function CheckoutConfirmationModal({
                                                             </p>
                                                             <p className="text-base font-black text-gray-800">
                                                                 {(
-                                                                    hospedajeFinal +
+                                                                    totalFinal +
                                                                     consumoFinal
                                                                 ).toFixed(
                                                                     2,
@@ -2663,24 +2687,31 @@ function CheckoutConfirmationModal({
                                                             </span>
                                                         </div>
                                                         <div className="text-right">
-                                                            {rebajaConfirmada !==
-                                                            null ? (
-                                                                <span className="font-bold text-green-600">
-                                                                    {hospedajeFinal.toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs
-                                                                    (Rebajado)
-                                                                </span>
-                                                            ) : (
-                                                                <span>
-                                                                    {hospedajeFinal.toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs
-                                                                </span>
-                                                            )}
+                                                            <span>
+                                                                {precioBase.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
                                                         </div>
+                                                        {penalidadLateCheckout >
+                                                            0 && (
+                                                            <>
+                                                                <div>
+                                                                    <span className="font-bold text-amber-600">
+                                                                        Recargo
+                                                                        Salida
+                                                                        Tardía:
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-right font-bold text-amber-600">
+                                                                    {penalidadLateCheckout.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </div>
+                                                            </>
+                                                        )}
                                                         {displayData.services_total >
                                                             0 && (
                                                             <>
@@ -2691,6 +2722,23 @@ function CheckoutConfirmationModal({
                                                                 </div>
                                                                 <div className="text-right">
                                                                     {displayData.services_total.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        {montoDescuento >
+                                                            0 && (
+                                                            <>
+                                                                <div>
+                                                                    <span className="font-bold text-green-600">
+                                                                        Descuento:
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-right font-bold text-green-600">
+                                                                    -
+                                                                    {montoDescuento.toFixed(
                                                                         2,
                                                                     )}{' '}
                                                                     Bs
@@ -2792,9 +2840,36 @@ function CheckoutConfirmationModal({
 
                                             {/* --- COLUMNA DERECHA: ACCIONES --- */}
                                             <div>
+                                                {/* 🚨 BANNER DE LATE CHECKOUT */}
                                                 {displayData &&
-                                                    displayData.duration_days >
-                                                        1 && (
+                                                    (displayData.late_checkout_fee ||
+                                                        0) > 0 &&
+                                                    !waivePenalty && (
+                                                        <div className="mb-3 flex items-start gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-amber-800 shadow-sm">
+                                                            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                                                            <p className="text-xs leading-relaxed font-semibold">
+                                                                Atención:
+                                                                Excedió el
+                                                                horario de
+                                                                salida. Existe
+                                                                un recargo
+                                                                automático de
+                                                                Bs.{' '}
+                                                                {displayData.late_checkout_fee?.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                por{' '}
+                                                                {
+                                                                    displayData.late_checkout_label
+                                                                }
+                                                                .
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                {displayData &&
+                                                    (displayData.late_checkout_fee ||
+                                                        0) > 0 && (
                                                         <div className="mt-4 flex animate-in justify-center duration-300 fade-in zoom-in">
                                                             <button
                                                                 type="button"
@@ -2881,13 +2956,29 @@ function CheckoutConfirmationModal({
                                                             </button>
 
                                                             <label className="mb-1 block text-[11px] font-bold tracking-wider text-red-600 uppercase">
-                                                                Nuevo Total de
-                                                                Hospedaje (Bs)
+                                                                Monto de
+                                                                Descuento (Bs)
+                                                                {penalidadLateCheckout >
+                                                                    0 && (
+                                                                    <span className="ml-1 font-normal normal-case text-red-400">
+                                                                        (sobre
+                                                                        subtotal{' '}
+                                                                        {subtotal.toFixed(
+                                                                            2,
+                                                                        )}{' '}
+                                                                        Bs,
+                                                                        incluye
+                                                                        recargo)
+                                                                    </span>
+                                                                )}
                                                             </label>
                                                             <div className="mt-2 flex items-center gap-2">
                                                                 <input
                                                                     type="number"
                                                                     min="0"
+                                                                    max={
+                                                                        subtotal
+                                                                    }
                                                                     value={
                                                                         rebaja
                                                                     }
@@ -3508,12 +3599,36 @@ function CheckoutConfirmationModal({
                                                                         )}
                                                                     </div>
                                                                     <div className="pt-0.5 text-right text-xs font-bold text-gray-800">
-                                                                        {hospedajeFinal.toFixed(
+                                                                        {precioBase.toFixed(
                                                                             2,
                                                                         )}
                                                                     </div>
                                                                     <div></div>
                                                                 </div>
+
+                                                                {/* RECARGO SALIDA TARDÍA */}
+                                                                {penalidadLateCheckout >
+                                                                    0 && (
+                                                                    <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 bg-amber-50/50 px-2 py-1.5">
+                                                                        <div className="pl-4 text-[12px] font-bold text-amber-700">
+                                                                            Recargo
+                                                                            Salida
+                                                                            Tardía
+                                                                        </div>
+                                                                        <div className="text-center text-gray-400">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-gray-400">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-xs font-bold text-amber-700">
+                                                                            {penalidadLateCheckout.toFixed(
+                                                                                2,
+                                                                            )}
+                                                                        </div>
+                                                                        <div></div>
+                                                                    </div>
+                                                                )}
 
                                                                 {/* 3. CONSUMO */}
                                                                 <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-gray-50 px-2 py-1.5">
@@ -3604,6 +3719,29 @@ function CheckoutConfirmationModal({
                                                                     </div>
                                                                     <div></div>
                                                                 </div>
+
+                                                                {/* DESCUENTO */}
+                                                                {montoDescuento >
+                                                                    0 && (
+                                                                    <div className="grid grid-cols-[1fr_60px_100px_100px_24px] items-center border-b border-dashed border-gray-100 bg-green-50/50 px-2 py-1.5 font-bold text-green-600">
+                                                                        <div className="pl-4 text-[12px]">
+                                                                            Descuento
+                                                                        </div>
+                                                                        <div className="text-center text-green-300">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-green-300">
+                                                                            -
+                                                                        </div>
+                                                                        <div className="text-right text-xs">
+                                                                            -
+                                                                            {montoDescuento.toFixed(
+                                                                                2,
+                                                                            )}
+                                                                        </div>
+                                                                        <div></div>
+                                                                    </div>
+                                                                )}
 
                                                                 {/* 5. ADELANTOS */}
                                                                 {(

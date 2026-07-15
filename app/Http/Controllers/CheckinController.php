@@ -1374,14 +1374,6 @@ class CheckinController extends Controller
             $waivePenalty = false;
         }
 
-        $isLate = false;
-        if (!$waivePenalty && $checkin->schedule) {
-            $horaOficial = now()->setTimeFromTimeString($checkin->schedule->check_out_time);
-            if ($checkOutDate->greaterThan($horaOficial)) {
-                $isLate = true;
-            }
-        }
-
         // =========================================================
         // 🚀 RASTREO DEL HISTORIAL (Para mantener fecha original y días)
         // =========================================================
@@ -1400,7 +1392,12 @@ class CheckinController extends Controller
             }
         }
 
-        $days = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+        // Días SIEMPRE limpios (calendario, sin la vieja "+1 noche"): el
+        // recargo por salida tardía ahora lo calcula por separado
+        // calculateLateCheckoutFee(), que sí respeta $waivePenalty.
+        // Cobrar la noche extra AQUÍ y el recargo escalonado ABAJO sería
+        // cobrar dos veces la misma penalidad.
+        $days = $this->calculateBillableDays($checkin, $checkOutDate, true);
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
 
         if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
@@ -1410,6 +1407,10 @@ class CheckinController extends Controller
             $paxCount = 1 + $checkin->companions->count();
             $price = $ratePerPerson * $paxCount;
         }
+
+        // 🚀 LATE CHECKOUT ESCALONADO — respeta el mismo $waivePenalty ya
+        // validado arriba contra la ventana real de tolerancia.
+        $lateCheckout = $this->calculateLateCheckoutFee($checkin, $checkOutDate, (float) $price, $waivePenalty);
 
         // LÓGICA DE SALDOS (Actual + Historial arrastrado)
         $accommodationTotal = $days * $price;
@@ -1421,8 +1422,8 @@ class CheckinController extends Controller
             $servicesTotal += $detail->quantity * $p;
         }
 
-        // AÑADIMOS LA DEUDA ARRASTRADA AL TOTAL A PAGAR
-        $grandTotal = $accommodationTotal + $servicesTotal + $carriedBalance;
+        // AÑADIMOS LA DEUDA ARRASTRADA Y EL RECARGO POR SALIDA TARDÍA AL TOTAL
+        $grandTotal = $accommodationTotal + $servicesTotal + $carriedBalance + $lateCheckout['fee'];
 
         // PAGOS (Como los pagos se migraron físicamente en el transfer, aquí ya están todos)
         $totalPagadoReal = 0;
@@ -1449,7 +1450,10 @@ class CheckinController extends Controller
             'grand_total' => $grandTotal,
             'balance' => $balance,
             'notes' => $checkin->notes,
-            'is_late' => $isLate
+            'is_late' => $lateCheckout['tier'] !== 'none',
+            'late_checkout_tier' => $lateCheckout['tier'],
+            'late_checkout_fee' => $lateCheckout['fee'],
+            'late_checkout_label' => $lateCheckout['label'],
         ]);
     }
 
@@ -1634,30 +1638,39 @@ class CheckinController extends Controller
                     $waivePenalty = false;
                 }
 
-                $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, $waivePenalty);
+                // Días SIEMPRE limpios: el recargo por salida tardía ya no
+                // es una noche extra dentro del conteo de noches — ahora
+                // lo calcula por separado calculateLateCheckoutFee() (que
+                // sí respeta $waivePenalty), más abajo.
+                $finalDays = $this->calculateBillableDays($checkin, $checkOutDate, true);
 
-                // --- Precio acordado (con o sin rebaja manual) ---
+                // --- Precio acordado ---
+                // El descuento YA NO reescribe el precio unitario del
+                // hospedaje: si lo hiciera, el recargo por salida tardía
+                // (calculado más abajo sobre este mismo precio) se
+                // encogería junto con el descuento, y el front tendría que
+                // "adivinar" cuánto pedir de hospedaje para no duplicar el
+                // recargo ya sumado. Precio y recargo se calculan siempre
+                // sobre el valor real pactado; el descuento se resta al
+                // final como monto plano sobre el subtotal completo (ver
+                // $discountAmount más abajo).
                 $agreedPrice = $checkin->agreed_price;
-                if ($request->filled('discount') && is_numeric($request->discount) && $request->discount > 0) {
-                    $totalConRebaja = floatval($request->discount);
-                    if ($finalDays > 0) {
-                        $agreedPrice = $totalConRebaja / $finalDays;
-                    }
-                    $totalHospedaje = $totalConRebaja;
-                    $precioUnitario = $agreedPrice;
-                } else {
-                    $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
+                $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
 
-                    if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                        $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
-                        $isPrivate     = in_array($bathroomType, ['private', 'privado']);
-                        $ratePerPerson = $isPrivate ? 90 : 60;
-                        $paxCount      = 1 + $checkin->companions->count();
-                        $precioUnitario = $ratePerPerson * $paxCount;
-                    }
-
-                    $totalHospedaje = $finalDays * $precioUnitario;
+                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
+                    $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
+                    $isPrivate     = in_array($bathroomType, ['private', 'privado']);
+                    $ratePerPerson = $isPrivate ? 90 : 60;
+                    $paxCount      = 1 + $checkin->companions->count();
+                    $precioUnitario = $ratePerPerson * $paxCount;
                 }
+
+                $totalHospedaje = $finalDays * $precioUnitario;
+
+                // 🚀 LATE CHECKOUT ESCALONADO — recalculado server-side (nunca
+                // confiando en un monto que mande el cliente), respetando el
+                // mismo $waivePenalty ya validado arriba.
+                $lateCheckout = $this->calculateLateCheckoutFee($checkin, $checkOutDate, (float) $precioUnitario, $waivePenalty);
 
                 // --- Servicios consumidos ---
                 $servicesTotal = 0;
@@ -1678,7 +1691,18 @@ class CheckinController extends Controller
 
                 // --- Saldo pendiente ---
                 $carriedBalance = floatval($checkin->carried_balance ?? 0);
-                $grandTotal     = $totalHospedaje + $servicesTotal + $carriedBalance;
+                $subtotalAntesDescuento = $totalHospedaje + $servicesTotal + $carriedBalance + $lateCheckout['fee'];
+
+                // Descuento: monto FIJO restado del subtotal COMPLETO
+                // (hospedaje + recargo por salida tardía + servicios +
+                // saldo arrastrado), nunca un nuevo precio de hospedaje —
+                // así nunca puede terminar "absorbiendo" u ocultando el
+                // recargo por salida tardía.
+                $discountAmount = 0.0;
+                if ($request->filled('discount_amount') && is_numeric($request->discount_amount) && $request->discount_amount > 0) {
+                    $discountAmount = min((float) $request->discount_amount, $subtotalAntesDescuento);
+                }
+                $grandTotal = $subtotalAntesDescuento - $discountAmount;
 
                 $totalPagadoPrevio = 0;
                 foreach ($checkin->payments as $pago) {
@@ -1687,8 +1711,14 @@ class CheckinController extends Controller
                 $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
 
                 // --- Registro de pago(s) ---
-                $metodoRecibido = strtolower($request->input('payment_method', 'efectivo'));
-                $bancoRecibido  = strtoupper($request->input('qr_bank', ''));
+                // 🐛 BUG PREEXISTENTE CORREGIDO: leía 'payment_method'/'qr_bank',
+                // pero el frontend (handleConfirmAndPreview) siempre manda
+                // 'metodo_pago'/'banco_qr' (mismos nombres que ya usa
+                // multiCheckout() correctamente) — $metodoRecibido caía
+                // SIEMPRE en 'efectivo' por defecto, sin importar el método
+                // real elegido, y todo pago QR se registraba como EFECTIVO.
+                $metodoRecibido = strtolower($request->input('metodo_pago', 'efectivo'));
+                $bancoRecibido  = strtoupper($request->input('banco_qr', ''));
                 $userId         = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
                 // Sin caja abierta, cualquier cobro de saldo en el checkout
@@ -1698,6 +1728,24 @@ class CheckinController extends Controller
                 // bloquearse por esto.
                 $montoEfectivoSolicitado = (float) $request->input('monto_efectivo', 0);
                 $montoQrSolicitado       = (float) $request->input('monto_qr', 0);
+
+                // 🛑 BLOQUEO: con recargo por salida tardía pendiente, el
+                // pago mixto (efectivo+QR) debe cubrir el saldo COMPLETO
+                // (que ya incluye el recargo) — si no, se rechaza el cierre
+                // en vez de dejarlo pasar con una deuda fantasma. El método
+                // único ya cobra $saldoPendienteFinal completo sin importar
+                // lo que se haya tecleado, así que no necesita este candado.
+                if ($lateCheckout['fee'] > 0 && $metodoRecibido === 'ambos') {
+                    $totalIngresado = $montoEfectivoSolicitado + $montoQrSolicitado;
+                    if ($totalIngresado < $saldoPendienteFinal) {
+                        throw new \RuntimeException(sprintf(
+                            'Debe registrar el pago completo del recargo por salida tardía (%s Bs, %s) antes de finalizar. Faltan %s Bs.',
+                            number_format($lateCheckout['fee'], 2),
+                            $lateCheckout['label'],
+                            number_format($saldoPendienteFinal - $totalIngresado, 2)
+                        ));
+                    }
+                }
                 $hayCobroPendiente = $metodoRecibido === 'ambos'
                     ? ($montoEfectivoSolicitado > 0 || $montoQrSolicitado > 0)
                     : $saldoPendienteFinal > 0;
@@ -1823,6 +1871,26 @@ class CheckinController extends Controller
                 // Detalle: servicios consumidos
                 foreach ($serviciosDetalle as $svc) {
                     $invoice->details()->create($svc);
+                }
+
+                // Detalle: recargo por salida tardía (si aplica)
+                if ($lateCheckout['fee'] > 0) {
+                    $invoice->details()->create([
+                        'description' => 'Recargo por Salida Tardía (' . $lateCheckout['label'] . ')',
+                        'quantity'    => 1,
+                        'unit_price'  => $lateCheckout['fee'],
+                        'cost'        => $lateCheckout['fee'],
+                    ]);
+                }
+
+                // Detalle: descuento aplicado (si aplica)
+                if ($discountAmount > 0) {
+                    $invoice->details()->create([
+                        'description' => 'Descuento Aplicado',
+                        'quantity'    => 1,
+                        'unit_price'  => -$discountAmount,
+                        'cost'        => -$discountAmount,
+                    ]);
                 }
 
                 return $invoice;
@@ -3034,6 +3102,70 @@ class CheckinController extends Controller
         $horaOficial = $momento->copy()->setTimeFromTimeString($checkin->schedule->check_out_time);
 
         return $momento->greaterThanOrEqualTo($horaOficial);
+    }
+
+    /**
+     * Late Checkout escalonado: 0% hasta la hora oficial de salida, 50%
+     * de agreed_price hasta 6 horas después (13:00→19:00 del ejemplo de
+     * negocio), 100% pasado eso (incluye días calendario posteriores).
+     *
+     * 🛡️ ESCUDO DE TOLERANCIA: $waivePenalty debe llegar YA validado por
+     * isWithinExitTolerance() (el mismo candado que protege
+     * calculateBillableDays()) — si el recepcionista aplicó la tolerancia
+     * de forma legítima, el recargo se anula sin evaluar la hora. Este
+     * método es la ÚNICA fuente del recargo por salida tardía: para que
+     * no se cobre dos veces, calculateBillableDays() debe invocarse
+     * siempre con waivePenalty=true en getCheckoutDetails()/checkout()
+     * (días limpios) — el recargo de aquí reemplaza a la vieja "noche
+     * extra completa" de su CASO B.
+     */
+    private function calculateLateCheckoutFee(Checkin $checkin, Carbon $checkOutMoment, float $agreedPrice, bool $waivePenalty): array
+    {
+        if ($waivePenalty) {
+            return ['tier' => 'none', 'fee' => 0.0, 'label' => null];
+        }
+
+        if (!$checkin->schedule || $checkin->status === 'finalizado') {
+            return ['tier' => 'none', 'fee' => 0.0, 'label' => null];
+        }
+
+        $usingTransferAnchor = !is_null($checkin->price_effective_since);
+        $ingreso = Carbon::parse($checkin->price_effective_since ?? $checkin->check_in_date);
+
+        if (!$usingTransferAnchor) {
+            $horaOficialEntrada = Carbon::parse($ingreso->format('Y-m-d') . ' ' . $checkin->schedule->check_in_time);
+            $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($checkin->schedule->entry_tolerance_minutes);
+            if ($ingreso->between($inicioTolerancia, $horaOficialEntrada)) {
+                $ingreso = $horaOficialEntrada;
+            }
+        }
+
+        if ($checkOutMoment->copy()->startOfDay()->lt($ingreso->copy()->startOfDay())) {
+            return ['tier' => 'none', 'fee' => 0.0, 'label' => null];
+        }
+
+        $diasBase = max(1, $ingreso->copy()->startOfDay()->diffInDays($checkOutMoment->copy()->startOfDay()));
+
+        // Momento en que "debería" haber salido: la hora oficial de
+        // salida, en el día en que se cumplen las $diasBase noches ya
+        // facturables. Cubre "días posteriores" automáticamente: si la
+        // salida real cae después, ya excede las 6h del tramo de 50% y
+        // cae directo en el tramo de 100%, sin casos especiales.
+        $horaLimiteEsperada = $ingreso->copy()->startOfDay()
+            ->addDays($diasBase)
+            ->setTimeFromTimeString($checkin->schedule->check_out_time);
+
+        if ($checkOutMoment->lessThanOrEqualTo($horaLimiteEsperada)) {
+            return ['tier' => 'none', 'fee' => 0.0, 'label' => null];
+        }
+
+        $limiteMedioDia = $horaLimiteEsperada->copy()->addHours(6);
+
+        if ($checkOutMoment->lessThanOrEqualTo($limiteMedioDia)) {
+            return ['tier' => 'half', 'fee' => round($agreedPrice * 0.5, 2), 'label' => 'Medio Día'];
+        }
+
+        return ['tier' => 'full', 'fee' => round($agreedPrice * 1.0, 2), 'label' => 'Noche Extra'];
     }
 
     // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
