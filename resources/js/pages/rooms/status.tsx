@@ -1,6 +1,7 @@
 import ActionModal from '@/components/actionModal';
 import CleanConfirmModal from '@/components/cleanConfirmModal';
 import ConfirmCompleteModal from '@/components/ConfirmCompleteModal';
+import DiscountConfirmModal from '@/components/DiscountConfirmModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import OperatorSelector from '@/components/OperatorSelector';
 import ReservationsPopover from '@/components/Reservationspopover';
@@ -2010,6 +2011,13 @@ function CheckoutConfirmationModal({
         null,
     );
 
+    // 🚨 BARRERA DE SEGURIDAD: monto "en espera" mientras se confirma en el
+    // modal — el total NO se toca hasta que el recepcionista confirme.
+    const [showDiscountConfirm, setShowDiscountConfirm] = useState(false);
+    const [pendingDiscount, setPendingDiscount] = useState<number | null>(
+        null,
+    );
+
     const handleConfirmarRebaja = () => {
         const val = parseFloat(rebaja);
 
@@ -2025,16 +2033,35 @@ function CheckoutConfirmationModal({
             );
             return;
         }
-        if (displayData) {
-            const limiteAdvertencia = subtotal * 0.3;
-            if (val > limiteAdvertencia) {
-                const confirmar = window.confirm(
-                    `Atención: el descuento es de ${val} Bs sobre un subtotal de ${subtotal.toFixed(2)} Bs.\n\n¿Estás seguro de que quiere aplicar el descuento?`,
-                );
-                if (!confirmar) return;
-            }
+
+        const limiteAdvertencia = subtotal * 0.3;
+        if (val > limiteAdvertencia) {
+            // Descuento grande: pausamos la aplicación matemática y
+            // lanzamos el modal de confirmación en vez de aplicar directo.
+            setPendingDiscount(val);
+            setShowDiscountConfirm(true);
+            return;
         }
+
         setRebajaConfirmada(val);
+    };
+
+    // El recepcionista cancela: el total queda intacto, solo se limpia el
+    // monto que estaba "en espera" de confirmación.
+    const handleDiscountConfirmCancel = () => {
+        setShowDiscountConfirm(false);
+        setPendingDiscount(null);
+    };
+
+    // El recepcionista confirma: recién ahora se aplica la resta
+    // matemática (vía rebajaConfirmada, que ya alimenta subtotal/totalFinal
+    // más abajo).
+    const handleDiscountConfirmAccept = () => {
+        if (pendingDiscount !== null) {
+            setRebajaConfirmada(pendingDiscount);
+        }
+        setShowDiscountConfirm(false);
+        setPendingDiscount(null);
     };
 
     const handleMontoEfectivoChange = (val: string) => {
@@ -3032,6 +3059,20 @@ function CheckoutConfirmationModal({
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                <DiscountConfirmModal
+                                                    show={showDiscountConfirm}
+                                                    discountAmount={
+                                                        pendingDiscount ?? 0
+                                                    }
+                                                    subtotal={subtotal}
+                                                    onCancel={
+                                                        handleDiscountConfirmCancel
+                                                    }
+                                                    onConfirm={
+                                                        handleDiscountConfirmAccept
+                                                    }
+                                                />
 
                                                 {/* SECCIÓN 1: TIPO DE DOCUMENTO */}
 
