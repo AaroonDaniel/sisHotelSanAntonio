@@ -26,6 +26,7 @@ import {
     User,
     UserCog,
     Users,
+    Vault,
     Wallet,
     Wrench,
     X,
@@ -181,7 +182,7 @@ export default function Dashboard({
                     url: '/usuarios',
                     perm: 'usuarios.ver',
                 },
-
+                /*
                 ...(isAdmin
                     ? [
                           { name: 'Permisos', icon: Key, url: '/permisos' },
@@ -192,6 +193,7 @@ export default function Dashboard({
                           },
                       ]
                     : []),
+                    */
             ],
         },
         {
@@ -285,20 +287,15 @@ export default function Dashboard({
                     url: '/reports/financial',
                     anyPerm: ['reportes.cierre_caja'],
                 },
-                /*
+                
                 {
-                    name: 'Aperturas y Cierres',
+                    name: 'Reportes de Aperturas y Cierres',
                     icon: Vault,
                     url: '/admin/shift-reports',
                     anyPerm: ['reportes.financiero'],
                 },              
-                {
-                    name: 'Ingresos y Egresos diarios',
-                    icon: FileText,
-                    url: '/reports/financialMovement',
-                    anyPerm: ['reportes.financiero', 'reportes.ventas'],
-                },
-                */
+               
+                
             ],
         },
     ]

@@ -20,7 +20,12 @@ trait BuildsShiftClosingData
         $payments = Payment::query()
             ->where('payments.cash_register_id', $cashRegister->id)
             ->with(['checkin.room', 'operador'])
-            ->join('checkins', 'checkins.id', '=', 'payments.checkin_id')
+            // LEFT JOIN (antes era INNER): un ingreso agregado manualmente
+            // por un administrador (ver ShiftReportController::storeAdjustment)
+            // no tiene checkin_id — con INNER JOIN desaparecía del listado
+            // aunque sí sumaba en los totales, dando una discrepancia
+            // fantasma entre "Cobros y Adelantos" y el Efectivo Esperado.
+            ->leftJoin('checkins', 'checkins.id', '=', 'payments.checkin_id')
             ->orderBy('payments.payment_date', 'desc')
             ->select('payments.*')
             ->get()

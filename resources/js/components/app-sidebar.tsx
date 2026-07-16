@@ -33,6 +33,7 @@ import {
     DollarSign,
     KeyRound,
     UserCog,
+    Vault,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -127,6 +128,12 @@ const mainNavItems: NavItem[] = [
         href: '/reports',
         icon: BarChart3,
         anyPermission: ['reportes.financiero', 'reportes.ocupacion', 'reportes.ventas', 'reportes.parte_diario', 'reportes.cierre_caja'],
+    },
+    {
+        title: 'Aperturas y Cierres',
+        href: '/admin/shift-reports',
+        icon: Vault,
+        role: 'administrador',
     },
     {
         title: 'Gastos',

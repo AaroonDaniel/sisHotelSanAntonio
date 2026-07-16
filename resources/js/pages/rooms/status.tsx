@@ -1289,7 +1289,7 @@ export default function RoomsStatus({
                                 title="Ver resumen visual del dinero cobrado"
                             >
                                 <FileText className="h-5 w-5" />
-                                Vista Previa
+                                Lista de Cobros
                             </button>
 
                             {/* Selector de Tipo de Habitación (Reducido a w-32) */}

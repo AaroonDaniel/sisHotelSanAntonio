@@ -1,7 +1,8 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { Calendar, Eye, History, Vault, Wallet } from 'lucide-react';
+import { Calendar, Eye, History, Pencil, Vault, Wallet } from 'lucide-react';
 import { useState } from 'react';
+import PdfPreviewModal from './PdfPreviewModal';
 
 interface ShiftRow {
     id: number;
@@ -70,6 +71,7 @@ export default function ShiftReportsIndex({
 }: Props) {
     const [activeTab, setActiveTab] = useState<TabKey>('turnos');
     const [date, setDate] = useState(InitialDate);
+    const [previewId, setPreviewId] = useState<number | null>(null);
 
     const handleDateChange = (value: string) => {
         setDate(value);
@@ -159,7 +161,7 @@ export default function ShiftReportsIndex({
                                             Dejó en Caja
                                         </th>
                                         <th className="px-4 py-3 text-right">
-                                            Documento
+                                            Acciones
                                         </th>
                                     </tr>
                                 </thead>
@@ -217,14 +219,26 @@ export default function ShiftReportsIndex({
                                                       )
                                                     : '—'}
                                             </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Link
-                                                    href={`/cash-registers/${s.id}`}
-                                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100"
-                                                >
-                                                    <Eye className="h-3.5 w-3.5" />
-                                                    Ver / Descargar
-                                                </Link>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setPreviewId(s.id)
+                                                        }
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                        Ver
+                                                    </button>
+                                                    <Link
+                                                        href={`/admin/shift-reports/${s.id}/edit`}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                        Editar
+                                                    </Link>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -394,6 +408,11 @@ export default function ShiftReportsIndex({
                     </div>
                 )}
             </div>
+
+            <PdfPreviewModal
+                cashRegisterId={previewId}
+                onClose={() => setPreviewId(null)}
+            />
         </AuthenticatedLayout>
     );
 }

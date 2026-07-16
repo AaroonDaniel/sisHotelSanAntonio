@@ -128,7 +128,7 @@ export default function CashRegisterShow({
                     <div className="flex items-start justify-between">
                         <div>
                             <h1 className="text-xl font-extrabold tracking-wider text-gray-900 uppercase">
-                                Hotel San Antonio
+                                Hotel San Antonioo
                             </h1>
                             <p className="mt-1 text-sm font-semibold tracking-wide text-gray-400 uppercase">
                                 Cierre de Caja — Turno #{CashRegister.id}
