@@ -1,5 +1,6 @@
 import ApprovePaymentModal from '@/components/approvePaymentModal';
 import CancelModal from '@/components/cancelModal';
+import { Operator } from '@/components/OperatorSelector';
 import RejectPaymentModal from '@/components/rejectPaymentModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
@@ -32,6 +33,7 @@ interface Props {
     reservations: any[];
     guests: any[];
     rooms: any[];
+    operators?: Operator[];
 }
 
 export default function ViewReservationModal({
@@ -39,6 +41,7 @@ export default function ViewReservationModal({
     reservations,
     guests,
     rooms,
+    operators = [],
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -891,6 +894,7 @@ export default function ViewReservationModal({
                 onClose={() => setIsCreateModalOpen(false)}
                 guests={guests}
                 rooms={rooms}
+                operators={operators}
             />
 
             {/* Modal para EDITAR reserva */}
@@ -900,6 +904,7 @@ export default function ViewReservationModal({
                 reservationToEdit={editingReservation}
                 guests={guests}
                 rooms={rooms}
+                operators={operators}
             />
 
             {/* Modal para ASIGNAR / REASIGNAR HABITACIONES */}

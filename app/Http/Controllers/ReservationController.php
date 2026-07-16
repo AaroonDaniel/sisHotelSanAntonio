@@ -596,10 +596,21 @@ class ReservationController extends Controller
         // 👇 AQUÍ ESTÁ EL CAMBIO: Agregamos 'price' a la lista 👇
         $rooms = Room::with(['roomType', 'floor', 'price'])->get();
 
+        // 🛠️ FIX: esta es la página real de "Reservas Internas" (/reservas,
+        // la que usa el personal día a día — reservations/index.tsx +
+        // ReservationController::index() es un panel alterno solo para
+        // admin). Le faltaba pasar los operadores, así que el
+        // OperatorSelector dentro de ReservationModal (para registrar el
+        // adelanto) siempre caía en el arreglo vacío por defecto y mostraba
+        // "No hay operadores activos disponibles". Mismo scope que ya usa
+        // ReservationController::index() para el otro panel.
+        $operators = User::operadores()->get(['id', 'full_name', 'nickname']);
+
         return Inertia::render('reservations/viewReservationModal', [
             'reservations' => $reservations,
             'guests' => $guests,
-            'rooms' => $rooms
+            'rooms' => $rooms,
+            'operators' => $operators,
         ]);
     }
 
