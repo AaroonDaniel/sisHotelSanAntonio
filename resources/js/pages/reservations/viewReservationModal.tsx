@@ -771,6 +771,7 @@ export default function ViewReservationModal({
                 {/* ========================================== */}
                 {/* 👇 TABLA 3: RESERVAS ONLINE POR VERIFICAR 👇 */}
                 {/* ========================================== */}
+                {/*}
                 <section className="mt-8 flex flex-col">
                     <div className="flex min-h-[350px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
                         <div className="flex items-center justify-between border-b border-gray-100 bg-blue-50/50 px-6 py-5">
@@ -872,6 +873,7 @@ export default function ViewReservationModal({
                         </div>
                     </div>
                 </section>
+                {*/}
             </div>
 
             {/* MODALES AUXILIARES */}
