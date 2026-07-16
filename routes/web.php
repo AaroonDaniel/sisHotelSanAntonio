@@ -195,9 +195,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // acceder aunque tengan algún permiso suelto de reportes.
     Route::middleware('role:administrador')->group(function () {
         Route::get('/admin/shift-reports', [App\Http\Controllers\ShiftReportController::class, 'index'])->name('admin.shift-reports.index');
-        Route::get('/admin/shift-reports/{cashRegister}/edit', [App\Http\Controllers\ShiftReportController::class, 'edit'])->name('admin.shift-reports.edit');
-        Route::post('/admin/shift-reports/{cashRegister}/adjustments', [App\Http\Controllers\ShiftReportController::class, 'storeAdjustment'])->name('admin.shift-reports.adjustments.store');
-        Route::get('/admin/shift-reports/{cashRegister}/pdf', [App\Http\Controllers\ShiftReportController::class, 'previewPdf'])->name('admin.shift-reports.pdf');
     });
 
     Route::post('/cash-registers/open', [CashRegisterController::class, 'open'])->name('cash-registers.open');

@@ -5,6 +5,7 @@ import DiscountConfirmModal from '@/components/DiscountConfirmModal';
 import FinishMaintenanceModal from '@/components/finishMaintenanceModal';
 import OperatorSelector from '@/components/OperatorSelector';
 import ReservationsPopover from '@/components/Reservationspopover';
+import ShiftPreviewModal from '@/components/ShiftPreviewModal';
 import ToleranceModal from '@/components/ToleranceModal';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
@@ -1908,45 +1909,10 @@ export default function RoomsStatus({
                     </div>
                 </div>
             )}
-            {quickPreviewUrl && (
-                <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
-                    <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
-                        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
-                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                                <div className="rounded-lg bg-blue-100 p-1.5 text-blue-600">
-                                    <FileText className="h-5 w-5" />
-                                </div>
-                                Caja (Informativo)
-                            </h3>
-                            <button
-                                onClick={() => setQuickPreviewUrl(null)}
-                                className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-200"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        {/* Visor PDF */}
-                        <div className="flex-1 bg-gray-300/50 p-2">
-                            <iframe
-                                src={quickPreviewUrl}
-                                className="h-full w-full rounded border border-gray-300 bg-white shadow-inner"
-                                title="Vista Previa PDF"
-                            />
-                        </div>
-
-                        {/* Footer de Acciones */}
-                        <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
-                            <button
-                                onClick={() => setQuickPreviewUrl(null)}
-                                className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ShiftPreviewModal
+                url={quickPreviewUrl}
+                onClose={() => setQuickPreviewUrl(null)}
+            />
         </AuthenticatedLayout>
     );
 }
