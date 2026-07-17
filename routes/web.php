@@ -25,7 +25,7 @@ use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\DataAuditController;
-use App\Http\Controllers\CorporateAccountController;
+use App\Http\Controllers\GroupAccountController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -126,6 +126,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
     Route::post('/checkins/{checkin}/cancel-agreement', [CheckinController::class, 'cancelAgreement'])
         ->name('checkins.cancelAgreement');
+    Route::post('/checkins/{checkin}/split-from-group', [CheckinController::class, 'splitFromGroup'])
+        ->name('checkins.splitFromGroup');
     Route::get('/checkins/preview-price', [CheckinController::class, 'previewPrice'])
         ->name('checkins.previewPrice');
 
@@ -145,13 +147,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkins/{checkin}/merge', [CheckinController::class, 'merge'])->name('checkins.merge');
 
     // ==========================================
-    // CUENTA MAESTRA CORPORATIVA (varias habitaciones, un solo convenio)
+    // CUENTAS GRUPALES (Delegación + Corporativo unificados) — exclusivo
+    // recepción/administración interna, no toca reservas online.
     // ==========================================
-    Route::get('/corporate-accounts', [CorporateAccountController::class, 'index'])->name('corporate-accounts.index');
-    Route::post('/corporate-accounts', [CorporateAccountController::class, 'store'])->name('corporate-accounts.store');
-    Route::post('/corporate-accounts/{corporateAccount}/attach', [CorporateAccountController::class, 'attach'])->name('corporate-accounts.attach');
-    Route::post('/corporate-accounts/{corporateAccount}/payments', [CorporateAccountController::class, 'registerPayment'])->name('corporate-accounts.payments');
-    Route::get('/corporate-accounts/{corporateAccount}/balances', [CorporateAccountController::class, 'balances'])->name('corporate-accounts.balances');
+    Route::get('/group-accounts', [GroupAccountController::class, 'index'])->name('group-accounts.index');
+    Route::post('/group-accounts', [GroupAccountController::class, 'store'])->name('group-accounts.store');
+    Route::post('/group-accounts/{groupAccount}/advance', [GroupAccountController::class, 'addAdvance'])->name('group-accounts.advance');
 
     // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');

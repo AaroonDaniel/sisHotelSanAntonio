@@ -222,9 +222,23 @@ export default function MultiCheckoutModal({
             const diffTime = Math.abs(salida.getTime() - ingreso.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-            const price = parseFloat(room.price?.amount || 0);
+            // 🚀 MOTOR DE FACTURACIÓN GRUPAL: el precio SIEMPRE es el
+            // pactado (agreed_price) guardado al asignar/Check-in Rápido —
+            // nunca la tarifa base de la habitación. room.price.amount solo
+            // queda como último recurso si por algún motivo el check-in no
+            // tiene agreed_price guardado.
+            const agreedPrice = parseFloat(activeCheckin.agreed_price);
+            const price = !isNaN(agreedPrice)
+                ? agreedPrice
+                : parseFloat(room.price?.amount || 0);
             const accomTotal = diffDays * price;
             totalHospedajeGeneral += accomTotal;
+
+            // Cuenta Grupal REAL (Delegación/Corporativo con nombre propio,
+            // ver /group-accounts) — trae financial_summary calculado en
+            // vivo (inyectado por RoomController::status()).
+            const groupAgreement = activeCheckin.special_agreement;
+            const isGroupAccount = !!groupAgreement?.company_name;
 
             const servicios = roomServices[room.id] || [];
             const servicesTotal = servicios.reduce(
@@ -277,9 +291,65 @@ export default function MultiCheckoutModal({
                 groupedServices,
                 pagado,
                 totalHabitacion,
+                isGroupAccount,
+                groupAgreementId: groupAgreement?.id ?? null,
+                groupName: groupAgreement?.company_name ?? null,
+                groupType: groupAgreement?.type ?? null,
+                groupBalance: groupAgreement?.financial_summary?.balance ?? 0,
             };
         })
         .filter(Boolean);
+
+    // ==========================================
+    // 🚀 MOTOR DE FACTURACIÓN GRUPAL: agrupamos las habitaciones de la
+    // misma Cuenta Grupal, sumamos su costo real (agreed_price * días) y
+    // restamos el Fondo Grupal Disponible (balance, si es positivo) — el
+    // saldo restante de cada grupo es lo único que falta cobrar de esas
+    // habitaciones; si el fondo alcanza para todo, queda en cero.
+    // ==========================================
+    const gruposMap: Record<
+        number,
+        {
+            id: number;
+            name: string;
+            type: string;
+            balance: number;
+            costoHabitaciones: number;
+            rooms: string[];
+        }
+    > = {};
+
+    desgloseHabitaciones.forEach((h: any) => {
+        if (!h.isGroupAccount || !h.groupAgreementId) return;
+        if (!gruposMap[h.groupAgreementId]) {
+            gruposMap[h.groupAgreementId] = {
+                id: h.groupAgreementId,
+                name: h.groupName,
+                type: h.groupType,
+                balance: h.groupBalance,
+                costoHabitaciones: 0,
+                rooms: [],
+            };
+        }
+        gruposMap[h.groupAgreementId].costoHabitaciones += h.accomTotal;
+        gruposMap[h.groupAgreementId].rooms.push(h.roomNumber);
+    });
+
+    const resumenGrupos = Object.values(gruposMap).map((g) => {
+        const fondoAplicado = Math.max(0, g.balance);
+        const saldoRestante = Math.max(0, g.costoHabitaciones - fondoAplicado);
+        return { ...g, fondoAplicado, saldoRestante };
+    });
+
+    // Lo que cada Cuenta Grupal ya cubre de su propio costo de
+    // habitaciones (nunca más de lo que esas habitaciones cuestan, ni más
+    // de lo que el grupo tiene disponible) — se resta del total a cobrar
+    // en efectivo/QR de este lote, igual que el backend lo hace vía
+    // applyGroupAccountCoverage().
+    const totalCubiertoPorGrupos = resumenGrupos.reduce(
+        (acc, g) => acc + Math.min(g.costoHabitaciones, g.fondoAplicado),
+        0,
+    );
 
     // ==========================================
     // CÁLCULO DEL SALDO PENDIENTE CON DESCUENTO
@@ -289,7 +359,10 @@ export default function MultiCheckoutModal({
 
     const saldoPendienteFinal = Math.max(
         0,
-        hospedajeFinal + totalConsumosGeneral - totalAdelantosGeneral,
+        hospedajeFinal +
+            totalConsumosGeneral -
+            totalAdelantosGeneral -
+            totalCubiertoPorGrupos,
     );
 
     const efeNum = parseFloat(montoEfectivo) || 0;
@@ -598,6 +671,21 @@ export default function MultiCheckoutModal({
                                                         </span>
                                                     </div>
                                                 )}
+                                                {totalCubiertoPorGrupos >
+                                                    0 && (
+                                                    <div className="col-span-2 grid grid-cols-[100px_1fr] items-center border-b border-dashed border-gray-300 py-1 text-indigo-700">
+                                                        <span className="font-bold">
+                                                            Ctas. Grupales:
+                                                        </span>
+                                                        <span className="text-right font-bold">
+                                                            -{' '}
+                                                            {totalCubiertoPorGrupos.toFixed(
+                                                                2,
+                                                            )}{' '}
+                                                            Bs
+                                                        </span>
+                                                    </div>
+                                                )}
 
                                                 <div className="col-span-2 mt-1 flex justify-between pt-1 text-lg">
                                                     <span className="font-bold text-gray-900">
@@ -615,6 +703,94 @@ export default function MultiCheckoutModal({
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* 🚀 MOTOR DE FACTURACIÓN GRUPAL: detalle
+                                        por Cuenta Grupal — costo de sus
+                                        habitaciones en este lote, Fondo
+                                        Grupal Disponible y saldo restante. */}
+                                    {metodoPago !== 'ambos' &&
+                                        resumenGrupos.length > 0 && (
+                                            <div className="mb-4 space-y-2">
+                                                {resumenGrupos.map((g) => (
+                                                    <div
+                                                        key={g.id}
+                                                        className={`rounded-xl border p-3 text-xs ${
+                                                            g.type ===
+                                                            'delegacion'
+                                                                ? 'border-amber-200 bg-amber-50'
+                                                                : 'border-indigo-200 bg-indigo-50'
+                                                        }`}
+                                                    >
+                                                        <div className="mb-1.5 flex items-center justify-between">
+                                                            <span
+                                                                className={`font-black tracking-wide uppercase ${
+                                                                    g.type ===
+                                                                    'delegacion'
+                                                                        ? 'text-amber-800'
+                                                                        : 'text-indigo-800'
+                                                                }`}
+                                                            >
+                                                                {g.type ===
+                                                                'delegacion'
+                                                                    ? 'DELEGACIÓN'
+                                                                    : 'CORPORATIVO'}
+                                                                : {g.name}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-500">
+                                                                Hab.{' '}
+                                                                {g.rooms.join(
+                                                                    ', ',
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-gray-600">
+                                                            <span>
+                                                                Costo
+                                                                habitaciones:
+                                                            </span>
+                                                            <span className="font-bold">
+                                                                {g.costoHabitaciones.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-gray-600">
+                                                            <span>
+                                                                Fondo Grupal
+                                                                Disponible:
+                                                            </span>
+                                                            <span
+                                                                className={`font-bold ${g.balance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}
+                                                            >
+                                                                {g.balance >= 0
+                                                                    ? `${g.balance.toFixed(2)} Bs`
+                                                                    : `Deuda: -${Math.abs(g.balance).toFixed(2)} Bs`}
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1 flex items-center justify-between border-t border-dashed border-gray-300 pt-1 font-bold">
+                                                            <span>
+                                                                Saldo
+                                                                restante:
+                                                            </span>
+                                                            <span
+                                                                className={
+                                                                    g.saldoRestante <=
+                                                                    0
+                                                                        ? 'text-green-600'
+                                                                        : 'text-red-600'
+                                                                }
+                                                            >
+                                                                {g.saldoRestante.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                Bs
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
 
                                     {/* BLOQUE REBAJA MÚLTIPLE (COLORES ROJOS) */}
                                     {metodoPago !== 'ambos' && (

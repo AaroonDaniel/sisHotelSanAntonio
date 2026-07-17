@@ -116,6 +116,12 @@ const mainNavItems: NavItem[] = [
         anyPermission: ['checkin.realizar', 'checkins.ver_todos'],
     },
     {
+        title: 'Cuentas Grupales',
+        href: '/group-accounts',
+        icon: Building2,
+        anyPermission: ['checkin.realizar', 'checkins.ver_todos'],
+    },
+    {
         title: 'Estado de habitaciones',
         href: '/status',
         icon: DoorOpen,

@@ -196,6 +196,12 @@ export interface CheckinData {
         type: 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
         agreed_price: number;
         payment_frequency_days: number;
+        // Solo presente en Cuentas Grupales "reales" (ver /group-accounts);
+        // un convenio ad-hoc de una sola habitación ("ASIG. CORP") no tiene
+        // nombre de grupo.
+        company_name?: string | null;
+        total_advance?: number;
+        total_consumed?: number;
     } | null;
     payments?: any[];
     corporate_days?: number;
@@ -226,6 +232,20 @@ export interface Room {
     checkins?: CheckinData[];
 }
 
+// Cuenta Grupal (Delegación/Corporativo unificados, ver /group-accounts):
+// al elegir una en el Check-in Rápido, el costo de la habitación se
+// descuenta de `balance` en vez de cobrarse en efectivo al huésped.
+export interface GroupAccount {
+    id: number;
+    type: 'delegacion' | 'corporativo';
+    company_name: string;
+    // Procedencia registrada al crear la Cuenta Grupal (solo Delegación):
+    // se hereda como valor por defecto (editable) al campo "Procedencia"
+    // de cada huésped en el Check-in Rápido.
+    origin?: string | null;
+    balance: number;
+}
+
 interface CheckinModalProps {
     show: boolean;
     onClose: (isSuccess?: boolean) => void;
@@ -235,6 +255,7 @@ interface CheckinModalProps {
     rooms: Room[];
     schedules: Schedule[];
     operators?: Operator[];
+    groupAccounts?: GroupAccount[];
     initialRoomId?: number | null;
     // 🚀 NUEVO: cuando la habitación viene de una reserva de Delegación ya
     // asignada, se pasa aquí el precio pactado por cama (90/60/50) guardado
@@ -301,6 +322,9 @@ interface CheckinFormData {
     corporate_days: number;
     agreed_price: number | string;
     checkin_operator_id: string;
+    // Cuenta Grupal ya existente (Check-in Rápido): reemplaza la creación
+    // de un convenio nuevo, ver CheckinController::store().
+    group_account_id: string;
 }
 
 export default function CheckinModal({
@@ -312,6 +336,7 @@ export default function CheckinModal({
     rooms,
     schedules = [],
     operators = [],
+    groupAccounts = [],
     initialRoomId,
     initialAgreedPrice,
     initialSpecialAgreementId,
@@ -484,7 +509,60 @@ export default function CheckinModal({
             type: 'estandar',
             agreed_price: 0,
             corporate_days: 1,
+            group_account_id: '',
         });
+
+    // 🚀 CHECK-IN RÁPIDO: activo cuando se eligió una Cuenta Grupal ya
+    // existente. Desactiva el cobro en efectivo (el costo va a la cuenta
+    // del grupo) — aplica igual a Corporativo y Delegación.
+    const isQuickGroupMode = !!data.group_account_id;
+
+    // 🚀 Tipo de Registro = Delegación: reduce el formulario de datos del
+    // huésped a Nombre/CI/Edad/Procedencia, sin importar si además está
+    // vinculado a una Cuenta Grupal o es un convenio individual ad-hoc.
+    const isDelegationType = data.type === 'delegacion';
+
+    // 🚀 SELECTOR "TIPO DE REGISTRO" (reemplaza el checkbox "ASIG. CORP"):
+    // Normal / Corporativo / Delegación. Corporativo y Delegación aplican
+    // el mismo descuento base de -20 Bs que antes aplicaba el checkbox
+    // (ver misma regla en CheckinController::store()). Si la Cuenta Grupal
+    // ya elegida no corresponde al nuevo tipo, se limpia para no dejar un
+    // valor que el selector filtrado ya no puede mostrar.
+    const handleTipoRegistroChange = (
+        tipo: 'estandar' | 'corporativo' | 'delegacion',
+    ) => {
+        const selectedRoom = rooms.find(
+            (r) => r.id === Number(data.room_id) || r.id === initialRoomId,
+        );
+        const origPrice = selectedRoom?.price?.amount || 0;
+
+        const keepGroupAccount =
+            !!data.group_account_id &&
+            groupAccounts.find((a) => String(a.id) === data.group_account_id)
+                ?.type === tipo;
+
+        if (tipo === 'estandar') {
+            setData((prev) => ({
+                ...prev,
+                type: 'estandar',
+                corporate_days: 0,
+                agreed_price: origPrice,
+                group_account_id: '',
+            }));
+        } else {
+            setData((prev) => ({
+                ...prev,
+                type: tipo,
+                auto_adjust_price: false,
+                agreed_price: Math.max(0, origPrice - 20),
+                corporate_days: tipo === 'corporativo' ? 1 : 0,
+                group_account_id: keepGroupAccount
+                    ? prev.group_account_id
+                    : '',
+            }));
+        }
+        setIsCustomFrequency(false);
+    };
 
     // =========================================================================
     //  LÓGICA DE TOLERANCIA (Rango: -350m / +40m ejemplo)
@@ -1122,6 +1200,23 @@ export default function CheckinModal({
         }
     };
 
+    // 🚀 HERENCIA DE PROCEDENCIA (Delegación): cuando hay una Cuenta Grupal
+    // de Delegación seleccionada, cada huésped (titular o acompañante)
+    // arranca con la procedencia de la cuenta como valor por defecto, pero
+    // sigue siendo editable — solo se autocompleta si el campo está vacío,
+    // nunca sobreescribe algo que ya se escribió a mano.
+    useEffect(() => {
+        if (data.type !== 'delegacion') return;
+        const account = groupAccounts.find(
+            (a) => String(a.id) === data.group_account_id,
+        );
+        if (!account?.origin) return;
+        if (!currentPerson.origin) {
+            handleFieldChange('origin', account.origin);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data.type, data.group_account_id, currentIndex]);
+
     // E. NAVEGACIÓN (Siguiente / Anterior / Borrar)
     const handleNext = () => {
         if (currentIndex < totalPeople - 1) {
@@ -1401,8 +1496,10 @@ export default function CheckinModal({
 
         // =========================================================
         // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
+        // No aplica en Check-in Rápido a Cuenta Grupal: ahí el costo se
+        // descuenta del adelanto de la cuenta, nunca se cobra en efectivo.
         // =========================================================
-        if (data.type === 'corporativo') {
+        if (data.type === 'corporativo' && !isQuickGroupMode) {
             const montoAdelanto = Number(data.advance_payment);
 
             if (!montoAdelanto || montoAdelanto <= 0) {
@@ -1935,6 +2032,91 @@ export default function CheckinModal({
                                         DATOS DEL HUESPED {currentIndex + 1}
                                     </label>
 
+                                    {/* 🚀 CUENTA GRUPAL (Delegación/Corporativo unificados):
+                                        al elegir una, el costo de la habitación se descuenta
+                                        del adelanto de la cuenta, sin cobrar en efectivo.
+                                        Solo se muestra cuando el Tipo de Registro activo es
+                                        Corporativo o Delegación. */}
+                                    {data.type !== 'estandar' &&
+                                        (() => {
+                                            const filteredGroupAccounts =
+                                                groupAccounts.filter(
+                                                    (a) =>
+                                                        a.type === data.type,
+                                                );
+                                            return (
+                                                <div className="mb-3">
+                                                    <label className="mb-1 block text-[11px] font-bold tracking-wide text-gray-500 uppercase">
+                                                        Cuenta Grupal (
+                                                        {data.type ===
+                                                        'delegacion'
+                                                            ? 'Delegación'
+                                                            : 'Corporativo'}
+                                                        )
+                                                    </label>
+                                                    <select
+                                                        value={
+                                                            data.group_account_id
+                                                        }
+                                                        disabled={isReadOnly}
+                                                        onChange={(e) => {
+                                                            const accountId =
+                                                                e.target
+                                                                    .value;
+                                                            setData(
+                                                                (prev) => ({
+                                                                    ...prev,
+                                                                    group_account_id:
+                                                                        accountId,
+                                                                    auto_adjust_price: false,
+                                                                    advance_payment: 0,
+                                                                }),
+                                                            );
+                                                        }}
+                                                        className={`w-full rounded-xl border px-3 py-2 text-sm font-bold shadow-sm focus:ring-1 ${
+                                                            isQuickGroupMode
+                                                                ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-500 focus:ring-amber-500'
+                                                                : 'border-gray-300 bg-white text-gray-700 focus:border-indigo-500 focus:ring-indigo-500'
+                                                        }`}
+                                                    >
+                                                        <option value="">
+                                                            Sin cuenta grupal
+                                                            (convenio
+                                                            individual)
+                                                        </option>
+                                                        {filteredGroupAccounts.map(
+                                                            (acc) => (
+                                                                <option
+                                                                    key={
+                                                                        acc.id
+                                                                    }
+                                                                    value={
+                                                                        acc.id
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        acc.company_name
+                                                                    }{' '}
+                                                                    (saldo:{' '}
+                                                                    {acc.balance.toFixed(
+                                                                        2,
+                                                                    )}{' '}
+                                                                    Bs)
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                    {isQuickGroupMode && (
+                                                        <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                                                            {isDelegationType
+                                                                ? '⚡ Delegación: formulario simplificado (Nombre, CI, Edad, Procedencia). El costo se descuenta del adelanto de la cuenta, no se cobra en efectivo.'
+                                                                : '⚡ Check-in Rápido activo: el costo se descuenta del adelanto de la cuenta, no se cobra en efectivo.'}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+
                                     <label className="mb-1.5 block text-xs font-bold text-gray-500 uppercase">
                                         Nombre Completo
                                     </label>
@@ -2091,186 +2273,35 @@ export default function CheckinModal({
                                     </div>
                                 </div>
 
-                                {/* D. FILA CARNET Y NACIONALIDAD */}
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Carnet (CI)/Pasaporte
-                                        </label>
-                                        <input
-                                            className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300' : ''}`}
-                                            value={
-                                                currentPerson.identification_number
-                                            }
-                                            disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'identification_number',
-                                                    e.target.value.toUpperCase(),
-                                                )
-                                            }
-                                        />
-                                    </div>
-                                    <div
-                                        className="relative order-2"
-                                        ref={issuedInDropdownRef}
-                                    >
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Otorgado
-                                        </label>
-                                        {esExtranjero(
-                                            currentPerson.nationality,
-                                        ) ? (
+                                {/* ============================================================== */}
+                                {/* RENDERIZACIÓN CONDICIONAL ESTRICTA DEL GRID: Delegación usa el
+                                    diseño simplificado de 2 columnas (Carnet + Edad); Normal y
+                                    Corporativo restauran EXACTAMENTE el diseño original completo
+                                    (Carnet/Otorgado/Nacionalidad en 3 columnas, luego Estado
+                                    Civil/Edad/Profesión en 3 columnas). */}
+                                {/* ============================================================== */}
+                                {isDelegationType ? (
+                                    /* --- DISEÑO DELEGACIÓN: Carnet + Edad en grid de 2 columnas --- */
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">
+                                                Carnet (CI)/Pasaporte
+                                            </label>
                                             <input
-                                                className="w-full cursor-not-allowed rounded-lg border border-gray-400 bg-gray-100 px-3 py-2 text-sm text-gray-500 uppercase"
+                                                className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300' : ''}`}
                                                 value={
-                                                    currentPerson.issued_in ||
-                                                    ''
-                                                }
-                                                disabled
-                                                readOnly
-                                                title="Pasaporte: expedido en su pais"
-                                            />
-                                        ) : (
-                                            <select
-                                                className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
-                                                value={
-                                                    currentPerson.issued_in ||
-                                                    ''
+                                                    currentPerson.identification_number
                                                 }
                                                 disabled={isReadOnly}
                                                 onChange={(e) =>
                                                     handleFieldChange(
-                                                        'issued_in',
-                                                        e.target.value,
+                                                        'identification_number',
+                                                        e.target.value.toUpperCase(),
                                                     )
                                                 }
-                                            >
-                                                <option value="">
-                                                    Seleccione...
-                                                </option>
-                                                {DEPARTAMENTOS_BOLIVIA.map(
-                                                    (d) => (
-                                                        <option
-                                                            key={d}
-                                                            value={d}
-                                                        >
-                                                            {d}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
-                                        )}
-                                    </div>
-                                    <div
-                                        className="relative order-1"
-                                        ref={nationalityRef}
-                                    >
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Nacionalidad
-                                        </label>
-                                        <input
-                                            className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase"
-                                            value={natInput}
-                                            disabled={isReadOnly}
-                                            placeholder="Escriba un pais..."
-                                            autoComplete="off"
-                                            onFocus={() => {
-                                                setNatInput('');
-                                                setShowNat(true);
-                                            }}
-                                            onChange={(e) => {
-                                                setNatInput(
-                                                    e.target.value.toUpperCase(),
-                                                );
-                                                setShowNat(true);
-                                            }}
-                                            onBlur={() => {
-                                                setTimeout(() => {
-                                                    setShowNat(false);
-                                                    setNatInput(
-                                                        currentPerson.nationality ||
-                                                            '',
-                                                    );
-                                                }, 200);
-                                            }}
-                                        />
-                                        {showNat && (
-                                            <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg">
-                                                {NACIONALIDADES.filter((n) => {
-                                                    const q = natInput.trim();
-                                                    if (!q) return true;
-                                                    return (
-                                                        n.includes(q) ||
-                                                        paisDe(n).includes(q)
-                                                    );
-                                                }).map((n) => (
-                                                    <div
-                                                        key={n}
-                                                        onMouseDown={() => {
-                                                            handleFieldChange(
-                                                                'nationality',
-                                                                n,
-                                                            );
-                                                            if (
-                                                                esExtranjero(n)
-                                                            ) {
-                                                                handleFieldChange(
-                                                                    'issued_in',
-                                                                    paisDe(n),
-                                                                );
-                                                            } else {
-                                                                handleFieldChange(
-                                                                    'issued_in',
-                                                                    '',
-                                                                );
-                                                            }
-                                                            setNatInput(n);
-                                                            setShowNat(false);
-                                                        }}
-                                                        className="flex cursor-pointer justify-between px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50"
-                                                    >
-                                                        <span>{n}</span>
-                                                        <span className="text-gray-400">
-                                                            {paisDe(n)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* E. FILA ESTADO CIVIL Y FECHA */}
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Estado Civil
-                                        </label>
-                                        <select
-                                            className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
-                                            value={currentPerson.civil_status}
-                                            disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'civil_status',
-                                                    e.target.value,
-                                                )
-                                            }
-                                        >
-                                            <option value="">-</option>
-                                            {civilStatusOptions.map((opt) => (
-                                                <option
-                                                    key={opt.value}
-                                                    value={opt.value}
-                                                >
-                                                    {opt.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="col-span-2 flex gap-2">
-                                        <div className="flex-1">
+                                            />
+                                        </div>
+                                        <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">
                                                 Edad
                                             </label>
@@ -2315,164 +2346,410 @@ export default function CheckinModal({
                                                         );
                                                     }
                                                 }}
-                                                onKeyDown={(e) => {
-                                                    // TAB hacia adelante (lo controlas tú)
-                                                    if (
-                                                        e.key === 'Tab' &&
-                                                        !e.shiftKey
-                                                    ) {
-                                                        e.preventDefault();
-                                                        professionRef.current?.focus();
-                                                    }
-
-                                                    // SHIFT + TAB hacia atrás (comportamiento normal)
-                                                    if (
-                                                        e.key === 'Tab' &&
-                                                        e.shiftKey
-                                                    ) {
-                                                        // no hacemos nada para que el navegador retroceda libremente
-                                                    }
-                                                }}
                                             />
                                         </div>
-
-                                        {/*}
-                                    <div className="flex-1">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">
-                                            Fecha Nac.
-                                        </label>
-                                        <input
-                                            type="date"
-                                            className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
-                                            value={currentPerson.birth_date}
-                                            max={
-                                                new Date()
-                                                    .toISOString()
-                                                    .split('T')[0]
-                                            }
-                                            disabled={isReadOnly}
-                                            onChange={(e) =>
-                                                handleFieldChange(
-                                                    'birth_date',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            onKeyDown={(e) => {
-                                                // TAB hacia adelante (lo controlas tú)
-                                                if (
-                                                    e.key === 'Tab' &&
-                                                    !e.shiftKey
-                                                ) {
-                                                    e.preventDefault();
-                                                    professionRef.current?.focus();
-                                                }
-
-                                                // SHIFT + TAB hacia atrás (comportamiento normal)
-                                                if (
-                                                    e.key === 'Tab' &&
-                                                    e.shiftKey
-                                                ) {
-                                                    // no hacemos nada para que el navegador retroceda libremente
-                                                }
-                                            }}
-                                        />
-                                        <span className="pl-1 text-xs font-bold text-gray-700">
-                                            {displayAge
-                                                ? `Edad: ${displayAge}`
-                                                : ''}
-                                        </span>
                                     </div>
-                                    {*/}
-
-                                        {/* INPUT DE PROFESIÓN ACTUALIZADO */}
-                                        {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
-                                        <div
-                                            className="relative flex-1"
-                                            ref={professionDropdownRef}
-                                        >
-                                            <label className="text-xs font-bold text-gray-500 uppercase">
-                                                Profesión
-                                            </label>
-                                            <div className="relative">
+                                ) : (
+                                    /* --- DISEÑO ORIGINAL NORMAL/CORPORATIVO: sin cambios --- */
+                                    <>
+                                        {/* D. FILA CARNET, OTORGADO Y NACIONALIDAD */}
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">
+                                                    Carnet (CI)/Pasaporte
+                                                </label>
                                                 <input
-                                                    ref={professionRef}
-                                                    type="text"
-                                                    className="block w-full rounded-xl border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                    className={`w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase ${isProfileIncomplete ? 'border-amber-300' : ''}`}
                                                     value={
-                                                        currentPerson.profession ||
-                                                        ''
+                                                        currentPerson.identification_number
                                                     }
                                                     disabled={isReadOnly}
-                                                    autoComplete="off"
                                                     onChange={(e) =>
-                                                        handleProfessionInput(
-                                                            e.target.value,
+                                                        handleFieldChange(
+                                                            'identification_number',
+                                                            e.target.value.toUpperCase(),
                                                         )
                                                     }
-                                                    onFocus={() => {
-                                                        if (
-                                                            (
-                                                                currentPerson.profession ||
-                                                                ''
-                                                            ).length > 1
-                                                        ) {
-                                                            setIsProfessionDropdownOpen(
-                                                                true,
-                                                            );
-                                                            searchProfessions(
-                                                                currentPerson.profession as string,
-                                                            );
+                                                />
+                                            </div>
+                                            <div
+                                                className="relative order-2"
+                                                ref={issuedInDropdownRef}
+                                            >
+                                                <label className="text-xs font-bold text-gray-500 uppercase">
+                                                    Otorgado
+                                                </label>
+                                                {esExtranjero(
+                                                    currentPerson.nationality,
+                                                ) ? (
+                                                    <input
+                                                        className="w-full cursor-not-allowed rounded-lg border border-gray-400 bg-gray-100 px-3 py-2 text-sm text-gray-500 uppercase"
+                                                        value={
+                                                            currentPerson.issued_in ||
+                                                            ''
                                                         }
+                                                        disabled
+                                                        readOnly
+                                                        title="Pasaporte: expedido en su pais"
+                                                    />
+                                                ) : (
+                                                    <select
+                                                        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                        value={
+                                                            currentPerson.issued_in ||
+                                                            ''
+                                                        }
+                                                        disabled={isReadOnly}
+                                                        onChange={(e) =>
+                                                            handleFieldChange(
+                                                                'issued_in',
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="">
+                                                            Seleccione...
+                                                        </option>
+                                                        {DEPARTAMENTOS_BOLIVIA.map(
+                                                            (d) => (
+                                                                <option
+                                                                    key={d}
+                                                                    value={d}
+                                                                >
+                                                                    {d}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                )}
+                                            </div>
+                                            <div
+                                                className="relative order-1"
+                                                ref={nationalityRef}
+                                            >
+                                                <label className="text-xs font-bold text-gray-500 uppercase">
+                                                    Nacionalidad
+                                                </label>
+                                                <input
+                                                    className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-medium text-gray-900 uppercase"
+                                                    value={natInput}
+                                                    disabled={isReadOnly}
+                                                    placeholder="Escriba un pais..."
+                                                    autoComplete="off"
+                                                    onFocus={() => {
+                                                        setNatInput('');
+                                                        setShowNat(true);
+                                                    }}
+                                                    onChange={(e) => {
+                                                        setNatInput(
+                                                            e.target.value.toUpperCase(),
+                                                        );
+                                                        setShowNat(true);
                                                     }}
                                                     onBlur={() => {
                                                         setTimeout(() => {
-                                                            setIsProfessionDropdownOpen(
+                                                            setShowNat(
                                                                 false,
+                                                            );
+                                                            setNatInput(
+                                                                currentPerson.nationality ||
+                                                                    '',
                                                             );
                                                         }, 200);
                                                     }}
                                                 />
-
-                                                {/* Dropdown conectado a la Base de Datos (professionSuggestions) */}
-                                                {isProfessionDropdownOpen &&
-                                                    professionSuggestions.length >
-                                                        0 && (
-                                                        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
-                                                            {professionSuggestions.map(
-                                                                (
-                                                                    profItem,
-                                                                    index,
-                                                                ) => (
-                                                                    <div
-                                                                        key={
-                                                                            index
-                                                                        }
-                                                                        onClick={() => {
-                                                                            handleFieldChange(
-                                                                                'profession',
-                                                                                profItem,
-                                                                            );
-                                                                            setIsProfessionDropdownOpen(
-                                                                                false,
-                                                                            );
-                                                                        }}
-                                                                        className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
-                                                                    >
-                                                                        {
-                                                                            profItem
-                                                                        }
-                                                                    </div>
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                {showNat && (
+                                                    <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg">
+                                                        {NACIONALIDADES.filter(
+                                                            (n) => {
+                                                                const q =
+                                                                    natInput.trim();
+                                                                if (!q)
+                                                                    return true;
+                                                                return (
+                                                                    n.includes(
+                                                                        q,
+                                                                    ) ||
+                                                                    paisDe(
+                                                                        n,
+                                                                    ).includes(
+                                                                        q,
+                                                                    )
+                                                                );
+                                                            },
+                                                        ).map((n) => (
+                                                            <div
+                                                                key={n}
+                                                                onMouseDown={() => {
+                                                                    handleFieldChange(
+                                                                        'nationality',
+                                                                        n,
+                                                                    );
+                                                                    if (
+                                                                        esExtranjero(
+                                                                            n,
+                                                                        )
+                                                                    ) {
+                                                                        handleFieldChange(
+                                                                            'issued_in',
+                                                                            paisDe(
+                                                                                n,
+                                                                            ),
+                                                                        );
+                                                                    } else {
+                                                                        handleFieldChange(
+                                                                            'issued_in',
+                                                                            '',
+                                                                        );
+                                                                    }
+                                                                    setNatInput(
+                                                                        n,
+                                                                    );
+                                                                    setShowNat(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                                className="flex cursor-pointer justify-between px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50"
+                                                            >
+                                                                <span>
+                                                                    {n}
+                                                                </span>
+                                                                <span className="text-gray-400">
+                                                                    {paisDe(
+                                                                        n,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* F. FILA PROCEDENCIA Y TELÉFONO */}
-                                <div className="grid grid-cols-2 gap-3">
+                                        {/* E. FILA ESTADO CIVIL, EDAD Y PROFESIÓN */}
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">
+                                                    Estado Civil
+                                                </label>
+                                                <select
+                                                    className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
+                                                    value={
+                                                        currentPerson.civil_status
+                                                    }
+                                                    disabled={isReadOnly}
+                                                    onChange={(e) =>
+                                                        handleFieldChange(
+                                                            'civil_status',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                >
+                                                    <option value="">
+                                                        -
+                                                    </option>
+                                                    {civilStatusOptions.map(
+                                                        (opt) => (
+                                                            <option
+                                                                key={
+                                                                    opt.value
+                                                                }
+                                                                value={
+                                                                    opt.value
+                                                                }
+                                                            >
+                                                                {opt.label}
+                                                            </option>
+                                                        ),
+                                                    )}
+                                                </select>
+                                            </div>
+                                            <div className="col-span-2 flex gap-2">
+                                                <div className="flex-1">
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">
+                                                        Edad
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        className="w-full rounded-lg border border-gray-400 px-2 py-2 text-sm text-black"
+                                                        value={
+                                                            currentPerson.birth_date
+                                                                ? new Date().getFullYear() -
+                                                                  parseInt(
+                                                                      currentPerson.birth_date.split(
+                                                                          '-',
+                                                                      )[0],
+                                                                  )
+                                                                : ''
+                                                        }
+                                                        disabled={
+                                                            isReadOnly
+                                                        }
+                                                        onChange={(e) => {
+                                                            const age =
+                                                                parseInt(
+                                                                    e.target
+                                                                        .value,
+                                                                    10,
+                                                                );
+                                                            if (
+                                                                !isNaN(
+                                                                    age,
+                                                                ) &&
+                                                                age > 0
+                                                            ) {
+                                                                // Calculamos el año restando la edad al año actual
+                                                                const birthYear =
+                                                                    new Date().getFullYear() -
+                                                                    age;
+                                                                // Guardamos el formato ficticio de la base de datos (Ej: 1992-01-01)
+                                                                handleFieldChange(
+                                                                    'birth_date',
+                                                                    `${birthYear}-01-01`,
+                                                                );
+                                                            } else {
+                                                                // Si borra el campo, limpiamos la fecha
+                                                                handleFieldChange(
+                                                                    'birth_date',
+                                                                    '',
+                                                                );
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            // TAB hacia adelante (lo controlas tú)
+                                                            if (
+                                                                e.key ===
+                                                                    'Tab' &&
+                                                                !e.shiftKey
+                                                            ) {
+                                                                e.preventDefault();
+                                                                professionRef.current?.focus();
+                                                            }
+
+                                                            // SHIFT + TAB hacia atrás (comportamiento normal)
+                                                            if (
+                                                                e.key ===
+                                                                    'Tab' &&
+                                                                e.shiftKey
+                                                            ) {
+                                                                // no hacemos nada para que el navegador retroceda libremente
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                {/* INPUT DE PROFESIÓN ACTUALIZADO */}
+                                                {/* CAMPO PROFESIÓN ACTUALIZADO (ESTILO PROCEDENCIA) */}
+                                                <div
+                                                    className="relative flex-1"
+                                                    ref={
+                                                        professionDropdownRef
+                                                    }
+                                                >
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">
+                                                        Profesión
+                                                    </label>
+                                                    <div className="relative">
+                                                        <input
+                                                            ref={
+                                                                professionRef
+                                                            }
+                                                            type="text"
+                                                            className="block w-full rounded-xl border border-gray-400 px-3 py-2 text-sm text-black uppercase focus:border-blue-500 focus:ring-blue-500"
+                                                            value={
+                                                                currentPerson.profession ||
+                                                                ''
+                                                            }
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
+                                                            autoComplete="off"
+                                                            onChange={(e) =>
+                                                                handleProfessionInput(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            onFocus={() => {
+                                                                if (
+                                                                    (
+                                                                        currentPerson.profession ||
+                                                                        ''
+                                                                    ).length >
+                                                                    1
+                                                                ) {
+                                                                    setIsProfessionDropdownOpen(
+                                                                        true,
+                                                                    );
+                                                                    searchProfessions(
+                                                                        currentPerson.profession as string,
+                                                                    );
+                                                                }
+                                                            }}
+                                                            onBlur={() => {
+                                                                setTimeout(
+                                                                    () => {
+                                                                        setIsProfessionDropdownOpen(
+                                                                            false,
+                                                                        );
+                                                                    },
+                                                                    200,
+                                                                );
+                                                            }}
+                                                        />
+
+                                                        {/* Dropdown conectado a la Base de Datos (professionSuggestions) */}
+                                                        {isProfessionDropdownOpen &&
+                                                            professionSuggestions.length >
+                                                                0 && (
+                                                                <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-400 bg-white shadow-xl">
+                                                                    {professionSuggestions.map(
+                                                                        (
+                                                                            profItem,
+                                                                            index,
+                                                                        ) => (
+                                                                            <div
+                                                                                key={
+                                                                                    index
+                                                                                }
+                                                                                onClick={() => {
+                                                                                    handleFieldChange(
+                                                                                        'profession',
+                                                                                        profItem,
+                                                                                    );
+                                                                                    setIsProfessionDropdownOpen(
+                                                                                        false,
+                                                                                    );
+                                                                                }}
+                                                                                className="cursor-pointer border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 last:border-0 hover:bg-blue-200"
+                                                                            >
+                                                                                {
+                                                                                    profItem
+                                                                                }
+                                                                            </div>
+                                                                        ),
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* F. FILA PROCEDENCIA Y TELÉFONO (en
+                                    Delegación se mantiene Procedencia —
+                                    hereda el valor de la Cuenta Grupal — y
+                                    se oculta solo Teléfono) */}
+                                <div
+                                    className={
+                                        isDelegationType
+                                            ? 'grid grid-cols-1 gap-3'
+                                            : 'grid grid-cols-2 gap-3'
+                                    }
+                                >
                                     <div
                                         className="relative"
                                         ref={originDropdownRef}
@@ -2555,6 +2832,7 @@ export default function CheckinModal({
                                         </div>
                                     </div>
 
+                                    {!isDelegationType && (
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 uppercase">
                                             Teléfono
@@ -2577,6 +2855,7 @@ export default function CheckinModal({
                                             />
                                         </div>
                                     </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -2795,224 +3074,113 @@ export default function CheckinModal({
 
                                     <div className="mb-1">
                                         {/* 1. FILA DE OPCIONES (Solo Temporal Derecha) */}
+
                                         {/* ============================================================== */}
-                                        {/* 🌟 FILA DE CONTROLES COMPACTOS (AUTO AJUSTE Y CORPORATIVO) 🌟 */}
+                                        {/* 🌟 AUTO AJUSTE + TIPO DE REGISTRO (una sola fila, con
+                                            "revelación progresiva"): sin ninguno de los dos toggles
+                                            (Corp/Deleg) activo, el registro es normal por defecto.
+                                            Corporativo y Delegación son mutuamente excluyentes — el
+                                            propio data.type es el estado único que lo controla — y
+                                            cada uno oculta el botón del otro para dejar sitio a sus
+                                            controles específicos (Frecuencia de cobro, en el caso de
+                                            Corporativo) en la MISMA fila, sin dejar una fila extra
+                                            vacía debajo. Corporativo y Delegación aplican el mismo
+                                            descuento base de -20 Bs que antes aplicaba el checkbox
+                                            único. */}
                                         {/* ============================================================== */}
                                         <div className="col-span-full mb-2">
-                                            <div className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
-                                                {/* IZQUIERDA: Auto Ajuste de Precio */}
-                                                <div
-                                                    className={`flex w-[40%] items-center justify-center rounded-lg p-1 transition-all ${
+                                            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm transition-all duration-300">
+                                                <label
+                                                    htmlFor="auto_adjust_price"
+                                                    className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition-all duration-300 select-none ${
                                                         data.auto_adjust_price
-                                                            ? 'bg-blue-100 shadow-sm'
-                                                            : 'hover:bg-gray-200/50'
+                                                            ? 'bg-blue-100 text-blue-800 shadow-sm'
+                                                            : 'text-gray-500 hover:bg-gray-200/50'
                                                     }`}
                                                 >
-                                                    <label
-                                                        htmlFor="auto_adjust_price"
-                                                        className={`flex cursor-pointer items-center justify-center gap-1.5 text-xs font-bold transition-all select-none ${
+                                                    <input
+                                                        id="auto_adjust_price"
+                                                        type="checkbox"
+                                                        checked={
                                                             data.auto_adjust_price
-                                                                ? 'text-blue-800'
-                                                                : 'text-gray-500'
-                                                        }`}
-                                                    >
-                                                        <input
-                                                            id="auto_adjust_price"
-                                                            type="checkbox"
-                                                            checked={
-                                                                data.auto_adjust_price
-                                                            }
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    'auto_adjust_price',
-                                                                    e.target
-                                                                        .checked,
-                                                                )
-                                                            }
-                                                            disabled={
-                                                                isReadOnly ||
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'auto_adjust_price',
+                                                                e.target
+                                                                    .checked,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isReadOnly ||
+                                                            data.type !==
+                                                                'estandar' ||
+                                                            isQuickGroupMode
+                                                        }
+                                                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                                    />
+                                                    AUTO AJUSTE
+                                                </label>
+
+                                                <div className="h-5 w-px bg-gray-300" />
+
+                                                {/* CORPORATIVO: oculto cuando Delegación está activa */}
+                                                {data.type !== 'delegacion' && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={isReadOnly}
+                                                        onClick={() =>
+                                                            handleTipoRegistroChange(
                                                                 data.type ===
                                                                     'corporativo'
-                                                            }
-                                                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                                                        />
-                                                        AUTO AJUSTE
-                                                    </label>
-                                                </div>
-
-                                                {/* Línea divisoria sutil entre ambos botones */}
-                                                <div className="h-5 w-px bg-gray-300"></div>
-
-                                                {/* DERECHA: Asig. CORP (w-[60%]) DISEÑO ORIGINAL MANTENIDO */}
-                                                <div
-                                                    className={`flex w-[60%] items-center justify-center rounded-lg p-1 transition-all ${
-                                                        data.type ===
-                                                        'corporativo'
-                                                            ? 'border border-indigo-100 bg-indigo-50 shadow-sm'
-                                                            : 'hover:bg-gray-200/50'
-                                                    }`}
-                                                >
-                                                    <label
-                                                        htmlFor="is_corporate_rec"
-                                                        className={`flex cursor-pointer items-center justify-center gap-1.5 text-xs font-bold transition-all select-none ${
+                                                                    ? 'estandar'
+                                                                    : 'corporativo',
+                                                            )
+                                                        }
+                                                        className={`rounded-lg px-2 py-1.5 text-xs font-bold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50 ${
                                                             data.type ===
                                                             'corporativo'
-                                                                ? 'text-indigo-800'
-                                                                : 'text-gray-500'
+                                                                ? 'bg-indigo-100 text-indigo-800 shadow-sm'
+                                                                : 'flex-1 text-gray-500 hover:bg-gray-200/50'
                                                         }`}
                                                     >
-                                                        <input
-                                                            id="is_corporate_rec"
-                                                            type="checkbox"
-                                                            checked={
-                                                                data.type ===
-                                                                'corporativo'
+                                                        CORPORATIVO
+                                                    </button>
+                                                )}
+
+                                                {/* Controles de Frecuencia: aparecen EN LA MISMA FILA,
+                                                    a la derecha de "CORPORATIVO", solo cuando ese modo
+                                                    está activo — ya no ocupan una fila propia debajo. */}
+                                                {data.type ===
+                                                    'corporativo' && (
+                                                    <div className="flex flex-1 animate-in items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 duration-300 fade-in slide-in-from-left-1">
+                                                        <span className="text-[11px] font-bold whitespace-nowrap text-indigo-800">
+                                                            Frecuencia:
+                                                        </span>
+                                                        {/* 1. SELECTOR RÁPIDO */}
+                                                        <select
+                                                            className="h-6 w-[64px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
+                                                            // Si el número en la caja es 1, 7, 15 o 30, el select lo muestra. Si escriben otro número a mano, el select muestra "OTRO"
+                                                            value={
+                                                                [
+                                                                    1, 7, 15,
+                                                                    30,
+                                                                ].includes(
+                                                                    Number(
+                                                                        data.corporate_days,
+                                                                    ),
+                                                                )
+                                                                    ? String(
+                                                                          data.corporate_days,
+                                                                      )
+                                                                    : 'OTRO'
                                                             }
                                                             onChange={(e) => {
-                                                                const isChecked =
-                                                                    e.target
-                                                                        .checked;
-                                                                const selectedRoom =
-                                                                    rooms.find(
-                                                                        (r) =>
-                                                                            r.id ===
-                                                                                Number(
-                                                                                    data.room_id,
-                                                                                ) ||
-                                                                            r.id ===
-                                                                                initialRoomId,
-                                                                    );
-                                                                const origPrice =
-                                                                    selectedRoom
-                                                                        ?.price
-                                                                        ?.amount ||
-                                                                    0;
-
                                                                 if (
-                                                                    !isChecked
+                                                                    e.target
+                                                                        .value !==
+                                                                    'OTRO'
                                                                 ) {
-                                                                    // Si lo APAGA, limpiamos todo y restauramos el precio normal
-                                                                    setData(
-                                                                        (
-                                                                            prev,
-                                                                        ) => ({
-                                                                            ...prev,
-                                                                            type: 'estandar',
-                                                                            corporate_days: 0,
-                                                                            agreed_price:
-                                                                                origPrice,
-                                                                        }),
-                                                                    );
-                                                                    setIsCustomFrequency(
-                                                                        false,
-                                                                    );
-                                                                } else {
-                                                                    // Si lo ENCIENDE, aplicamos el descuento base de -20 Bs
-                                                                    setData(
-                                                                        (
-                                                                            prev,
-                                                                        ) => ({
-                                                                            ...prev,
-                                                                            type: 'corporativo',
-                                                                            auto_adjust_price: false,
-                                                                            agreed_price:
-                                                                                Math.max(
-                                                                                    0,
-                                                                                    origPrice -
-                                                                                        20,
-                                                                                ),
-                                                                            // 👇 CAMBIO AQUÍ: Ponemos 0 para que obligue a seleccionar
-                                                                            corporate_days: 1,
-                                                                        }),
-                                                                    );
-                                                                    // 👇 CAMBIO AQUÍ: Aseguramos que la caja de "OTRO" esté oculta inicialmente
-                                                                    setIsCustomFrequency(
-                                                                        false,
-                                                                    );
-                                                                }
-                                                            }}
-                                                            disabled={
-                                                                isReadOnly
-                                                            }
-                                                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
-                                                        />
-                                                        ASIG. CORP
-                                                    </label>
-
-                                                    {/* Controles de Frecuencia que aparecen AL LADO */}
-                                                    {data.type ===
-                                                        'corporativo' && (
-                                                        <div className="ml-2 flex items-center gap-1 border-l border-indigo-200 pl-2">
-                                                            {/* 1. SELECTOR RÁPIDO */}
-                                                            <select
-                                                                className="h-6 w-[68px] rounded border-indigo-300 bg-white py-0 pr-4 pl-1 text-[13px] font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500"
-                                                                // Si el número en la caja es 1, 7, 15 o 30, el select lo muestra. Si escriben otro número a mano, el select muestra "OTRO"
-                                                                value={
-                                                                    [
-                                                                        1, 7,
-                                                                        15, 30,
-                                                                    ].includes(
-                                                                        Number(
-                                                                            data.corporate_days,
-                                                                        ),
-                                                                    )
-                                                                        ? String(
-                                                                              data.corporate_days,
-                                                                          )
-                                                                        : 'OTRO'
-                                                                }
-                                                                onChange={(
-                                                                    e,
-                                                                ) => {
-                                                                    if (
-                                                                        e.target
-                                                                            .value !==
-                                                                        'OTRO'
-                                                                    ) {
-                                                                        setData(
-                                                                            'corporate_days',
-                                                                            Number(
-                                                                                e
-                                                                                    .target
-                                                                                    .value,
-                                                                            ),
-                                                                        );
-                                                                    }
-                                                                }}
-                                                                disabled={
-                                                                    isReadOnly
-                                                                }
-                                                            >
-                                                                <option value="1">
-                                                                    1 día
-                                                                </option>
-                                                                <option value="7">
-                                                                    7 días
-                                                                </option>
-                                                                <option value="15">
-                                                                    15 días
-                                                                </option>
-                                                                <option value="30">
-                                                                    30 días
-                                                                </option>
-                                                                <option value="OTRO">
-                                                                    Otro
-                                                                </option>
-                                                            </select>
-
-                                                            {/* 2. CAJA DE TEXTO (SIEMPRE VISIBLE) */}
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                className="w-16 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm font-black text-black shadow-inner focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                placeholder="Días"
-                                                                value={
-                                                                    data.corporate_days ===
-                                                                    0
-                                                                        ? ''
-                                                                        : data.corporate_days
-                                                                }
-                                                                onChange={(e) =>
                                                                     setData(
                                                                         'corporate_days',
                                                                         Number(
@@ -3020,21 +3188,90 @@ export default function CheckinModal({
                                                                                 .target
                                                                                 .value,
                                                                         ),
-                                                                    )
+                                                                    );
                                                                 }
-                                                                disabled={
-                                                                    isReadOnly
-                                                                }
-                                                                required={
-                                                                    data.type ===
-                                                                    'corporativo'
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                            }}
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
+                                                        >
+                                                            <option value="1">
+                                                                1 día
+                                                            </option>
+                                                            <option value="7">
+                                                                7 días
+                                                            </option>
+                                                            <option value="15">
+                                                                15 días
+                                                            </option>
+                                                            <option value="30">
+                                                                30 días
+                                                            </option>
+                                                            <option value="OTRO">
+                                                                Otro
+                                                            </option>
+                                                        </select>
+
+                                                        {/* 2. CAJA DE TEXTO (SIEMPRE VISIBLE) */}
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            className="w-14 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm font-black text-black shadow-inner focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                            placeholder="Días"
+                                                            value={
+                                                                data.corporate_days ===
+                                                                0
+                                                                    ? ''
+                                                                    : data.corporate_days
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'corporate_days',
+                                                                    Number(
+                                                                        e
+                                                                            .target
+                                                                            .value,
+                                                                    ),
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                isReadOnly
+                                                            }
+                                                            required={
+                                                                data.type ===
+                                                                'corporativo'
+                                                            }
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* DELEGACIÓN: oculto cuando Corporativo está activo */}
+                                                {data.type !==
+                                                    'corporativo' && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={isReadOnly}
+                                                        onClick={() =>
+                                                            handleTipoRegistroChange(
+                                                                data.type ===
+                                                                    'delegacion'
+                                                                    ? 'estandar'
+                                                                    : 'delegacion',
+                                                            )
+                                                        }
+                                                        className={`rounded-lg px-2 py-1.5 text-xs font-bold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                            data.type ===
+                                                            'delegacion'
+                                                                ? 'bg-amber-100 text-amber-800 shadow-sm'
+                                                                : 'flex-1 text-gray-500 hover:bg-gray-200/50'
+                                                        }`}
+                                                    >
+                                                        DELEGACIÓN
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
+
                                         {/* 2. CONTENEDOR VERDE (Habitación, Costo Base y Total) */}
                                         <div className="rounded-xl border border-green-200 bg-green-50 p-1 shadow-sm transition-all">
                                             {(() => {
@@ -3580,7 +3817,10 @@ export default function CheckinModal({
                                     </div>
                                 </div>
 
-                                {/* CAMPO ADELANTO (Siempre visible, bloqueado si no es titular) */}
+                                {/* CAMPO ADELANTO (oculto en Check-in Rápido:
+                                    el costo va a la Cuenta Grupal, nunca se
+                                    cobra en efectivo al huésped) */}
+                                {!isQuickGroupMode && (
                                 <div>
                                     <div className="relative -mt-2 animate-in duration-300 fade-in slide-in-from-top-2">
                                         <div className="flex flex-col gap-3">
@@ -3777,6 +4017,7 @@ export default function CheckinModal({
                                         </div>
                                     </div>
                                 </div>
+                                )}
                                 {/* Campo de observaciones*/}
                                 <div className="relative -top-4">
                                     <label className="text-xs font-bold text-gray-500 uppercase">

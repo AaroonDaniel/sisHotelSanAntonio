@@ -12,14 +12,90 @@ class SpecialAgreement extends Model
     protected $fillable = [
         'type',
         'company_name',
+        'origin',
         'agreed_price',
         'payment_frequency_days',
         'starts_at',
+        'total_advance',
+        'total_consumed',
     ];
 
     protected $casts = [
         'starts_at' => 'datetime',
+        'total_advance' => 'decimal:2',
+        'total_consumed' => 'decimal:2',
     ];
+
+    /**
+     * MOTOR DE FACTURACIÓN GRUPAL — estado financiero REAL, calculado en
+     * vivo desde las tablas fuente (payments/checkins) en vez de confiar en
+     * los contadores total_advance/total_consumed (que se incrementan a
+     * mano en distintos puntos del código y pueden desincronizarse). Esos
+     * dos campos de la tabla se dejan intactos por compatibilidad — nada
+     * más los sigue incrementando — pero balance/getBalanceAttribute() ya
+     * NO los usa: ahora delega en este cálculo real.
+     */
+
+    /**
+     * Suma real de TODO el dinero depositado en la cuenta: adelanto
+     * inicial + cualquier abono posterior (tabla payments,
+     * special_agreement_id). Fuente de verdad en vivo.
+     */
+    public function getTotalDepositedAttribute(): float
+    {
+        return round((float) $this->payments()->sum('amount'), 2);
+    }
+
+    /**
+     * Suma real del costo de TODAS las habitaciones (checkins) vinculadas a
+     * este grupo, activas o finalizadas: agreed_price * duration_days de
+     * cada una. Fuente de verdad en vivo — no depende de ningún contador.
+     */
+    public function getTotalConsumedRealAttribute(): float
+    {
+        return round(
+            (float) $this->checkins()
+                ->get(['agreed_price', 'duration_days'])
+                ->sum(fn ($c) => (float) ($c->agreed_price ?? 0) * max(1, (int) $c->duration_days)),
+            2,
+        );
+    }
+
+    /**
+     * Saldo de "bolsa" de la Cuenta Grupal: total depositado menos lo
+     * realmente consumido. Positivo = fondo grupal disponible; negativo =
+     * deuda morosa del grupo.
+     */
+    public function getBalanceAttribute(): float
+    {
+        return round($this->total_deposited - $this->total_consumed_real, 2);
+    }
+
+    /**
+     * Resumen financiero listo para serializar al frontend (banner del
+     * OccupiedRoomModal, listado de /group-accounts, resumen de checkout
+     * múltiple) con los nombres de campo que espera la UI.
+     */
+    public function financialSummary(): array
+    {
+        return [
+            'total_deposited' => $this->total_deposited,
+            'total_consumed' => $this->total_consumed_real,
+            'balance' => $this->balance,
+        ];
+    }
+
+    /**
+     * Cuenta Grupal "real" (con nombre propio): las que se crean desde el
+     * módulo de Cuentas Grupales, a diferencia de un convenio individual
+     * ad-hoc (una sola habitación, sin company_name) que sigue existiendo
+     * desde el checkbox "ASIG. CORP" del check-in normal.
+     */
+    public function scopeGroupAccounts($query)
+    {
+        return $query->whereNotNull('company_name')
+            ->whereIn('type', ['corporativo', 'delegacion']);
+    }
 
     /**
      * Habitaciones (Checkins) agrupadas bajo este convenio. Para una

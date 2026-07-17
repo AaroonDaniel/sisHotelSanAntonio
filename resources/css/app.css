@@ -210,6 +210,20 @@
   html {
     @apply font-sans;
     }
+
+    /* Ocultar flechas (spinners) en inputs numéricos en todo el sistema
+       (Adelantos, Asignación, Devoluciones, Gastos, Apertura/Cierre de
+       caja, etc.) — Chrome, Safari, Edge, Opera. */
+    input[type='number']::-webkit-outer-spin-button,
+    input[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    /* Mismo efecto en Firefox. */
+    input[type='number'] {
+        -moz-appearance: textfield;
+    }
 }
 
 @theme inline {

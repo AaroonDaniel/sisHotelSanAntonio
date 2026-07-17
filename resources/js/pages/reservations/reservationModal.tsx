@@ -17,7 +17,6 @@ import {
     User,
     Users,
     X,
-    Zap,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -209,165 +208,14 @@ export default function ReservationModal({
         operator_id: '',
     });
 
-    const [autoAssignFilter, setAutoAssignFilter] = useState<
-        'ambos' | 'private' | 'shared'
-    >('ambos');
-
     // Toast de error (rojo) para datos mal llenados o errores internos.
     const [errorToast, setErrorToast] = useState<string | null>(null);
 
-    // Función Inteligente para Delegaciones Rápidas
-    // Función Inteligente para Delegaciones Rápidas (Con Lógica 50/50)
-    const handleAutoAssign = () => {
-        let remaining = unassignedGuests;
-        if (remaining <= 0) return;
-
-        const newDetails = [...data.details] as any[];
-
-        // ⏱️ Calculamos las fechas en milisegundos
-        const formStart = new Date(data.arrival_date).getTime();
-        const formEnd = formStart + data.duration_days * 24 * 60 * 60 * 1000;
-
-        // 1. Filtrar TODAS las habitaciones disponibles sin importar el baño todavía
-        const allAvailableRooms = rooms.filter((room) => {
-            if (newDetails.some((d) => d.room_id === String(room.id)))
-                return false;
-            if (
-                ['MANTENIMIENTO', 'INHABILITADO'].includes(
-                    room.status.toUpperCase(),
-                )
-            )
-                return false;
-
-            // ⚡ Convertimos a any temporalmente
-            const rAny = room as any;
-
-            // 🔍 VERIFICACIÓN DE DISPONIBILIDAD (Cruces de fechas)
-            const hasConflict =
-                rAny.reservation_details?.some((rd: any) => {
-                    const res = rd.reservation;
-                    if (
-                        !res ||
-                        ['CANCELADO', 'COMPLETADO'].includes(
-                            res.status?.toUpperCase(),
-                        )
-                    )
-                        return false;
-
-                    const resStart = new Date(res.arrival_date).getTime();
-                    const resEnd =
-                        resStart + res.duration_days * 24 * 60 * 60 * 1000;
-
-                    return formStart < resEnd && formEnd > resStart;
-                }) ||
-                rAny.checkin_details?.some((cd: any) => {
-                    const ch = cd.checkin;
-                    if (
-                        !ch ||
-                        ['CHECKOUT', 'CANCELADO'].includes(
-                            ch.status?.toUpperCase(),
-                        )
-                    )
-                        return false;
-
-                    const chStart = new Date(
-                        ch.arrival_date || ch.created_at,
-                    ).getTime();
-                    const chEnd =
-                        chStart + (ch.duration_days || 1) * 24 * 60 * 60 * 1000;
-
-                    return formStart < chEnd && formEnd > chStart;
-                });
-
-            return !hasConflict;
-        });
-
-        // 2. APLICAR EL FILTRO Y LA LÓGICA DE 50/50 (Cremallera)
-        let roomsToAssign: any[] = [];
-
-        if (autoAssignFilter === 'private') {
-            roomsToAssign = allAvailableRooms.filter((room) => {
-                const isShared =
-                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
-                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
-                return !isShared;
-            });
-        } else if (autoAssignFilter === 'shared') {
-            roomsToAssign = allAvailableRooms.filter((room) => {
-                const isShared =
-                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
-                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
-                return isShared;
-            });
-        } else {
-            // ✨ MODO AMBOS: Separamos y entrelazamos para asegurar mitad y mitad
-            const privateRooms = allAvailableRooms.filter((room) => {
-                const isShared =
-                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
-                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
-                return !isShared;
-            });
-            const sharedRooms = allAvailableRooms.filter((room) => {
-                const isShared =
-                    room.price?.bathroom_type?.toLowerCase() === 'shared' ||
-                    room.price?.bathroom_type?.toLowerCase() === 'compartido';
-                return isShared;
-            });
-
-            // Entrelazamos: 1 privado, 1 compartido, 1 privado...
-            let pIndex = 0,
-                sIndex = 0;
-            while (
-                pIndex < privateRooms.length ||
-                sIndex < sharedRooms.length
-            ) {
-                if (pIndex < privateRooms.length)
-                    roomsToAssign.push(privateRooms[pIndex++]);
-                if (sIndex < sharedRooms.length)
-                    roomsToAssign.push(sharedRooms[sIndex++]);
-            }
-        }
-
-        // 3. Proceso de asignación final usando la lista ordenada
-        for (const room of roomsToAssign) {
-            if (remaining <= 0) break;
-
-            const rType = room.room_type;
-            if (!rType || rType.name.toLowerCase().includes('salon')) continue;
-
-            const cap = getRoomCapacity(rType) || 1;
-            const physicalBath =
-                room.price?.bathroom_type?.toLowerCase() === 'shared' ||
-                room.price?.bathroom_type?.toLowerCase() === 'compartido'
-                    ? 'shared'
-                    : 'private';
-
-            const priceCalc = recalculatePrice(
-                String(rType.id),
-                physicalBath,
-                cap,
-                true,
-                isCorporateToggle,
-            );
-
-            newDetails.push({
-                _temp_id: Date.now() + Math.random(),
-                room_id: String(room.id),
-                price_id: priceCalc.priceId,
-                price: priceCalc.price,
-                requested_room_type_id: String(rType.id),
-                requested_bathroom: physicalBath,
-                _temp_pax_count: cap,
-                _temp_room_name: rType.name,
-                _temp_advance_payment: 0,
-                room: room,
-            });
-
-            remaining -= cap;
-        }
-
-        setData('details', newDetails);
-    };
+    // 🗑️ Se eliminó handleAutoAssign() (auto-asignación aleatoria 50/50 de
+    // habitaciones para Delegación, con su selector de filtro de baño): ya
+    // no se fuerza a asignar habitaciones al registrar la reserva — ver
+    // validación relajada en submit() más abajo. Las habitaciones reales
+    // se asignan después, al check-in (Cuentas Grupales).
 
     const validGuestCount =
         typeof data.guest_count === 'number' ? data.guest_count : 0;
@@ -685,21 +533,28 @@ export default function ReservationModal({
             alert('⚠️ Ingrese una cantidad de huéspedes válida.');
             return;
         }
-        if (unassignedGuests > 0) {
-            alert(
-                `⚠️ Faltan acomodar ${unassignedGuests} personas en habitaciones.`,
-            );
-            return;
-        }
-        if (data.details.length === 0) {
-            alert('⚠️ Debe agregar al menos una habitación.');
-            return;
-        }
-        if (data.details.some((det) => !det.requested_bathroom)) {
-            alert(
-                '⚠️ El campo "Tipo de Baño" es obligatorio en todas las habitaciones agregadas.',
-            );
-            return;
+        // 🚀 Delegación: ya NO exige acomodar a todos los huéspedes en
+        // habitaciones para poder registrar/confirmar la reserva — eso
+        // pasa después, cuando la delegación llega de verdad (Cuentas
+        // Grupales / Check-in Rápido en /status). Si de todas formas se
+        // insertaron algunas habitaciones a mano, se guardan tal cual.
+        if (!isDelegation) {
+            if (unassignedGuests > 0) {
+                alert(
+                    `⚠️ Faltan acomodar ${unassignedGuests} personas en habitaciones.`,
+                );
+                return;
+            }
+            if (data.details.length === 0) {
+                alert('⚠️ Debe agregar al menos una habitación.');
+                return;
+            }
+            if (data.details.some((det) => !det.requested_bathroom)) {
+                alert(
+                    '⚠️ El campo "Tipo de Baño" es obligatorio en todas las habitaciones agregadas.',
+                );
+                return;
+            }
         }
         if (isCorporateToggle && totalAdvancePayment <= 0) {
             alert(
@@ -730,14 +585,31 @@ export default function ReservationModal({
             type: reservationType,
             is_delegation: isDelegation,
             is_corporate: isCorporateToggle,
-            details: currentData.details.map((det) => ({
-                id: det.id, // Pasamos el ID para que actualice y no duplique al editar
-                room_id: det.room_id,
-                price_id: det.price_id,
-                price: det.price,
-                requested_room_type_id: det.requested_room_type_id,
-                requested_bathroom: det.requested_bathroom,
-            })),
+            // 🚀 Delegación sin ninguna habitación insertada a mano: el
+            // backend igual exige al menos un "detalle" (details.min:1),
+            // así que mandamos uno placeholder sin habitación real — es
+            // exactamente el mismo estado que ya usa el sistema para
+            // "pendiente de asignar habitación" en /reservas.
+            details:
+                isDelegation && currentData.details.length === 0
+                    ? [
+                          {
+                              id: undefined,
+                              room_id: null,
+                              price_id: null,
+                              price: 0,
+                              requested_room_type_id: null,
+                              requested_bathroom: null,
+                          },
+                      ]
+                    : currentData.details.map((det) => ({
+                          id: det.id, // Pasamos el ID para que actualice y no duplique al editar
+                          room_id: det.room_id,
+                          price_id: det.price_id,
+                          price: det.price,
+                          requested_room_type_id: det.requested_room_type_id,
+                          requested_bathroom: det.requested_bathroom,
+                      })),
         }));
 
         const options = {
@@ -1346,42 +1218,13 @@ export default function ReservationModal({
                                         <Plus className="h-5 w-5" /> Insertar
                                     </button>
 
-                                    {/* 👇 SECCIÓN MODO DELEGACIÓN (Auto-Agarrar) 👇 */}
-                                    {isDelegation && (
-                                        <div className="ml-auto flex items-center gap-1 border-l border-gray-200">
-                                            {/* Selector de Filtro de Baño */}
-                                            <select
-                                                value={autoAssignFilter}
-                                                onChange={(e) =>
-                                                    setAutoAssignFilter(
-                                                        e.target.value as any,
-                                                    )
-                                                }
-                                                className="cursor-pointer rounded-lg border border-indigo-200 bg-indigo-50 px-0.5 py-2 text-xs font-bold text-indigo-800 uppercase shadow-sm transition-colors hover:bg-indigo-50 focus:border-indigo-500 focus:ring-indigo-500"
-                                                title="Filtrar tipo de baño para auto-asignación"
-                                            >
-                                                <option value="ambos">
-                                                    Ambos
-                                                </option>
-                                                <option value="private">
-                                                    Privado
-                                                </option>
-                                                <option value="shared">
-                                                    Compartido
-                                                </option>
-                                            </select>
-
-                                            {/* Botón de Acción Auto-Agarrar */}
-                                            <button
-                                                type="button"
-                                                onClick={handleAutoAssign}
-                                                className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-sm font-bold text-white shadow-md transition-all hover:bg-indigo-500 active:scale-95"
-                                            >
-                                                <Zap className="h-4 w-4" />{' '}
-                                                Auto-Asignar
-                                            </button>
-                                        </div>
-                                    )}
+                                    {/* 🚀 Delegación: ya NO hay auto-asignación
+                                        aleatoria de habitaciones aquí — se
+                                        registra solo la cantidad de personas
+                                        y las habitaciones reales se asignan
+                                        después, al check-in (Cuentas
+                                        Grupales), o a mano con "Insertar" si
+                                        ya se sabe cuáles se van a usar. */}
                                 </div>
                             )}
 

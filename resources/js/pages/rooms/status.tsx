@@ -41,6 +41,7 @@ import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
     Guest as ModalGuest,
+    GroupAccount,
     Room as ModalRoom,
     Operator,
 } from '../checkins/checkinModal';
@@ -127,6 +128,7 @@ interface Props {
     Schedules: any[];
     reservations: any[];
     Operators: Operator[];
+    GroupAccounts?: GroupAccount[];
 }
 
 export default function RoomsStatus({
@@ -142,6 +144,7 @@ export default function RoomsStatus({
     availableRooms,
     occupiedRooms,
     Operators,
+    GroupAccounts = [],
 }: Props) {
     // Completado de checkins
     const [confirmCompleteTarget, setConfirmCompleteTarget] =
@@ -1446,6 +1449,26 @@ export default function RoomsStatus({
                         // garantizando que card y modal nunca discrepen.
                         const corpState: any = computeCorpState(activeCheckin);
 
+                        // 🚀 CUENTA GRUPAL (Delegación/Corporativo unificados,
+                        // ver /group-accounts): si el ocupante pertenece a una,
+                        // se identifica con un badge visible arriba del nombre
+                        // del huésped. `company_name` solo existe en las
+                        // Cuentas Grupales "reales" (no en un convenio ad-hoc
+                        // de una sola habitación armado desde "ASIG. CORP").
+                        const groupAccount = activeCheckin?.special_agreement;
+                        const groupAccountBadge =
+                            groupAccount?.company_name &&
+                            (groupAccount.type === 'delegacion' ||
+                                groupAccount.type === 'corporativo')
+                                ? {
+                                      label:
+                                          groupAccount.type === 'delegacion'
+                                              ? 'DELEGACIÓN'
+                                              : 'CORPORATIVO',
+                                      name: groupAccount.company_name,
+                                  }
+                                : null;
+
                         // 🔍 LÓGICA DE RESERVAS ORDENADAS
                         let sortedReservations: any[] = [];
                         let firstRes: any = null;
@@ -1543,6 +1566,12 @@ export default function RoomsStatus({
                                     <h3 className="text-2xl font-extrabold tracking-tight">
                                         {room.number}
                                     </h3>
+                                    {groupAccountBadge && (
+                                        <p className="mt-1 line-clamp-1 text-[10px] font-black tracking-wide text-yellow-300 uppercase drop-shadow-sm">
+                                            {groupAccountBadge.label}:{' '}
+                                            {groupAccountBadge.name}
+                                        </p>
+                                    )}
                                     <p className="mt-1 line-clamp-2 text-xs font-bold text-white/90">
                                         {config.info}
                                     </p>
@@ -1676,6 +1705,7 @@ export default function RoomsStatus({
                 guests={Guests}
                 rooms={Rooms}
                 operators={Operators}
+                groupAccounts={GroupAccounts}
                 initialRoomId={selectedRoomId}
                 initialAgreedPrice={selectedInitialAgreedPrice}
                 initialSpecialAgreementId={selectedInitialSpecialAgreementId}

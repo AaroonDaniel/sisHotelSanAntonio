@@ -228,6 +228,17 @@ class RoomController
             // Asignamos el arreglo de reservas futuras a la habitación
             $room->future_reservations = $futureReservations;
 
+            // 🚀 MOTOR DE FACTURACIÓN GRUPAL: si el check-in activo de esta
+            // habitación pertenece a una Cuenta Grupal real (tiene
+            // company_name), le inyectamos el saldo REAL calculado en vivo
+            // (total_deposited/total_consumed/balance) para que el banner
+            // del OccupiedRoomModal no dependa de los contadores manuales.
+            foreach ($room->checkins as $checkin) {
+                if ($checkin->specialAgreement && !empty($checkin->specialAgreement->company_name)) {
+                    $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
+                }
+            }
+
             return $room;
         });
 
@@ -249,6 +260,15 @@ class RoomController
         ])
             ->where('status', 'activo')
             ->get();
+
+        // 🚀 MOTOR DE FACTURACIÓN GRUPAL: mismo saldo real inyectado que
+        // arriba, para los checkins que alimentan directamente los modales
+        // de salida/detalles (OccupiedRoomModal, multiCheckoutModal).
+        foreach ($activeCheckins as $checkin) {
+            if ($checkin->specialAgreement && !empty($checkin->specialAgreement->company_name)) {
+                $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
+            }
+        }
 
         // 3. Reservas pendientes
         $pendingReservations = \App\Models\Reservation::with(['guest', 'details.room.roomType', 'payments', 'specialAgreement'])
@@ -302,6 +322,20 @@ class RoomController
             return $service;
         });
 
+        // 🚀 Cuentas Grupales activas (Delegación/Corporativo unificados):
+        // alimenta el selector de "Check-in Rápido" en CheckinModal para
+        // asignar una habitación directamente a una de estas cuentas.
+        $groupAccounts = \App\Models\SpecialAgreement::groupAccounts()
+            ->orderBy('company_name')
+            ->get(['id', 'type', 'company_name', 'origin', 'total_advance', 'total_consumed'])
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'type' => $a->type,
+                'company_name' => $a->company_name,
+                'origin' => $a->origin,
+                'balance' => $a->balance,
+            ]);
+
         return \Inertia\Inertia::render('rooms/status', [
             'Rooms'        => $rooms,
             'Checkins'     => $activeCheckins,
@@ -314,6 +348,7 @@ class RoomController
             'Schedules'    => \App\Models\Schedule::where('is_active', true)->get(),
             'reservations' => $pendingReservations,
             'Operators'    => \App\Models\User::operadores()->get(),
+            'GroupAccounts' => $groupAccounts,
         ]);
     }
 

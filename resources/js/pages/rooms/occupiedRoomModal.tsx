@@ -145,6 +145,38 @@ export default function OccupiedRoomModal({
             onFinish: () => setShowCancelAgreementModal(false),
         });
     };
+
+    // --- FORMULARIO DE "DESVINCULAR DEL GRUPO" (split de facturación,
+    // edge case "el huésped que se queda") ---
+    const {
+        data: splitData,
+        setData: setSplitData,
+        post: postSplit,
+        processing: processingSplit,
+        reset: resetSplit,
+    } = useForm({ checkin_operator_id: '' });
+    const [showSplitModal, setShowSplitModal] = useState(false);
+    const [splitOperatorError, setSplitOperatorError] = useState<
+        string | null
+    >(null);
+
+    const confirmSplit = () => {
+        if (!liveCheckin) return;
+        if (!splitData.checkin_operator_id) {
+            setSplitOperatorError('Seleccione un operador para continuar.');
+            return;
+        }
+        postSplit(`/checkins/${liveCheckin.id}/split-from-group`, {
+            preserveScroll: true,
+            preserveState: true,
+            // La habitación pasa a un check-in NUEVO (esta ya no es la
+            // estadía activa) — cerramos el modal para que el
+            // recepcionista vuelva a abrirlo y vea el estado fresco, en
+            // vez de dejarlo viendo datos de un check-in ya finalizado.
+            onSuccess: () => handleClose(),
+            onError: () => setShowSplitModal(false),
+        });
+    };
     // --- FORMULARIO DE ADELANTO ---
     const {
         data: paymentData,
@@ -199,6 +231,9 @@ export default function OccupiedRoomModal({
         setShowConfirmModal(false);
         setPaymentOperatorError(null);
         resetPayment();
+        setShowSplitModal(false);
+        setSplitOperatorError(null);
+        resetSplit();
         onClose();
     };
 
@@ -293,6 +328,20 @@ export default function OccupiedRoomModal({
         liveCheckin?.special_agreement?.type === 'corporativo' ||
         liveCheckin?.special_agreement?.type === 'delegacion';
 
+    // 🚀 MOTOR DE FACTURACIÓN GRUPAL: una Cuenta Grupal REAL (Delegación o
+    // Corporativo del módulo /group-accounts) siempre tiene company_name —
+    // a diferencia de un convenio individual ad-hoc ("ASIG. CORP" del
+    // check-in normal, sin nombre de grupo). Solo las reales tienen saldo
+    // de "bolsa" calculado en vivo (financial_summary, inyectado por
+    // RoomController::status()) y permiten abonar/desvincular como grupo.
+    const groupAgreement = liveCheckin?.special_agreement;
+    const isRealGroupAccount = !!groupAgreement?.company_name;
+    const groupFinancial: {
+        total_deposited: number;
+        total_consumed: number;
+        balance: number;
+    } | null = groupAgreement?.financial_summary ?? null;
+
     // =================================================================
     // 🚦 SEMÁFORO DE CONVENIOS CORPORATIVOS (Punto 3.13)
     // -----------------------------------------------------------------
@@ -367,6 +416,36 @@ export default function OccupiedRoomModal({
     };
 
     const confirmPayment = () => {
+        // 🚀 MOTOR DE FACTURACIÓN GRUPAL: si esta habitación pertenece a
+        // una Cuenta Grupal real, el pago NO se registra contra el
+        // check-in individual — se abona directamente al fondo del grupo
+        // (misma cuenta/endpoint que /group-accounts), actualizando el
+        // saldo de TODAS las habitaciones del grupo, no solo esta.
+        if (isRealGroupAccount && groupAgreement) {
+            router.post(
+                `/group-accounts/${groupAgreement.id}/advance`,
+                {
+                    amount: paymentData.amount,
+                    operator_id: paymentData.operator_id,
+                    method: paymentData.payment_method,
+                },
+                {
+                    preserveScroll: true,
+                    preserveState: true,
+                    onSuccess: () => {
+                        resetPayment();
+                        setShowPaymentForm(false);
+                        setShowConfirmModal(false);
+                    },
+                    onError: (errors) => {
+                        console.error('Error backend:', errors);
+                    },
+                    onFinish: () => setShowConfirmModal(false),
+                },
+            );
+            return;
+        }
+
         const url = `/checkins/${liveCheckin.id}/add-payment`;
 
         postPayment(url, {
@@ -451,6 +530,46 @@ export default function OccupiedRoomModal({
                             <X className="h-6 w-6" />
                         </button>
                     </div>
+
+                    {/* 🚀 BANNER DE CUENTA GRUPAL (Delegación/Corporativo):
+                        estado financiero REAL calculado en vivo, no el
+                        contador manual. */}
+                    {isRealGroupAccount && (
+                        <div
+                            className={`z-10 flex flex-wrap items-center justify-between gap-2 border-b px-6 py-2.5 ${
+                                groupAgreement?.type === 'delegacion'
+                                    ? 'border-amber-200 bg-amber-50'
+                                    : 'border-indigo-200 bg-indigo-50'
+                            }`}
+                        >
+                            <span
+                                className={`flex items-center gap-2 text-sm font-black tracking-wide uppercase ${
+                                    groupAgreement?.type === 'delegacion'
+                                        ? 'text-amber-800'
+                                        : 'text-indigo-800'
+                                }`}
+                            >
+                                <Building2 className="h-4 w-4" />
+                                {groupAgreement?.type === 'delegacion'
+                                    ? 'DELEGACIÓN'
+                                    : 'CORPORATIVO'}
+                                : {groupAgreement?.company_name}
+                            </span>
+                            {groupFinancial && (
+                                <span
+                                    className={`text-sm font-bold ${
+                                        groupFinancial.balance >= 0
+                                            ? 'text-emerald-700'
+                                            : 'text-red-600'
+                                    }`}
+                                >
+                                    {groupFinancial.balance >= 0
+                                        ? `Fondo Grupal Disponible: ${formatCurrency(groupFinancial.balance)}`
+                                        : `Deuda del Grupo: -${formatCurrency(Math.abs(groupFinancial.balance))}`}
+                                </span>
+                            )}
+                        </div>
+                    )}
 
                     {/* CONTENIDO SCROLLABLE */}
                     <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
@@ -715,7 +834,9 @@ export default function OccupiedRoomModal({
                                                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-green-700"
                                             >
                                                 <Banknote className="h-4 w-4" />{' '}
-                                                REGISTRAR NUEVO ADELANTO
+                                                {isRealGroupAccount
+                                                    ? 'ABONAR A CUENTA GRUPAL'
+                                                    : 'REGISTRAR NUEVO ADELANTO'}
                                             </button>
                                         ) : (
                                             <form
@@ -725,7 +846,9 @@ export default function OccupiedRoomModal({
                                                 <div className="mb-2 flex items-center justify-between">
                                                     <span className="flex items-center gap-1 text-[12px] font-bold text-green-700 uppercase">
                                                         <Wallet className="h-3 w-3" />{' '}
-                                                        Nuevo Pago / Adelanto
+                                                        {isRealGroupAccount
+                                                            ? `Abono a ${groupAgreement?.company_name}`
+                                                            : 'Nuevo Pago / Adelanto'}
                                                     </span>
                                                     <button
                                                         type="button"
@@ -1089,19 +1212,44 @@ export default function OccupiedRoomModal({
                                                 </p>
                                             )}
 
-                                            {/* Botón Anular Convenio */}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setShowCancelAgreementModal(
-                                                        true,
-                                                    )
-                                                }
-                                                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100 active:scale-95"
-                                            >
-                                                <ShieldOff className="h-4 w-4" />
-                                                Anular Convenio
-                                            </button>
+                                            {/* 🚀 EDGE CASE "EL HUÉSPED QUE SE
+                                                QUEDA": en una Cuenta Grupal
+                                                real (con nombre propio) se
+                                                ofrece un SPLIT de
+                                                facturación real (checkout +
+                                                nuevo check-in individual) en
+                                                vez de la anulación simple
+                                                in-place, que solo tiene
+                                                sentido para un convenio
+                                                ad-hoc de una sola
+                                                habitación. */}
+                                            {isRealGroupAccount ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowSplitModal(true)
+                                                    }
+                                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-700 transition hover:bg-amber-100 active:scale-95"
+                                                >
+                                                    <ArrowRightLeft className="h-4 w-4" />
+                                                    Desvincular del Grupo
+                                                    (Extender estadía
+                                                    individual)
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowCancelAgreementModal(
+                                                            true,
+                                                        )
+                                                    }
+                                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100 active:scale-95"
+                                                >
+                                                    <ShieldOff className="h-4 w-4" />
+                                                    Anular Convenio
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -1217,10 +1365,23 @@ export default function OccupiedRoomModal({
                         <Banknote className="h-7 w-7 text-green-600" />
                     </div>
                     <h3 className="mb-2 text-xl font-bold tracking-tight text-gray-800">
-                        ¿Confirmar Adelanto?
+                        {isRealGroupAccount
+                            ? '¿Confirmar Abono al Grupo?'
+                            : '¿Confirmar Adelanto?'}
                     </h3>
                     <p className="mb-6 text-sm leading-relaxed text-gray-500">
-                        Se registrará un pago de <br />
+                        {isRealGroupAccount ? (
+                            <>
+                                Se abonará al fondo de{' '}
+                                <strong className="text-gray-700">
+                                    {groupAgreement?.company_name}
+                                </strong>
+                                : <br />
+                            </>
+                        ) : (
+                            <>Se registrará un pago de </>
+                        )}
+                        <br />
                         <strong className="my-2 block text-2xl tracking-tight text-slate-900">
                             {formatCurrency(
                                 parseFloat(paymentData.amount || '0'),
@@ -1301,6 +1462,88 @@ export default function OccupiedRoomModal({
                             {processingCancel
                                 ? 'Anulando...'
                                 : 'Sí, Anular Convenio'}
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* --- MODAL DE CONFIRMACIÓN "DESVINCULAR DEL GRUPO" (split de
+                facturación — edge case "el huésped que se queda") --- */}
+            <Dialog open={showSplitModal} onOpenChange={setShowSplitModal}>
+                <DialogContent className="rounded-2xl border-none bg-white p-6 text-center shadow-2xl sm:max-w-[420px]">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Desvincular del Grupo</DialogTitle>
+                        <DialogDescription>
+                            Confirme la desvinculación de esta habitación de
+                            la Cuenta Grupal, extendiendo la estadía de forma
+                            individual.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-amber-100 bg-amber-50 shadow-sm">
+                        <ArrowRightLeft className="h-7 w-7 text-amber-600" />
+                    </div>
+                    <h3 className="mb-2 text-xl font-bold tracking-tight text-gray-800">
+                        ¿Desvincular del Grupo?
+                    </h3>
+                    <p className="mb-4 text-sm leading-relaxed text-gray-500">
+                        Se hará{' '}
+                        <strong className="text-gray-700">
+                            checkout de hoy
+                        </strong>{' '}
+                        para esta estadía: los días ya transcurridos se
+                        cobrarán a{' '}
+                        <strong className="text-gray-700">
+                            {groupAgreement?.company_name}
+                        </strong>{' '}
+                        como estaba previsto. Se creará una{' '}
+                        <strong className="text-gray-700">
+                            nueva estadía individual
+                        </strong>{' '}
+                        en esta misma habitación, a tarifa normal, desde hoy.
+                    </p>
+
+                    <div className="mb-4 text-left">
+                        <label className="mb-1 block text-center text-[12px] font-bold text-gray-500 uppercase">
+                            Operador
+                        </label>
+                        <OperatorSelector
+                            operators={operators}
+                            value={splitData.checkin_operator_id}
+                            onChange={(id) => {
+                                setSplitData('checkin_operator_id', id);
+                                setSplitOperatorError(null);
+                            }}
+                            compact
+                            size="lg"
+                            label=""
+                        />
+                        {splitOperatorError && (
+                            <p className="mt-1 text-center text-[12px] font-bold text-red-600">
+                                {splitOperatorError}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            onClick={() => {
+                                setShowSplitModal(false);
+                                setSplitOperatorError(null);
+                            }}
+                            disabled={processingSplit}
+                            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={confirmSplit}
+                            disabled={processingSplit}
+                            className="w-full transform rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-200 transition hover:bg-amber-700 active:scale-[0.98] disabled:opacity-50"
+                        >
+                            {processingSplit
+                                ? 'Procesando...'
+                                : 'Sí, Desvincular'}
                         </button>
                     </div>
                 </DialogContent>

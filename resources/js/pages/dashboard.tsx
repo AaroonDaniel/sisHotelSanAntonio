@@ -213,9 +213,9 @@ export default function Dashboard({
                     anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
                 },
                 {
-                    name: 'Cuentas Corporativas',
+                    name: 'Cuentas Grupales',
                     icon: Building,
-                    url: '/corporate-accounts',
+                    url: '/group-accounts',
                     anyPerm: ['checkin.realizar', 'checkins.ver_todos'],
                 },
                 {

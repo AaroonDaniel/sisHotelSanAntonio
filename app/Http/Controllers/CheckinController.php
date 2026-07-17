@@ -173,7 +173,11 @@ class CheckinController extends Controller
 
             // Validaciones estructurales del Titular
             'full_name' => 'required_without:guest_id|string|max:150',
-            'identification_number' => 'nullable|string|max:50',
+            // Check-in Rápido de Cuenta Grupal: CI y fecha de nacimiento
+            // pasan a ser obligatorios (son 2 de los 3 únicos campos del
+            // modo reducido, junto con el nombre).
+            'identification_number' => 'nullable|required_with:group_account_id|string|max:50',
+            'birth_date' => 'nullable|required_with:group_account_id|date',
             'phone' => 'nullable|string|max:20',
 
             // Validaciones estructurales de los Acompañantes
@@ -192,6 +196,10 @@ class CheckinController extends Controller
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'corporate_days' => 'nullable|integer',
             'agreed_price' => 'nullable|numeric|min:0',
+            // 🚀 Cuenta Grupal (Delegación/Corporativo) YA EXISTENTE — Check-in
+            // Rápido: en vez de crear un convenio nuevo, se reutiliza uno
+            // creado desde /group-accounts. Ver bloque de precios más abajo.
+            'group_account_id' => 'nullable|integer|exists:special_agreements,id',
         ], [
             'payment_method.required_if' => 'Si registra un adelanto, debe elegir un método de pago.',
             'checkin_operator_id.required' => 'Debe seleccionar un operador para continuar.',
@@ -427,8 +435,21 @@ class CheckinController extends Controller
 
             $specialAgreementId = null;
             $isAutoAdjust = $request->boolean('auto_adjust_price');
+            $groupAccountId = $request->input('group_account_id');
 
-            if ($isSpecialDeal || $isAutoAdjust) {
+            if ($groupAccountId) {
+                // 🚀 CHECK-IN RÁPIDO A CUENTA GRUPAL: se reutiliza el
+                // convenio YA EXISTENTE (una Cuenta Grupal agrupa varias
+                // habitaciones) — no se crea uno nuevo por cada asignación.
+                // El costo de esta habitación se descuenta del adelanto de
+                // la cuenta (total_consumed); nunca se le cobra en efectivo
+                // al huésped, por eso este modo no pide advance_payment.
+                $groupAccount = \App\Models\SpecialAgreement::findOrFail($groupAccountId);
+                $specialAgreementId = $groupAccount->id;
+
+                $diasAcumular = max(1, (int) ($validatedCheckin['duration_days'] ?? 1));
+                $groupAccount->increment('total_consumed', round($agreedPrice * $diasAcumular, 2));
+            } elseif ($isSpecialDeal || $isAutoAdjust) {
                 $tipoTrato = $isAutoAdjust ? 'AJUSTE DE PRECIO' : ($request->input('type') ?? 'corporativo');
                 $frecuenciaDias = $isAutoAdjust ? 0 : (int) $request->input('corporate_days', 0);
 
@@ -908,6 +929,113 @@ class CheckinController extends Controller
             $checkin->notes = substr(trim($notasActuales . ' ' . $notaAnulacion), 0, 145);
             $checkin->save();
             return redirect()->back()->with('success', 'Convenio corporativo anulado. El precio normal aplica desde hoy.');
+        });
+    }
+
+    // ===================================================================
+    // 🚀 MOTOR DE FACTURACIÓN GRUPAL — EDGE CASE "EL HUÉSPED QUE SE QUEDA"
+    // ===================================================================
+    // "Desvincular del Grupo (Extender estadía individual)": a diferencia
+    // de cancelAgreement() (que muta el MISMO check-in in-place, sin pasar
+    // por caja), esto hace un SPLIT real de facturación cuando el huésped
+    // pertenece a una Cuenta Grupal de verdad (company_name):
+    //   A. Checkout del check-in actual con fecha de HOY — los días ya
+    //      transcurridos se cargan a la Cuenta Grupal (applyGroupAccountCoverage),
+    //      exactamente como estaba previsto desde la asignación.
+    //   B. Se crea un check-in NUEVO para el mismo huésped/habitación,
+    //      arrancando HOY, sin Cuenta Grupal ("Normal"), a la tarifa
+    //      estándar completa según la capacidad real de la habitación.
+    // Todo dentro de una única transacción: si algo falla, no queda dinero
+    // cargado al grupo sin su check-in de reemplazo, ni viceversa.
+    public function splitFromGroup(Request $request, Checkin $checkin)
+    {
+        $validated = $request->validate([
+            'checkin_operator_id' => 'required|exists:users,id',
+        ], [
+            'checkin_operator_id.required' => 'Debe seleccionar un operador para continuar.',
+            'checkin_operator_id.exists' => 'Debe seleccionar un operador para continuar.',
+        ]);
+
+        $checkin->loadMissing(['specialAgreement', 'room.price', 'companions']);
+        $agreement = $checkin->specialAgreement;
+
+        if (!$agreement || empty($agreement->company_name)) {
+            return redirect()->back()->with('error', 'Este check-in no pertenece a una Cuenta Grupal.');
+        }
+
+        if ($checkin->status !== 'activo') {
+            return redirect()->back()->with('error', 'Solo se puede desvincular una estadía activa.');
+        }
+
+        return DB::transaction(function () use ($checkin, $agreement, $validated) {
+            $ahora = Carbon::now();
+            $operatorId = (int) $validated['checkin_operator_id'];
+
+            // --- A. CHECKOUT del check-in actual, fecha de HOY ---
+            $diasACobrar = $this->calculateBillableDays($checkin, $ahora);
+            $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
+            $totalHospedaje = $precioUnitario * $diasACobrar;
+            $carriedBalance = floatval($checkin->carried_balance ?? 0);
+            // NOTA: igual que en multiCheckout(), los servicios consumidos
+            // NO quedan cubiertos por este ajuste — se siguen cobrando
+            // aparte si los hubo (no forman parte del "split", solo el
+            // hospedaje que estaba previsto contra el grupo).
+            $costoRealHospedaje = $totalHospedaje + $carriedBalance;
+
+            $this->applyGroupAccountCoverage($checkin, $costoRealHospedaje, true);
+
+            $checkin->update([
+                'check_out_date' => $ahora,
+                'duration_days' => $diasACobrar,
+                'status' => 'finalizado',
+                'checkout_operator_id' => $operatorId,
+            ]);
+
+            // --- B. Nuevo check-in "Normal", mismo huésped/habitación, hoy ---
+            $totalGuests = 1 + $checkin->companions->count();
+            $precioNormal = $this->calculateAgreedPrice($checkin->room_id, $totalGuests);
+
+            $cajaAbierta = \App\Models\CashRegister::where('user_id', $operatorId)
+                ->where('status', 'ABIERTA')
+                ->first();
+
+            $notaSplit = sprintf(
+                '[EXTENSIÓN INDIVIDUAL: desvinculado de "%s" el %s. Tarifa normal desde hoy: Bs %s/noche.]',
+                $agreement->company_name,
+                $ahora->format('d/m/Y H:i'),
+                number_format($precioNormal, 2),
+            );
+
+            $nuevoCheckin = Checkin::create([
+                'guest_id' => $checkin->guest_id,
+                'room_id' => $checkin->room_id,
+                'user_id' => Auth::id() ?? 1,
+                'checkin_operator_id' => $operatorId,
+                'check_in_date' => $ahora,
+                'actual_arrival_date' => $ahora,
+                'schedule_id' => $checkin->schedule_id,
+                'origin' => $checkin->origin,
+                'duration_days' => 1,
+                'agreed_price' => $precioNormal,
+                'special_agreement_id' => null,
+                'notes' => $notaSplit,
+                'status' => 'activo',
+                'cash_register_id' => $cajaAbierta ? $cajaAbierta->id : null,
+            ]);
+
+            // Los mismos acompañantes se trasladan al nuevo check-in
+            // (conservando su procedencia registrada en el pivote).
+            if ($checkin->companions->isNotEmpty()) {
+                $syncData = $checkin->companions->mapWithKeys(fn ($g) => [
+                    $g->id => ['origin' => $g->pivot->origin],
+                ])->toArray();
+                $nuevoCheckin->companions()->sync($syncData);
+            }
+
+            return redirect()->back()->with(
+                'success',
+                "Huésped desvinculado de '{$agreement->company_name}'. Nueva estadía individual iniciada hoy a Bs {$precioNormal}/noche.",
+            );
         });
     }
 
@@ -1398,15 +1526,10 @@ class CheckinController extends Controller
         // Cobrar la noche extra AQUÍ y el recargo escalonado ABAJO sería
         // cobrar dos veces la misma penalidad.
         $days = $this->calculateBillableDays($checkin, $checkOutDate, true);
+        // 🚀 MOTOR DE FACTURACIÓN GRUPAL: agreed_price se respeta siempre
+        // (ver misma limpieza en checkout()/multiCheckout() — se eliminó
+        // el override legado por texto 'DELEGACION' en notes).
         $price = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-
-        if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-            $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
-            $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
-            $ratePerPerson = $isPrivate ? 90 : 60;
-            $paxCount = 1 + $checkin->companions->count();
-            $price = $ratePerPerson * $paxCount;
-        }
 
         // 🚀 LATE CHECKOUT ESCALONADO — respeta el mismo $waivePenalty ya
         // validado arriba contra la ventana real de tolerancia.
@@ -1426,13 +1549,25 @@ class CheckinController extends Controller
         $grandTotal = $accommodationTotal + $servicesTotal + $carriedBalance + $lateCheckout['fee'];
 
         // PAGOS (Como los pagos se migraron físicamente en el transfer, aquí ya están todos)
+        // El monto de una DEVOLUCION ya se guarda en NEGATIVO (-abs(), ver
+        // refund()) — sumar el arreglo completo tal cual ya la resta sola.
+        // Restarla aparte aquí (monto negativo - monto negativo = suma el
+        // doble) inflaba $totalPagadoReal y subestimaba el saldo pendiente.
         $totalPagadoReal = 0;
         if ($checkin->payments->count() > 0) {
             foreach ($checkin->payments as $pago) {
-                $totalPagadoReal += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                $totalPagadoReal += (float) $pago->amount;
             }
         } else {
             $totalPagadoReal = $checkin->advance_payment ?? 0;
+        }
+
+        // 🚀 CUENTA GRUPAL: si aplica, el costo ya está cubierto por el
+        // grupo — no se le pide efectivo al huésped en este checkout.
+        // $persist=false: esto es solo la VISTA PREVIA (GET), no toca la BD.
+        $groupAccountCoverage = $this->applyGroupAccountCoverage($checkin, $grandTotal, false);
+        if ($groupAccountCoverage) {
+            $totalPagadoReal = $grandTotal;
         }
 
         $balance = $grandTotal - $totalPagadoReal;
@@ -1454,6 +1589,7 @@ class CheckinController extends Controller
             'late_checkout_tier' => $lateCheckout['tier'],
             'late_checkout_fee' => $lateCheckout['fee'],
             'late_checkout_label' => $lateCheckout['label'],
+            'group_account' => $groupAccountCoverage,
         ]);
     }
 
@@ -1654,16 +1790,15 @@ class CheckinController extends Controller
                 // sobre el valor real pactado; el descuento se resta al
                 // final como monto plano sobre el subtotal completo (ver
                 // $discountAmount más abajo).
+                // 🚀 MOTOR DE FACTURACIÓN GRUPAL: se eliminó el override
+                // legado que ignoraba agreed_price por texto en notes
+                // ('DELEGACION') y recalculaba una tarifa por persona a
+                // mano — esa lógica es anterior al módulo de Cuentas
+                // Grupales (SpecialAgreement) y lo contradecía: el precio
+                // pactado real (agreed_price) SIEMPRE debe respetarse tal
+                // cual se guardó en la asignación/Check-in Rápido.
                 $agreedPrice = $checkin->agreed_price;
                 $precioUnitario = $agreedPrice ?? ($checkin->room->price->amount ?? 0);
-
-                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                    $bathroomType  = strtolower($checkin->room->price->bathroom_type ?? '');
-                    $isPrivate     = in_array($bathroomType, ['private', 'privado']);
-                    $ratePerPerson = $isPrivate ? 90 : 60;
-                    $paxCount      = 1 + $checkin->companions->count();
-                    $precioUnitario = $ratePerPerson * $paxCount;
-                }
 
                 $totalHospedaje = $finalDays * $precioUnitario;
 
@@ -1704,10 +1839,23 @@ class CheckinController extends Controller
                 }
                 $grandTotal = $subtotalAntesDescuento - $discountAmount;
 
+                // El monto de una DEVOLUCION ya se guarda en NEGATIVO
+                // (-abs(), ver refund()) — sumar tal cual ya la resta sola;
+                // restarla aparte aquí duplicaba el efecto.
                 $totalPagadoPrevio = 0;
                 foreach ($checkin->payments as $pago) {
-                    $totalPagadoPrevio += ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                    $totalPagadoPrevio += (float) $pago->amount;
                 }
+
+                // 🚀 CUENTA GRUPAL: si aplica, el costo se cubre contra el
+                // saldo del grupo — se ajusta total_consumed con la
+                // diferencia real vs. lo ya estimado al check-in, y no se
+                // exige ningún cobro en efectivo por esta habitación.
+                $groupAccountCoverage = $this->applyGroupAccountCoverage($checkin, $grandTotal, true);
+                if ($groupAccountCoverage) {
+                    $totalPagadoPrevio = $grandTotal;
+                }
+
                 $saldoPendienteFinal = max(0, $grandTotal - $totalPagadoPrevio);
 
                 // --- Registro de pago(s) ---
@@ -2481,15 +2629,10 @@ class CheckinController extends Controller
         $diasExcedidos = $diasACobrar - max(1, intval($checkin->duration_days));
         if ($diasExcedidos < 0) $diasExcedidos = 0;
 
+        // 🚀 MOTOR DE FACTURACIÓN GRUPAL: agreed_price se respeta siempre
+        // (override legado por 'DELEGACION' en notes eliminado — ver
+        // checkout()/multiCheckout()/getCheckoutDetails()).
         $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-
-        if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-            $bathroomType = strtolower($checkin->room->price->bathroom_type ?? '');
-            $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
-            $ratePerPerson = $isPrivate ? 90 : 60;
-            $paxCount = 1 + $checkin->companions->count();
-            $precioUnitario = $ratePerPerson * $paxCount;
-        }
 
         $totalHospedaje = $precioUnitario * $diasACobrar;
         $carriedBalance = floatval($checkin->carried_balance ?? 0); // Deuda arrastrada
@@ -2515,7 +2658,9 @@ class CheckinController extends Controller
             $ultimoPagoId = $checkin->payments->last()->id;
 
             foreach ($checkin->payments as $pago) {
-                $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                // DEVOLUCION ya se guarda en NEGATIVO (-abs(), ver
+                // refund()) — usar el monto tal cual, sin volver a negarlo.
+                $monto = (float) $pago->amount;
                 $totalPagadoReal += $monto;
 
                 if ($pago->id === $ultimoPagoId) {
@@ -2782,7 +2927,9 @@ class CheckinController extends Controller
             if ($checkin->payments->count() > 0) {
                 $ultimoPagoId = $checkin->payments->last()->id;
                 foreach ($checkin->payments as $pago) {
-                    $monto = ($pago->type === 'DEVOLUCION') ? -$pago->amount : $pago->amount;
+                    // DEVOLUCION ya se guarda en NEGATIVO (-abs(), ver
+                    // refund()) — usar el monto tal cual.
+                    $monto = (float) $pago->amount;
                     if ($pago->id !== $ultimoPagoId) {
                         $adelantosPrevios += $monto;
                     }
@@ -3047,10 +3194,11 @@ class CheckinController extends Controller
 
         $totalServicios = $detailAdd->sum('subtotal');
 
-        // 2. Calcular Pagos
+        // 2. Calcular Pagos. DEVOLUCION ya se guarda en NEGATIVO (-abs(),
+        // ver refund()) — sumar tal cual ya la resta sola; restarla aparte
+        // aquí duplicaba el efecto.
         $totalPagado = $checkin->payments->reduce(function ($carry, $payment) {
-            // Si es devolución resta, si es pago suma
-            return $payment->type === 'DEVOLUCION' ? ($carry - $payment->amount) : ($carry + $payment->amount);
+            return $carry + (float) $payment->amount;
         }, 0);
 
 
@@ -3149,6 +3297,58 @@ class CheckinController extends Controller
      * (días limpios) — el recargo de aquí reemplaza a la vieja "noche
      * extra completa" de su CASO B.
      */
+
+    /**
+     * Si el checkin pertenece a una Cuenta Grupal (Delegación/Corporativo
+     * unificados — ver GroupAccountController, distingue de un convenio
+     * ad-hoc de una sola habitación porque este SÍ tiene company_name), el
+     * costo real de la estadía ($grandTotal) se cubre contra el saldo del
+     * grupo en vez de pedirle efectivo al huésped en este checkout puntual.
+     *
+     * Al hacer el Check-in Rápido ya se dedujo una ESTIMACIÓN de esta
+     * habitación (agreed_price * duration_days declarados en ese momento).
+     * Aquí se "empareja" esa estimación con el costo REAL final (que puede
+     * diferir por recargo de salida tardía, servicios consumidos, o una
+     * estadía más larga/corta que la declarada), ajustando
+     * total_consumed con la diferencia — así el saldo de la cuenta grupal
+     * queda exacto, nunca desfasado.
+     *
+     * $persist=false (getCheckoutDetails, solo vista previa GET) NO escribe
+     * en la BD, solo proyecta cuál quedaría el saldo. $persist=true
+     * (checkout()/multiCheckout(), la confirmación real) sí ajusta
+     * total_consumed.
+     *
+     * Devuelve null si el checkin no pertenece a una Cuenta Grupal.
+     */
+    private function applyGroupAccountCoverage(Checkin $checkin, float $grandTotal, bool $persist): ?array
+    {
+        $checkin->loadMissing('specialAgreement');
+        $agreement = $checkin->specialAgreement;
+
+        if (!$agreement || empty($agreement->company_name)) {
+            return null;
+        }
+
+        $estimadoInicial = round((float) $checkin->agreed_price * max(1, (int) $checkin->duration_days), 2);
+        $ajuste = round($grandTotal - $estimadoInicial, 2);
+
+        $balanceProyectado = round(
+            (float) $agreement->total_advance - (float) $agreement->total_consumed - $ajuste,
+            2,
+        );
+
+        if ($persist && $ajuste != 0) {
+            $agreement->increment('total_consumed', $ajuste);
+        }
+
+        return [
+            'id' => $agreement->id,
+            'name' => $agreement->company_name,
+            'type' => $agreement->type,
+            'balance_after' => $persist ? (float) $agreement->balance : $balanceProyectado,
+        ];
+    }
+
     private function calculateLateCheckoutFee(Checkin $checkin, Carbon $checkOutMoment, float $agreedPrice, bool $waivePenalty): array
     {
         if ($waivePenalty) {
@@ -3545,15 +3745,11 @@ class CheckinController extends Controller
                 // Calcular días a cobrar
                 $diasACobrar = $this->calculateBillableDays($checkin, $salida);
 
-                // Calcular precio unitario (con soporte para tarifas corporativas)
+                // 🚀 MOTOR DE FACTURACIÓN GRUPAL: el precio unitario SIEMPRE
+                // respeta agreed_price (el pactado al asignar/Check-in
+                // Rápido) — se eliminó el override legado por texto
+                // 'DELEGACION' en notes, que lo ignoraba por completo.
                 $precioUnitario = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-                if (str_contains(strtoupper($checkin->notes ?? ''), 'DELEGACION')) {
-                    $bathroomType = strtolower($checkin->room->bathroom_type ?? '');
-                    $isPrivate = $bathroomType === 'private' || $bathroomType === 'privado';
-                    $ratePerPerson = $isPrivate ? 90 : 60;
-                    $paxCount = 1 + $checkin->companions->count();
-                    $precioUnitario = $ratePerPerson * $paxCount;
-                }
 
                 $totalHospedaje = $precioUnitario * $diasACobrar;
 
@@ -3593,19 +3789,35 @@ class CheckinController extends Controller
                     $serviciosGlobales[$nombreSrv]['total'] += $subt;
                 }
 
-                // Sumar pagos previos (Adelantos del historial)
+                // Sumar pagos previos (Adelantos del historial). El monto de
+                // una DEVOLUCION ya se guarda en NEGATIVO (-abs(), ver
+                // refund()) — sumar el arreglo completo tal cual ya la
+                // resta sola. Restarla aparte aquí (monto negativo - monto
+                // negativo = suma el doble) inflaba $totalPagadoReal y
+                // terminaba subestimando $saldoPagar (pérdida de dinero).
+                // Mismo criterio que Checkin::getAdvancePaymentAttribute().
                 $totalPagadoReal = 0;
                 if ($checkin->payments->count() > 0) {
                     foreach ($checkin->payments as $pago) {
-                        if ($pago->type === 'DEVOLUCION') {
-                            $totalPagadoReal -= $pago->amount;
-                        } else {
-                            $totalPagadoReal += $pago->amount;
-                        }
+                        $totalPagadoReal += (float) $pago->amount;
                     }
                 } else {
                     $totalPagadoReal = $checkin->advance_payment ?? 0;
                 }
+
+                // 🚀 CUENTA GRUPAL: si esta habitación pertenece a una, su
+                // costo (hospedaje + deuda arrastrada; multiCheckout no
+                // calcula recargo por salida tardía) se cubre contra el
+                // saldo del grupo — no entra al efectivo/QR a cobrar del
+                // lote. NOTA: los servicios consumidos (agrupados
+                // globalmente más abajo) NO quedan cubiertos por este
+                // ajuste, se siguen cobrando aparte si los hubo.
+                $costoRealEstaHabitacion = $totalHospedaje + $carriedBalance;
+                $groupAccountCoverage = $this->applyGroupAccountCoverage($checkin, $costoRealEstaHabitacion, true);
+                if ($groupAccountCoverage) {
+                    $totalPagadoReal = $costoRealEstaHabitacion;
+                }
+
                 $totalAdelantosGlobal += $totalPagadoReal;
 
                 // Marcar el Checkin como finalizado
@@ -3636,13 +3848,30 @@ class CheckinController extends Controller
                 $metodoRecibido = 'QR';
             }
 
+            // 🚀 MOTOR DE FACTURACIÓN GRUPAL: nunca confiar ciegamente en los
+            // montos mixtos que manda el cliente — si su preview no
+            // descontó bien la cobertura de una Cuenta Grupal (o cualquier
+            // otro desfase), podría terminar cobrando de más. Se recortan
+            // (nunca se amplían) para que su suma jamás exceda $saldoPagar,
+            // ya calculado server-side con la cobertura grupal aplicada.
+            // Mismo candado que ya protege la rama de un solo método (que
+            // siempre usa $saldoPagar directo, nunca el monto del cliente).
+            $montoEfectivoSolicitado = max(0, (float) $request->input('monto_efectivo', 0));
+            $montoQrSolicitado = max(0, (float) $request->input('monto_qr', 0));
+            $totalSolicitado = $montoEfectivoSolicitado + $montoQrSolicitado;
+            if ($totalSolicitado > $saldoPagar) {
+                $factor = $totalSolicitado > 0 ? ($saldoPagar / $totalSolicitado) : 0;
+                $montoEfectivoSolicitado = round($montoEfectivoSolicitado * $factor, 2);
+                $montoQrSolicitado = round($saldoPagar - $montoEfectivoSolicitado, 2);
+            }
+
             // Sin caja abierta, cualquier cobro de saldo aquí quedaría
             // invisible en el cuadre de turno (cobro fantasma). Solo se
             // exige si REALMENTE hay dinero por cobrar. Terminal Compartida:
             // el dueño del turno es checkout_operator_id, NO $userId
             // (Auth::id(), siempre la cuenta genérica 'recepcion').
             $hayCobroPendiente = $request->metodo_pago === 'ambos'
-                ? ($request->monto_efectivo > 0 || $request->monto_qr > 0)
+                ? ($montoEfectivoSolicitado > 0 || $montoQrSolicitado > 0)
                 : $saldoPagar > 0;
 
             $cajaAbierta = null;
@@ -3651,25 +3880,25 @@ class CheckinController extends Controller
             }
 
             if ($request->metodo_pago === 'ambos') {
-                if ($request->monto_efectivo > 0) {
+                if ($montoEfectivoSolicitado > 0) {
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
                         'operator_id' => (int) $request->checkout_operator_id,
                         'cash_register_id' => $cajaAbierta->id,
-                        'amount' => $request->monto_efectivo,
+                        'amount' => $montoEfectivoSolicitado,
                         'method' => 'EFECTIVO',
                         'description' => 'PAGO FINAL MÚLTIPLE (MIXTO)',
                         'type' => 'PAGO'
                     ]);
                 }
-                if ($request->monto_qr > 0) {
+                if ($montoQrSolicitado > 0) {
                     Payment::create([
                         'checkin_id' => $primerCheckinId,
                         'user_id' => $userId,
                         'operator_id' => (int) $request->checkout_operator_id,
                         'cash_register_id' => $cajaAbierta->id,
-                        'amount' => $request->monto_qr,
+                        'amount' => $montoQrSolicitado,
                         'method' => 'QR',
                         'bank_name' => $bancoRecibido,
                         'description' => 'PAGO FINAL MÚLTIPLE (MIXTO)',
