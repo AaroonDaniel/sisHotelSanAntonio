@@ -282,7 +282,7 @@ export default function Dashboard({
                     anyPerm: ['reportes.parte_diario'],
                 },
                 {
-                    name: 'Reporte de Cierre de Caja',
+                    name: 'Cierre de Caja',
                     icon: Wallet,
                     url: '/reports/financial',
                     anyPerm: ['reportes.cierre_caja'],

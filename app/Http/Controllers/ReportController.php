@@ -42,6 +42,29 @@ class ReportController extends Controller
             ->first();
     }
 
+    /**
+     * Normaliza start_date/end_date a límites de rango Carbon-parseables.
+     * Acepta tanto fechas puras ("2026-07-16", día completo 00:00–23:59,
+     * usadas por la vista agregada "Todos") como datetimes exactos
+     * ("2026-07-16T22:15", la hora real de apertura/cierre de un turno que
+     * ahora manda el <input type="datetime-local"> del Cierre de Caja por
+     * operador) — Carbon no necesita la 'T', solo un espacio.
+     */
+    private function normalizeRangeBounds(string $startDate, string $endDate): array
+    {
+        $isDateOnly = fn (string $v) => strlen($v) <= 10;
+
+        $rangoInicio = $isDateOnly($startDate)
+            ? $startDate . ' 00:00:00'
+            : str_replace('T', ' ', $startDate);
+
+        $rangoFin = $isDateOnly($endDate)
+            ? $endDate . ' 23:59:59'
+            : str_replace('T', ' ', $endDate);
+
+        return [$rangoInicio, $rangoFin];
+    }
+
     public function index(Request $request)
     {
         $targetDate = $request->query('date', now()->toDateString());
@@ -561,8 +584,7 @@ class ReportController extends Controller
             })
             ->values();
 
-        $rangoInicio = $startDate . ' 00:00:00';
-        $rangoFin    = $endDate . ' 23:59:59';
+        [$rangoInicio, $rangoFin] = $this->normalizeRangeBounds($startDate, $endDate);
 
         if ($userId && $userId !== 'todos' && $startDate === $endDate) {
             $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
@@ -770,8 +792,7 @@ class ReportController extends Controller
             $endDate = $request->query('end_date', now()->toDateString());
             $userId = $request->query('user_id', 'todos');
 
-            $rangoInicio = $startDate . ' 00:00:00';
-            $rangoFin    = $endDate . ' 23:59:59';
+            [$rangoInicio, $rangoFin] = $this->normalizeRangeBounds($startDate, $endDate);
             $cashRegisterResuelto = null;
 
             if ($userId !== 'todos' && $startDate === $endDate) {
@@ -835,27 +856,23 @@ class ReportController extends Controller
         $pdf->SetMargins(15, 15, 15);
         $pdf->SetAutoPageBreak(true, 30);
         $pdf->AddPage();
-
-        $pdf->SetFont('Arial', 'B', 15);
-        $pdf->Cell(0, 8, utf8_decode('HOTEL "SAN ANTONIO"'), 0, 1, 'C');
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(0, 6, utf8_decode('REPORTE DE CAJA'), 0, 1, 'C');
 
-        $tipoTexto = 'AMBOS (Efectivo y QR/Bancos)';
+        $tipoTexto = 'AMBOS (Efectivo y QR)';
         if ($recordType === 'efectivo') $tipoTexto = 'SOLO EFECTIVO';
-        if ($recordType === 'bancos') $tipoTexto = 'SOLO QR / BANCOS';
+        if ($recordType === 'bancos') $tipoTexto = 'SOLO QR ';
 
         $pdf->SetFont('Arial', '', 9);
-        $pdf->Cell(0, 5, utf8_decode('Tipo de Registro: ' . $tipoTexto), 0, 1, 'C');
         $cajeroTexto = $userId === 'todos'
             ? 'TODOS LOS RECEPCIONISTAS'
             : (User::find($userId)->full_name ?? 'Usuario');
-        $pdf->Cell(0, 5, utf8_decode('Cajero / Usuario: ' . strtoupper($cajeroTexto)), 0, 1, 'C');
+        $pdf->Cell(0, 5, utf8_decode('Cajero: ' . strtoupper($cajeroTexto)), 0, 1, 'L');
         // Estampa de tiempo EXACTA (Día/Mes/Año Hora:Minuto) de apertura y
         // cierre, no solo la fecha: crítico para auditar turnos que cruzan
         // la medianoche, donde "Desde/Hasta" sin hora sería ambiguo.
         $rangoTexto = "Desde: " . \Carbon\Carbon::parse($rangoInicio)->format('d/m/Y H:i') . "  Hasta: " . \Carbon\Carbon::parse($rangoFin)->format('d/m/Y H:i');
-        $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'C');
+        $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'L');
         $pdf->Ln(6);
 
         $granTotalEfectivo = 0;
@@ -1004,8 +1021,6 @@ class ReportController extends Controller
             $pdf->SetFont('Arial', 'B', 11);
             $pdf->SetFillColor(255, 243, 205);
             $pdf->Cell(106, 7, '', 0, 0);
-            $pdf->Cell(50, 7, utf8_decode('EFECTIVO DEJADO PARA EL SIGUIENTE TURNO:'), 1, 0, 'R', true);
-            $pdf->Cell(40, 7, number_format($cashRegisterResuelto->left_amount, 2) . ' Bs', 1, 1, 'R', true);
         }
 
         $pdf->Ln(25);
@@ -1026,13 +1041,17 @@ class ReportController extends Controller
         $endDate = $request->query('end_date', now()->toDateString());
         $userId = $request->query('user_id', 'todos');
 
+        [$rangoInicio, $rangoFin] = $this->normalizeRangeBounds($startDate, $endDate);
+
         $query = Payment::with(['user', 'operador', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            ->whereBetween('created_at', [$rangoInicio, $rangoFin]);
 
         if ($userId !== 'todos') $this->scopeByOperator($query, $userId);
 
         $payments = $query->orderBy('user_id')->orderBy('created_at')->get();
-        $fileName = 'cierre-caja-' . $startDate . '.csv';
+        // Filename siempre con fecha limpia (sin ':'/'T'), aunque venga un
+        // datetime-local exacto de un turno puntual.
+        $fileName = 'cierre-caja-' . Carbon::parse($rangoInicio)->format('Y-m-d') . '.csv';
 
         $headers = array(
             "Content-type"        => "text/csv; charset=UTF-8",

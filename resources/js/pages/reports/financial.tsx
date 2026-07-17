@@ -3,9 +3,7 @@ import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    ArrowDownCircle,
     ArrowLeft,
-    ArrowUpCircle,
     Banknote,
     Calendar,
     Eye,
@@ -17,44 +15,12 @@ import {
     LogOut,
     Printer,
     QrCode,
-    Receipt,
-    Scale,
     User as UserIcon,
-    Wallet,
     X,
 } from 'lucide-react';
-import { FormEventHandler, useMemo, useState } from 'react';
+import { FormEventHandler, useState } from 'react';
 
 /* ===================== TIPOS ===================== */
-interface PaymentRow {
-    id: number;
-    user_name: string;
-    amount: number; // ya viene con signo: devoluciones negativas
-    method: string;
-    bank_name?: string | null;
-    type: string; // ADELANTO | PAGO | DEVOLUCION ...
-    date: string;
-    time: string;
-    room_number: string;
-    guest_name: string;
-}
-
-interface ExpenseRow {
-    id: number;
-    user_name: string;
-    amount: number;
-    description: string;
-    date: string;
-    time: string;
-}
-
-interface Summary {
-    apertura: number;
-    ingresos: number;
-    devoluciones: number; // valor negativo
-    gastos: number;
-    liquidacion: number;
-}
 
 interface OperatorOption extends User {
     // ISO 8601, o null si el operador no tiene un turno ABIERTO ahora mismo.
@@ -74,9 +40,6 @@ interface Props {
         active_register?: any;
     };
     users?: OperatorOption[];
-    Payments?: PaymentRow[];
-    Expenses?: ExpenseRow[];
-    Summary?: Summary;
     Filters?: {
         start_date?: string;
         end_date?: string;
@@ -87,12 +50,6 @@ interface Props {
 }
 
 /* ===================== HELPERS ===================== */
-const bs = (n: number) =>
-    new Intl.NumberFormat('es-BO', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(n ?? 0);
-
 const formatDateTime = (value: string | null) => {
     if (!value) return '—';
     return new Date(value).toLocaleString('es-BO', {
@@ -108,9 +65,6 @@ const formatDateTime = (value: string | null) => {
 export default function FinancialReport({
     auth,
     users = [],
-    Payments = [],
-    Expenses = [],
-    Summary,
     Filters,
     CanViewAll = false,
     HasMovements = false,
@@ -148,27 +102,21 @@ export default function FinancialReport({
         );
     };
 
-    // Estados del formulario. Por defecto ambas fechas son HOY: el backend
-    // (findShiftOverlapping) ya detecta automáticamente el turno completo
-    // que se solapa con ese día, incluso si empezó el día anterior y cruza
-    // la medianoche — así el recepcionista no tiene que calcular fechas a
-    // mano para ver todo lo que hizo en su turno.
-    const today = new Date().toISOString().slice(0, 10);
-    const [fechaInicio, setFechaInicio] = useState(
-        Filters?.start_date || today,
-    );
-    const [fechaFin, setFechaFin] = useState(Filters?.end_date || today);
+    // Estados del formulario. En blanco hasta que se elija un operador
+    // puntual (ver handleUserChange): ya no hay "hoy" por defecto, las
+    // fechas se derivan siempre del turno real, nunca de un valor
+    // adivinado.
+    const [fechaInicio, setFechaInicio] = useState(Filters?.start_date || '');
+    const [fechaFin, setFechaFin] = useState(Filters?.end_date || '');
     const [userId, setUserId] = useState(Filters?.user_id || '');
 
-    // Mantenemos "fecha fin" pegada a "fecha inicio" salvo que el usuario
-    // la toque explícitamente: un rango de un solo día es lo que activa la
-    // detección automática de turno en el backend (start_date === end_date).
-    const handleFechaInicioChange = (value: string) => {
-        setFechaInicio(value);
-        if (fechaFin === fechaInicio) {
-            setFechaFin(value);
-        }
-    };
+    // Con un operador puntual seleccionado, las fechas se autocompletan
+    // desde su turno real y quedan bloqueadas (candado anti-trampa): no se
+    // pueden escribir a mano. Solo con "Todos" (vista agregada, sin un
+    // turno único del cual derivar nada) se habilitan para elegir un rango
+    // manualmente, como ya funcionaba antes.
+    const fechasBloqueadas = !!userId && userId !== 'todos';
+
     const [tipoRegistro, setTipoRegistro] = useState<
         'efectivo' | 'bancos' | 'ambos'
     >('ambos');
@@ -177,37 +125,6 @@ export default function FinancialReport({
     // Estados de UI
     const [isGenerating, setIsGenerating] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-
-    /* ============ CÁLCULO DE LIQUIDACIÓN EN PANTALLA ============
-       Se prioriza el Summary del backend; si por algún motivo no llega,
-       se recalcula localmente con los arrays para que nunca quede vacío. */
-    const resumen: Summary = useMemo(() => {
-        if (Summary) return Summary;
-
-        const ingresos = Payments.filter((p) => p.type !== 'DEVOLUCION').reduce(
-            (acc, p) => acc + (Number(p.amount) || 0),
-            0,
-        );
-
-        const devoluciones = Payments.filter(
-            (p) => p.type === 'DEVOLUCION',
-        ).reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-
-        const gastos = Expenses.reduce(
-            (acc, e) => acc + (Number(e.amount) || 0),
-            0,
-        );
-
-        return {
-            apertura: 0,
-            ingresos,
-            devoluciones,
-            gastos,
-            liquidacion: ingresos + devoluciones - gastos,
-        };
-    }, [Summary, Payments, Expenses]);
-
-    const hayDatos = Payments.length > 0 || Expenses.length > 0;
 
     // La respuesta HasMovements/Filters del backend corresponde a la
     // consulta que ya se disparó (Filters.user_id). Si el operador
@@ -218,8 +135,8 @@ export default function FinancialReport({
     const turnoVacio = consultaAlDia && userId !== 'todos' && !HasMovements;
 
     const handleLimpiar = () => {
-        setFechaInicio(today);
-        setFechaFin(today);
+        setFechaInicio('');
+        setFechaFin('');
         setUserId('');
         setTipoRegistro('ambos');
         setFormato('pdf');
@@ -246,28 +163,42 @@ export default function FinancialReport({
         );
     };
 
-    // Al elegir un operador con turno ABIERTO, autocompletamos "Fecha de
-    // Inicio" con la apertura exacta de su turno y "Hasta qué fecha" con
-    // hoy, y consultamos de inmediato — así un turno que cruza la
-    // medianoche se grafica completo sin que el recepcionista tenga que
-    // calcular nada a mano.
+    // 'YYYY-MM-DDTHH:mm:ssZ' (ISO, lo que manda el backend) -> 'YYYY-MM-DDTHH:mm'
+    // (lo que exige el <input type="datetime-local">), en hora LOCAL del
+    // navegador (new Date() ya hace esa conversión).
+    const toDatetimeLocal = (isoString: string) => {
+        const d = new Date(isoString);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    // Al elegir un operador puntual, autocompletamos "Fecha de Inicio" con
+    // la fecha Y HORA exacta en que abrió su turno, y "Hasta qué fecha" con
+    // el instante actual — y consultamos de inmediato. Sin turno abierto,
+    // avisamos claramente en vez de dejar el formulario a medias.
     const handleUserChange = (newUserId: string) => {
         setUserId(newUserId);
 
+        if (!newUserId || newUserId === 'todos') {
+            setFechaInicio('');
+            setFechaFin('');
+            return;
+        }
+
         const operator = users.find((u) => String(u.id) === newUserId);
-        let inicio = fechaInicio;
-        let fin = fechaFin;
 
-        if (operator?.active_shift_opened_at) {
-            inicio = operator.active_shift_opened_at.slice(0, 10);
-            fin = today;
-            setFechaInicio(inicio);
-            setFechaFin(fin);
+        if (!operator?.active_shift_opened_at) {
+            setFechaInicio('');
+            setFechaFin('');
+            alert('Este usuario no tiene un turno abierto actualmente.');
+            return;
         }
 
-        if (newUserId) {
-            handleConsultar(inicio, fin, newUserId);
-        }
+        const inicio = toDatetimeLocal(operator.active_shift_opened_at);
+        const fin = toDatetimeLocal(new Date().toISOString());
+        setFechaInicio(inicio);
+        setFechaFin(fin);
+        handleConsultar(inicio, fin, newUserId);
     };
 
     const handleGenerar: FormEventHandler = (e) => {
@@ -396,16 +327,16 @@ export default function FinancialReport({
                         </div>
                     </div>
                 ) : (
-                    /* ============ PASO 1: FORMULARIO + LIQUIDACIÓN ============ */
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                    /* ============ FORMULARIO DE CIERRE (único elemento de la vista) ============ */
+                    <div className="flex flex-1 items-start justify-center py-6">
                         {/* ---------- TARJETA FORMULARIO ---------- */}
-                        <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl lg:w-[420px] lg:flex-shrink-0">
+                        <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
                             <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
                                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                     <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                                         <Printer className="h-5 w-5" />
                                     </div>
-                                    Paso 1: Generar Reporte
+                                    Generar Reporte
                                 </h2>
                             </div>
 
@@ -467,7 +398,10 @@ export default function FinancialReport({
                                         )}
                                     </div>
 
-                                    {/* Fechas */}
+                                    {/* Fechas: se autocompletan del turno real del
+                                        operador elegido y quedan bloqueadas —
+                                        solo "Todos" las deja editables, al no
+                                        haber un turno único del cual derivarlas. */}
                                     <div className="flex flex-col gap-4 sm:flex-row">
                                         <div className="w-full sm:w-1/2">
                                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
@@ -478,15 +412,17 @@ export default function FinancialReport({
                                                     <Calendar className="h-4 w-4 text-gray-400" />
                                                 </div>
                                                 <input
-                                                    type="date"
+                                                    type="datetime-local"
                                                     required
+                                                    readOnly={fechasBloqueadas}
                                                     value={fechaInicio}
                                                     onChange={(e) =>
-                                                        handleFechaInicioChange(
+                                                        !fechasBloqueadas &&
+                                                        setFechaInicio(
                                                             e.target.value,
                                                         )
                                                     }
-                                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
+                                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0 read-only:cursor-not-allowed read-only:bg-gray-100 read-only:text-gray-500"
                                                 />
                                             </div>
                                         </div>
@@ -499,32 +435,21 @@ export default function FinancialReport({
                                                     <Calendar className="h-4 w-4 text-gray-400" />
                                                 </div>
                                                 <input
-                                                    type="date"
+                                                    type="datetime-local"
                                                     required
+                                                    readOnly={fechasBloqueadas}
                                                     value={fechaFin}
                                                     onChange={(e) =>
+                                                        !fechasBloqueadas &&
                                                         setFechaFin(
                                                             e.target.value,
                                                         )
                                                     }
-                                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
+                                                    className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black focus:border-gray-600 focus:ring-0 read-only:cursor-not-allowed read-only:bg-gray-100 read-only:text-gray-500"
                                                 />
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Botón consultar en pantalla */}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleConsultar()}
-                                        disabled={
-                                            !fechaInicio || !fechaFin || !userId
-                                        }
-                                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
-                                    >
-                                        <Scale className="h-4 w-4" />
-                                        Consultar Liquidación en Pantalla
-                                    </button>
 
                                     {/* Tipo de Registro */}
                                     <div>
@@ -639,274 +564,6 @@ export default function FinancialReport({
                                 </div>
                             </form>
                         </div>
-
-                        {/* ---------- PANEL DE LIQUIDACIÓN EN PANTALLA ---------- */}
-                        <div className="flex-1 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-                            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-6 py-4">
-                                <div className="rounded-lg bg-indigo-100 p-1.5 text-indigo-600">
-                                    <Scale className="h-5 w-5" />
-                                </div>
-                                <h2 className="text-lg font-bold text-gray-800">
-                                    Liquidación de Caja
-                                </h2>
-                            </div>
-
-                            {!hayDatos ? (
-                                <div className="flex flex-col items-center justify-center gap-2 px-6 py-20 text-center text-gray-400">
-                                    <Wallet className="h-10 w-10" />
-                                    <p className="text-sm font-medium">
-                                        Selecciona un rango de fechas y pulsa{' '}
-                                        <b>Consultar Liquidación</b> para ver
-                                        las transacciones.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="space-y-6 p-6">
-                                    {/* TARJETAS RESUMEN */}
-                                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                        <SummaryCard
-                                            label="Apertura"
-                                            value={resumen.apertura}
-                                            color="text-gray-700"
-                                            icon={
-                                                <Wallet className="h-4 w-4" />
-                                            }
-                                        />
-                                        <SummaryCard
-                                            label="Ingresos / Adelantos"
-                                            value={resumen.ingresos}
-                                            color="text-emerald-600"
-                                            icon={
-                                                <ArrowUpCircle className="h-4 w-4" />
-                                            }
-                                        />
-                                        <SummaryCard
-                                            label="Devoluciones"
-                                            value={resumen.devoluciones}
-                                            color="text-amber-600"
-                                            icon={
-                                                <ArrowDownCircle className="h-4 w-4" />
-                                            }
-                                        />
-                                        <SummaryCard
-                                            label="Gastos / Egresos"
-                                            value={-Math.abs(resumen.gastos)}
-                                            color="text-red-600"
-                                            icon={
-                                                <Receipt className="h-4 w-4" />
-                                            }
-                                        />
-                                    </div>
-
-                                    {/* TOTAL DE LIQUIDACIÓN */}
-                                    <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4">
-                                        <span className="flex items-center gap-2 text-sm font-bold tracking-wide text-indigo-800 uppercase">
-                                            <Scale className="h-5 w-5" />
-                                            Total de Liquidación
-                                        </span>
-                                        <span
-                                            className={`text-2xl font-black ${resumen.liquidacion >= 0 ? 'text-indigo-700' : 'text-red-600'}`}
-                                        >
-                                            {bs(resumen.liquidacion)} Bs
-                                        </span>
-                                    </div>
-
-                                    {/* TABLA DE PAGOS Y DEVOLUCIONES */}
-                                    <div>
-                                        <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-700">
-                                            <Banknote className="h-4 w-4 text-emerald-600" />
-                                            Pagos y Devoluciones (
-                                            {Payments.length})
-                                        </h3>
-                                        <div className="overflow-x-auto rounded-lg border border-gray-200">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-gray-50 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-                                                    <tr>
-                                                        <th className="px-3 py-2">
-                                                            Fecha
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Hab.
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Huésped
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Método
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Concepto
-                                                        </th>
-                                                        <th className="px-3 py-2 text-right">
-                                                            Monto (Bs)
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {Payments.length === 0 ? (
-                                                        <tr>
-                                                            <td
-                                                                colSpan={6}
-                                                                className="px-3 py-4 text-center text-gray-400"
-                                                            >
-                                                                Sin pagos
-                                                                registrados.
-                                                            </td>
-                                                        </tr>
-                                                    ) : (
-                                                        Payments.map((p) => (
-                                                            <tr
-                                                                key={p.id}
-                                                                className="text-gray-700"
-                                                            >
-                                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                                    {p.date}{' '}
-                                                                    <span className="text-gray-400">
-                                                                        {p.time}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    {
-                                                                        p.room_number
-                                                                    }
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    {
-                                                                        p.guest_name
-                                                                    }
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    {p.method}
-                                                                    {p.bank_name
-                                                                        ? ` · ${p.bank_name}`
-                                                                        : ''}
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    <span
-                                                                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${p.type === 'DEVOLUCION' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}
-                                                                    >
-                                                                        {p.type}
-                                                                    </span>
-                                                                </td>
-                                                                <td
-                                                                    className={`px-3 py-2 text-right font-bold ${p.amount < 0 ? 'text-red-600' : 'text-emerald-700'}`}
-                                                                >
-                                                                    {bs(
-                                                                        p.amount,
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))
-                                                    )}
-                                                </tbody>
-                                                <tfoot className="bg-gray-50 font-bold text-gray-800">
-                                                    <tr>
-                                                        <td
-                                                            colSpan={5}
-                                                            className="px-3 py-2 text-right"
-                                                        >
-                                                            Subtotal (Ingresos +
-                                                            Devoluciones)
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right">
-                                                            {bs(
-                                                                resumen.ingresos +
-                                                                    resumen.devoluciones,
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {/* TABLA DE GASTOS */}
-                                    <div>
-                                        <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-700">
-                                            <Receipt className="h-4 w-4 text-red-600" />
-                                            Gastos / Egresos ({Expenses.length})
-                                        </h3>
-                                        <div className="overflow-x-auto rounded-lg border border-gray-200">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-gray-50 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-                                                    <tr>
-                                                        <th className="px-3 py-2">
-                                                            Fecha
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Registrado por
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Descripción
-                                                        </th>
-                                                        <th className="px-3 py-2 text-right">
-                                                            Monto (Bs)
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {Expenses.length === 0 ? (
-                                                        <tr>
-                                                            <td
-                                                                colSpan={4}
-                                                                className="px-3 py-4 text-center text-gray-400"
-                                                            >
-                                                                Sin gastos
-                                                                registrados.
-                                                            </td>
-                                                        </tr>
-                                                    ) : (
-                                                        Expenses.map((e) => (
-                                                            <tr
-                                                                key={e.id}
-                                                                className="text-gray-700"
-                                                            >
-                                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                                    {e.date}{' '}
-                                                                    <span className="text-gray-400">
-                                                                        {e.time}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    {
-                                                                        e.user_name
-                                                                    }
-                                                                </td>
-                                                                <td className="px-3 py-2">
-                                                                    {
-                                                                        e.description
-                                                                    }
-                                                                </td>
-                                                                <td className="px-3 py-2 text-right font-bold text-red-600">
-                                                                    -{' '}
-                                                                    {bs(
-                                                                        e.amount,
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))
-                                                    )}
-                                                </tbody>
-                                                <tfoot className="bg-gray-50 font-bold text-gray-800">
-                                                    <tr>
-                                                        <td
-                                                            colSpan={3}
-                                                            className="px-3 py-2 text-right"
-                                                        >
-                                                            Total Egresos
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right text-red-600">
-                                                            -{' '}
-                                                            {bs(resumen.gastos)}
-                                                        </td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 )}
             </div>
@@ -1019,30 +676,5 @@ export default function FinancialReport({
                 </div>
             )}
         </AuthenticatedLayout>
-    );
-}
-
-/* ===================== SUBCOMPONENTE: Tarjeta resumen ===================== */
-function SummaryCard({
-    label,
-    value,
-    color,
-    icon,
-}: {
-    label: string;
-    value: number;
-    color: string;
-    icon: React.ReactNode;
-}) {
-    return (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-                {icon}
-                {label}
-            </div>
-            <div className={`mt-1 text-lg font-black ${color}`}>
-                {bs(value)} Bs
-            </div>
-        </div>
     );
 }
