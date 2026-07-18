@@ -1466,6 +1466,15 @@ export default function RoomsStatus({
                                               ? 'DELEGACIÓN'
                                               : 'CORPORATIVO',
                                       name: groupAccount.company_name,
+                                      // 🚀 MOTOR DE FACTURACIÓN GRUPAL: saldo
+                                      // REAL calculado en vivo (inyectado por
+                                      // RoomController::status()) — si el
+                                      // fondo del grupo ya quedó negativo, el
+                                      // recepcionista lo ve de un vistazo en
+                                      // la cuadrícula, sin abrir el modal.
+                                      hasDeficit:
+                                          (groupAccount.financial_summary
+                                              ?.balance ?? 0) < 0,
                                   }
                                 : null;
 
@@ -1567,9 +1576,23 @@ export default function RoomsStatus({
                                         {room.number}
                                     </h3>
                                     {groupAccountBadge && (
-                                        <p className="mt-1 line-clamp-1 text-[10px] font-black tracking-wide text-yellow-300 uppercase drop-shadow-sm">
+                                        <p
+                                            className={`mt-1 line-clamp-1 flex items-center gap-1 text-[10px] font-black tracking-wide uppercase drop-shadow-sm ${
+                                                groupAccountBadge.hasDeficit
+                                                    ? 'text-red-300'
+                                                    : 'text-yellow-300'
+                                            }`}
+                                        >
+                                            {groupAccountBadge.hasDeficit && (
+                                                <AlertTriangle className="h-3 w-3 shrink-0 animate-pulse text-red-400" />
+                                            )}
                                             {groupAccountBadge.label}:{' '}
                                             {groupAccountBadge.name}
+                                            {groupAccountBadge.hasDeficit && (
+                                                <span className="shrink-0 rounded bg-red-500/90 px-1 py-0.5 text-[8px] tracking-wider text-white">
+                                                    FALTA PAGO
+                                                </span>
+                                            )}
                                         </p>
                                     )}
                                     <p className="mt-1 line-clamp-2 text-xs font-bold text-white/90">

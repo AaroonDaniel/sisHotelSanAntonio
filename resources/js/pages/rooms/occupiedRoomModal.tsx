@@ -405,7 +405,15 @@ export default function OccupiedRoomModal({
         e.preventDefault();
         const amountValue = parseFloat(paymentData.amount);
         if (!amountValue || amountValue <= 0) return;
-        if (paymentData.payment_method === 'QR' && !paymentData.qr_bank) return;
+        // El abono a una Cuenta Grupal no pide banco (no hay selector de
+        // banco en su formulario compacto) — esta validación solo aplica
+        // al adelanto individual clásico.
+        if (
+            !isRealGroupAccount &&
+            paymentData.payment_method === 'QR' &&
+            !paymentData.qr_bank
+        )
+            return;
         if (!paymentData.operator_id) {
             setPaymentOperatorError('Seleccione un operador para continuar.');
             return;
@@ -711,7 +719,14 @@ export default function OccupiedRoomModal({
                                         </div>
                                     </div>
 
-                                    {/* --- BARRA DE ESTADO DE PAGOS --- */}
+                                    {/* --- BARRA DE ESTADO DE PAGOS ---
+                                        (oculta por completo si el huésped
+                                        pertenece a una Cuenta Grupal real:
+                                        su deuda individual es SIEMPRE 0 y
+                                        el cobro se hace contra el fondo del
+                                        grupo, ver panel "Estado de Cuenta
+                                        Grupal" más abajo) */}
+                                    {!isRealGroupAccount && (
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                                         <div className="mb-2 flex items-center justify-between">
                                             <div className="flex flex-col">
@@ -1107,6 +1122,7 @@ export default function OccupiedRoomModal({
                                             </form>
                                         )}
                                     </div>
+                                    )}
                                 </div>
 
                                 {/* --- SECCIÓN DE CONVENIO CORPORATIVO + SEMÁFORO (Punto 3.13) --- */}
@@ -1158,6 +1174,289 @@ export default function OccupiedRoomModal({
                                                     </span>
                                                 </div>
                                             </div>
+
+                                            {/* 🚀 MOTOR DE FACTURACIÓN GRUPAL: panel
+                                                "Estado de Cuenta Grupal" — reemplaza
+                                                por completo el cobro individual
+                                                (ver BARRA DE ESTADO DE PAGOS oculta
+                                                arriba). Muestra el saldo REAL en
+                                                vivo del grupo y, si está en
+                                                déficit, permite abonar desde aquí
+                                                mismo. */}
+                                            {isRealGroupAccount &&
+                                                groupFinancial && (
+                                                    <div className="space-y-2">
+                                                        <h4 className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-gray-500 uppercase">
+                                                            <Wallet className="h-3.5 w-3.5" />
+                                                            Estado de Cuenta
+                                                            Grupal
+                                                        </h4>
+                                                        <div className="grid grid-cols-3 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
+                                                                    Depositado
+                                                                </span>
+                                                                <span className="text-sm font-black text-gray-800">
+                                                                    {formatCurrency(
+                                                                        groupFinancial.total_deposited,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
+                                                                    Consumido
+                                                                </span>
+                                                                <span className="text-sm font-black text-gray-800">
+                                                                    {formatCurrency(
+                                                                        groupFinancial.total_consumed,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
+                                                                    Saldo
+                                                                </span>
+                                                                <span
+                                                                    className={`text-sm font-black ${
+                                                                        groupFinancial.balance >=
+                                                                        0
+                                                                            ? 'text-emerald-600'
+                                                                            : 'text-red-600'
+                                                                    }`}
+                                                                >
+                                                                    {formatCurrency(
+                                                                        groupFinancial.balance,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {groupFinancial.balance >=
+                                                        0 ? (
+                                                            <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                                                                ✅ Cubierto por
+                                                                el Fondo
+                                                                Grupal
+                                                            </div>
+                                                        ) : (
+                                                            <div className="rounded-lg border border-red-300 bg-red-50 p-3">
+                                                                <p className="flex items-start gap-1.5 text-xs font-bold text-red-700">
+                                                                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                                                                    <span>
+                                                                        ⚠️
+                                                                        FONDO
+                                                                        GRUPAL
+                                                                        INSUFICIENTE.
+                                                                        El
+                                                                        depósito
+                                                                        no
+                                                                        cubre
+                                                                        todas
+                                                                        las
+                                                                        habitaciones
+                                                                        asignadas.
+                                                                        Faltan:{' '}
+                                                                        {formatCurrency(
+                                                                            Math.abs(
+                                                                                groupFinancial.balance,
+                                                                            ),
+                                                                        )}
+                                                                        .
+                                                                    </span>
+                                                                </p>
+                                                                {!showPaymentForm && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setShowPaymentForm(
+                                                                                true,
+                                                                            )
+                                                                        }
+                                                                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700"
+                                                                    >
+                                                                        <Banknote className="h-4 w-4" />
+                                                                        Abonar
+                                                                        al
+                                                                        Fondo
+                                                                        Grupal
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Formulario compacto de abono directo al fondo grupal */}
+                                                        {showPaymentForm && (
+                                                            <form
+                                                                onSubmit={
+                                                                    handlePreSubmit
+                                                                }
+                                                                className="animate-in rounded-lg border border-red-200 bg-white p-3 shadow-inner fade-in slide-in-from-top-2"
+                                                            >
+                                                                <div className="mb-2 flex items-center justify-between">
+                                                                    <span className="flex items-center gap-1 text-[12px] font-bold text-red-700 uppercase">
+                                                                        <Wallet className="h-3 w-3" />
+                                                                        Abono a{' '}
+                                                                        {
+                                                                            groupAgreement?.company_name
+                                                                        }
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setShowPaymentForm(
+                                                                                false,
+                                                                            );
+                                                                            setPaymentOperatorError(
+                                                                                null,
+                                                                            );
+                                                                        }}
+                                                                        className="text-gray-400 hover:text-red-500"
+                                                                    >
+                                                                        <X className="h-3 w-3" />
+                                                                    </button>
+                                                                </div>
+
+                                                                {(
+                                                                    paymentErrors as any
+                                                                ).error && (
+                                                                    <div className="mb-2 flex items-center gap-1.5 rounded bg-red-50 p-1.5 text-[11px] font-bold text-red-600">
+                                                                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                                                        {
+                                                                            (
+                                                                                paymentErrors as any
+                                                                            )
+                                                                                .error
+                                                                        }
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="mb-3">
+                                                                    <label className="mb-1 block text-[12px] font-bold text-gray-500 uppercase">
+                                                                        Monto
+                                                                    </label>
+                                                                    <div className="relative">
+                                                                        <span className="absolute inset-y-0 left-2 flex items-center text-[12px] font-bold text-gray-400">
+                                                                            Bs
+                                                                        </span>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="1"
+                                                                            min="0"
+                                                                            autoFocus
+                                                                            value={
+                                                                                paymentData.amount
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                setPaymentData(
+                                                                                    'amount',
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                            className="h-[30px] w-full [appearance:textfield] rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-red-500 focus:ring-red-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                            placeholder="0"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="mb-3">
+                                                                    <label className="mb-1 block text-[12px] font-bold text-gray-500 uppercase">
+                                                                        Método
+                                                                    </label>
+                                                                    <div className="grid grid-cols-4 gap-1">
+                                                                        {(
+                                                                            [
+                                                                                'EFECTIVO',
+                                                                                'QR',
+                                                                                'TARJETA',
+                                                                                'TRANSFERENCIA',
+                                                                            ] as const
+                                                                        ).map(
+                                                                            (
+                                                                                m,
+                                                                            ) => (
+                                                                                <button
+                                                                                    key={
+                                                                                        m
+                                                                                    }
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setPaymentData(
+                                                                                            'payment_method',
+                                                                                            m,
+                                                                                        )
+                                                                                    }
+                                                                                    className={`rounded py-1.5 text-[10px] font-bold transition-all ${
+                                                                                        paymentData.payment_method ===
+                                                                                        m
+                                                                                            ? 'bg-red-600 text-white shadow-sm'
+                                                                                            : 'bg-gray-100 text-gray-500 hover:text-gray-700'
+                                                                                    }`}
+                                                                                >
+                                                                                    {
+                                                                                        m
+                                                                                    }
+                                                                                </button>
+                                                                            ),
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="mb-3">
+                                                                    <label className="mb-1 block text-center text-[14px] font-bold text-gray-500 uppercase">
+                                                                        Operador
+                                                                    </label>
+                                                                    <OperatorSelector
+                                                                        operators={
+                                                                            operators
+                                                                        }
+                                                                        value={
+                                                                            paymentData.operator_id
+                                                                        }
+                                                                        onChange={(
+                                                                            id,
+                                                                        ) => {
+                                                                            setPaymentData(
+                                                                                'operator_id',
+                                                                                id,
+                                                                            );
+                                                                            setPaymentOperatorError(
+                                                                                null,
+                                                                            );
+                                                                        }}
+                                                                        compact
+                                                                        size="lg"
+                                                                        label=""
+                                                                    />
+                                                                    {paymentOperatorError && (
+                                                                        <p className="mt-1 text-center text-[12px] font-bold text-red-600">
+                                                                            {
+                                                                                paymentOperatorError
+                                                                            }
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+
+                                                                <button
+                                                                    type="submit"
+                                                                    disabled={
+                                                                        processingPayment ||
+                                                                        !paymentData.amount ||
+                                                                        !paymentData.operator_id
+                                                                    }
+                                                                    className="w-full rounded bg-red-600 py-1.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                                                >
+                                                                    {processingPayment
+                                                                        ? 'Guardando...'
+                                                                        : 'CONFIRMAR ABONO'}
+                                                                </button>
+                                                            </form>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                             {/* Frecuencia / fecha límite (info complementaria) */}
                                             {agreementInfo &&

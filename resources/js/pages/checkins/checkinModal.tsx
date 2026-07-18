@@ -202,6 +202,14 @@ export interface CheckinData {
         company_name?: string | null;
         total_advance?: number;
         total_consumed?: number;
+        // 🚀 MOTOR DE FACTURACIÓN GRUPAL: saldo REAL calculado en vivo
+        // (inyectado por RoomController::status()), solo presente en
+        // Cuentas Grupales reales (con company_name).
+        financial_summary?: {
+            total_deposited: number;
+            total_consumed: number;
+            balance: number;
+        };
     } | null;
     payments?: any[];
     corporate_days?: number;

@@ -164,6 +164,38 @@ class Checkin extends Model
     }
 
     /**
+     * 🚀 MOTOR DE FACTURACIÓN GRUPAL — REGLA DE ORO: si esta habitación
+     * pertenece a una Cuenta Grupal REAL (special_agreement_id con
+     * company_name — a diferencia de un convenio individual ad-hoc, que no
+     * tiene nombre de grupo), la deuda INDIVIDUAL de este check-in siempre
+     * es 0. El huésped no debe nada a nivel personal: su costo
+     * (agreed_price * noches) ya se contabiliza en el
+     * SpecialAgreement::total_consumed_real del grupo, no aquí.
+     *
+     * Para check-ins normales (o convenios ad-hoc sin grupo) retorna null
+     * — la deuda individual la sigue calculando el frontend como hasta
+     * ahora (no se duplica esa lógica en el backend).
+     *
+     * Deliberadamente NO está en $appends: muchos listados (reportes,
+     * auditoría, historial) cargan checkins SIN eager-load de
+     * specialAgreement, y auto-serializar esto dispararía una consulta
+     * extra por cada fila (N+1). RoomController::status() —la única vista
+     * que necesita este dato y ya carga specialAgreement— lo asigna
+     * explícitamente como atributo plano antes de renderizar.
+     */
+    public function getIndividualDebtAttribute(): ?float
+    {
+        $this->loadMissing('specialAgreement');
+        $agreement = $this->specialAgreement;
+
+        if ($agreement && !empty($agreement->company_name)) {
+            return 0.0;
+        }
+
+        return null;
+    }
+
+    /**
      * Adelanto NETO de la estadía.
      *
      * Incluye TODOS los movimientos de dinero del checkin: los pagos

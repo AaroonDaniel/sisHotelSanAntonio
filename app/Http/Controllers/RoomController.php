@@ -232,11 +232,15 @@ class RoomController
             // habitación pertenece a una Cuenta Grupal real (tiene
             // company_name), le inyectamos el saldo REAL calculado en vivo
             // (total_deposited/total_consumed/balance) para que el banner
-            // del OccupiedRoomModal no dependa de los contadores manuales.
+            // del OccupiedRoomModal no dependa de los contadores manuales,
+            // y forzamos individual_debt a 0 (REGLA DE ORO: el huésped de
+            // un grupo nunca debe nada a nivel personal).
             foreach ($room->checkins as $checkin) {
-                if ($checkin->specialAgreement && !empty($checkin->specialAgreement->company_name)) {
+                $isRealGroupAccount = $checkin->specialAgreement && !empty($checkin->specialAgreement->company_name);
+                if ($isRealGroupAccount) {
                     $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
                 }
+                $checkin->individual_debt = $isRealGroupAccount ? 0.0 : null;
             }
 
             return $room;
@@ -265,9 +269,11 @@ class RoomController
         // arriba, para los checkins que alimentan directamente los modales
         // de salida/detalles (OccupiedRoomModal, multiCheckoutModal).
         foreach ($activeCheckins as $checkin) {
-            if ($checkin->specialAgreement && !empty($checkin->specialAgreement->company_name)) {
+            $isRealGroupAccount = $checkin->specialAgreement && !empty($checkin->specialAgreement->company_name);
+            if ($isRealGroupAccount) {
                 $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
             }
+            $checkin->individual_debt = $isRealGroupAccount ? 0.0 : null;
         }
 
         // 3. Reservas pendientes

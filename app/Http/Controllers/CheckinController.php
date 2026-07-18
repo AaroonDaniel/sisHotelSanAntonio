@@ -674,6 +674,7 @@ class CheckinController extends Controller
             $newRoomId = $request->new_room_id;
             $ahora = now();
             $oldRoomId = $checkin->room_id; // 🚀 Guardamos la habitación original antes de cambiarla
+            $oldRoomNumber = $checkin->room->number;
 
             $titularId = $checkin->guest_id;
             $companionIds = $checkin->companions->pluck('id')->toArray();
@@ -709,9 +710,11 @@ class CheckinController extends Controller
                 \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
                 $newRoom->update(['status' => 'OCUPADO']);
 
-                $noteAddition = $deudaHastaAhora > 0
-                    ? " | TRANSFER TO ROOM {$newRoom->number}. Previous balance owed: {$deudaHastaAhora} Bs"
-                    : " | TRANSFER TO ROOM {$newRoom->number}";
+                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+                // "origen->destino", sin prefijos ni explicaciones — el
+                // saldo arrastrado ya queda registrado en carried_balance
+                // (campo numérico real), no hace falta repetirlo en texto.
+                $noteAddition = " | {$oldRoomNumber}->{$newRoom->number}";
 
                 // 🚀 ANCLA DE PRECIO: las noches ya transcurridas en la
                 // habitación vieja quedan fijas como deuda (al precio VIEJO,
@@ -754,9 +757,10 @@ class CheckinController extends Controller
                 $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
 
                 // 1. Actualizamos a los que se QUEDAN
-                $noteAdditionStay = $deudaHastaAhora > 0
-                    ? " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}. Balance before split: {$deudaHastaAhora} Bs"
-                    : " | SPLIT: " . count($leavingIds) . " guest(s) moved to Room {$newRoom->number}";
+                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+                // "origen->destino" — mismo criterio que la transferencia
+                // completa, sin explicaciones ni montos en el texto.
+                $noteAdditionStay = " | {$oldRoomNumber}->{$newRoom->number}";
 
                 // 🚀 ANCLA DE PRECIO: igual que en la transferencia completa.
                 // El precio cambia (menos ocupantes = otra tarifa) aunque la
@@ -796,14 +800,23 @@ class CheckinController extends Controller
                     'duration_days' => 0,
                     'advance_payment' => 0,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
-                    'special_agreement_id' => null,
+                    // 🚀 BLINDAJE DE CUENTAS GRUPALES: el check-in nuevo
+                    // hereda ESTRICTAMENTE el special_agreement_id (Cuenta
+                    // Grupal) del registro original — antes se ponía en
+                    // null aquí, lo que sacaba silenciosamente a esta
+                    // habitación de la Delegación/Corporativo al dividir
+                    // el grupo, dejando de contarse en su
+                    // total_consumed_real aunque agreed_price siguiera
+                    // siendo el pactado.
+                    'special_agreement_id' => $checkin->special_agreement_id,
                     'parent_checkin_id' => null,
                     'carried_balance' => 0,
                     // 🚀 CORRECCIÓN CLAVE PARA REACT:
                     // Iniciamos como true por precaución, pero lo validaremos justo abajo
                     'is_temporary' => true,
                     'status' => 'activo',
-                    'notes' => "SPLIT FROM ROOM " . $checkin->room->number,
+                    // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto.
+                    'notes' => "{$oldRoomNumber}->{$newRoom->number}",
                 ]);
 
                 if (!empty($newNewCompanions)) {
@@ -3522,11 +3535,13 @@ class CheckinController extends Controller
                 $precioVieja = $checkin->agreed_price ?? $checkin->room->price->amount ?? 0;
                 $deudaAnterior = $diasACobrar * $precioVieja;
 
+                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+                // "origen->destino", sin prefijos ni explicaciones.
                 $checkin->update([
                     'status' => 'transferido', // 'transferido' evita descuadrar reportes
                     'check_out_date' => $ahora,
                     'duration_days' => $diasACobrar,
-                    'notes' => $checkin->notes . " | FUSIONADO (Todos pasaron a Hab. " . $targetCheckin->room->number . ")"
+                    'notes' => $checkin->notes . " | " . $checkin->room->number . "->" . $targetCheckin->room->number,
                 ]);
 
                 // LIBERAMOS A LOS ACOMPAÑANTES para no chocar con la base de datos
@@ -3552,12 +3567,14 @@ class CheckinController extends Controller
                     $checkin->increment('carried_balance', $deudaHastaAhoraMerge);
                 }
 
+                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+                // "origen->destino".
                 $checkin->update([
                     'guest_id' => $stayingIds[0], // Nombra a un nuevo titular para los que se quedan
                     'agreed_price' => $this->calculateAgreedPrice($checkin->room_id, count($stayingIds)),
                     'price_effective_since' => $ahora,
                     'duration_days' => 1,
-                    'notes' => $checkin->notes . " | FUSIÓN PARCIAL (Algunos pasaron a Hab. " . $targetCheckin->room->number . ")"
+                    'notes' => $checkin->notes . " | " . $checkin->room->number . "->" . $targetCheckin->room->number,
                 ]);
                 // Desvinculamos a los que se fueron de la vieja habitación
                 $checkin->companions()->sync(array_slice($stayingIds, 1));
@@ -3612,12 +3629,14 @@ class CheckinController extends Controller
                 $targetCheckin->increment('carried_balance', $deudaTargetHastaAhora);
             }
 
-            // Recalculamos la tarifa y aplicamos el nuevo estado is_temporary
+            // Recalculamos la tarifa y aplicamos el nuevo estado is_temporary.
+            // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+            // "origen->destino".
             $targetCheckin->update([
                 'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, $totalGuestsNow),
                 'price_effective_since' => $ahora,
                 'duration_days' => 1,
-                'notes' => ltrim($targetCheckin->notes . " | Recibió huéspedes de Hab. " . \App\Models\Room::find($oldRoomId)->number, " | "),
+                'notes' => ltrim($targetCheckin->notes . " | " . \App\Models\Room::find($oldRoomId)->number . "->" . $targetCheckin->room->number, " | "),
                 'is_temporary' => $isTemporaryNewState // 👈 ¡ESTO ES LO QUE ARREGLA EL ERROR!
             ]);
 
@@ -3640,19 +3659,15 @@ class CheckinController extends Controller
 
             $primerCheckinId = null;
 
-            // 🚀 VERIFICAMOS SI LA RESERVA ERA CORPORATIVA
-            $isCorporate = ($reservation->guest_count ?? 0) >= 20;
-
             // Recorremos CADA HABITACIÓN reservada
             foreach ($reservation->details as $index => $detail) {
 
                 $arrivalDate = $reservation->arrival_date ?? now();
 
-                // 🚀 PREPARAMOS LAS NOTAS (Agregando la etiqueta corporativa si corresponde)
-                $baseNotes = 'Generado desde Reserva #' . $reservation->id;
-                if ($isCorporate) {
-                    $baseNotes .= ' [DELEGACION]';
-                }
+                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
+                // "Reserva [Nombre del Cliente]", sin ID de reserva ni
+                // etiquetas adicionales.
+                $baseNotes = 'Reserva ' . $reservation->guest->full_name;
 
                 $checkin = \App\Models\Checkin::create([
                     'guest_id' => $reservation->guest_id,

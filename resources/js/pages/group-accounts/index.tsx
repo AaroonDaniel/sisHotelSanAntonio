@@ -1,6 +1,6 @@
+import OperatorSelector from '@/components/OperatorSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import OperatorSelector from '@/components/OperatorSelector';
 import {
     Table,
     TableBody,
@@ -136,22 +136,25 @@ export default function GroupAccountsIndex({
 
             <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="flex items-center gap-3 text-2xl font-bold text-gray-800">
+                    <h2 className="text-write flex items-center gap-3 text-2xl font-bold">
                         <div className="rounded-lg bg-amber-100 p-2 text-amber-600">
                             <Building2 className="h-6 w-6" />
                         </div>
                         Cuentas Grupales
                     </h2>
-                    <Button onClick={() => setIsCreateOpen(true)}>
-                        <Plus className="h-4 w-4" />
-                        Nueva Cuenta Grupal
+                    <Button
+                        onClick={() => setIsCreateOpen(true)}
+                        className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                    >
+                        <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
+                        <span>Nueva Cuenta Grupal</span>
                     </Button>
                 </div>
-                <p className="mb-6 -mt-4 text-sm text-gray-500">
-                    Delegaciones y cuentas corporativas unificadas: registra
-                    un adelanto inicial y asigna habitaciones con Check-in
-                    Rápido — el costo se descuenta automáticamente del
-                    adelanto, sin cobrar en efectivo al huésped.
+                <p className="-mt-4 mb-6 text-sm text-gray-500">
+                    Delegaciones y cuentas corporativas unificadas: registra un
+                    adelanto inicial y asigna habitaciones con Check-in Rápido —
+                    el costo se descuenta automáticamente del adelanto, sin
+                    cobrar en efectivo al huésped.
                 </p>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -189,8 +192,7 @@ export default function GroupAccountsIndex({
                                         className="py-12 text-center text-sm text-gray-500"
                                     >
                                         <Building2 className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-                                        Todavía no hay Cuentas Grupales
-                                        creadas.
+                                        Todavía no hay Cuentas Grupales creadas.
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -221,15 +223,11 @@ export default function GroupAccountsIndex({
                                         </TableCell>
                                         <TableCell className="text-right text-gray-700">
                                             Bs{' '}
-                                            {formatCurrency(
-                                                acc.total_advance,
-                                            )}
+                                            {formatCurrency(acc.total_advance)}
                                         </TableCell>
                                         <TableCell className="text-right text-gray-700">
                                             Bs{' '}
-                                            {formatCurrency(
-                                                acc.total_consumed,
-                                            )}
+                                            {formatCurrency(acc.total_consumed)}
                                         </TableCell>
                                         <TableCell
                                             className={`text-right font-bold ${
@@ -246,7 +244,7 @@ export default function GroupAccountsIndex({
                                                 {acc.active_rooms_count}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right text-gray-900">
                                             <Button
                                                 type="button"
                                                 size="sm"
@@ -340,8 +338,7 @@ export default function GroupAccountsIndex({
                                                 }
                                                 className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-bold transition-all ${
                                                     data.type === tipo
-                                                        ? tipo ===
-                                                          'delegacion'
+                                                        ? tipo === 'delegacion'
                                                             ? 'bg-amber-100 text-amber-800 shadow-sm'
                                                             : 'bg-indigo-100 text-indigo-800 shadow-sm'
                                                         : 'text-gray-500 hover:bg-gray-200/50'
@@ -424,26 +421,21 @@ export default function GroupAccountsIndex({
                                     <>
                                         <div>
                                             <label className="mb-1.5 block text-center text-sm font-semibold text-gray-700">
-                                                Operador que recibe el
-                                                adelanto
+                                                Operador que recibe el adelanto
                                             </label>
                                             <OperatorSelector
                                                 operators={Operators}
                                                 value={data.operator_id}
                                                 onChange={(id) =>
-                                                    setData(
-                                                        'operator_id',
-                                                        id,
-                                                    )
+                                                    setData('operator_id', id)
                                                 }
                                                 compact
                                                 size="lg"
                                                 label=""
                                             />
                                             <p className="mt-1 text-center text-xs text-gray-400">
-                                                El adelanto se registra de
-                                                una vez en la caja de este
-                                                operador.
+                                                El adelanto se registra de una
+                                                vez en la caja de este operador.
                                             </p>
                                             {errors.operator_id && (
                                                 <p className="mt-1 text-center text-xs font-bold text-red-500">
@@ -500,8 +492,8 @@ export default function GroupAccountsIndex({
                                         'Guardando...'
                                     ) : (
                                         <>
-                                            <Save className="h-4 w-4" />{' '}
-                                            Crear Cuenta
+                                            <Save className="h-4 w-4" /> Crear
+                                            Cuenta
                                         </>
                                     )}
                                 </button>
@@ -544,9 +536,7 @@ export default function GroupAccountsIndex({
                                                 : 'font-bold text-emerald-600'
                                         }
                                     >
-                                        {formatCurrency(
-                                            advanceTarget.balance,
-                                        )}
+                                        {formatCurrency(advanceTarget.balance)}
                                     </span>
                                 </p>
 
