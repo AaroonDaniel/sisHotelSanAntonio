@@ -2114,13 +2114,7 @@ export default function CheckinModal({
                                                             ),
                                                         )}
                                                     </select>
-                                                    {isQuickGroupMode && (
-                                                        <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
-                                                            {isDelegationType
-                                                                ? '⚡ Delegación: formulario simplificado (Nombre, CI, Edad, Procedencia). El costo se descuenta del adelanto de la cuenta, no se cobra en efectivo.'
-                                                                : '⚡ Check-in Rápido activo: el costo se descuenta del adelanto de la cuenta, no se cobra en efectivo.'}
-                                                        </p>
-                                                    )}
+                                                    
                                                 </div>
                                             );
                                         })()}
@@ -3895,16 +3889,45 @@ export default function CheckinModal({
                                                                     ? ''
                                                                     : data.advance_payment
                                                             }
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    'advance_payment',
-                                                                    e.target
-                                                                        .value as any,
-                                                                )
-                                                            }
                                                             onFocus={(e) =>
                                                                 e.target.select()
                                                             }
+                                                            onChange={(e) => {
+                                                                let val =
+                                                                    e.target
+                                                                        .value;
+                                                                if (
+                                                                    val === ''
+                                                                ) {
+                                                                    setData(
+                                                                        'advance_payment',
+                                                                        0,
+                                                                    );
+                                                                    return;
+                                                                }
+                                                                if (
+                                                                    val.length >
+                                                                        1 &&
+                                                                    val.startsWith(
+                                                                        '0',
+                                                                    ) &&
+                                                                    !val.startsWith(
+                                                                        '0.',
+                                                                    )
+                                                                ) {
+                                                                    val =
+                                                                        val.replace(
+                                                                            /^0+/,
+                                                                            '',
+                                                                        );
+                                                                }
+                                                                setData(
+                                                                    'advance_payment',
+                                                                    Number(
+                                                                        val,
+                                                                    ),
+                                                                );
+                                                            }}
                                                             disabled={
                                                                 !isTitular
                                                             }

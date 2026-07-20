@@ -106,9 +106,22 @@ export default function CloseRegisterModal({
                                 required
                                 autoFocus
                                 value={data.left_amount}
-                                onChange={(e) =>
-                                    setData('left_amount', e.target.value)
-                                }
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                    let val = e.target.value;
+                                    if (val === '') {
+                                        setData('left_amount', '');
+                                        return;
+                                    }
+                                    if (
+                                        val.length > 1 &&
+                                        val.startsWith('0') &&
+                                        !val.startsWith('0.')
+                                    ) {
+                                        val = val.replace(/^0+/, '');
+                                    }
+                                    setData('left_amount', val);
+                                }}
                                 className="w-full rounded-lg border-2 border-gray-200 py-2 pr-3 pl-9 text-base font-bold text-gray-800 focus:border-amber-500 focus:ring-amber-500"
                                 placeholder="0.00"
                             />

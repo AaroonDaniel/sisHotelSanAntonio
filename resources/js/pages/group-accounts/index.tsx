@@ -10,8 +10,9 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
+    ArrowLeft,
     BedDouble,
     Building2,
     GraduationCap,
@@ -135,6 +136,16 @@ export default function GroupAccountsIndex({
             <Head title="Cuentas Grupales" />
 
             <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+                {/* Botón Volver */}
+                <button
+                    onClick={() => router.visit('/dashboard')}
+                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
+                >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
+                        <ArrowLeft className="h-4 w-4" />
+                    </div>
+                    <span>Volver</span>
+                </button>
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-write flex items-center gap-3 text-2xl font-bold">
                         <div className="rounded-lg bg-amber-100 p-2 text-amber-600">
@@ -150,12 +161,6 @@ export default function GroupAccountsIndex({
                         <span>Nueva Cuenta Grupal</span>
                     </Button>
                 </div>
-                <p className="-mt-4 mb-6 text-sm text-gray-500">
-                    Delegaciones y cuentas corporativas unificadas: registra un
-                    adelanto inicial y asigna habitaciones con Check-in Rápido —
-                    el costo se descuenta automáticamente del adelanto, sin
-                    cobrar en efectivo al huésped.
-                </p>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                     <Table>
@@ -308,7 +313,6 @@ export default function GroupAccountsIndex({
                                                     e.target.value.toUpperCase(),
                                                 )
                                             }
-                                            placeholder="EJ. COLEGIO SAN JOSÉ"
                                             className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                         />
                                     </div>
@@ -370,15 +374,9 @@ export default function GroupAccountsIndex({
                                                         e.target.value.toUpperCase(),
                                                     )
                                                 }
-                                                placeholder="EJ. SANTA CRUZ"
                                                 className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                             />
                                         </div>
-                                        <p className="mt-1 text-xs text-gray-400">
-                                            Se heredará automáticamente al
-                                            registrar a cada huésped de esta
-                                            delegación en el Check-in Rápido.
-                                        </p>
                                         {errors.origin && (
                                             <p className="mt-1 text-xs font-bold text-red-500">
                                                 {errors.origin}
@@ -398,15 +396,33 @@ export default function GroupAccountsIndex({
                                         <input
                                             type="number"
                                             min="0"
-                                            step="0.01"
+                                            step="1"
                                             value={data.initial_advance}
-                                            onChange={(e) =>
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                                let val = e.target.value;
+                                                if (val === '') {
+                                                    setData(
+                                                        'initial_advance',
+                                                        '',
+                                                    );
+                                                    return;
+                                                }
+                                                if (
+                                                    val.length > 1 &&
+                                                    val.startsWith('0') &&
+                                                    !val.startsWith('0.')
+                                                ) {
+                                                    val = val.replace(
+                                                        /^0+/,
+                                                        '',
+                                                    );
+                                                }
                                                 setData(
                                                     'initial_advance',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="0.00"
+                                                    val,
+                                                );
+                                            }}
                                             className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-9 text-base text-black focus:border-gray-600 focus:ring-0"
                                         />
                                     </div>
@@ -550,16 +566,34 @@ export default function GroupAccountsIndex({
                                         </span>
                                         <input
                                             type="number"
-                                            min="0.01"
-                                            step="0.01"
+                                            min="0"
+                                            step="0.50"
                                             value={advanceData.amount}
-                                            onChange={(e) =>
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                                let val = e.target.value;
+                                                if (val === '') {
+                                                    setAdvanceData(
+                                                        'amount',
+                                                        '',
+                                                    );
+                                                    return;
+                                                }
+                                                if (
+                                                    val.length > 1 &&
+                                                    val.startsWith('0') &&
+                                                    !val.startsWith('0.')
+                                                ) {
+                                                    val = val.replace(
+                                                        /^0+/,
+                                                        '',
+                                                    );
+                                                }
                                                 setAdvanceData(
                                                     'amount',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="0.00"
+                                                    val,
+                                                );
+                                            }}
                                             className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-9 text-base text-black focus:border-gray-600 focus:ring-0"
                                         />
                                     </div>

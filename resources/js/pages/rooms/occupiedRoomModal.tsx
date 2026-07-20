@@ -964,16 +964,49 @@ export default function OccupiedRoomModal({
                                                                         value={
                                                                             paymentData.amount
                                                                         }
-                                                                        onChange={(
+                                                                        onFocus={(
                                                                             e,
                                                                         ) =>
-                                                                            setPaymentData(
-                                                                                'amount',
+                                                                            e.target.select()
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) => {
+                                                                            let val =
                                                                                 e
                                                                                     .target
-                                                                                    .value,
-                                                                            )
-                                                                        }
+                                                                                    .value;
+                                                                            if (
+                                                                                val ===
+                                                                                ''
+                                                                            ) {
+                                                                                setPaymentData(
+                                                                                    'amount',
+                                                                                    '',
+                                                                                );
+                                                                                return;
+                                                                            }
+                                                                            if (
+                                                                                val.length >
+                                                                                    1 &&
+                                                                                val.startsWith(
+                                                                                    '0',
+                                                                                ) &&
+                                                                                !val.startsWith(
+                                                                                    '0.',
+                                                                                )
+                                                                            ) {
+                                                                                val =
+                                                                                    val.replace(
+                                                                                        /^0+/,
+                                                                                        '',
+                                                                                    );
+                                                                            }
+                                                                            setPaymentData(
+                                                                                'amount',
+                                                                                val,
+                                                                            );
+                                                                        }}
                                                                         className="h-[26px] w-full [appearance:textfield] rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                         placeholder="0"
                                                                     />
@@ -1346,16 +1379,49 @@ export default function OccupiedRoomModal({
                                                                             value={
                                                                                 paymentData.amount
                                                                             }
-                                                                            onChange={(
+                                                                            onFocus={(
                                                                                 e,
                                                                             ) =>
-                                                                                setPaymentData(
-                                                                                    'amount',
+                                                                                e.target.select()
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) => {
+                                                                                let val =
                                                                                     e
                                                                                         .target
-                                                                                        .value,
-                                                                                )
-                                                                            }
+                                                                                        .value;
+                                                                                if (
+                                                                                    val ===
+                                                                                    ''
+                                                                                ) {
+                                                                                    setPaymentData(
+                                                                                        'amount',
+                                                                                        '',
+                                                                                    );
+                                                                                    return;
+                                                                                }
+                                                                                if (
+                                                                                    val.length >
+                                                                                        1 &&
+                                                                                    val.startsWith(
+                                                                                        '0',
+                                                                                    ) &&
+                                                                                    !val.startsWith(
+                                                                                        '0.',
+                                                                                    )
+                                                                                ) {
+                                                                                    val =
+                                                                                        val.replace(
+                                                                                            /^0+/,
+                                                                                            '',
+                                                                                        );
+                                                                                }
+                                                                                setPaymentData(
+                                                                                    'amount',
+                                                                                    val,
+                                                                                );
+                                                                            }}
                                                                             className="h-[30px] w-full [appearance:textfield] rounded border border-gray-300 pr-2 pl-6 text-base font-bold text-gray-800 focus:border-red-500 focus:ring-red-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                                             placeholder="0"
                                                                         />
@@ -2099,9 +2165,22 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
                                 placeholder="0.00"
                                 value={data.amount}
                                 className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                onChange={(e) =>
-                                    setData('amount', e.target.value)
-                                }
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                    let val = e.target.value;
+                                    if (val === '') {
+                                        setData('amount', '');
+                                        return;
+                                    }
+                                    if (
+                                        val.length > 1 &&
+                                        val.startsWith('0') &&
+                                        !val.startsWith('0.')
+                                    ) {
+                                        val = val.replace(/^0+/, '');
+                                    }
+                                    setData('amount', val);
+                                }}
                             />
                             {errors.amount && (
                                 <p className="text-xs font-medium text-red-600">

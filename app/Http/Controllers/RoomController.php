@@ -228,6 +228,27 @@ class RoomController
             // Asignamos el arreglo de reservas futuras a la habitación
             $room->future_reservations = $futureReservations;
 
+            // 🚀 "RESERVADO HOY": a diferencia de future_reservations (solo
+            // 'pendiente', desde hoy en adelante), este SOLO considera
+            // reservas cuya llegada es EXACTAMENTE hoy (zona horaria del
+            // hotel, config/app.php → America/La_Paz) y que todavía no
+            // pasaron a check-in real (status 'pendiente' o 'confirmada').
+            // Alimenta el banner "RESERVADO HOY" del grid principal.
+            $todayReservationDetail = \App\Models\ReservationDetail::where('room_id', $room->id)
+                ->whereHas('reservation', function ($query) {
+                    $query->whereIn('status', ['pendiente', 'confirmada'])
+                        ->whereDate('arrival_date', now()->toDateString());
+                })
+                ->with(['reservation.guest'])
+                ->first();
+
+            $room->today_reservation = $todayReservationDetail
+                ? [
+                    'id' => $todayReservationDetail->reservation->id,
+                    'guest' => $todayReservationDetail->reservation->guest->full_name ?? 'Huésped',
+                ]
+                : null;
+
             // 🚀 MOTOR DE FACTURACIÓN GRUPAL: si el check-in activo de esta
             // habitación pertenece a una Cuenta Grupal real (tiene
             // company_name), le inyectamos el saldo REAL calculado en vivo

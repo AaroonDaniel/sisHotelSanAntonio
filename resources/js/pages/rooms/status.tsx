@@ -1496,10 +1496,30 @@ export default function RoomsStatus({
                             isToday = firstRes.date === todayStr;
                         }
 
+                        // 🚀 "RESERVADO HOY": si la habitación está LIBRE
+                        // (sin check-in activo) y tiene una reserva cuya
+                        // llegada es hoy, un clic en la tarjeta salta
+                        // directo a convertir esa reserva en check-in (en
+                        // vez del flujo normal de asignación manual). Si
+                        // la habitación ya está ocupada, el clic sigue
+                        // abriendo el modal de la estadía actual — el
+                        // banner es solo informativo en ese caso.
+                        const todayReservation = (room as any)
+                            .today_reservation;
+
                         return (
                             <div
                                 key={room.id}
-                                onClick={() => handleRoomClick(room)}
+                                onClick={() => {
+                                    if (!activeCheckin && todayReservation) {
+                                        setPreselectedReservationId(
+                                            todayReservation.id,
+                                        );
+                                        setIsPendingModalOpen(true);
+                                    } else {
+                                        handleRoomClick(room);
+                                    }
+                                }}
                                 // 🚨 Tarjeta SIN overflow-hidden para que el hover no se corte
                                 className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
@@ -1568,10 +1588,28 @@ export default function RoomsStatus({
                                     </div>
                                 )}
 
+                                {/* 🚀 BANNER "RESERVADO HOY": franja llamativa
+                                    de ancho completo en la parte superior
+                                    de la tarjeta — visible tanto si la
+                                    habitación está libre (clic = check-in
+                                    directo) como si ya está ocupada (solo
+                                    informativo). */}
+                                {todayReservation && (
+                                    <div className="absolute top-0 right-0 left-0 z-40 flex items-center justify-center gap-1 rounded-t-lg bg-yellow-400 px-2 py-1 text-[10px] font-black tracking-wide text-yellow-900 shadow-sm">
+                                        <Clock className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">
+                                            RESERVADO HOY:{' '}
+                                            {todayReservation.guest}
+                                        </span>
+                                    </div>
+                                )}
+
                                 <div className="pointer-events-none absolute -top-2 -right-2 rotate-12 transform opacity-30">
                                     {config.icon}
                                 </div>
-                                <div className="pointer-events-none relative z-10 p-4 text-white">
+                                <div
+                                    className={`pointer-events-none relative z-10 p-4 text-white ${todayReservation ? 'pt-7' : ''}`}
+                                >
                                     <h3 className="text-2xl font-extrabold tracking-tight">
                                         {room.number}
                                     </h3>
@@ -3028,13 +3066,38 @@ function CheckoutConfirmationModal({
                                                                     value={
                                                                         rebaja
                                                                     }
+                                                                    onFocus={(
+                                                                        e,
+                                                                    ) =>
+                                                                        e.target.select()
+                                                                    }
                                                                     onChange={(
                                                                         e,
                                                                     ) => {
-                                                                        setRebaja(
+                                                                        let val =
                                                                             e
                                                                                 .target
-                                                                                .value,
+                                                                                .value;
+                                                                        if (
+                                                                            val !==
+                                                                                '' &&
+                                                                            val.length >
+                                                                                1 &&
+                                                                            val.startsWith(
+                                                                                '0',
+                                                                            ) &&
+                                                                            !val.startsWith(
+                                                                                '0.',
+                                                                            )
+                                                                        ) {
+                                                                            val =
+                                                                                val.replace(
+                                                                                    /^0+/,
+                                                                                    '',
+                                                                                );
+                                                                        }
+                                                                        setRebaja(
+                                                                            val,
                                                                         );
                                                                         setRebajaConfirmada(
                                                                             null,
@@ -3311,15 +3374,40 @@ function CheckoutConfirmationModal({
                                                                                 value={
                                                                                     montoEfectivo
                                                                                 }
-                                                                                onChange={(
+                                                                                onFocus={(
                                                                                     e,
                                                                                 ) =>
-                                                                                    handleMontoEfectivoChange(
+                                                                                    e.target.select()
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) => {
+                                                                                    let val =
                                                                                         e
                                                                                             .target
-                                                                                            .value,
-                                                                                    )
-                                                                                }
+                                                                                            .value;
+                                                                                    if (
+                                                                                        val !==
+                                                                                            '' &&
+                                                                                        val.length >
+                                                                                            1 &&
+                                                                                        val.startsWith(
+                                                                                            '0',
+                                                                                        ) &&
+                                                                                        !val.startsWith(
+                                                                                            '0.',
+                                                                                        )
+                                                                                    ) {
+                                                                                        val =
+                                                                                            val.replace(
+                                                                                                /^0+/,
+                                                                                                '',
+                                                                                            );
+                                                                                    }
+                                                                                    handleMontoEfectivoChange(
+                                                                                        val,
+                                                                                    );
+                                                                                }}
                                                                                 className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-green-500 focus:ring-green-500"
                                                                             />
                                                                         </div>
@@ -3340,15 +3428,40 @@ function CheckoutConfirmationModal({
                                                                                 value={
                                                                                     montoQR
                                                                                 }
-                                                                                onChange={(
+                                                                                onFocus={(
                                                                                     e,
                                                                                 ) =>
-                                                                                    handleMontoQRChange(
+                                                                                    e.target.select()
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) => {
+                                                                                    let val =
                                                                                         e
                                                                                             .target
-                                                                                            .value,
-                                                                                    )
-                                                                                }
+                                                                                            .value;
+                                                                                    if (
+                                                                                        val !==
+                                                                                            '' &&
+                                                                                        val.length >
+                                                                                            1 &&
+                                                                                        val.startsWith(
+                                                                                            '0',
+                                                                                        ) &&
+                                                                                        !val.startsWith(
+                                                                                            '0.',
+                                                                                        )
+                                                                                    ) {
+                                                                                        val =
+                                                                                            val.replace(
+                                                                                                /^0+/,
+                                                                                                '',
+                                                                                            );
+                                                                                    }
+                                                                                    handleMontoQRChange(
+                                                                                        val,
+                                                                                    );
+                                                                                }}
                                                                                 className="w-full rounded-lg border-gray-400 text-center text-lg font-black text-gray-800 focus:border-purple-500 focus:ring-purple-500"
                                                                             />
                                                                         </div>

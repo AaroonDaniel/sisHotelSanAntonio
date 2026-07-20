@@ -372,7 +372,22 @@ export default function EventCheckinModal({
                                         required
                                         min="0"
                                         value={data.agreed_price}
-                                        onChange={(e) => setData('agreed_price', e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => {
+                                            let val = e.target.value;
+                                            if (val === '') {
+                                                setData('agreed_price', '');
+                                                return;
+                                            }
+                                            if (
+                                                val.length > 1 &&
+                                                val.startsWith('0') &&
+                                                !val.startsWith('0.')
+                                            ) {
+                                                val = val.replace(/^0+/, '');
+                                            }
+                                            setData('agreed_price', val);
+                                        }}
                                         className="w-full rounded-lg border-2 border-emerald-400 bg-white px-3 py-2 text-xl font-black text-emerald-950 shadow-inner focus:border-emerald-600 focus:ring-emerald-600 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="ml-2 font-black text-emerald-800">
@@ -389,7 +404,22 @@ export default function EventCheckinModal({
                                         type="number"
                                         min="0"
                                         value={data.advance_payment}
-                                        onChange={(e) => setData('advance_payment', e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => {
+                                            let val = e.target.value;
+                                            if (val === '') {
+                                                setData('advance_payment', '');
+                                                return;
+                                            }
+                                            if (
+                                                val.length > 1 &&
+                                                val.startsWith('0') &&
+                                                !val.startsWith('0.')
+                                            ) {
+                                                val = val.replace(/^0+/, '');
+                                            }
+                                            setData('advance_payment', val);
+                                        }}
                                         className="w-full rounded-lg border-2 border-slate-400 bg-white px-3 py-2 text-xl font-black text-gray-900 shadow-inner focus:border-slate-600 focus:ring-slate-600 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="ml-2 font-black text-slate-600">

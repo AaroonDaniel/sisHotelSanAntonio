@@ -998,15 +998,31 @@ export default function ReservationModal({
                                         <input
                                             type="number"
                                             min="0"
-                                            step="0.5"
+                                            step="1"
                                             value={data.advance_payment}
-                                            onChange={(e) =>
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                                let value = e.target.value;
+
+                                                // Si comienza con 0 y no es un decimal, quitamos los ceros iniciales
+                                                if (
+                                                    value.length > 1 &&
+                                                    value.startsWith('0') &&
+                                                    !value.startsWith('0.')
+                                                ) {
+                                                    value = value.replace(
+                                                        /^0+/,
+                                                        '',
+                                                    );
+                                                }
+
+                                                // Number() convierte '' (vacío) a 0 automáticamente,
+                                                // lo cual es un tipo de dato 'number' válido para TypeScript.
                                                 setData(
                                                     'advance_payment',
-                                                    Number(e.target.value),
-                                                )
-                                            }
-                                            placeholder="0.00"
+                                                    Number(value),
+                                                );
+                                            }}
                                             className="block w-full rounded-xl border-2 border-gray-300 bg-white py-2 pr-3 pl-10 text-center text-base font-black text-gray-900 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                         />
                                     </div>
@@ -1311,15 +1327,41 @@ export default function ReservationModal({
                                                         detail._temp_advance_payment ||
                                                         ''
                                                     }
-                                                    onChange={(e) =>
+                                                    onFocus={(e) =>
+                                                        e.target.select()
+                                                    }
+                                                    onChange={(e) => {
+                                                        let val =
+                                                            e.target.value;
+                                                        if (val === '') {
+                                                            updateDetailRow(
+                                                                index,
+                                                                '_temp_advance_payment',
+                                                                0,
+                                                            );
+                                                            return;
+                                                        }
+                                                        if (
+                                                            val.length > 1 &&
+                                                            val.startsWith(
+                                                                '0',
+                                                            ) &&
+                                                            !val.startsWith(
+                                                                '0.',
+                                                            )
+                                                        ) {
+                                                            val =
+                                                                val.replace(
+                                                                    /^0+/,
+                                                                    '',
+                                                                );
+                                                        }
                                                         updateDetailRow(
                                                             index,
                                                             '_temp_advance_payment',
-                                                            Number(
-                                                                e.target.value,
-                                                            ),
-                                                        )
-                                                    }
+                                                            Number(val),
+                                                        );
+                                                    }}
                                                     placeholder="0.00"
                                                     className="w-full rounded-lg border-indigo-200 bg-indigo-50 py-1.5 text-xs font-bold text-indigo-800 focus:border-indigo-500 focus:ring-indigo-500"
                                                 />

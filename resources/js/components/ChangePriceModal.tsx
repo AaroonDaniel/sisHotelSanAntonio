@@ -183,7 +183,22 @@ export default function ChangePriceModal({
                                 min="0"
                                 step="0.01"
                                 value={newPrice}
-                                onChange={(e) => setNewPrice(e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                    let val = e.target.value;
+                                    if (val === '') {
+                                        setNewPrice('');
+                                        return;
+                                    }
+                                    if (
+                                        val.length > 1 &&
+                                        val.startsWith('0') &&
+                                        !val.startsWith('0.')
+                                    ) {
+                                        val = val.replace(/^0+/, '');
+                                    }
+                                    setNewPrice(val);
+                                }}
                                 placeholder="Ej: 100"
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-black focus:border-emerald-500 focus:ring-emerald-500"
                                 autoFocus

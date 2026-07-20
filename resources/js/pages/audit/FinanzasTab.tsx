@@ -5,6 +5,10 @@ import { useState } from 'react';
 export interface PaymentAudit {
     id: number;
     checkin_id: number | null;
+    // 🚀 AUDITORÍA DE PAGOS DE RESERVAS: adelanto cobrado antes del
+    // check-in (solo tiene reservation_id, checkin_id es null hasta que
+    // se confirma la reserva).
+    reservation_id: number | null;
     guest_name: string;
     room_number: string;
     amount: number;
@@ -206,7 +210,9 @@ function PaymentsTable({
                                         <td className="px-4 py-3 text-gray-300">
                                             {p.checkin_id
                                                 ? `Hab. ${p.room_number} · ${p.guest_name}`
-                                                : '—'}
+                                                : p.reservation_id
+                                                  ? p.guest_name
+                                                  : '—'}
                                         </td>
                                         <td className="px-4 py-3 text-gray-300">
                                             Bs {p.amount.toFixed(2)}
@@ -258,19 +264,34 @@ function PaymentsTable({
                                     <td className="px-4 py-3 text-gray-300">
                                         {p.checkin_id
                                             ? `Hab. ${p.room_number} · ${p.guest_name}`
-                                            : '—'}
+                                            : p.reservation_id
+                                              ? p.guest_name
+                                              : '—'}
                                     </td>
                                     <td className="px-4 py-3">
                                         <input
                                             type="number"
                                             step="0.01"
                                             value={editForm.amount}
-                                            onChange={(e) =>
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                                let val = e.target.value;
+                                                if (
+                                                    val !== '' &&
+                                                    val.length > 1 &&
+                                                    val.startsWith('0') &&
+                                                    !val.startsWith('0.')
+                                                ) {
+                                                    val = val.replace(
+                                                        /^0+/,
+                                                        '',
+                                                    );
+                                                }
                                                 setEditForm((prev) => ({
                                                     ...prev,
-                                                    amount: e.target.value,
-                                                }))
-                                            }
+                                                    amount: val,
+                                                }));
+                                            }}
                                             className="w-24 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
@@ -580,12 +601,27 @@ function ExpensesTable({
                                             step="0.01"
                                             min="0"
                                             value={editForm.amount}
-                                            onChange={(ev) =>
+                                            onFocus={(ev) =>
+                                                ev.target.select()
+                                            }
+                                            onChange={(ev) => {
+                                                let val = ev.target.value;
+                                                if (
+                                                    val !== '' &&
+                                                    val.length > 1 &&
+                                                    val.startsWith('0') &&
+                                                    !val.startsWith('0.')
+                                                ) {
+                                                    val = val.replace(
+                                                        /^0+/,
+                                                        '',
+                                                    );
+                                                }
                                                 setEditForm((prev) => ({
                                                     ...prev,
-                                                    amount: ev.target.value,
-                                                }))
-                                            }
+                                                    amount: val,
+                                                }));
+                                            }}
                                             className="w-24 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>

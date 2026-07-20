@@ -835,10 +835,33 @@ export default function MultiCheckoutModal({
                                                             min="0"
                                                             placeholder={`Ej: ${totalHospedajeGeneral}`}
                                                             value={rebaja}
+                                                            onFocus={(e) =>
+                                                                e.target.select()
+                                                            }
                                                             onChange={(e) => {
-                                                                setRebaja(
+                                                                let val =
                                                                     e.target
-                                                                        .value,
+                                                                        .value;
+                                                                if (
+                                                                    val !==
+                                                                        '' &&
+                                                                    val.length >
+                                                                        1 &&
+                                                                    val.startsWith(
+                                                                        '0',
+                                                                    ) &&
+                                                                    !val.startsWith(
+                                                                        '0.',
+                                                                    )
+                                                                ) {
+                                                                    val =
+                                                                        val.replace(
+                                                                            /^0+/,
+                                                                            '',
+                                                                        );
+                                                                }
+                                                                setRebaja(
+                                                                    val,
                                                                 );
                                                                 setRebajaConfirmada(
                                                                     null,
@@ -1076,15 +1099,40 @@ export default function MultiCheckoutModal({
                                                                     value={
                                                                         montoEfectivo
                                                                     }
-                                                                    onChange={(
+                                                                    onFocus={(
                                                                         e,
                                                                     ) =>
-                                                                        handleMontoEfectivoChange(
+                                                                        e.target.select()
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        let val =
                                                                             e
                                                                                 .target
-                                                                                .value,
-                                                                        )
-                                                                    }
+                                                                                .value;
+                                                                        if (
+                                                                            val !==
+                                                                                '' &&
+                                                                            val.length >
+                                                                                1 &&
+                                                                            val.startsWith(
+                                                                                '0',
+                                                                            ) &&
+                                                                            !val.startsWith(
+                                                                                '0.',
+                                                                            )
+                                                                        ) {
+                                                                            val =
+                                                                                val.replace(
+                                                                                    /^0+/,
+                                                                                    '',
+                                                                                );
+                                                                        }
+                                                                        handleMontoEfectivoChange(
+                                                                            val,
+                                                                        );
+                                                                    }}
                                                                     className="w-full rounded-lg border-gray-400 text-center text-base font-black text-gray-800 focus:border-red-500 focus:ring-red-500"
                                                                 />
                                                             </div>
@@ -1102,15 +1150,40 @@ export default function MultiCheckoutModal({
                                                                     value={
                                                                         montoQR
                                                                     }
-                                                                    onChange={(
+                                                                    onFocus={(
                                                                         e,
                                                                     ) =>
-                                                                        handleMontoQRChange(
+                                                                        e.target.select()
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        let val =
                                                                             e
                                                                                 .target
-                                                                                .value,
-                                                                        )
-                                                                    }
+                                                                                .value;
+                                                                        if (
+                                                                            val !==
+                                                                                '' &&
+                                                                            val.length >
+                                                                                1 &&
+                                                                            val.startsWith(
+                                                                                '0',
+                                                                            ) &&
+                                                                            !val.startsWith(
+                                                                                '0.',
+                                                                            )
+                                                                        ) {
+                                                                            val =
+                                                                                val.replace(
+                                                                                    /^0+/,
+                                                                                    '',
+                                                                                );
+                                                                        }
+                                                                        handleMontoQRChange(
+                                                                            val,
+                                                                        );
+                                                                    }}
                                                                     className="w-full rounded-lg border-gray-400 text-center text-base font-black text-gray-800 focus:border-red-500 focus:ring-red-500"
                                                                 />
                                                             </div>

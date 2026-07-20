@@ -263,12 +263,30 @@ export default function Gastos({
                                                 step="0.10"
                                                 min="0.10"
                                                 value={data.amount}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'amount',
-                                                        e.target.value,
-                                                    )
+                                                onFocus={(e) =>
+                                                    e.target.select()
                                                 }
+                                                onChange={(e) => {
+                                                    let val = e.target.value;
+                                                    if (val === '') {
+                                                        setData(
+                                                            'amount',
+                                                            '',
+                                                        );
+                                                        return;
+                                                    }
+                                                    if (
+                                                        val.length > 1 &&
+                                                        val.startsWith('0') &&
+                                                        !val.startsWith('0.')
+                                                    ) {
+                                                        val = val.replace(
+                                                            /^0+/,
+                                                            '',
+                                                        );
+                                                    }
+                                                    setData('amount', val);
+                                                }}
                                                 className={`w-full rounded-xl border bg-gray-700 py-2.5 pr-4 pl-12 text-lg font-bold text-white focus:ring-2 ${editingId ? 'border-blue-500/50 focus:border-blue-500 focus:ring-blue-500/50' : 'border-gray-600 focus:border-orange-500 focus:ring-orange-500/50'}`}
                                                 placeholder="0.00"
                                             />

@@ -483,10 +483,20 @@ function CheckinAuditForm({
                                     step="0.01"
                                     min="0"
                                     value={form.total_a_pagar}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => {
+                                        let val = e.target.value;
+                                        if (
+                                            val !== '' &&
+                                            val.length > 1 &&
+                                            val.startsWith('0') &&
+                                            !val.startsWith('0.')
+                                        ) {
+                                            val = val.replace(/^0+/, '');
+                                        }
                                         setForm((prev) => ({
                                             ...prev,
-                                            total_a_pagar: e.target.value,
+                                            total_a_pagar: val,
                                         }));
                                         invalidatePreview();
                                     }}
@@ -702,19 +712,38 @@ function CheckinAuditForm({
                                                     type="number"
                                                     step="0.01"
                                                     value={pf.amount}
-                                                    onChange={(e) =>
+                                                    onFocus={(e) =>
+                                                        e.target.select()
+                                                    }
+                                                    onChange={(e) => {
+                                                        let val =
+                                                            e.target.value;
+                                                        if (
+                                                            val !== '' &&
+                                                            val.length > 1 &&
+                                                            val.startsWith(
+                                                                '0',
+                                                            ) &&
+                                                            !val.startsWith(
+                                                                '0.',
+                                                            )
+                                                        ) {
+                                                            val =
+                                                                val.replace(
+                                                                    /^0+/,
+                                                                    '',
+                                                                );
+                                                        }
                                                         setPaymentForms(
                                                             (prev) => ({
                                                                 ...prev,
                                                                 [p.id]: {
                                                                     ...pf,
-                                                                    amount: e
-                                                                        .target
-                                                                        .value,
+                                                                    amount: val,
                                                                 },
                                                             }),
-                                                        )
-                                                    }
+                                                        );
+                                                    }}
                                                     className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                 />
                                             </div>

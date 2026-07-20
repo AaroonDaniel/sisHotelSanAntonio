@@ -116,7 +116,19 @@ export default function ServiceModal({ show, onClose, ServiceToEdit }: ServiceMo
                                         type="number"
                                         step="0.01"
                                         value={data.price}
-                                        onChange={(e) => setData('price', e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => {
+                                            let val = e.target.value;
+                                            if (
+                                                val !== '' &&
+                                                val.length > 1 &&
+                                                val.startsWith('0') &&
+                                                !val.startsWith('0.')
+                                            ) {
+                                                val = val.replace(/^0+/, '');
+                                            }
+                                            setData('price', val);
+                                        }}
                                         className="w-full rounded-lg border border-gray-400 py-2 pr-3 pl-10 text-base text-black uppercase focus:border-gray-600 focus:ring-0"
                                         placeholder="0.00"
                                     />

@@ -207,16 +207,40 @@ class DataAuditController extends Controller
         return Payment::with([
             'checkin.guest:id,full_name',
             'checkin.room:id,number',
+            // 🚀 AUDITORÍA DE PAGOS DE RESERVAS: un adelanto cobrado sobre
+            // una reserva (antes del check-in) solo tiene reservation_id,
+            // checkin_id queda NULL hasta que se confirma. Sin esto, el
+            // huésped/habitación de esas filas se perdía silenciosamente.
+            'reservation.guest:id,full_name',
+            'reservation.details.room:id,number',
             'operador:id,full_name,nickname',
         ])
             ->orderByDesc('payment_date')
             ->get()
             ->map(function (Payment $p) {
+                // Prioridad: check-in real > reserva pendiente > 'N/D'.
+                $guestName = $p->checkin?->guest?->full_name
+                    ?? ($p->reservation?->guest?->full_name
+                        ? 'Reserva: ' . $p->reservation->guest->full_name
+                        : null)
+                    ?? 'N/D';
+
+                $roomNumber = $p->checkin?->room?->number;
+                if (!$roomNumber && $p->reservation) {
+                    $roomNumbers = $p->reservation->details
+                        ->pluck('room.number')
+                        ->filter()
+                        ->unique();
+                    $roomNumber = $roomNumbers->isNotEmpty() ? $roomNumbers->implode(', ') : null;
+                }
+                $roomNumber = $roomNumber ?? 'N/D';
+
                 return [
                     'id' => $p->id,
                     'checkin_id' => $p->checkin_id,
-                    'guest_name' => $p->checkin->guest->full_name ?? 'N/D',
-                    'room_number' => $p->checkin->room->number ?? 'N/D',
+                    'reservation_id' => $p->reservation_id,
+                    'guest_name' => $guestName,
+                    'room_number' => $roomNumber,
                     'amount' => (float) $p->amount,
                     'method' => $p->method,
                     'type' => $p->type,

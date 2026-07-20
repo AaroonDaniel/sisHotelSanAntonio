@@ -119,9 +119,22 @@ export default function ExpenseModal({
                                     required
                                     step="0.10"
                                     value={data.amount}
-                                    onChange={(e) =>
-                                        setData('amount', e.target.value)
-                                    }
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                        let val = e.target.value;
+                                        if (val === '') {
+                                            setData('amount', '');
+                                            return;
+                                        }
+                                        if (
+                                            val.length > 1 &&
+                                            val.startsWith('0') &&
+                                            !val.startsWith('0.')
+                                        ) {
+                                            val = val.replace(/^0+/, '');
+                                        }
+                                        setData('amount', val);
+                                    }}
                                     className="block w-full [appearance:textfield] rounded-xl border-2 border-gray-200 py-3 pr-4 pl-12 text-xl font-black text-gray-800 transition-colors focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     placeholder="0.00"
                                 />
