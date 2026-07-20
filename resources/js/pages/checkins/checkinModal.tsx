@@ -1336,11 +1336,13 @@ export default function CheckinModal({
     const filteredGuests =
         currentPerson.full_name && currentPerson.full_name.length > 1
             ? guests.filter((g) => {
+                  // 🚀 Check-in diferido: full_name/identification_number
+                  // pueden llegar en null desde el backend (huésped aún sin
+                  // datos completos) — sin el fallback, .toLowerCase()
+                  // sobre null tumba toda la búsqueda.
                   const term = currentPerson.full_name.toLowerCase();
-                  const fullName = g.full_name.toLowerCase();
-                  const ci = g.identification_number
-                      ? g.identification_number.toLowerCase()
-                      : '';
+                  const fullName = (g.full_name ?? '').toLowerCase();
+                  const ci = (g.identification_number ?? '').toLowerCase();
                   return fullName.includes(term) || ci.includes(term);
               })
             : [];

@@ -197,12 +197,15 @@ export default function ReportsIndex({
     const filteredBook = useMemo<DailyMovement[]>(() => {
         if (!bookSearch.trim()) return DailyBook;
         const q = bookSearch.toLowerCase();
+        // 🚀 Check-in diferido: el nombre del huésped puede llegar en null
+        // desde el backend aunque el tipo declare string — sin el
+        // fallback, .toLowerCase() sobre null tumba todo el filtro.
         return DailyBook.filter(
             (m) =>
-                m.concept.toLowerCase().includes(q) ||
-                m.guest.toLowerCase().includes(q) ||
-                m.reference.toLowerCase().includes(q) ||
-                m.user.toLowerCase().includes(q),
+                (m.concept ?? '').toLowerCase().includes(q) ||
+                (m.guest ?? '').toLowerCase().includes(q) ||
+                (m.reference ?? '').toLowerCase().includes(q) ||
+                (m.user ?? '').toLowerCase().includes(q),
         );
     }, [DailyBook, bookSearch]);
 

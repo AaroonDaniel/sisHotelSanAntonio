@@ -122,9 +122,12 @@ export default function ReportsIndex({
 
     // Función de filtrado por búsqueda
     const filterBySearch = (guests: Guest[]) => {
+        // 🚀 Check-in diferido: full_name puede llegar en null (huésped aún
+        // sin datos completos) — sin el fallback, .toLowerCase() sobre null
+        // tumba todo el filtro.
         return guests.filter(
             (guest) =>
-                guest.full_name
+                (guest.full_name ?? '')
                     .toLowerCase()
                     .includes(searchTerm.toLowerCase()) ||
                 guest.identification_number

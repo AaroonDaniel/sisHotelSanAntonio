@@ -82,9 +82,12 @@ export default function CheckinDetailsIndex({
     // --- FILTRADO ---
     const filteredDetails = checkindetails.filter((detail) => {
         const searchLower = searchTerm.toLowerCase();
+        // 🚀 Check-in diferido: guest.full_name puede llegar en null
+        // (huésped aún sin datos completos) — sin el fallback, .toLowerCase()
+        // sobre null tumba todo el filtro.
         return (
             detail.service.name.toLowerCase().includes(searchLower) ||
-            detail.checkin.guest.full_name
+            (detail.checkin.guest.full_name ?? '')
                 .toLowerCase()
                 .includes(searchLower) ||
             detail.checkin.room.number.toString().includes(searchLower)

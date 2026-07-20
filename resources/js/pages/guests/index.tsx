@@ -81,7 +81,10 @@ export default function GuestsIndex({ auth, Guests }: Props) {
     // --- 3. FILTRO AVANZADO ---
     const filteredGuests = Guests.filter((guest) => {
         const term = searchTerm.toLowerCase();
-        const fullName = ` ${guest.full_name}`.toLowerCase();
+        // 🚀 Check-in diferido: full_name puede llegar en null (huésped aún
+        // sin datos completos) — sin el fallback, el template literal lo
+        // convertía en el texto literal "null" en vez de una cadena vacía.
+        const fullName = ` ${guest.full_name ?? ''}`.toLowerCase();
         const idNumber = (guest.identification_number || '').toLowerCase();
         return (
             fullName.includes(term) ||

@@ -140,23 +140,25 @@ export default function CheckinsIndex({
     const filteredCheckins = Checkins.filter((checkin) => {
         const term = searchTerm.toLowerCase();
 
+        // 🚀 Check-in diferido: full_name/identification_number/room.number
+        // pueden llegar en null desde el backend (huésped o habitación aún
+        // sin datos completos) — sin el fallback a '', .toLowerCase() sobre
+        // null tumba todo el filtro (y con él, la lista completa).
         // Buscar por titular
-        const guestName = checkin.guest
-            ? `${checkin.guest.full_name}`.toLowerCase()
-            : '';
+        const guestName = (checkin.guest?.full_name ?? '').toLowerCase();
         const guestCi = (
-            checkin.guest?.identification_number || ''
+            checkin.guest?.identification_number ?? ''
         ).toLowerCase();
         // Buscar por habitación
-        const roomNumber = checkin.room
-            ? checkin.room.number.toLowerCase()
-            : '';
+        const roomNumber = (checkin.room?.number ?? '').toLowerCase();
 
         // Buscar por acompañantes (NUEVO)
         const companionsMatch = checkin.companions?.some(
             (comp) =>
-                comp.full_name.toLowerCase().includes(term) ||
-                comp.identification_number.toLowerCase().includes(term),
+                (comp.full_name ?? '').toLowerCase().includes(term) ||
+                (comp.identification_number ?? '')
+                    .toLowerCase()
+                    .includes(term),
         );
 
         return (
