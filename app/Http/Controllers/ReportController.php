@@ -878,7 +878,17 @@ class ReportController extends Controller
         $granTotalEfectivo = 0;
         $granTotalQR = 0;
 
+        // La columna "Cajero" solo aporta información en modo "todos" los
+        // operadores: para un solo operador la cabecera ya dice
+        // "Cajero: <nombre>" y repetirlo en cada fila es redundante.
+        // Compartida entre la tabla de EFECTIVO y la de QR/bancos.
+        $mostrarCajero = ($userId === 'todos');
+
         if ($efectivoPayments->isNotEmpty()) {
+            // El ancho que libera "Cajero" (32mm) se lo suma a "Huesped"
+            // (65->97) para que la fila siga sumando 185mm en ambos modos.
+            $anchoHuesped = $mostrarCajero ? 65 : 97;
+
             $pdf->SetFont('Arial', 'B', 10);
             $pdf->SetFillColor(210, 255, 210);
             $pdf->Cell(0, 6, utf8_decode(' INGRESOS EN EFECTIVO'), 1, 1, 'L', true);
@@ -887,8 +897,10 @@ class ReportController extends Controller
             $pdf->Cell(13, 5, 'Fecha', 1, 0, 'C', true);
             $pdf->Cell(10, 5, 'Hora', 1, 0, 'C', true);
             $pdf->Cell(10, 5, 'Hab', 1, 0, 'C', true);
-            $pdf->Cell(65, 5, 'Huesped', 1, 0, 'L', true);
-            $pdf->Cell(32, 5, 'Cajero', 1, 0, 'L', true);
+            $pdf->Cell($anchoHuesped, 5, 'Huesped', 1, 0, 'L', true);
+            if ($mostrarCajero) {
+                $pdf->Cell(32, 5, 'Cajero', 1, 0, 'L', true);
+            }
             $pdf->Cell(30, 5, 'Concepto', 1, 0, 'C', true);
             $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
             $pdf->SetFont('Arial', '', 7);
@@ -898,8 +910,10 @@ class ReportController extends Controller
                 $pdf->Cell(13, 5, $p->created_at->format('d/m'), 1, 0, 'C');
                 $pdf->Cell(10, 5, $p->created_at->format('H:i'), 1, 0, 'C');
                 $pdf->Cell(10, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
-                $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
-                $pdf->Cell(32, 5, utf8_decode(substr($p->operador->name ?? $p->user->name ?? '', 0, 18)), 1, 0, 'L');
+                $pdf->Cell($anchoHuesped, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
+                if ($mostrarCajero) {
+                    $pdf->Cell(32, 5, utf8_decode(substr($p->operador->nickname ?? $p->user->nickname ?? '', 0, 18)), 1, 0, 'L');
+                }
                 if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
                 $pdf->Cell(30, 5, utf8_decode($p->type), 1, 0, 'C');
                 $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');
@@ -912,16 +926,27 @@ class ReportController extends Controller
         }
 
         if ($qrPayments->isNotEmpty()) {
+            // "Banco Destino" siempre se necesita (no es redundante como
+            // Cajero en la tabla de efectivo), así que en modo "todos" el
+            // operador se agrega como columna NUEVA angosta (nickname es
+            // corto) robándole ancho a "Huesped" (65->45), no a Banco
+            // Destino. 13+10+10+45+32+20+30+25 = 185, igual que
+            // 13+10+10+65+32+30+25 = 185 cuando no se muestra.
+            $anchoHuespedQr = $mostrarCajero ? 45 : 65;
+
             $pdf->SetFont('Arial', 'B', 10);
             $pdf->SetFillColor(210, 235, 255);
-            $pdf->Cell(0, 6, utf8_decode(' INGRESOS POR QR Y TRANSFERENCIAS BANCARIAS'), 1, 1, 'L', true);
+            $pdf->Cell(0, 6, utf8_decode(' INGRESOS POR QR'), 1, 1, 'L', true);
             $pdf->SetFont('Arial', 'B', 7);
             $pdf->SetFillColor(240, 240, 240);
             $pdf->Cell(13, 5, 'Fecha', 1, 0, 'C', true);
             $pdf->Cell(10, 5, 'Hora', 1, 0, 'C', true);
             $pdf->Cell(10, 5, 'Hab', 1, 0, 'C', true);
-            $pdf->Cell(65, 5, 'Huesped', 1, 0, 'L', true);
+            $pdf->Cell($anchoHuespedQr, 5, 'Huesped', 1, 0, 'L', true);
             $pdf->Cell(32, 5, 'Banco Destino', 1, 0, 'C', true);
+            if ($mostrarCajero) {
+                $pdf->Cell(20, 5, 'Cajero', 1, 0, 'L', true);
+            }
             $pdf->Cell(30, 5, 'Concepto', 1, 0, 'C', true);
             $pdf->Cell(25, 5, 'Monto (Bs)', 1, 1, 'R', true);
             $pdf->SetFont('Arial', '', 7);
@@ -931,9 +956,12 @@ class ReportController extends Controller
                 $pdf->Cell(13, 5, $p->created_at->format('d/m'), 1, 0, 'C');
                 $pdf->Cell(10, 5, $p->created_at->format('H:i'), 1, 0, 'C');
                 $pdf->Cell(10, 5, $p->checkin->room->number ?? '-', 1, 0, 'C');
-                $pdf->Cell(65, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
+                $pdf->Cell($anchoHuespedQr, 5, utf8_decode(substr($p->checkin->guest->full_name ?? 'Sin Huésped', 0, 35)), 1, 0, 'L');
                 $bancoText = 'QR - ' . ($p->bank_name ? strtoupper($p->bank_name) : 'OTROS');
                 $pdf->Cell(32, 5, utf8_decode(substr($bancoText, 0, 18)), 1, 0, 'C');
+                if ($mostrarCajero) {
+                    $pdf->Cell(20, 5, utf8_decode(substr($p->operador->nickname ?? $p->user->nickname ?? '', 0, 12)), 1, 0, 'L');
+                }
                 if ($p->type === 'DEVOLUCION') $pdf->SetTextColor(200, 0, 0);
                 $pdf->Cell(30, 5, utf8_decode($p->type), 1, 0, 'C');
                 $pdf->Cell(25, 5, number_format($montoReal, 2), 1, 1, 'R');

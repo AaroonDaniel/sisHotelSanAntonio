@@ -888,6 +888,17 @@ export default function ViewReservationModal({
                         ? `/reservas/${cancelingReservationId}`
                         : null
                 }
+                operators={operators}
+                hasAdvance={
+                    (reservations.find(
+                        (r) => r.id === cancelingReservationId,
+                    )?.advance_payment ?? 0) > 0
+                }
+                advanceAmount={
+                    reservations.find(
+                        (r) => r.id === cancelingReservationId,
+                    )?.advance_payment ?? 0
+                }
             />
 
             {/* Modal para NUEVA reserva */}

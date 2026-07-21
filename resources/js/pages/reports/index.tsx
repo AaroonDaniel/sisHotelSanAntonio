@@ -219,11 +219,22 @@ export default function ReportsIndex({
     };
 
     // Componente auxiliar para pintar filas izquierdas
-    const renderGuestRow = (guest: Guest) => {
+    // 🐛 BUG CORREGIDO: Entrantes/Quedantes/Salientes se renderizan como
+    // hermanos dentro del mismo <tbody> (ver más abajo), pero cada fila
+    // solo usaba `guest.id` como key. Si el mismo huésped aparece en más
+    // de una categoría el mismo día (ej: sale de una habitación y queda
+    // en otra), React encuentra dos <tr> con la misma key bajo el mismo
+    // padre. `categoria` + índice garantiza unicidad sin importar qué
+    // combinación de datos venga del backend.
+    const renderGuestRow = (
+        guest: Guest,
+        categoria: string,
+        index: number,
+    ) => {
         const isSelected = selectedIds.includes(guest.id);
         return (
             <tr
-                key={guest.id}
+                key={`${categoria}-${guest.id}-${index}`}
                 onClick={() => toggleSelection(guest.id)}
                 className={`cursor-pointer transition-colors hover:bg-blue-50 ${isSelected ? 'bg-blue-50' : ''}`}
             >
@@ -250,8 +261,17 @@ export default function ReportsIndex({
     };
 
     // Componente auxiliar para pintar filas derechas (Vista Previa)
-    const renderPreviewRow = (guest: Guest, index: number) => (
-        <tr key={guest.id} className="transition-colors hover:bg-emerald-50/30">
+    // Mismo bug/fix que renderGuestRow: Entrantes/Quedantes/Salientes
+    // comparten un único <tbody> en esta tabla también.
+    const renderPreviewRow = (
+        guest: Guest,
+        index: number,
+        categoria: string,
+    ) => (
+        <tr
+            key={`${categoria}-${guest.id}-${index}`}
+            className="transition-colors hover:bg-emerald-50/30"
+        >
             <td className="border-r border-gray-100 bg-emerald-50/20 px-2 py-3 text-center font-bold text-emerald-600">
                 {index + 1}
             </td>
@@ -522,7 +542,12 @@ export default function ReportsIndex({
                                                         </td>
                                                     </tr>
                                                     {filteredEntrantes.map(
-                                                        renderGuestRow,
+                                                        (g, i) =>
+                                                            renderGuestRow(
+                                                                g,
+                                                                'entrantes',
+                                                                i,
+                                                            ),
                                                     )}
                                                 </>
                                             )}
@@ -537,7 +562,12 @@ export default function ReportsIndex({
                                                         </td>
                                                     </tr>
                                                     {filteredQuedantes.map(
-                                                        renderGuestRow,
+                                                        (g, i) =>
+                                                            renderGuestRow(
+                                                                g,
+                                                                'quedantes',
+                                                                i,
+                                                            ),
                                                     )}
                                                 </>
                                             )}
@@ -552,7 +582,12 @@ export default function ReportsIndex({
                                                         </td>
                                                     </tr>
                                                     {filteredSalientes.map(
-                                                        renderGuestRow,
+                                                        (g, i) =>
+                                                            renderGuestRow(
+                                                                g,
+                                                                'salientes',
+                                                                i,
+                                                            ),
                                                     )}
                                                 </>
                                             )}
@@ -670,6 +705,7 @@ export default function ReportsIndex({
                                                                 renderPreviewRow(
                                                                     guest,
                                                                     idx,
+                                                                    'entrantes',
                                                                 ),
                                                         )}
                                                     </>
@@ -690,6 +726,7 @@ export default function ReportsIndex({
                                                                 renderPreviewRow(
                                                                     guest,
                                                                     idx,
+                                                                    'quedantes',
                                                                 ),
                                                         )}
                                                     </>
@@ -710,6 +747,7 @@ export default function ReportsIndex({
                                                                 renderPreviewRow(
                                                                     guest,
                                                                     idx,
+                                                                    'salientes',
                                                                 ),
                                                         )}
                                                     </>

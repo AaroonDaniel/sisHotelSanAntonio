@@ -986,48 +986,51 @@ export default function ReservationModal({
                                 </div>
                             )}
 
-                            {!isCorporateToggle && (
-                                <div>
-                                    <label className="mb-1 block text-[10px] font-bold text-gray-600 uppercase">
-                                        Adelanto General (Bs)
-                                    </label>
-                                    <div className="relative">
-                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-bold text-gray-400">
-                                            Bs
-                                        </span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            value={data.advance_payment}
-                                            onFocus={(e) => e.target.select()}
-                                            onChange={(e) => {
-                                                let value = e.target.value;
+                           {!isCorporateToggle && (
+    <div>
+    <label className="mb-1 block text-[10px] font-bold text-gray-600 uppercase">
+        Adelanto General (Bs)
+    </label>
+    <div className="relative">
+        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-bold text-gray-400">
+            Bs
+        </span>
+        <input
+            type="number"
+            min="0"
+            step="1"
+            /* CAMBIO 1: Condicionamos el valor para que sea vacío si es 0 */
+            value={data.advance_payment === 0 ? '' : data.advance_payment}
+            /* CAMBIO 2: Añadimos el placeholder */
+            placeholder="0"
+            /* Añadimos onFocus para mejor UX, igual que en tu segundo ejemplo */
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => {
+                let value = e.target.value;
 
-                                                // Si comienza con 0 y no es un decimal, quitamos los ceros iniciales
-                                                if (
-                                                    value.length > 1 &&
-                                                    value.startsWith('0') &&
-                                                    !value.startsWith('0.')
-                                                ) {
-                                                    value = value.replace(
-                                                        /^0+/,
-                                                        '',
-                                                    );
-                                                }
+                /* CAMBIO 3: Manejamos el caso en que el usuario borra todo */
+                if (value === '') {
+                    setData('advance_payment', 0);
+                    return;
+                }
 
-                                                // Number() convierte '' (vacío) a 0 automáticamente,
-                                                // lo cual es un tipo de dato 'number' válido para TypeScript.
-                                                setData(
-                                                    'advance_payment',
-                                                    Number(value),
-                                                );
-                                            }}
-                                            className="block w-full rounded-xl border-2 border-gray-300 bg-white py-2 pr-3 pl-10 text-center text-base font-black text-gray-900 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                        />
-                                    </div>
-                                </div>
-                            )}
+                // Si comienza con 0 y no es un decimal, quitamos los ceros iniciales
+                if (
+                    value.length > 1 &&
+                    value.startsWith('0') &&
+                    !value.startsWith('0.')
+                ) {
+                    value = value.replace(/^0+/, '');
+                }
+
+                // Guardamos el número en el estado
+                setData('advance_payment', Number(value));
+            }}
+            className="block w-full rounded-xl border-2 border-gray-300 bg-white py-2 pr-3 pl-10 text-center text-base font-black text-gray-900 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+    </div>
+</div>
+)}
 
                             <div className="flex rounded-lg bg-gray-100 p-1">
                                 <button
@@ -1327,41 +1330,15 @@ export default function ReservationModal({
                                                         detail._temp_advance_payment ||
                                                         ''
                                                     }
-                                                    onFocus={(e) =>
-                                                        e.target.select()
-                                                    }
-                                                    onChange={(e) => {
-                                                        let val =
-                                                            e.target.value;
-                                                        if (val === '') {
-                                                            updateDetailRow(
-                                                                index,
-                                                                '_temp_advance_payment',
-                                                                0,
-                                                            );
-                                                            return;
-                                                        }
-                                                        if (
-                                                            val.length > 1 &&
-                                                            val.startsWith(
-                                                                '0',
-                                                            ) &&
-                                                            !val.startsWith(
-                                                                '0.',
-                                                            )
-                                                        ) {
-                                                            val =
-                                                                val.replace(
-                                                                    /^0+/,
-                                                                    '',
-                                                                );
-                                                        }
+                                                    onChange={(e) =>
                                                         updateDetailRow(
                                                             index,
                                                             '_temp_advance_payment',
-                                                            Number(val),
-                                                        );
-                                                    }}
+                                                            Number(
+                                                                e.target.value,
+                                                            ),
+                                                        )
+                                                    }
                                                     placeholder="0.00"
                                                     className="w-full rounded-lg border-indigo-200 bg-indigo-50 py-1.5 text-xs font-bold text-indigo-800 focus:border-indigo-500 focus:ring-indigo-500"
                                                 />

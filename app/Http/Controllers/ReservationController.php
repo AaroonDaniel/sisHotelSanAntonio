@@ -306,6 +306,64 @@ class ReservationController extends Controller
 
                 // --- 1. SI CANCELAN LA RESERVA ---
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
+                    // 🔒 CANDADO DE IDEMPOTENCIA: $statusUpper viene del status
+                    // DESEADO en el request, no del estado ANTERIOR real de la
+                    // reserva — hay que leer $reservation->status ANTES de
+                    // tocarlo con el ->update() de abajo. Sin este candado,
+                    // volver a pegarle a este endpoint sobre una reserva que
+                    // YA está 'cancelado' (doble click, reintento de red)
+                    // generaría una SEGUNDA tanda de DEVOLUCION y devolvería
+                    // el adelanto dos veces.
+                    $yaEstabaCancelada = $reservation->status === 'cancelado';
+
+                    if (!$yaEstabaCancelada) {
+                        // Devolución de adelantos: por cada Payment 'ADELANTO'
+                        // de esta reserva se crea un Payment 'DEVOLUCION'
+                        // equivalente, atribuido al operador/método que ELIGE
+                        // quien cancela (no tiene que coincidir con el
+                        // adelanto original). Mismo signo que
+                        // CheckinController::refund() (-abs()).
+                        $adelantos = Payment::where('reservation_id', $reservation->id)
+                            ->where('type', 'ADELANTO')
+                            ->get();
+
+                        // Defensa adicional: si por algún motivo ya existe una
+                        // DEVOLUCION para esta reserva, no duplicar.
+                        $yaTieneDevolucion = Payment::where('reservation_id', $reservation->id)
+                            ->where('type', 'DEVOLUCION')
+                            ->exists();
+
+                        if ($adelantos->isNotEmpty() && !$yaTieneDevolucion) {
+                            $operatorId = $request->input('operator_id');
+                            $metodoDevolucion = strtoupper((string) $request->input('refund_method', ''));
+                            $bancoDevolucion = $request->input('refund_bank_name');
+
+                            if (empty($operatorId) || !in_array($metodoDevolucion, ['EFECTIVO', 'QR'], true)) {
+                                throw new \RuntimeException('Debe seleccionar un operador y el método de devolución del adelanto para cancelar esta reserva.');
+                            }
+
+                            // Apertura silenciosa (mismo patrón que el
+                            // adelanto original y que refund()): NO
+                            // Auth::id() (Terminal Compartida).
+                            $cajaAbierta = $this->findOpenShift((int) $operatorId);
+
+                            foreach ($adelantos as $adelanto) {
+                                Payment::create([
+                                    'reservation_id'   => $reservation->id,
+                                    'user_id'          => Auth::id(),
+                                    'operator_id'      => $operatorId,
+                                    'cash_register_id' => $cajaAbierta->id,
+                                    'amount'           => -abs((float) $adelanto->amount),
+                                    'method'           => $metodoDevolucion,
+                                    'bank_name'        => $metodoDevolucion === 'EFECTIVO' ? null : $bancoDevolucion,
+                                    'description'      => 'DEVOLUCIÓN ADELANTO RESERVA #' . $reservation->id,
+                                    'type'             => 'DEVOLUCION',
+                                    'payment_date'     => now(),
+                                ]);
+                            }
+                        }
+                    }
+
                     $reservation->update([
                         'status' => 'cancelado',
                         'cancellation_date' => now() // ✅ MÓDULO 2: Registra la fecha y hora exacta

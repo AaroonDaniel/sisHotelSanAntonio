@@ -19,7 +19,7 @@ trait BuildsShiftClosingData
     {
         $payments = Payment::query()
             ->where('payments.cash_register_id', $cashRegister->id)
-            ->with(['checkin.room', 'operador'])
+            ->with(['checkin.room', 'checkin.guest', 'operador'])
             // LEFT JOIN (antes era INNER): un ingreso agregado manualmente
             // por un administrador (ver ShiftReportController::storeAdjustment)
             // no tiene checkin_id — con INNER JOIN desaparecía del listado

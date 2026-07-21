@@ -557,6 +557,17 @@ export default function ReservationsIndex({
                             ? `/reservas/${cancelingReservationId}`
                             : null
                     }
+                    operators={Operators}
+                    hasAdvance={
+                        (Reservations.find(
+                            (r) => r.id === cancelingReservationId,
+                        )?.advance_payment ?? 0) > 0
+                    }
+                    advanceAmount={
+                        Reservations.find(
+                            (r) => r.id === cancelingReservationId,
+                        )?.advance_payment ?? 0
+                    }
                 />
 
                 <ConfirmModal

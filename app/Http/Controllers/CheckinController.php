@@ -2734,34 +2734,33 @@ class CheckinController extends Controller
             : ($totalHospedaje + $totalServicios + $carriedBalance);
 
         // =========================================================
-        // 🚀 NUEVA LÓGICA DE PAGOS: SEPARAR ADELANTOS DEL PAGO ACTUAL
+        // 🚀 ADELANTOS PREVIOS: se identifican por Payment.type (la fuente
+        // de verdad que ya existe), NO por posición. El heurístico anterior
+        // ("todo pago menos el último") asumía que checkout() siempre crea
+        // exactamente UN Payment final — se rompía en dos casos reales:
+        //   1. Pago MIXTO ('ambos'): checkout() crea DOS Payment (EFECTIVO
+        //      + QR). La posición metía el primero de esos dos como
+        //      "adelanto", partiendo el cobro final en dos.
+        //   2. Saldo ya cubierto (saldoPendienteFinal = 0): checkout() NO
+        //      crea ningún Payment (ver el gate `if ($saldoPendienteFinal
+        //      > 0)`), así que el ADELANTO real quedaba como "el último
+        //      pago" y "Pagos Anticipados" se imprimía en 0.
+        //
+        // Se suma también 'DEVOLUCION' (ya guardada en NEGATIVO, ver
+        // refund()): si se devolvió parte de un adelanto ANTES de este
+        // checkout, "Pagos Anticipados" debe reflejar el NETO realmente
+        // acreditado — mostrar solo el ADELANTO bruto sobrestimaría lo ya
+        // cubierto y el recibo cobraría de menos en caja al huésped.
         // =========================================================
-        $totalPagadoReal = 0;
-        $pagoFinalCaja = 0;
-        $adelantosPrevios = 0;
-
-        if ($checkin->payments->count() > 0) {
-            // El último pago registrado es el que acaba de hacer en el checkout
-            $ultimoPagoId = $checkin->payments->last()->id;
-
-            foreach ($checkin->payments as $pago) {
-                // DEVOLUCION ya se guarda en NEGATIVO (-abs(), ver
-                // refund()) — usar el monto tal cual, sin volver a negarlo.
-                $monto = (float) $pago->amount;
-                $totalPagadoReal += $monto;
-
-                if ($pago->id === $ultimoPagoId) {
-                    $pagoFinalCaja += $monto;
-                } else {
-                    $adelantosPrevios += $monto;
-                }
-            }
+        if ($checkin->payments->isEmpty()) {
+            // Legacy: checkins de antes de que existiera la tabla payments,
+            // el adelanto vivía solo en checkins.advance_payment.
+            $adelantosPrevios = (float) ($checkin->advance_payment ?? 0);
         } else {
-            $adelantosPrevios = $checkin->advance_payment ?? 0;
-            $totalPagadoReal = $adelantosPrevios;
+            $adelantosPrevios = (float) $checkin->payments
+                ->whereIn('type', ['ADELANTO', 'DEVOLUCION'])
+                ->sum(fn ($pago) => (float) $pago->amount);
         }
-
-        $saldoFinal = max(0, $granTotal - $totalPagadoReal);
         // =========================================================
 
         // NÚMERO DE RECIBO: si checkout() ya persistió el Invoice (todo
