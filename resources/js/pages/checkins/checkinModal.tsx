@@ -1332,20 +1332,39 @@ export default function CheckinModal({
 
     // Filtros y Validaciones
     // BUSCADOR UNIVERSAL (Funciona para Titular y Acompañantes)
-    // Usamos currentPerson.full_name para filtrar, sin importar quién sea
-    const filteredGuests =
-        currentPerson.full_name && currentPerson.full_name.length > 1
-            ? guests.filter((g) => {
-                  // 🚀 Check-in diferido: full_name/identification_number
-                  // pueden llegar en null desde el backend (huésped aún sin
-                  // datos completos) — sin el fallback, .toLowerCase()
-                  // sobre null tumba toda la búsqueda.
-                  const term = currentPerson.full_name.toLowerCase();
-                  const fullName = (g.full_name ?? '').toLowerCase();
-                  const ci = (g.identification_number ?? '').toLowerCase();
-                  return fullName.includes(term) || ci.includes(term);
-              })
-            : [];
+    // 🚀 PERFORMANCE: ya no filtra el array completo de huéspedes precargado
+    // (`guests`) en el cliente — consulta bajo demanda /api/guests/search
+    // (mínimo 3 caracteres, con debounce) para no depender de tener a TODOS
+    // los huéspedes del hotel en el payload del dashboard.
+    const [filteredGuests, setFilteredGuests] = useState<Guest[]>([]);
+
+    useEffect(() => {
+        const term = currentPerson.full_name;
+
+        if (!term || term.length < 3) {
+            setFilteredGuests([]);
+            return;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            axios
+                .get('/api/guests/search', {
+                    params: { q: term },
+                    signal: controller.signal,
+                })
+                .then((res) => setFilteredGuests(res.data || []))
+                .catch(() => {
+                    // request cancelada (nueva letra escrita) o error de red:
+                    // se ignora, la siguiente tecla dispara un nuevo intento
+                });
+        }, 300);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
+    }, [currentPerson.full_name]);
 
     // 1. Verificamos que exista al menos UN teléfono en todo el grupo
     const hasValidPhoneInGroup = () => {

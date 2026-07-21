@@ -120,10 +120,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/checks/{checkin}/receipt', [CheckinController::class, 'generateAssignmentReceipt']);
     Route::delete('/checks/{checkin}/cancel-assignment', [CheckinController::class, 'cancelAssignment'])->name('checks.cancel_assignment');
     Route::get('/checks/{checkin}/checkout-details', [CheckinController::class, 'getCheckoutDetails']);
+    Route::get('/api/guests/search', [GuestController::class, 'search'])->name('guests.search');
     Route::get('/search/origins', [GuestController::class, 'searchOrigins'])->name('search.origins');
     Route::get('/search/professions', [GuestController::class, 'searchProfessions'])->name('search.professions');
     Route::get('/search/issued-in', [GuestController::class, 'searchIssuedIn'])->name('search.issued-in');
     Route::post('/checkins/multi-checkout', [CheckinController::class, 'multiCheckout'])->name('checkins.multiCheckout');
+    Route::get('/checkins/multi-checkout-receipt/{invoice}', [CheckinController::class, 'multiCheckoutReceipt'])->name('checkins.multiCheckoutReceipt');
     Route::post('/checkins/{checkin}/cancel-agreement', [CheckinController::class, 'cancelAgreement'])
         ->name('checkins.cancelAgreement');
     Route::post('/checkins/{checkin}/split-from-group', [CheckinController::class, 'splitFromGroup'])

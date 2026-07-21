@@ -34,6 +34,7 @@ use Illuminate\Support\Str;
 class CheckinController extends Controller
 {
     use RequiresOpenShift;
+    use \App\Traits\ConvertsNumberToWords;
 
     public function index()
     {
@@ -1069,6 +1070,7 @@ class CheckinController extends Controller
                 'origin' => 'nullable|string',
                 'is_temporary' => 'boolean',
                 'auto_adjust_price' => 'boolean',
+                'schedule_id' => 'nullable|exists:schedules,id',
 
                 // --- Campos viejos / Nuevos ---
                 'is_corporate' => 'nullable|boolean',
@@ -1389,6 +1391,12 @@ class CheckinController extends Controller
                 'origin' => $cleanOrigin,
                 'agreed_price' => $updatedAgreedPrice,
                 'special_agreement_id' => $checkin->special_agreement_id, // Conectamos con la llave de la nueva tabla
+                // 🐛 BUG CORREGIDO: 'schedule_id' faltaba tanto en la
+                // validación como acá — el selector de horario en el
+                // formulario de edición se enviaba pero nunca se
+                // persistía, dejando el checkin pegado al horario
+                // original de su creación para siempre.
+                'schedule_id' => $validated['schedule_id'] ?? $checkin->schedule_id,
 
                 'payment_method' => $validated['payment_method'] ?? $checkin->payment_method,
                 'qr_bank' => ($validated['payment_method'] ?? $checkin->payment_method) === 'EFECTIVO'
@@ -1990,33 +1998,41 @@ class CheckinController extends Controller
                 ]);
 
                 // =========================================================
-                // FACTURA LOCAL — solo si el huésped pidió factura
+                // 🚀 ÚNICA FUENTE DE VERDAD: se persiste Invoice+InvoiceDetail
+                // para TODO checkout (recibo o factura) — antes "recibo"
+                // cortaba acá con `return null` y el recargo por salida
+                // tardía (junto con el resto de los montos) solo vivía en
+                // memoria; generateCheckoutReceipt() lo recalculaba por su
+                // cuenta sin conocer $lateCheckout, produciendo un recibo
+                // impreso descuadrado contra lo realmente cobrado.
+                //
+                // Ahora generateCheckoutReceipt() es un lector de esto (no
+                // recalcula el recargo/descuento: los lee de acá).
+                //
+                // 'control_code' distingue recibo vs. factura (mismo
+                // convenio que ya usa InvoiceController::index() para
+                // pintar la lista de facturas): 'RECIBO-INTERNO' para
+                // recibo, '-' (más CUF luego) para factura.
                 // =========================================================
-                if (!$emitInvoice) {
-                    // RECIBO: no se crea Invoice. La caja solo registró Payment
-                    // y cerró el Checkin. El front muestra el PDF de recibo
-                    // con GET /checks/{id}/checkout-receipt.
-                    return null;
-                }
-
                 $invoice = Invoice::create([
                     'checkin_id'           => $checkin->id,
                     'invoice_number'       => (Invoice::max('invoice_number') ?? 0) + 1,
-
-                    // Códigos: el SIAT usa CUF; control_code y payment_method
-                    // son requeridos por la tabla (NOT NULL).
-                    'control_code'         => '-',
+                    'control_code'         => $emitInvoice ? '-' : 'RECIBO-INTERNO',
                     'payment_method'       => $methodAcronym,            // EF | QR | TC | TR
 
-                    'customer_name'        => strtoupper($request->input('customer_name') ?? $checkin->guest->full_name ?? 'SIN NOMBRE'),
-                    'customer_nit'         => $request->filled('customer_nit') ? $request->input('customer_nit') : ($checkin->guest->identification_number ?? '0'),
+                    'customer_name'        => $emitInvoice
+                        ? strtoupper($request->input('customer_name') ?? $checkin->guest->full_name ?? 'SIN NOMBRE')
+                        : ($checkin->guest->full_name ?? 'SIN NOMBRE'),
+                    'customer_nit'         => $emitInvoice
+                        ? ($request->filled('customer_nit') ? $request->input('customer_nit') : ($checkin->guest->identification_number ?? '0'))
+                        : ($checkin->guest->identification_number ?? '0'),
                     'issue_date'           => now()->format('Y-m-d'),
                     'issue_time'           => now(),
                     'user_id'              => $userId,
-                    'payment_method_code'  => (int) $request->input('payment_method_code', $siatMethodCode),
+                    'payment_method_code'  => $emitInvoice ? (int) $request->input('payment_method_code', $siatMethodCode) : null,
                     'total_amount'         => $grandTotal,
-                    'additional_discount'  => floatval($request->input('additional_discount', 0)),
-                    'total_subject_to_vat' => $grandTotal - floatval($request->input('additional_discount', 0)),
+                    'additional_discount'  => $emitInvoice ? floatval($request->input('additional_discount', 0)) : 0,
+                    'total_subject_to_vat' => $emitInvoice ? ($grandTotal - floatval($request->input('additional_discount', 0))) : 0,
                     'status'               => 'valid',
                     'siat_status'          => 'pending',
                 ]);
@@ -2029,12 +2045,25 @@ class CheckinController extends Controller
                     'cost'        => $totalHospedaje,
                 ]);
 
+                // Detalle: saldo arrastrado de una transferencia/fusión previa (si aplica)
+                if ($carriedBalance > 0) {
+                    $invoice->details()->create([
+                        'description' => 'Hospedaje Previo (saldo arrastrado)',
+                        'quantity'    => 1,
+                        'unit_price'  => $carriedBalance,
+                        'cost'        => $carriedBalance,
+                    ]);
+                }
+
                 // Detalle: servicios consumidos
                 foreach ($serviciosDetalle as $svc) {
                     $invoice->details()->create($svc);
                 }
 
-                // Detalle: recargo por salida tardía (si aplica)
+                // Detalle: recargo por salida tardía (si aplica) — ÚNICA
+                // fuente de verdad de este monto: se calculó una sola vez
+                // arriba ($lateCheckout) y se persiste acá; nadie más
+                // (generateCheckoutReceipt) debe volver a calcularlo.
                 if ($lateCheckout['fee'] > 0) {
                     $invoice->details()->create([
                         'description' => 'Recargo por Salida Tardía (' . $lateCheckout['label'] . ')',
@@ -2067,17 +2096,16 @@ class CheckinController extends Controller
         }
 
         // =========================================================
-        // FASE 2 — Emisión al SIAT (solo si se creó Invoice)
+        // FASE 2 — Emisión al SIAT (solo si el huésped pidió factura)
         // =========================================================
-        // Si el huésped pidió RECIBO, $invoice es null: no hay nada que
-        // mandar al SIAT, el checkout ya está cerrado y devolvemos la URL
-        // del PDF de recibo.
+        // $invoice ahora SIEMPRE existe (recibo o factura, ver FASE 1) —
+        // para "recibo" simplemente no hay nada que mandar al SIAT.
         // =========================================================
-        if ($invoice === null) {
+        if (!$emitInvoice) {
             return response()->json([
                 'success'      => true,
                 'message'      => 'Estadía finalizada. Se generó un recibo (sin factura electrónica).',
-                'invoice_id'   => null,
+                'invoice_id'   => $invoice->id,
                 'siat_status'  => null,
                 'document'     => 'recibo',
                 'document_url' => url("/checks/{$checkin->id}/checkout-receipt"),
@@ -2656,8 +2684,54 @@ class CheckinController extends Controller
             $totalServicios += ($detalle->quantity * $precioReal);
         }
 
-        // GRAN TOTAL INCLUYE LA DEUDA ANTERIOR
-        $granTotal = $totalHospedaje + $totalServicios + $carriedBalance;
+        // =========================================================
+        // 🚀 ÚNICA FUENTE DE VERDAD DEL RECARGO/DESCUENTO: se leen del
+        // Invoice que checkout() ya persistió (ver checkout(), detalle
+        // "Recargo por Salida Tardía"/"Descuento Aplicado") — NUNCA se
+        // recalculan acá. Esto es justamente lo que antes causaba el
+        // descuadre: este método recalculaba $granTotal por su cuenta sin
+        // conocer el recargo resuelto en checkout(), y el recibo impreso
+        // terminaba mostrando menos de lo realmente cobrado en el Payment.
+        // =========================================================
+        $invoiceExistente = \App\Models\Invoice::with('details')
+            ->where('checkin_id', $checkin->id)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $lateCheckoutFee = 0.0;
+        $lateCheckoutLabel = null;
+        $descuentoAplicado = 0.0;
+
+        if ($invoiceExistente) {
+            $detalleRecargo = $invoiceExistente->details->first(
+                fn($d) => str_contains(strtolower($d->description ?? ''), 'recargo por salida tard')
+            );
+            if ($detalleRecargo) {
+                $lateCheckoutFee = (float) $detalleRecargo->cost;
+                $lateCheckoutLabel = trim(str_ireplace(['Recargo por Salida Tardía', '(', ')'], '', $detalleRecargo->description));
+            }
+
+            $detalleDescuento = $invoiceExistente->details->first(
+                fn($d) => str_contains(strtolower($d->description ?? ''), 'descuento')
+            );
+            if ($detalleDescuento) {
+                $descuentoAplicado = abs((float) $detalleDescuento->cost);
+            }
+        }
+        // Checkins finalizados ANTES de este fix no tienen Invoice/detalle
+        // persistido para "recibo" — para esos casos legacy no hay forma
+        // confiable de reconstruir si hubo o no waive_penalty ni el
+        // descuento aplicado, así que quedan en 0 (mismo comportamiento
+        // que ya tenía este recibo para esos datos viejos).
+
+        // GRAN TOTAL: si ya existe Invoice (todo checkout nuevo, ver
+        // checkout()), ES la fuente de verdad real — coincide por
+        // construcción con lo que se cobró (Payment). Para legacy sin
+        // Invoice, se mantiene el cálculo anterior tal cual (sin recargo
+        // ni descuento, limitación ya documentada arriba).
+        $granTotal = $invoiceExistente
+            ? (float) $invoiceExistente->total_amount
+            : ($totalHospedaje + $totalServicios + $carriedBalance);
 
         // =========================================================
         // 🚀 NUEVA LÓGICA DE PAGOS: SEPARAR ADELANTOS DEL PAGO ACTUAL
@@ -2690,44 +2764,53 @@ class CheckinController extends Controller
         $saldoFinal = max(0, $granTotal - $totalPagadoReal);
         // =========================================================
 
-        // GUARDAR RECIBO (BOLETA) EN LA BASE DE DATOS
-        $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
-        $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
+        // NÚMERO DE RECIBO: si checkout() ya persistió el Invoice (todo
+        // checkout nuevo), se reutiliza — no se crea uno duplicado cada
+        // vez que se reimprime/consulta este PDF. Solo se crea uno nuevo
+        // acá para checkins legacy que quedaron sin Invoice (finalizados
+        // antes de este fix).
+        if ($invoiceExistente) {
+            $nuevoRecibo = $invoiceExistente;
+        } else {
+            $lastInvoice = \App\Models\Invoice::orderBy('invoice_number', 'desc')->first();
+            $nextInvoiceNumber = $lastInvoice ? $lastInvoice->invoice_number + 1 : 1;
 
-        $lastPayment = $checkin->payments->last();
-        $metodoFinal = $lastPayment ? substr($lastPayment->method, 0, 2) : 'EF';
+            $lastPayment = $checkin->payments->last();
+            $metodoFinal = $lastPayment ? substr($lastPayment->method, 0, 2) : 'EF';
 
-        $nuevoRecibo = \App\Models\Invoice::create([
-            'invoice_number' => $nextInvoiceNumber,
-            'checkin_id'     => $checkin->id,
-            'issue_date'     => now()->toDateString(),
-            'control_code'   => 'RECIBO-INTERNO',
-            'payment_method' => $metodoFinal,
-            'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
-            'issue_time'     => now(),
-            'status'         => 'valid',
-        ]);
+            $nuevoRecibo = \App\Models\Invoice::create([
+                'invoice_number' => $nextInvoiceNumber,
+                'checkin_id'     => $checkin->id,
+                'issue_date'     => now()->toDateString(),
+                'control_code'   => 'RECIBO-INTERNO',
+                'payment_method' => $metodoFinal,
+                'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                'issue_time'     => now(),
+                'status'         => 'valid',
+                'total_amount'   => $granTotal,
+            ]);
 
-        // Detalle: Hospedaje (Actual + Histórico)
-        \App\Models\InvoiceDetail::create([
-            'invoice_id' => $nuevoRecibo->id,
-            'service_id' => null,
-            'description' => "Hospedaje Hab {$checkin->room->number}",
-            'quantity'   => $diasACobrar + $totalDiasHistorial,
-            'unit_price' => $granTotal / max(1, ($diasACobrar + $totalDiasHistorial)),
-            'cost'       => $totalHospedaje + $carriedBalance,
-        ]);
-
-        // Detalle: Servicios individuales
-        foreach ($checkin->checkinDetails as $detalle) {
-            $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+            // Detalle: Hospedaje (Actual + Histórico)
             \App\Models\InvoiceDetail::create([
                 'invoice_id' => $nuevoRecibo->id,
-                'service_id' => $detalle->service_id,
-                'quantity'   => $detalle->quantity,
-                'unit_price' => $precioReal,
-                'cost'       => ($detalle->quantity * $precioReal),
+                'service_id' => null,
+                'description' => "Hospedaje Hab {$checkin->room->number}",
+                'quantity'   => $diasACobrar + $totalDiasHistorial,
+                'unit_price' => $granTotal / max(1, ($diasACobrar + $totalDiasHistorial)),
+                'cost'       => $totalHospedaje + $carriedBalance,
             ]);
+
+            // Detalle: Servicios individuales
+            foreach ($checkin->checkinDetails as $detalle) {
+                $precioReal = $detalle->selling_price ?? ($detalle->service->price ?? 0);
+                \App\Models\InvoiceDetail::create([
+                    'invoice_id' => $nuevoRecibo->id,
+                    'service_id' => $detalle->service_id,
+                    'quantity'   => $detalle->quantity,
+                    'unit_price' => $precioReal,
+                    'cost'       => ($detalle->quantity * $precioReal),
+                ]);
+            }
         }
 
         // =========================================================
@@ -2827,6 +2910,25 @@ class CheckinController extends Controller
             $pdf->Cell(8, 4, $item['cantidad'], 0, 0, 'C');
             $pdf->Cell(12, 4, number_format($pUnit, 2), 0, 0, 'R');
             $pdf->Cell(17, 4, number_format($item['subtotal'], 2), 0, 1, 'R');
+        }
+
+        // 🚀 Recargo por Salida Tardía — leído del Invoice persistido por
+        // checkout() (ver $lateCheckoutFee arriba), nunca recalculado acá.
+        if ($lateCheckoutFee > 0) {
+            $etiquetaRecargo = 'Recargo Salida Tardia'
+                . ($lateCheckoutLabel ? " ($lateCheckoutLabel)" : '');
+            $pdf->Cell(35, 4, utf8_decode(substr($etiquetaRecargo, 0, 22)), 0, 0, 'L');
+            $pdf->Cell(8, 4, '1', 0, 0, 'C');
+            $pdf->Cell(12, 4, number_format($lateCheckoutFee, 2), 0, 0, 'R');
+            $pdf->Cell(17, 4, number_format($lateCheckoutFee, 2), 0, 1, 'R');
+        }
+
+        // Descuento aplicado — mismo origen (Invoice persistido).
+        if ($descuentoAplicado > 0) {
+            $pdf->Cell(35, 4, utf8_decode('Descuento Aplicado'), 0, 0, 'L');
+            $pdf->Cell(8, 4, '1', 0, 0, 'C');
+            $pdf->Cell(12, 4, '-' . number_format($descuentoAplicado, 2), 0, 0, 'R');
+            $pdf->Cell(17, 4, '-' . number_format($descuentoAplicado, 2), 0, 1, 'R');
         }
 
         $pdf->Ln(2);
@@ -3119,66 +3221,8 @@ class CheckinController extends Controller
     }
 
     // --- FUNCIÓN MANUAL PARA NÚMERO A LETRAS (SIN DEPENDENCIAS) ---
-    private function convertirNumeroALetras($monto)
-    {
-        $monto = floatval($monto);
-        $entero = floor($monto);
-        $centavos = round(($monto - $entero) * 100);
-
-        $letras = $this->enteroALetras($entero);
-
-        return ucfirst($letras) . ' ' . str_pad($centavos, 2, '0', STR_PAD_LEFT) . '/100 Bolivianos';
-    }
-
-    private function enteroALetras($num)
-    {
-        if ($num == 0) return 'cero';
-
-        $unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
-        $decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
-        $diez_y = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve'];
-        $veinti = ['veinte', 'veintiuno', 'veintidos', 'veintitres', 'veinticuatro', 'veinticinco', 'veintiseis', 'veintisiete', 'veintiocho', 'veintinueve'];
-        $centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
-
-        if ($num < 10) return $unidades[$num];
-
-        if ($num < 20) return $diez_y[$num - 10];
-
-        if ($num < 30) return $veinti[$num - 20];
-
-        if ($num < 100) {
-            // Se agrega (int) para convertir el float a entero
-            $d = (int) floor($num / 10);
-            $u = $num % 10;
-            return $decenas[$d] . ($u > 0 ? ' y ' . $unidades[$u] : '');
-        }
-
-        if ($num == 100) return 'cien';
-
-        if ($num < 1000) {
-            // Se agrega (int)
-            $c = (int) floor($num / 100);
-            $resto = $num % 100;
-            return $centenas[$c] . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
-        }
-
-        if ($num == 1000) return 'mil';
-
-        if ($num < 2000) {
-            return 'mil ' . $this->enteroALetras($num % 1000);
-        }
-
-        if ($num < 1000000) {
-            // Se agrega (int)
-            $m = (int) floor($num / 1000);
-            $resto = $num % 1000;
-            // Caso especial para "un mil" -> "mil"
-            $miles = ($m == 1) ? 'mil' : $this->enteroALetras($m) . ' mil';
-            return $miles . ($resto > 0 ? ' ' . $this->enteroALetras($resto) : '');
-        }
-
-        return 'numero grande'; // Simplificado para este caso
-    }
+    // Extraída a App\Traits\ConvertsNumberToWords para poder reutilizarla
+    // también desde el Job GenerateCheckoutReceipt (background).
 
     public function generateViewDetail(Request $request)
     {
@@ -3998,169 +4042,67 @@ class CheckinController extends Controller
                 ]);
             }
             // =========================================================
-            // PASO 5: Generación del PDF (Unificado a 4 columnas y reordenado)
-            // =========================================================
-            $pdfLargo = max(150, 100 + (count($hospedajesPDF) * 5) + (count($serviciosGlobales) * 5));
-            $pdf = new \FPDF('P', 'mm', array(80, $pdfLargo));
-            $pdf->SetMargins(4, 4, 4);
-            $pdf->SetAutoPageBreak(true, 2);
-            $pdf->AddPage();
+            // 🚀 PASO 5 (BACKGROUND JOB): la generación del PDF (FPDF —
+            // fuentes, imagen del QR, decenas de Cell/MultiCell) es la
+            // parte LENTA del checkout múltiple y no tiene por qué
+            // bloquear la respuesta HTTP. Todo lo que importa para el
+            // dinero (checkins finalizados, Payment, Invoice,
+            // InvoiceDetail) ya quedó persistido arriba — el Job solo
+            // dibuja el comprobante y lo deja cacheado en
+            // storage/app/public/receipts/{invoice}.pdf para que
+            // downloadInvoiceReceipt() lo sirva instantáneo en cuanto
+            // esté listo.
+            $usuarioNombre = Auth::user() ? Auth::user()->name : 'Cajero';
 
-            // CABECERA
-            $pdf->SetFont('Arial', 'B', 10);
-            $pdf->Cell(0, 4, 'HOTEL SAN ANTONIO', 0, 1, 'C');
-            $pdf->SetFont('Arial', '', 7);
+            \App\Jobs\GenerateCheckoutReceipt::dispatch(
+                $nuevaFactura->id,
+                (string) $request->tipo_documento,
+                $request->nombre_factura,
+                $request->nit_factura,
+                $hospedajesPDF,
+                $serviciosGlobales,
+                (float) $granTotal,
+                (float) $totalAdelantosGlobal,
+                (float) $saldoPagar,
+                $primerCheckinId,
+                $usuarioNombre,
+            );
 
-            if ($request->tipo_documento === 'factura') {
-                $pdf->SetFont('Arial', 'B', 7);
-                $pdf->Cell(0, 3, 'CASA MATRIZ', 0, 1, 'C');
-                $pdf->SetFont('Arial', '', 6);
-                $pdf->Cell(0, 3, 'No. Punto de Venta 0', 0, 1, 'C');
-                $pdf->Cell(0, 3, 'Calle 9 - Potosi', 0, 1, 'C');
-                $pdf->Cell(0, 3, utf8_decode('Teléfono: 70461010'), 0, 1, 'C');
-                $pdf->Cell(0, 3, 'BOLIVIA', 0, 1, 'C');
-                $pdf->Ln(2);
-                $pdf->SetFont('Arial', 'B', 8);
-                $pdf->Cell(0, 4, 'FACTURA', 0, 1, 'C');
-                $pdf->SetFont('Arial', '', 6);
-
-                $pdf->Ln(2);
-
-                $pdf->SetFont('Arial', 'B', 7);
-                $pdf->Cell(30, 3, 'NIT:', 0, 0, 'R');
-                $pdf->SetFont('Arial', '', 7);
-                $pdf->Cell(35, 3, '3327479013', 0, 1, 'L');
-                $pdf->SetFont('Arial', 'B', 7);
-                $pdf->Cell(30, 3, utf8_decode('FACTURA N°:'), 0, 0, 'R');
-                $pdf->SetFont('Arial', '', 7);
-                $pdf->Cell(35, 3, str_pad($primerCheckinId, 5, '0', STR_PAD_LEFT), 0, 1, 'L');
-                $pdf->SetFont('Arial', 'B', 7);
-                $pdf->Cell(30, 3, utf8_decode('CÓD. AUTORIZACIÓN:'), 0, 0, 'R');
-                $pdf->SetFont('Arial', '', 7);
-                $pdf->Cell(35, 3, '456123ABC', 0, 1, 'L');
-                $pdf->Ln(1);
-            } else {
-                $pdf->Cell(0, 4, utf8_decode('Calle Principal #123 - Potosi'), 0, 1, 'C');
-                $pdf->Ln(2);
-                $pdf->SetFont('Arial', 'B', 9);
-                $pdf->Cell(0, 6, 'NOTA DE SALIDA GRUPAL', 0, 1, 'C');
-                $pdf->SetFont('Arial', '', 8);
-                $pdf->Cell(0, 4, 'Ref: ' . str_pad($primerCheckinId, 6, '0', STR_PAD_LEFT), 0, 1, 'C');
-                $pdf->Ln(1);
-            }
-
-            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
-            $pdf->Ln(2);
-
-            // DATOS CLIENTE
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'Fecha:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, now()->format('d/m/Y H:i:s'), 0, 1);
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'Cliente:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->MultiCell(0, 4, utf8_decode($request->nombre_factura ?? 'S/N'), 0, 'L');
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'NIT/CI:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, $request->nit_factura ?? '0', 0, 1);
-
-            $pdf->Ln(1);
-            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
-            $pdf->Ln(2);
-
-            // =========================================================
-            // DETALLE ITEMS UNIFICADOS (REORDENADOS)
-            // =========================================================
-            $pdf->SetFont('Arial', 'B', 6);
-            $pdf->Cell(35, 3, 'DETALLE', 0, 0, 'L');
-            $pdf->Cell(8, 3, 'CNT', 0, 0, 'C');
-            $pdf->Cell(12, 3, 'P.UNI', 0, 0, 'R');
-            $pdf->Cell(17, 3, 'TOTAL', 0, 1, 'R');
-            $pdf->Ln(1);
-
-            $pdf->SetFont('Arial', '', 6);
-
-            // 1. Hospedajes 
-            foreach ($hospedajesPDF as $hosp) {
-                $pdf->Cell(35, 3, utf8_decode(substr($hosp['desc'], 0, 22)), 0, 0, 'L');
-                $pdf->Cell(8, 3, $hosp['cant'], 0, 0, 'C');
-                $pdf->Cell(12, 3, number_format($hosp['punit'], 2), 0, 0, 'R');
-                $pdf->Cell(17, 3, number_format($hosp['subtot'], 2), 0, 1, 'R');
-            }
-
-            // 2. Consumos Globales
-            foreach ($serviciosGlobales as $name => $data) {
-                $pUnit = $data['qty'] > 0 ? $data['total'] / $data['qty'] : 0;
-                $pdf->Cell(35, 3, utf8_decode(substr($name, 0, 22)), 0, 0, 'L');
-                $pdf->Cell(8, 3, $data['qty'], 0, 0, 'C');
-                $pdf->Cell(12, 3, number_format($pUnit, 2), 0, 0, 'R');
-                $pdf->Cell(17, 3, number_format($data['total'], 2), 0, 1, 'R');
-            }
-
-            $pdf->Ln(1);
-            $pdf->Cell(0, 0, str_repeat('-', 55), 0, 1, 'C');
-            $pdf->Ln(2);
-
-            // TOTALES AL PIE
-            $pdf->SetFont('Arial', 'B', 8);
-            $pdf->Cell(50, 4, 'TOTAL Bs', 0, 0, 'R');
-            $pdf->Cell(22, 4, number_format($granTotal, 2), 0, 1, 'R');
-
-            if ($totalAdelantosGlobal > 0) {
-                $pdf->SetFont('Arial', '', 7);
-                $pdf->Cell(50, 4, '(-) Pagos Anticipados:', 0, 0, 'R');
-                $pdf->Cell(22, 4, number_format($totalAdelantosGlobal, 2), 0, 1, 'R');
-
-                $pdf->SetFont('Arial', 'B', 8);
-                $pdf->Cell(50, 4, 'A PAGAR EN CAJA:', 0, 0, 'R');
-                $pdf->Cell(22, 4, number_format($saldoPagar, 2), 0, 1, 'R');
-            }
-
-            if ($request->tipo_documento === 'factura') {
-                $pdf->Ln(2);
-                $pdf->SetFont('Arial', '', 7);
-                $montoLetras = $this->convertirNumeroALetras($granTotal);
-                $pdf->MultiCell(0, 4, 'Son: ' . utf8_decode($montoLetras), 0, 'L');
-
-                $pdf->Ln(2);
-                $pdf->SetFont('Arial', 'B', 6);
-                $pdf->Cell(35, 3, utf8_decode('IMPORTE BASE CRÉDITO FISCAL:'), 0, 0, 'L');
-                $pdf->Cell(0, 3, number_format($granTotal, 2), 0, 1, 'R');
-                $pdf->Ln(2);
-                $pdf->Cell(0, 3, utf8_decode('CÓDIGO DE CONTROL: 8A-F1-2C-99'), 0, 1, 'C');
-                $pdf->Ln(2);
-
-                $logoPath = public_path('images/qrCop.png');
-                if (file_exists($logoPath)) {
-                    $x = (80 - 22) / 2;
-                    $pdf->Image($logoPath, $x, $pdf->GetY(), 22, 22);
-                    $pdf->Ln(24);
-                } else {
-                    $pdf->Ln(24);
-                }
-
-                $pdf->SetFont('Arial', 'B', 5);
-                $pdf->MultiCell(0, 2.5, utf8_decode('"ESTA FACTURA CONTRIBUYE AL DESARROLLO DEL PAÍS, EL USO ILÍCITO SERÁ SANCIONADO PENALMENTE DE ACUERDO A LEY"'), 0, 'C');
-                $pdf->Ln(1);
-                $pdf->SetFont('Arial', '', 5);
-                $pdf->MultiCell(0, 2.5, utf8_decode('Ley N° 453: Tienes derecho a recibir información correcta, veraz, oportuna y completa sobre las características y contenidos de los productos que compras.'), 0, 'C');
-            } else {
-                $pdf->Ln(6);
-                $pdf->SetFont('Arial', 'I', 7);
-                $pdf->MultiCell(0, 3, utf8_decode("Gracias por su preferencia.\nRevise su cambio antes de retirarse."), 0, 'C');
-            }
-
-            $pdf->Ln(3);
-            $usuario = Auth::user() ? Auth::user()->name : 'Cajero';
-            $pdf->Cell(0, 3, 'Atendido por: ' . utf8_decode($usuario), 0, 1, 'C');
-
-            return response($pdf->Output('S'), 200)
-                ->header('Content-Type', 'application/pdf');
+            return response()->json([
+                'success' => true,
+                'message' => 'Checkout múltiple registrado correctamente. El comprobante se está generando.',
+                'invoice_id' => $nuevaFactura->id,
+                'receipt_url' => route('checkins.multiCheckoutReceipt', $nuevaFactura->id),
+            ]);
         });
     }
 
+    /**
+     * Sirve el PDF pre-generado por GenerateCheckoutReceipt en cuanto está
+     * listo. Mientras el Job no termine, responde 202 (Accepted) para que
+     * el frontend siga haciendo polling corto — nunca genera el PDF de
+     * forma síncrona aquí (para eso ya existe el flujo normal en
+     * multiCheckout(); este endpoint es solo el "buzón" del Job).
+     */
+    public function multiCheckoutReceipt(\App\Models\Invoice $invoice)
+    {
+        $path = "receipts/{$invoice->id}.pdf";
+
+        if (!\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+            return response()->json(['status' => 'processing'], 202);
+        }
+
+        return response(
+            \Illuminate\Support\Facades\Storage::disk('public')->get($path),
+            200,
+        )->header('Content-Type', 'application/pdf');
+    }
+
+    /**
+     * @deprecated Cuerpo legado de la generación FPDF inline, conservado
+     * únicamente como referencia de las líneas que se movieron al Job
+     * GenerateCheckoutReceipt. No se usa en ningún flujo activo.
+     */
     /**
      * Valida que los servicios con capacidad limitada (ej. Garaje con quantity=12)
      * aún tengan espacios disponibles antes de asignarlos a un check-in.

@@ -469,44 +469,54 @@ export default function MultiCheckoutModal({
                 checkout_operator_id: checkoutOperatorId,
             };
 
-            // Petición al backend
+            // Petición al backend: ahora responde de inmediato con JSON (el
+            // PDF se genera en background vía el Job GenerateCheckoutReceipt),
+            // así que el checkin/pago ya quedó cerrado apenas llega esta
+            // respuesta — lo único pendiente es el comprobante.
             const response = await axios.post(
                 '/checkins/multi-checkout',
                 payload,
-                {
-                    responseType: 'blob', // Crítico para recibir el PDF
-                },
             );
 
-            // Crear la URL temporal para mostrar el PDF en el iframe
-            const pdfBlob = new Blob([response.data], {
-                type: 'application/pdf',
-            });
+            const receiptUrl = response.data?.receipt_url;
+            const pdfBlob = await esperarComprobante(receiptUrl);
             const url = window.URL.createObjectURL(pdfBlob);
             setPdfUrl(url);
         } catch (error: any) {
             console.error('Error procesando checkout múltiple:', error);
-            // responseType: 'blob' hace que axios también entregue el
-            // cuerpo del error como Blob (no como JSON ya parseado), así
-            // que hay que leerlo manualmente para mostrar el mensaje real
-            // del backend (ej. "No tiene una caja abierta...").
-            let message = 'Hubo un error al generar la salida múltiple.';
             const data = error?.response?.data;
-            if (data instanceof Blob) {
-                try {
-                    const parsed = JSON.parse(await data.text());
-                    message = parsed?.message || message;
-                } catch {
-                    // el blob no era JSON parseable; se usa el mensaje genérico
-                }
-            } else if (data?.message) {
-                message = data.message;
-            }
+            const message =
+                data?.message ||
+                'Hubo un error al generar la salida múltiple.';
 
             alert(message);
         } finally {
             setProcessing(false);
         }
+    };
+
+    // Polling corto: el Job en background puede tardar 1-2s en renderizar el
+    // PDF (FPDF, fuentes, imagen QR). Mientras no esté listo,
+    // multiCheckoutReceipt responde 202; en cuanto existe el archivo, 200
+    // con los bytes del PDF.
+    const esperarComprobante = async (receiptUrl: string): Promise<Blob> => {
+        const maxIntentos = 40; // 40 * 1.5s = 60s máx.
+        for (let intento = 0; intento < maxIntentos; intento++) {
+            try {
+                const receiptResponse = await axios.get(receiptUrl, {
+                    responseType: 'blob',
+                    validateStatus: (status) =>
+                        status === 200 || status === 202,
+                });
+                if (receiptResponse.status === 200) {
+                    return receiptResponse.data as Blob;
+                }
+            } catch {
+                // error de red puntual: se reintenta
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        throw new Error('El comprobante tardó demasiado en generarse.');
     };
 
     // Cerrar y recargar la página para reflejar el estado "LIMPIEZA"

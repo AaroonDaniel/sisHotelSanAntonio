@@ -4,6 +4,8 @@ import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     Briefcase,
+    ChevronLeft,
+    ChevronRight,
     CreditCard,
     Pencil,
     Plus,
@@ -11,7 +13,7 @@ import {
     Trash2,
     User as UserIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DeleteModal from './deleteModal';
 import GuestModal from './guestModal';
 
@@ -63,14 +65,24 @@ export interface Guest {
     phone?: string;
 }
 
-interface Props {
-    auth: { user: User };
-    Guests: Guest[];
+interface PaginatedGuests {
+    data: Guest[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    prev_page_url: string | null;
+    next_page_url: string | null;
 }
 
-export default function GuestsIndex({ auth, Guests }: Props) {
+interface Props {
+    auth: { user: User };
+    Guests: PaginatedGuests;
+    filters?: { search?: string };
+}
+
+export default function GuestsIndex({ auth, Guests, filters }: Props) {
     const { hasRole } = useCan();
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(filters?.search ?? '');
 
     // Estados de Modales
     const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
@@ -78,22 +90,38 @@ export default function GuestsIndex({ auth, Guests }: Props) {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingGuestId, setDeletingGuestId] = useState<number | null>(null);
 
-    // --- 3. FILTRO AVANZADO ---
-    const filteredGuests = Guests.filter((guest) => {
-        const term = searchTerm.toLowerCase();
-        // 🚀 Check-in diferido: full_name puede llegar en null (huésped aún
-        // sin datos completos) — sin el fallback, el template literal lo
-        // convertía en el texto literal "null" en vez de una cadena vacía.
-        const fullName = ` ${guest.full_name ?? ''}`.toLowerCase();
-        const idNumber = (guest.identification_number || '').toLowerCase();
-        return (
-            fullName.includes(term) ||
-            idNumber.includes(term) ||
-            (guest.nationality &&
-                guest.nationality.toLowerCase().includes(term)) ||
-            (guest.profession && guest.profession.toLowerCase().includes(term))
+    // 🚀 PERFORMANCE: el filtrado y la paginación ahora ocurren en el
+    // backend (GuestController::index paginate(15)) en vez de traer toda
+    // la tabla de huéspedes y filtrarla en el cliente. El buscador dispara
+    // una recarga parcial (solo Guests/filters) con debounce.
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (searchTerm === (filters?.search ?? '')) return;
+            router.get(
+                '/invitados',
+                searchTerm ? { search: searchTerm } : {},
+                {
+                    preserveState: true,
+                    replace: true,
+                    only: ['Guests', 'filters'],
+                },
+            );
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchTerm]);
+
+    const filteredGuests = Guests.data;
+
+    const goToPage = (url: string | null) => {
+        if (!url) return;
+        router.get(
+            url,
+            {},
+            { preserveState: true, replace: true, only: ['Guests', 'filters'] },
         );
-    });
+    };
 
     // Funciones de apertura de modales
     const openCreateModal = () => {
@@ -316,6 +344,39 @@ export default function GuestsIndex({ auth, Guests }: Props) {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {Guests.last_page > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {Guests.current_page} de{' '}
+                                    {Guests.last_page} ({Guests.total}{' '}
+                                    huéspedes)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            goToPage(Guests.prev_page_url)
+                                        }
+                                        disabled={!Guests.prev_page_url}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            goToPage(Guests.next_page_url)
+                                        }
+                                        disabled={!Guests.next_page_url}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

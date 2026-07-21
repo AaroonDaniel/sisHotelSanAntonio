@@ -10,11 +10,30 @@ use Illuminate\Support\Facades\Log;
 
 class GuestController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $guests = Guest::orderBy('full_name')->get();
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Guest::orderBy('full_name');
+
+        // 🚀 PERFORMANCE: antes se traía la tabla completa de huéspedes en
+        // cada carga de esta página. Ahora se pagina (15 por página) y,
+        // si hay término de búsqueda, se filtra en la propia query en vez
+        // de descargar todo y filtrar en el cliente.
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('full_name', 'ILIKE', "%{$search}%")
+                    ->orWhere('identification_number', 'ILIKE', "%{$search}%")
+                    ->orWhere('nationality', 'ILIKE', "%{$search}%")
+                    ->orWhere('profession', 'ILIKE', "%{$search}%");
+            });
+        }
+
+        $guests = $query->paginate(15)->withQueryString();
+
         return Inertia::render('guests/index', [
-            'Guests' => $guests
+            'Guests' => $guests,
+            'filters' => ['search' => $search],
         ]);
     }
 
@@ -189,6 +208,38 @@ class GuestController extends Controller
     {
         $guest->delete();
         return redirect()->back();
+    }
+
+    /**
+     * Búsqueda async de huéspedes (selector de asignación en checkinModal).
+     * Reemplaza el envío del listado completo de huéspedes en cada carga
+     * del dashboard: solo trae coincidencias, limitado y bajo demanda.
+     */
+    public function search(Request $request)
+    {
+        $term = trim((string) $request->input('q', ''));
+
+        if (mb_strlen($term) < 3) {
+            return response()->json([]);
+        }
+
+        $guests = Guest::where('full_name', 'ILIKE', "%{$term}%")
+            ->orWhere('identification_number', 'ILIKE', "%{$term}%")
+            ->orderBy('full_name')
+            ->limit(15)
+            ->get([
+                'id',
+                'full_name',
+                'identification_number',
+                'nationality',
+                'issued_in',
+                'civil_status',
+                'birth_date',
+                'profession',
+                'phone',
+            ]);
+
+        return response()->json($guests);
     }
 
     public function searchOrigins(Request $request)

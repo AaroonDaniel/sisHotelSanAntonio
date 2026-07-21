@@ -176,9 +176,18 @@ class RoomController
     public function status()
     {
         // 1. Cargamos las habitaciones y les agregamos las próximas reservas si existen
+        //
+        // 🚀 select() SOLO en relaciones "de catálogo" chicas y de forma
+        // bien conocida (roomType, price, operadores) — id + las columnas
+        // que el frontend realmente pinta. guest/checkins/companions/
+        // specialAgreement/payments/services NO se recortan a propósito:
+        // se editan/muestran con casi todos sus campos en distintos
+        // modales (checkinModal, occupiedRoomModal, multiCheckoutModal) y
+        // adivinar mal una columna "no usada" rompería esos formularios en
+        // silencio — el ahorro de payload no vale ese riesgo aquí.
         $rooms = Room::with([
-            'roomType',
-            'price',
+            'roomType:id,name,capacity',
+            'price:id,amount,bathroom_type',
             'checkins' => function ($q) {
                 $q->where('status', 'activo')
                     ->with([
@@ -197,8 +206,8 @@ class RoomController
                         // Historial Financiero (FinancialHistoryModal).
                         'payments.operador:id,full_name,nickname',
                         'payments.user:id,full_name,nickname',
-                        'room.price',
-                        'room.roomType',
+                        'room.price:id,amount,bathroom_type',
+                        'room.roomType:id,name,capacity',
                         'specialAgreement', // 🚀 LUGAR 1: Agregar esto (Alimenta las tarjetas visuales)
                         'checkinOperator:id,full_name,nickname', // Quién hizo la asignación (para "asignado por:")
                     ]);
@@ -272,8 +281,8 @@ class RoomController
             'guest',
             'companions',
             'checkinDetails.service',
-            'room.price',
-            'room.roomType',
+            'room.price:id,amount,bathroom_type',
+            'room.roomType:id,name,capacity',
             'services',
             'specialAgreement', // 🚀 LUGAR 2: Agregar esto (Alimenta los modales de salida/detalles)
             'checkinOperator:id,full_name,nickname', // Quién hizo la asignación (para "asignado por:")
