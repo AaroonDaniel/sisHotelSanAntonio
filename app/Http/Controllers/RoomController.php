@@ -49,9 +49,10 @@ class RoomController
                 // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
                 $reservation->advance_payment = $pagosValidos->sum('amount');
 
-                // Método real: tomamos el del primer pago; si no hay, el de la reserva
+                // 🚀 REDISEÑO: la reserva ya no fija payment_type propio —
+                // el método real sale del primer pago registrado; si
+                // todavía no hay ninguno, EFECTIVO como default visual.
                 $reservation->payment_type = optional($pagosValidos->first())->method
-                    ?? $reservation->payment_type
                     ?? 'EFECTIVO';
 
                 return $reservation;
@@ -317,9 +318,10 @@ class RoomController
                 // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
                 $reservation->advance_payment = $pagosValidos->sum('amount');
 
-                // Método real: tomamos el del primer pago; si no hay, el de la reserva
+                // 🚀 REDISEÑO: la reserva ya no fija payment_type propio —
+                // el método real sale del primer pago registrado; si
+                // todavía no hay ninguno, EFECTIVO como default visual.
                 $reservation->payment_type = optional($pagosValidos->first())->method
-                    ?? $reservation->payment_type
                     ?? 'EFECTIVO';
 
                 return $reservation;

@@ -230,7 +230,6 @@ class OnlineBookingController extends Controller
                     'guest_id'      => $guest->id,
                     'guest_count'   => $validated['guests'],
                     'arrival_date'  => $validated['check_in'],
-                    'arrival_time'  => '14:00:00',
                     'duration_days' => $validated['duration_days'],
                     
                     // Asegúrate de que tu migración soporte estos campos, o ponlos en Payment
@@ -238,7 +237,6 @@ class OnlineBookingController extends Controller
                     // 'advance_payment' => $advanceAmount, 
                     
                     'status'        => 'pendiente', // 👈 ESTO ES CLAVE para que vaya a la Tabla 3
-                    'payment_type'  => 'QR',
                 ]);
 
                 // 4. Guardar correo
@@ -300,12 +298,13 @@ class OnlineBookingController extends Controller
                     }
 
                     // (3) Insertar el detalle y actualizar el estado de la habitación.
+                    // 🚀 REDISEÑO: ya no se persiste price/price_id/
+                    // requested_room_type_id (columnas eliminadas) — el
+                    // precio real de esta reserva online se define recién
+                    // al confirmar, igual que en el flujo interno.
                     ReservationDetail::create([
                         'reservation_id'         => $reservation->id,
                         'room_id'                => $roomId,
-                        'price_id'               => $roomData['price_id'] ?? null,
-                        'price'                  => $roomData['price'],
-                        'requested_room_type_id' => $roomData['room_type_id'] ?? null,
                     ]);
                     Room::where('id', $roomId)->update(['status' => 'RESERVADO']);
                 }

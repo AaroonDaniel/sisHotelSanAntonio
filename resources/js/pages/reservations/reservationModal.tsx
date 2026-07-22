@@ -75,7 +75,6 @@ export interface Reservation {
     guest?: Guest;
     guest_count: number;
     arrival_date: string;
-    arrival_time: string;
     duration_days: number;
     advance_payment: number;
     payment_type: string;
@@ -94,7 +93,6 @@ interface ReservationFormData {
     new_guest_ci: string;
     guest_count: number | '';
     arrival_date: string;
-    arrival_time: string;
     duration_days: number;
     advance_payment: number;
     payment_type: string;
@@ -196,7 +194,6 @@ export default function ReservationModal({
         new_guest_ci: '',
         guest_count: 1,
         arrival_date: new Date().toISOString().split('T')[0],
-        arrival_time: '14:00',
         duration_days: 1,
         advance_payment: 0,
         payment_type: 'EFECTIVO',
@@ -290,7 +287,6 @@ export default function ReservationModal({
                     ...prev,
                     guest_id: String(reservationToEdit.guest_id || ''),
                     arrival_date: reservationToEdit.arrival_date || '',
-                    arrival_time: reservationToEdit.arrival_time || '',
                     duration_days: Number(reservationToEdit.duration_days || 1),
                     guest_count: Number(reservationToEdit.guest_count || 1),
                     advance_payment: advanceTotal,

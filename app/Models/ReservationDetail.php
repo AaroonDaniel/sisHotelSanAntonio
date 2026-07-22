@@ -6,13 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class ReservationDetail extends Model
 {
+    // 🚀 REDISEÑO: la reserva ya no fija precio ni tipo/baño solicitado —
+    // room_id se llena recién al confirmar (puente/historial, el precio
+    // real vive en el Checkin que se crea en ese mismo momento, ver
+    // ReservationController::update() rama CONFIRMADO).
     protected $fillable = [
         'reservation_id',
         'room_id',
-        'requested_room_type_id',
-        'requested_bathroom',
-        'price_id',
-        'price', // El precio que se pactó en ese momento
     ];
 
     public function room()
@@ -20,14 +20,6 @@ class ReservationDetail extends Model
         return $this->belongsTo(Room::class);
     }
 
-    public function price()
-    {
-        return $this->belongsTo(Price::class); // Si tienes modelo Price
-    }
-    public function requestedRoomType()
-    {
-        return $this->belongsTo(RoomType::class, 'requested_room_type_id');
-    }
     public function reservation()
     {
         return $this->belongsTo(Reservation::class);

@@ -180,7 +180,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
     Route::get('/api/reservations/availability', [ReservationController::class, 'checkAvailability'])->name('reservations.availability');
-    Route::post('/reservas/{id}/assign-rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assign');
+    // 🚀 REDISEÑO: reservations.assign eliminada — "asignar" y
+    // "confirmar" se fusionaron dentro de reservations.update.
 
     //Reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index')->middleware('permission:reportes.parte_diario');

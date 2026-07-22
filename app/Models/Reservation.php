@@ -13,16 +13,23 @@ class Reservation extends Model
     protected $appends = ['advance_payment'];
     protected $fillable = [
         'user_id',
+        // 🚀 REDISEÑO: mismo valor que payments.operator_id del adelanto
+        // (ver ReservationController::store()) — la reserva ya no fija
+        // precio ni método de pago, pero sí recuerda quién la atendió.
+        'operator_id',
         'guest_id',
         'guest_count',
         'arrival_date',
-        'arrival_time',
         'duration_days',
-        'payment_type',
         'status',
         'special_agreement_id',
         'cancellation_date'
     ];
+
+    public function operator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operator_id');
+    }
 
     // Relación: Una reserva pertenece a un Huésped
     public function guest()

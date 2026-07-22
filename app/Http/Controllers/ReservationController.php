@@ -70,7 +70,14 @@ class ReservationController extends Controller
                 'arrival_date' => 'required|date|after_or_equal:today',
                 'duration_days' => 'required|integer|min:1',
 
-                'payment_type' => 'required|string',
+                // 🚀 REDISEÑO: payment_type ya NO se guarda en la reserva
+                // (la reserva es solo intención, sin precio ni método
+                // fijado) — sigue existiendo en el request porque
+                // determina el 'method' del Payment del adelanto, si lo
+                // hay. Por eso pasa a ser condicional, igual que
+                // operator_id: solo obligatorio si REALMENTE hay dinero
+                // entrando.
+                'payment_type' => 'nullable|string|in:EFECTIVO,QR',
                 'qr_bank' => 'nullable|string',
                 'advance_payment' => 'nullable|numeric|min:0', // Aseguramos la validación del adelanto
                 // Terminal Compartida: quién recibe el adelanto. Se exige
@@ -86,12 +93,11 @@ class ReservationController extends Controller
                 'agreed_price' => 'nullable|numeric|min:0',
                 'corporate_days' => 'nullable|integer',
 
+                // 🚀 REDISEÑO: un detalle es solo "quiero una habitación" —
+                // ni precio ni tipo/baño solicitado se guardan ya en la
+                // reserva. room_id se llena recién al confirmar.
                 'details' => 'required|array|min:1',
                 'details.*.room_id' => 'nullable',
-                'details.*.requested_room_type_id' => 'nullable',
-                'details.*.requested_bathroom' => 'nullable',
-                'details.*.price_id' => 'nullable',
-                'details.*.price' => 'nullable|numeric',
             ], [
                 'arrival_date.after_or_equal' => 'No se aceptan fechas anteriores a la fecha de hoy.',
                 'arrival_date.required' => 'Debe indicar la fecha de llegada.',
@@ -103,7 +109,6 @@ class ReservationController extends Controller
                 'guest_id.required_if' => 'Debe seleccionar un huésped.',
                 'new_guest_name.required_if' => 'Debe ingresar el nombre del nuevo huésped.',
                 'guest_count.min' => 'Debe haber al menos 1 huésped.',
-                'payment_type.required' => 'Debe seleccionar un método de pago.',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('❌ Falló validación:', $e->errors());
@@ -112,11 +117,18 @@ class ReservationController extends Controller
 
         // Terminal Compartida: si hay adelanto, es obligatorio saber quién
         // lo recibe (el avatar elegido en el OperatorSelector), NO Auth::id()
-        // (siempre la cuenta genérica 'recepcion').
-        if (($validatedData['advance_payment'] ?? 0) > 0 && empty($validatedData['operator_id'])) {
-            return redirect()->back()->withErrors([
-                'operator_id' => 'Seleccione quién está recibiendo el adelanto.',
-            ]);
+        // (siempre la cuenta genérica 'recepcion'), y con qué método.
+        if (($validatedData['advance_payment'] ?? 0) > 0) {
+            if (empty($validatedData['operator_id'])) {
+                return redirect()->back()->withErrors([
+                    'operator_id' => 'Seleccione quién está recibiendo el adelanto.',
+                ]);
+            }
+            if (empty($validatedData['payment_type'])) {
+                return redirect()->back()->withErrors([
+                    'payment_type' => 'Debe seleccionar un método de pago.',
+                ]);
+            }
         }
 
         try {
@@ -145,17 +157,15 @@ class ReservationController extends Controller
                 if ($isSpecialDeal) {
                     $tipoTrato = $typeRequest ?? ($request->is_delegation ? 'delegacion' : 'corporativo');
 
-                    // Obtener precio base del primer detalle
-                    $basePrice = $request->details[0]['price'] ?? 0;
-
-                    // 🌟 LÓGICA DE DESCUENTO AUTOMÁTICO:
-                    // Si es corporativo y no mandaron un precio manual, restamos 20 Bs
-                    $agreedPrice = $request->input('agreed_price');
-                    if ($tipoTrato === 'corporativo' && (!$agreedPrice || $agreedPrice == 0)) {
-                        $agreedPrice = max(0, $basePrice - 20);
-                    } else {
-                        $agreedPrice = $agreedPrice ?? $basePrice;
-                    }
+                    // 🚀 REDISEÑO: ya no hay un "precio base del primer
+                    // detalle" (reservation_details.price no existe más) —
+                    // a esta altura la reserva es solo intención, sin
+                    // habitación ni precio todavía. agreed_price queda en
+                    // lo que se haya tecleado manualmente (o 0); el
+                    // descuento automático de -20 Bs para corporativo se
+                    // recalculará recién al confirmar, cuando SÍ hay un
+                    // precio de habitación real de referencia.
+                    $agreedPrice = (float) ($request->input('agreed_price') ?? 0);
 
                     $corporateDays = (int) $request->input('corporate_days', 1);
 
@@ -168,18 +178,22 @@ class ReservationController extends Controller
                     $specialAgreementId = $agreement->id;
                 }
 
+                // 🚀 REDISEÑO: mismo operator_id se persiste en la reserva Y
+                // en el Payment del adelanto más abajo — un solo valor,
+                // nunca dos capturas independientes que puedan
+                // desincronizarse.
+                $operatorId = $request->filled('operator_id') ? (int) $request->operator_id : null;
+
                 // =========================================================
                 // CREACIÓN DE RESERVA
                 // =========================================================
                 $reservation = \App\Models\Reservation::create([
                     'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                    'operator_id' => $operatorId,
                     'guest_id' => $guestId,
                     'guest_count' => $request->guest_count,
                     'arrival_date' => $request->arrival_date,
-                    'arrival_time' => $request->arrival_time ?? '14:00:00', // Formato de 24 horas mantenido
                     'duration_days' => $request->duration_days,
-
-                    'payment_type' => $request->payment_type,
 
                     // Conectamos el acuerdo en lugar de usar los booleanos
                     'special_agreement_id' => $specialAgreementId,
@@ -239,10 +253,6 @@ class ReservationController extends Controller
                         \App\Models\ReservationDetail::create([
                             'reservation_id' => $reservation->id,
                             'room_id' => $roomId,
-                            'requested_room_type_id' => $detail['requested_room_type_id'] ?? null,
-                            'requested_bathroom' => $detail['requested_bathroom'] ?? null,
-                            'price_id' => $detail['price_id'] ?? null,
-                            'price' => $detail['price'] ?? null,
                         ]);
 
                         if ($roomId) {
@@ -259,8 +269,8 @@ class ReservationController extends Controller
                     // del OperatorSelector) no tiene turno abierto, se le
                     // crea uno automáticamente aquí mismo. NO Auth::id()
                     // (siempre la cuenta genérica 'recepcion' bajo Terminal
-                    // Compartida).
-                    $operatorId = (int) $request->operator_id;
+                    // Compartida). $operatorId ya se capturó arriba, junto
+                    // con la creación de la reserva.
                     $cajaAbierta = $this->findOpenShift($operatorId);
 
                     // 2. Guardar el pago relacionándolo con la caja y la reserva
@@ -378,6 +388,44 @@ class ReservationController extends Controller
                 // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---
                 elseif ($statusUpper === 'CONFIRMADO' || $statusUpper === 'CONFIRMADA') {
 
+                    // 🚀 REDISEÑO: "asignar habitación" y "confirmar" se
+                    // fusionan en un solo paso (antes eran dos acciones
+                    // separadas: ReservationController::assignRooms(),
+                    // ahora eliminado, y esta rama). El frontend manda,
+                    // junto con el cambio de estado, un array
+                    // `assignments` con la habitación física y el precio
+                    // real que tecleó el recepcionista para cada detalle.
+                    // room_id se guarda en el detalle SOLO como
+                    // puente/historial (reservation_details.price ya no
+                    // existe) — el precio real vive únicamente en el
+                    // Checkin que se crea más abajo.
+                    $assignments = $request->input('assignments', []);
+
+                    if (empty($assignments)) {
+                        throw new \Exception('Debe asignar habitación y precio a cada detalle antes de confirmar.');
+                    }
+
+                    $precioPorDetailId = [];
+                    foreach ($assignments as $assignment) {
+                        $detailId = $assignment['detail_id'] ?? null;
+                        $roomId = $assignment['room_id'] ?? null;
+                        $price = $assignment['price'] ?? null;
+
+                        if (!$detailId || !$roomId || $price === null || $price === '') {
+                            throw new \Exception('Cada asignación debe incluir detalle, habitación y precio.');
+                        }
+
+                        $detail = $reservation->details->firstWhere('id', (int) $detailId);
+                        if (!$detail) {
+                            throw new \Exception("El detalle #{$detailId} no pertenece a esta reserva.");
+                        }
+
+                        $detail->update(['room_id' => $roomId]);
+                        $precioPorDetailId[(int) $detailId] = (float) $price;
+                    }
+
+                    $reservation->unsetRelation('details');
+
                     // 🛑 VALIDACIÓN PREVIA: ninguna habitación de la reserva puede tener
                     // ya un check-in activo de otro huésped. Si alguna lo tiene, abortamos
                     // TODA la confirmación (no se crea ningún check-in) y avisamos cuál falta reasignar.
@@ -431,7 +479,12 @@ class ReservationController extends Controller
                             'status' => 'activo',
                             'is_temporary' => true,
                             'notes' => $notaAsignacion,
-                            'agreed_price' => $detail->price ?? 0,
+                            // 🚀 REDISEÑO: el precio real llega en el
+                            // Request (assignments[].price), tecleado por
+                            // el recepcionista al confirmar — ya no se lee
+                            // de reservation_details.price (columna
+                            // eliminada).
+                            'agreed_price' => $precioPorDetailId[$detail->id] ?? 0,
                             // Enlazar el acuerdo financiero y omitir la columna vieja 'agreed_price'
                             'special_agreement_id' => $reservation->special_agreement_id,
                         ]);
@@ -497,11 +550,9 @@ class ReservationController extends Controller
                     // Actualizamos los datos base de la reserva omitiendo is_corporate/is_delegation
                     $reservation->update([
                         'arrival_date' => $request->arrival_date ?? $reservation->arrival_date,
-                        'arrival_time' => $request->arrival_time ?? $reservation->arrival_time,
                         'duration_days' => $request->duration_days ?? $reservation->duration_days,
                         'guest_count' => $request->guest_count ?? $reservation->guest_count,
                         'advance_payment' => $request->advance_payment ?? $reservation->advance_payment,
-                        'payment_type' => $request->payment_type ?? $reservation->payment_type,
                         'special_agreement_id' => $reservation->special_agreement_id,
                         'status' => 'pendiente' // Forzamos pendiente porque se acaba de editar
                     ]);
@@ -517,10 +568,6 @@ class ReservationController extends Controller
                                 if ($detail) {
                                     $detail->update([
                                         'room_id' => $detailData['room_id'] ?? null,
-                                        'price_id' => $detailData['price_id'] ?? null,
-                                        'price' => $detailData['price'] ?? 0,
-                                        'requested_room_type_id' => $detailData['requested_room_type_id'] ?? null,
-                                        'requested_bathroom' => $detailData['requested_bathroom'] ?? null,
                                     ]);
                                     $detailIdsToKeep[] = $detail->id;
                                 }
@@ -529,10 +576,6 @@ class ReservationController extends Controller
                                 $newDetail = ReservationDetail::create([
                                     'reservation_id' => $reservation->id,
                                     'room_id' => $detailData['room_id'] ?? null,
-                                    'price_id' => $detailData['price_id'] ?? null,
-                                    'price' => $detailData['price'] ?? 0,
-                                    'requested_room_type_id' => $detailData['requested_room_type_id'] ?? null,
-                                    'requested_bathroom' => $detailData['requested_bathroom'] ?? null,
                                 ]);
                                 $detailIdsToKeep[] = $newDetail->id;
 
@@ -588,47 +631,11 @@ class ReservationController extends Controller
         }
     }
 
-    public function assignRooms(Request $request, $id)
-{
-    $request->validate([
-        'assignments' => 'required|array',
-        'assignments.*.detail_id' => 'required|exists:reservation_details,id',
-        'assignments.*.room_id' => 'required|exists:rooms,id',
-        'assignments.*.price' => 'nullable|numeric|min:0', // 👈 NUEVO
-    ]);
-
-    DB::transaction(function () use ($request) {
-        foreach ($request->assignments as $assignment) {
-            $detail = \App\Models\ReservationDetail::find($assignment['detail_id']);
-
-            // Resguardo del punto 1: no asignar sobre habitación ya ocupada
-            $ocupada = Checkin::where('room_id', $assignment['room_id'])
-                ->where('status', 'activo')
-                ->exists();
-            if ($ocupada) {
-                $room = Room::find($assignment['room_id']);
-                throw new \Exception("La habitación {$room->number} ya está ocupada. Elija otra.");
-            }
-
-            if ($detail->room_id && $detail->room_id != $assignment['room_id']) {
-                Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
-            }
-
-            $detail->room_id = $assignment['room_id'];
-
-            // 👇 NUEVO: se guarda el precio real calculado en el frontend (90/60/50 si es Delegación)
-            if (isset($assignment['price'])) {
-                $detail->price = $assignment['price'];
-            }
-
-            $detail->save();
-
-            Room::where('id', $assignment['room_id'])->update(['status' => 'RESERVADO']);
-        }
-    });
-
-    return back()->with('success', 'Habitaciones asignadas correctamente y bloqueadas en el sistema.');
-}
+    // 🚀 REDISEÑO: assignRooms() se eliminó — "asignar habitación" y
+    // "confirmar" se fusionaron en un solo paso dentro de update()
+    // (rama CONFIRMADO), que recibe `assignments` junto con el cambio
+    // de estado y crea el Checkin con el precio real en el mismo
+    // request. Ver update() más arriba.
 
     public function reception()
     {

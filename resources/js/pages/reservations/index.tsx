@@ -355,10 +355,6 @@ export default function ReservationsIndex({
                                                             <Clock className="h-3.5 w-3.5" />
                                                             <span>
                                                                 {
-                                                                    res.arrival_time
-                                                                }{' '}
-                                                                •{' '}
-                                                                {
                                                                     res.duration_days
                                                                 }{' '}
                                                                 Noche(s)
