@@ -19,7 +19,34 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import ReservationModal, { Guest, Reservation, Room } from './reservationModal';
+import ReservationModal, { Guest, Reservation } from './reservationModal';
+
+// 🚀 REDISEÑO: Room/Price/RoomType ya no viven en reservationModal.tsx
+// (el modal de reserva dejó de necesitarlos) — se definen acá porque el
+// Tape Chart de esta página SÍ los sigue usando para el calendario de
+// ocupación.
+export interface Price {
+    id: number;
+    amount: number;
+    bathroom_type: string;
+}
+
+export interface RoomType {
+    id: number;
+    name: string;
+    capacity?: number;
+}
+
+export interface Room {
+    id: number;
+    number: string;
+    status: string;
+    price_id?: number;
+    price?: Price;
+    prices?: Price[];
+    room_type?: RoomType;
+    room_type_id?: number;
+}
 // 1. IMPORTAMOS LOS MODALES COMPARTIDOS
 import CancelModal from '@/components/cancelModal'; // Importamos el de cancelar
 import ConfirmModal from '@/components/confirmModal'; // Importamos el de confirmar
@@ -535,7 +562,6 @@ export default function ReservationsIndex({
                     onClose={() => setIsReservationModalOpen(false)}
                     reservationToEdit={editingReservation}
                     guests={Guests}
-                    rooms={Rooms}
                     operators={Operators}
                 />
 

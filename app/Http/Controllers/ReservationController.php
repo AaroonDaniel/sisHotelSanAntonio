@@ -28,7 +28,6 @@ class ReservationController extends Controller
         $allReservations = Reservation::with([
             'guest',
             'details.room.roomType',
-            'details.requestedRoomType',
             'payments',
             'specialAgreement'
         ])->latest()->get();
@@ -86,12 +85,13 @@ class ReservationController extends Controller
                 // required_if no soporta comparaciones ">" contra otro campo.
                 'operator_id' => 'nullable|exists:users,id',
 
-                // --- NUEVOS CAMPOS (y mantenemos los viejos por compatibilidad con React por ahora) ---
-                'is_corporate' => 'boolean|nullable',
-                'is_delegation' => 'boolean|nullable',
-                'type' => 'nullable|string|in:estandar,corporativo,delegacion',
-                'agreed_price' => 'nullable|numeric|min:0',
-                'corporate_days' => 'nullable|integer',
+                // 🚀 REDISEÑO (decisión A): la reserva NO crea ni referencia
+                // ninguna Cuenta Grupal real — eso se decide después, en el
+                // checkin. "type" es solo una etiqueta de intención
+                // ('normal' por defecto); el "nombre de empresa" es
+                // simplemente el guest elegido como solicitante, ya se
+                // guarda así hoy (ej. "FUTBOL C" como huésped normal).
+                'type' => 'nullable|string|in:normal,estandar,corporativo,delegacion',
 
                 // 🚀 REDISEÑO: un detalle es solo "quiero una habitación" —
                 // ni precio ni tipo/baño solicitado se guardan ya en la
@@ -148,31 +148,24 @@ class ReservationController extends Controller
                 // =========================================================
                 // 🆕 LÓGICA DE ACUERDO ESPECIAL (SPECIAL AGREEMENT)
                 // =========================================================
+                // 🚀 REDISEÑO (decisión A, aclarada): la reserva NO ofrece
+                // ningún selector de convenio ni recibe special_agreement_id
+                // del frontend — el usuario solo marca "type". Como el
+                // campo special_agreement_id YA existe (FK nullable), no
+                // hace falta columna nueva: si el type es corporativo o
+                // delegación, se crea automáticamente un SpecialAgreement
+                // "en blanco" (una sola consulta) que únicamente anota ese
+                // type — sin company_name, sin selector, sin reutilizar
+                // ninguno existente. La Cuenta Grupal "real" (con nombre de
+                // empresa, saldo, etc.) se arma después, en el checkin.
                 $typeRequest = $request->input('type');
-                $isSpecialDeal = $request->is_corporate || $request->is_delegation || in_array($typeRequest, ['corporativo', 'delegacion']);
-
                 $specialAgreementId = null;
 
-                // ... dentro del método store, en la lógica de SpecialAgreement ...
-                if ($isSpecialDeal) {
-                    $tipoTrato = $typeRequest ?? ($request->is_delegation ? 'delegacion' : 'corporativo');
-
-                    // 🚀 REDISEÑO: ya no hay un "precio base del primer
-                    // detalle" (reservation_details.price no existe más) —
-                    // a esta altura la reserva es solo intención, sin
-                    // habitación ni precio todavía. agreed_price queda en
-                    // lo que se haya tecleado manualmente (o 0); el
-                    // descuento automático de -20 Bs para corporativo se
-                    // recalculará recién al confirmar, cuando SÍ hay un
-                    // precio de habitación real de referencia.
-                    $agreedPrice = (float) ($request->input('agreed_price') ?? 0);
-
-                    $corporateDays = (int) $request->input('corporate_days', 1);
-
+                if (in_array($typeRequest, ['corporativo', 'delegacion'])) {
                     $agreement = \App\Models\SpecialAgreement::create([
-                        'type' => $tipoTrato,
-                        'agreed_price' => $agreedPrice,
-                        'payment_frequency_days' => $corporateDays,
+                        'type' => $typeRequest,
+                        'agreed_price' => 0,
+                        'payment_frequency_days' => 0,
                     ]);
 
                     $specialAgreementId = $agreement->id;
@@ -645,7 +638,6 @@ class ReservationController extends Controller
         $reservations = Reservation::with([
             'guest',
             'details.room.roomType',
-            'details.requestedRoomType',
             'payments',
             'specialAgreement'
         ])

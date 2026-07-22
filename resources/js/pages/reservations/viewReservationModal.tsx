@@ -906,7 +906,6 @@ export default function ViewReservationModal({
                 show={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 guests={guests}
-                rooms={rooms}
                 operators={operators}
             />
 
@@ -916,7 +915,6 @@ export default function ViewReservationModal({
                 onClose={() => setEditingReservation(null)}
                 reservationToEdit={editingReservation}
                 guests={guests}
-                rooms={rooms}
                 operators={operators}
             />
 
