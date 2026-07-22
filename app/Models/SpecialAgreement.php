@@ -18,12 +18,15 @@ class SpecialAgreement extends Model
         'starts_at',
         'total_advance',
         'total_consumed',
+        'status',
+        'closed_at',
     ];
 
     protected $casts = [
         'starts_at' => 'datetime',
         'total_advance' => 'decimal:2',
         'total_consumed' => 'decimal:2',
+        'closed_at' => 'datetime',
     ];
 
     /**
@@ -117,7 +120,7 @@ class SpecialAgreement extends Model
 
     /**
      * Pagos hechos contra la CUENTA MAESTRA (el grupo), no contra una
-     * habitación en particular. Ver CorporateBillingService.
+     * habitación en particular.
      */
     public function payments(): HasMany
     {
@@ -125,24 +128,60 @@ class SpecialAgreement extends Model
     }
 
     /**
-     * Convenios corporativos a los que ya les toca cobrar el siguiente
-     * ciclo: pasaron >= payment_frequency_days desde el último pago
-     * registrado contra el grupo (o desde starts_at si nunca se pagó).
-     * Solo considera convenios con al menos una habitación todavía activa.
-     *
-     * NOTA: usa funciones específicas de PostgreSQL (make_interval), igual
-     * que el resto de la app (ver migraciones de cash_registers/siat).
+     * Libro mayor de cargos diarios (Fase 1 — ver
+     * ChargeGroupAccountsDailyCommand y GroupAccountCharge).
      */
-    public function scopeDueForCorporateBilling($query)
+    public function groupAccountCharges(): HasMany
     {
-        return $query->where('type', 'corporativo')
-            ->where('payment_frequency_days', '>', 0)
-            ->whereHas('checkins', fn ($q) => $q->where('status', 'activo'))
-            ->whereRaw(
-                "COALESCE(
-                    (SELECT MAX(p.payment_date) FROM payments p WHERE p.special_agreement_id = special_agreements.id),
-                    special_agreements.starts_at
-                ) <= (NOW() - make_interval(days => special_agreements.payment_frequency_days))"
-            );
+        return $this->hasMany(GroupAccountCharge::class);
+    }
+
+    /**
+     * Saldo disponible para el LIBRO MAYOR de cargos diarios: total
+     * depositado menos SOLO lo ya cubierto en group_account_charges.
+     *
+     * ⚠️ Distinto de $this->balance (arriba): ese compara contra
+     * total_consumed_real (costo total de las habitaciones por
+     * agreed_price*duration_days) y no sabe nada del libro mayor. Este
+     * método es la ÚNICA fuente de verdad que deben usar tanto
+     * ChargeGroupAccountsDailyCommand (Fase 1) como
+     * GroupAccountController::addAdvance() (Fase 2) para decidir si un
+     * cargo se cubre o queda pendiente — si cada uno calculara el saldo
+     * por su cuenta, se desincronizarían entre sí.
+     */
+    public function availableLedgerBalance(): float
+    {
+        $cubierto = $this->groupAccountCharges()->where('status', 'cubierto')->sum('amount');
+
+        return round((float) $this->total_deposited - (float) $cubierto, 2);
+    }
+
+    /**
+     * Cubre los cargos 'pendiente' más antiguos primero (charge_date ASC)
+     * mientras el saldo disponible alcance — llamado al recargar la
+     * cuenta (GroupAccountController::addAdvance(), Fase 2). Si el primer
+     * pendiente en orden cronológico no alcanza a cubrirse, se corta ahí
+     * (no se "salta" a uno más nuevo y más barato): el orden es por
+     * fecha, no por monto. Devuelve cuántos cargos quedaron cubiertos.
+     */
+    public function coverPendingCharges(): int
+    {
+        $pendientes = $this->groupAccountCharges()
+            ->where('status', 'pendiente')
+            ->orderBy('charge_date')
+            ->get();
+
+        $cubiertos = 0;
+
+        foreach ($pendientes as $cargo) {
+            if ($this->availableLedgerBalance() < (float) $cargo->amount) {
+                break;
+            }
+
+            $cargo->update(['status' => 'cubierto', 'covered_at' => now()]);
+            $cubiertos++;
+        }
+
+        return $cubiertos;
     }
 }
