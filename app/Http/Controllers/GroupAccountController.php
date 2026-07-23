@@ -162,10 +162,17 @@ class GroupAccountController extends Controller
 
             $groupAccount->increment('total_advance', $amount);
 
-            return redirect()->back()->with(
-                'success',
-                "Abono de Bs {$amount} registrado en '{$groupAccount->company_name}'.",
-            );
+            // 🚀 Fase 2: el abono nuevo cubre los cargos 'pendiente' más
+            // antiguos primero (misma lógica que usará el comando diario
+            // de Fase 1 — ver SpecialAgreement::coverPendingCharges()).
+            $cargosCubiertos = $groupAccount->coverPendingCharges();
+
+            $mensaje = "Abono de Bs {$amount} registrado en '{$groupAccount->company_name}'.";
+            if ($cargosCubiertos > 0) {
+                $mensaje .= " Se cubrieron {$cargosCubiertos} cargo(s) pendiente(s).";
+            }
+
+            return redirect()->back()->with('success', $mensaje);
         });
     }
 }

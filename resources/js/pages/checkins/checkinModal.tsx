@@ -178,6 +178,10 @@ export interface CheckinData {
     // movimientos y no sirve para esto (ver Checkin::getInitialAdvancePaymentAttribute).
     initial_advance_payment?: number;
     agreed_price: number;
+    // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
+    // precio del titular. null = checkin nunca migrado a precio por
+    // huésped (agreed_price se sigue leyendo como venía, entero).
+    titular_price?: number | null;
     notes?: string;
     services?: string[];
     guest?: Guest;
@@ -286,6 +290,9 @@ interface CompanionData {
     profession: string;
     origin: string;
     phone: string;
+    // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
+    // precio propio del acompañante, viaja con el resto de sus datos.
+    price?: number | string;
 }
 interface Schedule {
     id: number;
@@ -329,6 +336,11 @@ interface CheckinFormData {
     type: 'estandar' | 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
     corporate_days: number;
     agreed_price: number | string;
+    // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
+    // precio del titular. Vacío ('') = no se manda al backend
+    // (request()->filled() lo trata como ausente), igual que
+    // monto_efectivo/monto_qr — mismo criterio ya usado en este form.
+    titular_price: number | string;
     checkin_operator_id: string;
     // Cuenta Grupal ya existente (Check-in Rápido): reemplaza la creación
     // de un convenio nuevo, ver CheckinController::store().
@@ -516,6 +528,7 @@ export default function CheckinModal({
 
             type: 'estandar',
             agreed_price: 0,
+            titular_price: '',
             corporate_days: 1,
             group_account_id: '',
         });
@@ -820,6 +833,10 @@ export default function CheckinModal({
                         checkinToEdit.agreed_price ||
                         checkinToEdit.special_agreement?.agreed_price ||
                         Number(originalRoomPrice),
+                    // 🚀 PRECIO POR HUÉSPED (Fase 1): si el checkin nunca se
+                    // migró (titular_price null), queda '' — el Total sigue
+                    // siendo editable de golpe, como siempre.
+                    titular_price: checkinToEdit.titular_price ?? '',
                     corporate_days:
                         checkinToEdit.special_agreement
                             ?.payment_frequency_days || 0,
@@ -865,6 +882,9 @@ export default function CheckinModal({
                             profession: c.profession || '',
                             phone: c.phone || '',
                             origin: c.pivot?.origin || c.origin || '',
+                            // 🚀 PRECIO POR HUÉSPED (Fase 1): viaja en el
+                            // pivote (checkin_guests.price), no en el Guest.
+                            price: c.pivot?.price ?? '',
                         })) || [],
 
                     payment_method:
@@ -961,6 +981,12 @@ export default function CheckinModal({
                     is_temporary: false,
                     type: initialAgreedPrice ? 'delegacion' : 'estandar',
                     agreed_price: originalRoomPriceForNew
+                        ? Number(originalRoomPriceForNew)
+                        : 0,
+                    // 🚀 PRECIO POR HUÉSPED (Fase 1): arranca igualado al
+                    // precio de la habitación (sin acompañantes todavía,
+                    // el Total = titular_price). Editable de inmediato.
+                    titular_price: originalRoomPriceForNew
                         ? Number(originalRoomPriceForNew)
                         : 0,
                     corporate_days: 0,
@@ -1065,11 +1091,16 @@ export default function CheckinModal({
         // (evita la confusión de ver 220 -> 120 -> 100 al asignar).
         if (!data.auto_adjust_price) return;
 
+        // 🚀 PRECIO POR HUÉSPED (Fase 1, decisión confirmada: opción "a"):
+        // el ajuste por ocupación mueve SOLO el precio del titular — los
+        // acompañantes conservan el precio que ya tengan puesto. El
+        // Total visible se recalcula solo (ver el efecto de más abajo que
+        // deriva agreed_price = titular_price + Σ companions.price).
         if (
             newCalculatedPrice > 0 &&
-            Number(data.agreed_price) !== newCalculatedPrice
+            Number(data.titular_price) !== newCalculatedPrice
         ) {
-            setData('agreed_price', newCalculatedPrice);
+            setData('titular_price', newCalculatedPrice);
         }
     }, [
         data.companions?.length,
@@ -1078,6 +1109,30 @@ export default function CheckinModal({
         data.auto_adjust_price,
         show,
     ]);
+
+    // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
+    // agreed_price queda SIEMPRE derivado de titular_price + Σ
+    // companions.price mientras dure esta sesión de edición — así todo el
+    // bloque de "Total a cobrar" (más abajo) sigue funcionando sin
+    // tocarlo, solo que ahora recibe un valor calculado en vez de uno
+    // editado a mano. redondeo a 1 decimal, mismo criterio "oficial" que
+    // usa el backend (Checkin::setAgreedPriceAttribute()).
+    useEffect(() => {
+        if (data.type !== 'estandar') return;
+
+        const sumaAcompanantes = (data.companions || []).reduce(
+            (acc, c) => acc + (Number(c.price) || 0),
+            0,
+        );
+        const nuevoTotal =
+            Math.round(
+                ((Number(data.titular_price) || 0) + sumaAcompanantes) * 10,
+            ) / 10;
+
+        if (Number(data.agreed_price) !== nuevoTotal) {
+            setData('agreed_price', nuevoTotal);
+        }
+    }, [data.titular_price, data.companions, data.type]);
 
     // Efecto para mostrar y ocultar asignacion unica
     useEffect(() => {
@@ -1135,6 +1190,12 @@ export default function CheckinModal({
               profession: data.profession,
               origin: data.origin,
               phone: data.phone,
+              // 🚀 PRECIO POR HUÉSPED (Fase 1): el del titular vive suelto
+              // en data.titular_price, no en un campo "plano" como el
+              // resto — se expone acá para que el input de precio pueda
+              // leer siempre currentPerson.price sin importar quién esté
+              // activo en el carrusel.
+              price: data.titular_price,
           }
         : {
               // Datos del Acompañante (con valores por defecto seguros)
@@ -1151,6 +1212,7 @@ export default function CheckinModal({
               civil_status:
                   companionsList[currentIndex - 1]?.civil_status || '',
               birth_date: companionsList[currentIndex - 1]?.birth_date || '',
+              price: companionsList[currentIndex - 1]?.price ?? '',
           };
 
     // C. ACTUALIZAR EDAD VISUAL (Reemplaza al useEffect viejo)
@@ -1208,6 +1270,26 @@ export default function CheckinModal({
         }
     };
 
+    // 🚀 PRECIO POR HUÉSPED (Fase 1): manejador dedicado, separado de
+    // handleFieldChange, porque el precio del titular NO vive en un
+    // campo "plano" homónimo (data.price no existe) sino en
+    // data.titular_price -- handleFieldChange(field, value) asume que el
+    // nombre del campo es igual en ambos lados (titular/acompañante), acá
+    // no lo es.
+    const handlePriceChange = (value: string) => {
+        if (isTitular) {
+            setData('titular_price', value);
+        } else {
+            const newCompanions = [...companionsList];
+            if (!newCompanions[currentIndex - 1]) return;
+            newCompanions[currentIndex - 1] = {
+                ...newCompanions[currentIndex - 1],
+                price: value,
+            };
+            setData('companions', newCompanions);
+        }
+    };
+
     // 🚀 HERENCIA DE PROCEDENCIA (Delegación): cuando hay una Cuenta Grupal
     // de Delegación seleccionada, cada huésped (titular o acompañante)
     // arranca con la procedencia de la cuenta como valor por defecto, pero
@@ -1240,6 +1322,7 @@ export default function CheckinModal({
                 profession: '',
                 origin: '',
                 phone: '',
+                price: '',
             };
             setData('companions', [...companionsList, newCompanion]);
             setCurrentIndex((prev) => prev + 1);
@@ -2879,6 +2962,43 @@ export default function CheckinModal({
                                         </div>
                                     </div>
                                     )}
+
+                                    {/* 🚀 PRECIO POR HUÉSPED (Fase 1, solo
+                                    tipo 'estandar' por ahora): cada persona
+                                    del carrusel lleva su propio precio por
+                                    noche. El "Total a cobrar" de más abajo
+                                    pasa a ser de solo lectura (suma) en
+                                    cuanto se usa este campo. */}
+                                    {data.type === 'estandar' && (
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">
+                                                Precio (por noche)
+                                            </label>
+                                            <div className="relative">
+                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                    <span className="text-sm font-bold text-gray-400">
+                                                        Bs
+                                                    </span>
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    step="0.10"
+                                                    min={0}
+                                                    value={
+                                                        currentPerson.price ??
+                                                        ''
+                                                    }
+                                                    disabled={isReadOnly}
+                                                    onChange={(e) =>
+                                                        handlePriceChange(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -3614,9 +3734,17 @@ export default function CheckinModal({
                                                                         );
                                                                     }}
                                                                     disabled={
-                                                                        isReadOnly
+                                                                        isReadOnly ||
+                                                                        // 🚀 PRECIO POR HUÉSPED (Fase 1): en
+                                                                        // 'estandar' el Total ya no se edita
+                                                                        // de golpe -- es la suma de
+                                                                        // titular_price + Σ
+                                                                        // companions.price, se edita por
+                                                                        // persona en el carrusel de arriba.
+                                                                        data.type ===
+                                                                            'estandar'
                                                                     }
-                                                                    className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                                    className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
                                                                     placeholder="0.00"
                                                                 />
                                                                 <span className="text-2xl leading-none font-black text-gray-900">

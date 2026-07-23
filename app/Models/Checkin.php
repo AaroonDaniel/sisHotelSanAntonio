@@ -36,6 +36,7 @@ class Checkin extends Model
         'parent_checkin_id',
         'special_agreement_id',
         'agreed_price',
+        'titular_price',
         'price_effective_since',
         'cash_register_id',
     ];
@@ -53,6 +54,49 @@ class Checkin extends Model
         'price_effective_since' => 'datetime',
         'is_temporary' => 'boolean',
     ];
+
+    /**
+     * 🚀 PRECIO POR HUÉSPED (base, sin conectar a ningún flujo de edición
+     * todavía — eso es Fase 1+): agreed_price deja de escribirse a mano en
+     * cada controlador y pasa a ser SIEMPRE titular_price + Σ
+     * checkin_guests.price, recalculado acá. Se dispara desde
+     * CheckinGuestObserver (al guardar/borrar un acompañante) y desde
+     * CheckinObserver::saving() (al editar titular_price directo).
+     *
+     * ⚠️ 1 DECIMAL, no 2: setAgreedPriceAttribute() (más abajo, YA
+     * existía antes de esta fase) redondea agreed_price a 1 decimal —
+     * "REDONDEO OFICIAL" del negocio (mismo criterio que
+     * calculateAgreedPrice()). titular_price/checkin_guests.price
+     * respetan la MISMA precisión (ver sus propios mutadores) para que
+     * la suma nunca produzca un redondeo sorpresa al guardarse acá.
+     *
+     * saveQuietly() evita que este propio guardado dispare de nuevo los
+     * observers (recursión infinita).
+     */
+    public function recalculateAgreedPrice(): void
+    {
+        $sumaAcompanantes = (float) $this->companions()->sum('checkin_guests.price');
+        $nuevoTotal = round((float) ($this->titular_price ?? 0) + $sumaAcompanantes, 1);
+
+        if ((float) $this->agreed_price !== $nuevoTotal) {
+            $this->agreed_price = $nuevoTotal;
+            $this->saveQuietly();
+        }
+    }
+
+    /**
+     * Precio individual del titular — MISMA precisión que agreed_price
+     * (1 decimal, "redondeo oficial" del negocio).
+     */
+    public function setTitularPriceAttribute($value)
+    {
+        $this->attributes['titular_price'] = is_null($value) ? null : round((float) $value, 1);
+    }
+
+    public function getTitularPriceAttribute($value)
+    {
+        return is_null($value) ? null : round((float) $value, 1);
+    }
 
     // --- RELACIONES (BelongsTo) ---
 
@@ -124,7 +168,8 @@ class Checkin extends Model
     public function companions(): BelongsToMany
     {
         return $this->belongsToMany(Guest::class, 'checkin_guests')
-            ->withPivot('origin')
+            ->using(CheckinGuest::class)
+            ->withPivot('origin', 'price')
             ->withTimestamps();
     }
 

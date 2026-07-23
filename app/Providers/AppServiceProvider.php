@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Auth;
 use Spatie\Activitylog\Models\Activity;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Checkin;
+use App\Models\CheckinGuest;
+use App\Observers\CheckinObserver;
+use App\Observers\CheckinGuestObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -57,5 +61,10 @@ class AppServiceProvider extends ServiceProvider
             return $user->hasRole('administrador') ? true : null;
         });
 
+        // 🚀 PRECIO POR HUÉSPED (Fase 0, sin conectar a ningún flujo de
+        // edición real todavía): mantiene checkins.agreed_price
+        // sincronizado como titular_price + Σ checkin_guests.price.
+        Checkin::observe(CheckinObserver::class);
+        CheckinGuest::observe(CheckinGuestObserver::class);
     }
 }
