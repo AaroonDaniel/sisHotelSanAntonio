@@ -18,12 +18,15 @@ class SpecialAgreement extends Model
         'starts_at',
         'total_advance',
         'total_consumed',
+        'status',
+        'closed_at',
     ];
 
     protected $casts = [
         'starts_at' => 'datetime',
         'total_advance' => 'decimal:2',
         'total_consumed' => 'decimal:2',
+        'closed_at' => 'datetime',
     ];
 
     /**

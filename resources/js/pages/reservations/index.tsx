@@ -440,9 +440,8 @@ export default function ReservationsIndex({
                                                                 Bs
                                                             </span>
                                                             <span className="text-[10px] text-gray-400 uppercase">
-                                                                {
-                                                                    res.payment_type
-                                                                }
+                                                                {res.payment_method ||
+                                                                    'Sin adelanto'}
                                                             </span>
                                                         </div>
                                                     </div>

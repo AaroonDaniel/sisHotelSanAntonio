@@ -36,6 +36,9 @@ export interface Reservation {
     duration_days: number;
     advance_payment: number;
     payment_type?: string;
+    // Método del pago ADELANTO (Reservation::getPaymentMethodAttribute()),
+    // null si la reserva todavía no tiene adelanto.
+    payment_method?: string | null;
     status: string;
     special_agreement?: {
         id: number;

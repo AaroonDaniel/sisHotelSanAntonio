@@ -46,14 +46,13 @@ class RoomController
                 // Sumamos los pagos reales (ignoramos los rechazados por si acaso)
                 $pagosValidos = $reservation->payments->where('status', '!=', 'RECHAZADO');
 
-                // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
+                // Inyectamos el adelanto real que verá la tabla de reservas
+                // pendientes de la pantalla de Habitaciones.
                 $reservation->advance_payment = $pagosValidos->sum('amount');
 
-                // 🚀 REDISEÑO: la reserva ya no fija payment_type propio —
-                // el método real sale del primer pago registrado; si
-                // todavía no hay ninguno, EFECTIVO como default visual.
-                $reservation->payment_type = optional($pagosValidos->first())->method
-                    ?? 'EFECTIVO';
+                // payment_method (método del pago ADELANTO, o null si no
+                // hay adelanto) ya llega solo via $appends del modelo
+                // Reservation — no hace falta reimplementarlo acá.
 
                 return $reservation;
             });
@@ -315,14 +314,13 @@ class RoomController
                 // Sumamos los pagos reales (ignoramos los rechazados por si acaso)
                 $pagosValidos = $reservation->payments->where('status', '!=', 'RECHAZADO');
 
-                // Inyectamos el adelanto real que verá el panel "Asignación de Reservas"
+                // Inyectamos el adelanto real que verá la tabla de reservas
+                // pendientes de la pantalla de Habitaciones.
                 $reservation->advance_payment = $pagosValidos->sum('amount');
 
-                // 🚀 REDISEÑO: la reserva ya no fija payment_type propio —
-                // el método real sale del primer pago registrado; si
-                // todavía no hay ninguno, EFECTIVO como default visual.
-                $reservation->payment_type = optional($pagosValidos->first())->method
-                    ?? 'EFECTIVO';
+                // payment_method (método del pago ADELANTO, o null si no
+                // hay adelanto) ya llega solo via $appends del modelo
+                // Reservation — no hace falta reimplementarlo acá.
 
                 return $reservation;
             });

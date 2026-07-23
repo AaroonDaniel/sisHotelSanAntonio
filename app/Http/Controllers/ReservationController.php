@@ -376,6 +376,35 @@ class ReservationController extends Controller
                             Room::where('id', $detail->room_id)->update(['status' => 'LIBRE']);
                         }
                     }
+
+                    // Cierre del convenio (SpecialAgreement) asociado, si lo
+                    // hay: evita que quede una cuenta "activa" sin ningún
+                    // uso real detrás de una reserva cancelada. NO se cierra
+                    // si (a) el convenio ya tiene Checkins asociados —
+                    // significa que la reserva llegó a confirmarse y hay
+                    // consumo real detrás, cerrar sería destructivo — o (b)
+                    // está ligado a otra reserva todavía viva (defensivo:
+                    // hoy store()/update() siempre crean un convenio propio
+                    // por reserva, nunca comparten uno, pero no cuesta nada
+                    // cubrir el caso).
+                    if ($reservation->special_agreement_id) {
+                        $agreement = $reservation->specialAgreement;
+
+                        if ($agreement && $agreement->status !== 'cerrado') {
+                            $tieneCheckins = $agreement->checkins()->exists();
+                            $tieneOtraReservaViva = $agreement->reservations()
+                                ->where('id', '!=', $reservation->id)
+                                ->whereIn('status', ['pendiente', 'confirmada'])
+                                ->exists();
+
+                            if (!$tieneCheckins && !$tieneOtraReservaViva) {
+                                $agreement->update([
+                                    'status' => 'cerrado',
+                                    'closed_at' => now(),
+                                ]);
+                            }
+                        }
+                    }
                 }
 
                 // --- 2. SI CONFIRMAN LLEGADA (CHECK-IN) ---

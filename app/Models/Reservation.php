@@ -10,7 +10,7 @@ use Spatie\Activitylog\LogOptions;
 class Reservation extends Model
 {
     use LogsActivity;
-    protected $appends = ['advance_payment'];
+    protected $appends = ['advance_payment', 'payment_method'];
     protected $fillable = [
         'user_id',
         // 🚀 REDISEÑO: mismo valor que payments.operator_id del adelanto
@@ -49,6 +49,20 @@ class Reservation extends Model
     public function getAdvancePaymentAttribute()
     {
         return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
+    }
+
+    // 🚀 REDISEÑO: la reserva ya no fija payment_type propio (columna
+    // eliminada) — el método real vive en payments.method. Igual que
+    // advance_payment, se deriva del pago ADELANTO; sin fallback: si
+    // no hay adelanto, null (no inventamos un método de pago que no
+    // existe).
+    public function getPaymentMethodAttribute()
+    {
+        return $this->payments()
+            ->where('type', 'ADELANTO')
+            ->latest()
+            ->first()
+            ?->method;
     }
 
     public function payments()
