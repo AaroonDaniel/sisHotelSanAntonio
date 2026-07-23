@@ -47,10 +47,10 @@ import CheckinModal, {
 } from '../checkins/checkinModal';
 import EventCheckinModal from '../checkins/EventCheckinModal';
 import MultiCheckoutModal from '../checkins/multiCheckoutModal';
+import AssignRoomsModal from '../reservations/AssignRoomsModal';
 import ReservationModal from '../reservations/reservationModal';
 import EventOccupiedModal from './EventOccupiedModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
-import PendingReservationsModal from './pendingReservationsModal';
 import TransferModal from './transferModal';
 
 // Evitar errores de TS con Ziggy
@@ -168,7 +168,6 @@ export default function RoomsStatus({
     const [showMultiCheckoutModal, setShowMultiCheckoutModal] = useState(false);
 
     //Estado para el modal de reserva
-    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [isNewReservationModalOpen, setIsNewReservationModalOpen] =
         useState(false);
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
@@ -352,7 +351,7 @@ export default function RoomsStatus({
                     'pendingCheckinsQueue',
                     flash.auto_open_checkins.join(','),
                 );
-                setIsPendingModalOpen(false);
+                setPreselectedReservationId(null);
 
                 // Opcional: Imprimir en consola solo para confirmar que se guardó bien
                 console.log(
@@ -1515,7 +1514,6 @@ export default function RoomsStatus({
                                         setPreselectedReservationId(
                                             todayReservation.id,
                                         );
-                                        setIsPendingModalOpen(true);
                                     } else {
                                         handleRoomClick(room);
                                     }
@@ -1539,7 +1537,6 @@ export default function RoomsStatus({
                                                     setPreselectedReservationId(
                                                         firstRes.id,
                                                     );
-                                                    setIsPendingModalOpen(true);
                                                 } else {
                                                     setSelectedItem(firstRes);
                                                     setIsActionModalOpen(true);
@@ -1868,20 +1865,24 @@ export default function RoomsStatus({
                 item={selectedItem}
             />
 
-            {/* MODAL DE RESERVAS PENDIENTES*/}
-            <PendingReservationsModal
-                show={isPendingModalOpen}
-                onClose={() => {
-                    console.log('Cerrando desde el padre...');
-                    setIsPendingModalOpen(false);
-                }}
-                reservations={reservations}
-                rooms={Rooms}
-                initialReservationId={preselectedReservationId}
-                onNewReservation={() => {
-                    setIsPendingModalOpen(false);
-                    setIsReservationModalOpen(true);
-                }}
+            {/* MODAL DE MATCHMAKING: asignar habitación / confirmar reserva
+                del día, disparado desde la tarjeta de habitación "Reservado
+                Hoy" (reemplaza al viejo PendingReservationsModal, que
+                llamaba a la ruta POST /assign-rooms eliminada). */}
+            <AssignRoomsModal
+                show={preselectedReservationId !== null}
+                onClose={() => setPreselectedReservationId(null)}
+                reservation={
+                    reservations.find(
+                        (r: any) => r.id === preselectedReservationId,
+                    ) || null
+                }
+                mode="confirm"
+                availableRooms={(Rooms || []).filter(
+                    (r: any) =>
+                        r.status?.toUpperCase() !== 'MANTENIMIENTO' &&
+                        r.status?.toUpperCase() !== 'INHABILITADO',
+                )}
             />
             {/* MODAL DE NUEVA RESERVA */}
             <ReservationModal

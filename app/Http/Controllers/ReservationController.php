@@ -624,11 +624,78 @@ class ReservationController extends Controller
         }
     }
 
-    // 🚀 REDISEÑO: assignRooms() se eliminó — "asignar habitación" y
-    // "confirmar" se fusionaron en un solo paso dentro de update()
-    // (rama CONFIRMADO), que recibe `assignments` junto con el cambio
-    // de estado y crea el Checkin con el precio real en el mismo
-    // request. Ver update() más arriba.
+    /**
+     * "Asignar Habitación" (Tabla 1 -> Tabla 2 del matchmaking) — SOLO
+     * bloquea habitaciones físicas para esta reserva, sin pedir precio
+     * ni crear ningún Checkin (eso es "Confirmar Reserva/Check-in",
+     * ver update() rama CONFIRMADO). status se queda en 'pendiente'.
+     *
+     * Recibe una lista plana de room_id (un id por cada grupo de
+     * personas que el recepcionista armó en el matchmaking — cuántas
+     * personas hay en cada grupo es una decisión de la pantalla, no se
+     * persiste: la cantidad total ya vive en reservations.guest_count,
+     * y "cuántas habitaciones" es simplemente cuántas filas de
+     * reservation_details terminan existiendo).
+     *
+     * Reemplaza TODOS los reservation_details existentes por uno nuevo
+     * por cada room_id recibido — libera las habitaciones que ya no se
+     * usan y bloquea ('RESERVADO') las nuevas.
+     */
+    public function assignRooms(Request $request, Reservation $reservation)
+    {
+        $validated = $request->validate([
+            'room_ids' => 'required|array|min:1',
+            'room_ids.*' => 'required|distinct|exists:rooms,id',
+        ], [
+            'room_ids.required' => 'Debe asignar al menos una habitación.',
+            'room_ids.*.distinct' => 'No puede asignar la misma habitación dos veces.',
+        ]);
+
+        try {
+            DB::transaction(function () use ($validated, $reservation) {
+                $roomIds = $validated['room_ids'];
+
+                // (1) Lock pesimista + validar que ninguna esté ocupada por
+                // un check-in activo de otro huésped ahora mismo.
+                foreach ($roomIds as $roomId) {
+                    $room = Room::where('id', $roomId)->lockForUpdate()->first();
+                    if (!$room) {
+                        throw new \RuntimeException("La habitación #{$roomId} ya no existe.");
+                    }
+
+                    $ocupada = Checkin::where('room_id', $roomId)
+                        ->where('status', 'activo')
+                        ->exists();
+                    if ($ocupada) {
+                        throw new \RuntimeException("La habitación {$room->number} ya está ocupada. Elija otra.");
+                    }
+                }
+
+                // (2) Liberar las habitaciones previamente asignadas a esta
+                // reserva que ya NO forman parte de la nueva asignación.
+                $previousRoomIds = $reservation->details()->pluck('room_id')->filter()->all();
+                $roomIdsToFree = array_diff($previousRoomIds, $roomIds);
+                if (!empty($roomIdsToFree)) {
+                    Room::whereIn('id', $roomIdsToFree)->update(['status' => 'LIBRE']);
+                }
+
+                // (3) Reemplazar los detalles: uno por cada habitación asignada.
+                $reservation->details()->delete();
+                foreach ($roomIds as $roomId) {
+                    ReservationDetail::create([
+                        'reservation_id' => $reservation->id,
+                        'room_id' => $roomId,
+                    ]);
+                }
+
+                Room::whereIn('id', $roomIds)->update(['status' => 'RESERVADO']);
+            });
+
+            return redirect()->back()->with('success', 'Habitaciones asignadas correctamente.');
+        } catch (\Throwable $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
 
     public function reception()
     {

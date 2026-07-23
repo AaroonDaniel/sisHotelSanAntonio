@@ -180,8 +180,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/reservas/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservas/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
     Route::get('/api/reservations/availability', [ReservationController::class, 'checkAvailability'])->name('reservations.availability');
-    // 🚀 REDISEÑO: reservations.assign eliminada — "asignar" y
-    // "confirmar" se fusionaron dentro de reservations.update.
+    // 🚀 REDISEÑO (matchmaking): "Asignar Habitación" vuelve a ser una
+    // acción separada de "Confirmar" — solo bloquea habitaciones, sin
+    // precio ni Checkin (eso sigue siendo reservations.update).
+    Route::patch('/reservas/{reservation}/rooms', [ReservationController::class, 'assignRooms'])->name('reservations.assign-rooms');
 
     //Reportes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index')->middleware('permission:reportes.parte_diario');

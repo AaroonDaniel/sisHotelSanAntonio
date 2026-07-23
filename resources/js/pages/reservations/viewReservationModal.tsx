@@ -7,8 +7,6 @@ import { Head, router } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowLeft,
-    ArrowRight,
-    Banknote,
     BedDouble,
     Calendar,
     CalendarDays,
@@ -45,8 +43,16 @@ export default function ViewReservationModal({
 }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [assigningReservation, setAssigningReservation] = useState<any>(null);
-    const [confirmingStayRes, setConfirmingStayRes] = useState<any>(null);
+    // 🚀 REDISEÑO (matchmaking): reemplaza assigningReservation +
+    // confirmingStayRes -- un solo modal (AssignRoomsModal) con dos
+    // modos. "Asignar Habitación" (Tabla 1/2) = mode 'assign'.
+    // "Confirmar Reserva/Check-in" / "Registrar Llegada" = mode
+    // 'confirm' (si ya viene asignada, el modal salta directo a pedir
+    // precio; si no, hace el matchmaking primero).
+    const [matchmakingTarget, setMatchmakingTarget] = useState<{
+        reservation: any;
+        mode: 'assign' | 'confirm';
+    } | null>(null);
     const [editingReservation, setEditingReservation] = useState<any>(null);
 
     // 👇 Estado para la vista de Verificación de Pago Online 👇
@@ -276,182 +282,13 @@ export default function ViewReservationModal({
         );
     }
 
-    // ==========================================
-    // 🛏️ VISTA PANTALLA COMPLETA DE CONFIRMACIÓN DE CHECK-IN
-    // ==========================================
-    if (confirmingStayRes) {
-        // 👇 1. CALCULAMOS EL ADELANTO REAL DESDE LA TABLA DE PAGOS 👇
-        const advancePaid =
-            confirmingStayRes.payments?.reduce(
-                (sum: number, p: any) => sum + (Number(p.amount) || 0),
-                0,
-            ) || 0;
-        const paymentMethod =
-            confirmingStayRes.payments?.[0]?.method ||
-            confirmingStayRes.payment_type ||
-            'Transferencia';
-
-        return (
-            <AuthenticatedLayout user={auth.user}>
-                <Head title="Confirmar Estancia" />
-                <div className="min-h-screen animate-in p-8 pt-2 duration-500 slide-in-from-right-10 fade-in lg:pt-2">
-                    <button
-                        onClick={() => setConfirmingStayRes(null)}
-                        className="mb-6 flex items-center gap-2 text-gray-400 transition-colors hover:text-white"
-                    >
-                        <ChevronLeft className="h-5 w-5" /> Volver al listado
-                    </button>
-
-                    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-3">
-                        <div className="space-y-6 lg:col-span-1">
-                            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-xl">
-                                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 text-green-600">
-                                    <UserCheck className="h-8 w-8" />
-                                </div>
-                                <h2 className="text-2xl leading-tight font-black text-gray-900 uppercase">
-                                    {confirmingStayRes.guest?.full_name}
-                                </h2>
-                                <p className="text-sm font-bold text-gray-400">
-                                    CI:{' '}
-                                    {
-                                        confirmingStayRes.guest
-                                            ?.identification_number
-                                    }
-                                </p>
-
-                                <div className="mt-8 space-y-4 border-t pt-6">
-                                    <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">
-                                            Llegada
-                                        </span>
-                                        <span className="font-bold text-gray-800">
-                                            {confirmingStayRes.arrival_date}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">
-                                            Noches
-                                        </span>
-                                        <span className="font-bold text-gray-800">
-                                            {confirmingStayRes.duration_days}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-sm text-gray-400">
-                                            Personas
-                                        </span>
-                                        <span className="font-bold text-gray-800">
-                                            {confirmingStayRes.guest_count}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="rounded-3xl bg-indigo-900 p-6 text-white shadow-lg">
-                                <h3 className="mb-2 text-xs font-bold tracking-widest text-indigo-200 uppercase">
-                                    Finanzas
-                                </h3>
-                                {/* 👇 2. MOSTRAMOS EL ADELANTO CALCULADO 👇 */}
-                                <div className="text-3xl font-black">
-                                    {advancePaid.toFixed(2)} Bs
-                                </div>
-                                <p className="mt-1 text-xs text-indigo-300">
-                                    Adelanto recibido ({paymentMethod})
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-6 lg:col-span-2">
-                            <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl">
-                                <h3 className="mb-6 flex items-center gap-2 text-xl font-black text-gray-800">
-                                    <BedDouble className="h-6 w-6 text-green-500" />{' '}
-                                    Habitaciones Preparadas
-                                </h3>
-
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                    {confirmingStayRes.details.map(
-                                        (det: any, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="flex items-center justify-between rounded-2xl border-2 border-green-50 bg-green-50/30 p-4"
-                                            >
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="text-xs font-black text-green-700 uppercase">
-                                                            Habitación{' '}
-                                                            {det.room?.number}
-                                                        </div>
-                                                        {/* Badge del tipo de baño para Delegaciones */}
-                                                        {confirmingStayRes.is_delegation && (
-                                                            <span
-                                                                className={`rounded border px-1.5 py-0.5 text-[9px] font-black ${
-                                                                    det.requested_bathroom ===
-                                                                    'private'
-                                                                        ? 'border-blue-200 bg-blue-100 text-blue-700'
-                                                                        : 'border-orange-200 bg-orange-100 text-orange-700'
-                                                                }`}
-                                                            >
-                                                                {det.requested_bathroom ===
-                                                                'private'
-                                                                    ? '🚿 PRIVADO'
-                                                                    : det.requested_bathroom ===
-                                                                        'compartido_sindesayuno'
-                                                                      ? '🚽 COMP. S/D'
-                                                                      : '🚽 COMP. C/D'}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-lg font-bold text-gray-800">
-                                                        {det.room_type?.name}
-                                                    </div>
-
-                                                    <div className="mt-1 flex items-center gap-1 text-sm font-black text-indigo-600">
-                                                        <Banknote className="h-3.5 w-3.5" />
-                                                        {det.price} Bs.
-                                                    </div>
-                                                </div>
-                                                <CheckCircle2 className="h-6 w-6 text-green-500" />
-                                            </div>
-                                        ),
-                                    )}
-                                </div>
-
-                                <div className="mt-12 rounded-3xl border-2 border-dashed border-gray-200 p-8 text-center">
-                                    <p className="mx-auto mb-6 max-w-sm font-medium text-gray-500">
-                                        Al confirmar, las habitaciones pasarán a
-                                        estado "Ocupadas" y se generará el
-                                        registro oficial de Check-in.
-                                    </p>
-                                    <form
-                                        onSubmit={(e) => {
-                                            e.preventDefault();
-                                            router.put(
-                                                `/reservas/${confirmingStayRes.id}`,
-                                                { status: 'confirmada' },
-                                                {
-                                                    onSuccess: () =>
-                                                        setConfirmingStayRes(
-                                                            null,
-                                                        ),
-                                                },
-                                            );
-                                        }}
-                                    >
-                                        <button
-                                            type="submit"
-                                            className="w-full rounded-2xl bg-black py-5 text-lg font-black tracking-widest text-white uppercase shadow-xl shadow-gray-200 transition-all hover:bg-gray-800 active:scale-95"
-                                        >
-                                            ✓ Confirmar Entrada del Huésped
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </AuthenticatedLayout>
-        );
-    }
+    // 🚀 REDISEÑO: la vista de pantalla completa "Confirmar Estancia" se
+    // eliminó -- no pedía precio (ya no tiene sentido con
+    // reservation_details.price eliminado) y llamaba a update() sin
+    // `assignments`, que ahora es obligatorio. Reemplazada por
+    // AssignRoomsModal en mode="confirm" (ver más abajo), que si la
+    // reserva ya viene asignada salta directo a pedir precio por
+    // habitación.
 
     // ==========================================
     // 📋 VISTA PRINCIPAL: LISTADO DE TABLAS
@@ -503,13 +340,13 @@ export default function ViewReservationModal({
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 lg:gap-8 xl:grid-cols-5">
-                    {/* TABLA 1: PENDIENTES DE HABITACIÓN */}
+                    {/* TABLA 1: RESERVAS REGISTRADAS (sin habitación asignada todavía) */}
                     <section className="flex h-full flex-col xl:col-span-2">
                         <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
                             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
                                 <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-orange-500 uppercase">
-                                    <Clock className="h-5 w-5" /> 1. Pendientes
-                                    de Habitación ({pendingAssignment.length})
+                                    <Clock className="h-5 w-5" /> 1. Reservas
+                                    Registradas ({pendingAssignment.length})
                                 </h2>
                             </div>
 
@@ -536,18 +373,8 @@ export default function ViewReservationModal({
                                                 </th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {pendingAssignment.map((res) => {
-                                                const assignedCount =
-                                                    res.details.filter(
-                                                        (d: any) => d.room_id,
-                                                    ).length;
-                                                const buttonText =
-                                                    assignedCount > 0
-                                                        ? 'Asignar / Editar'
-                                                        : 'Asignar';
-
-                                                return (
+                        <tbody className="divide-y divide-gray-50">
+                                            {pendingAssignment.map((res) => (
                                                     <tr
                                                         key={res.id}
                                                         className="group transition-colors hover:bg-orange-50/30"
@@ -570,63 +397,85 @@ export default function ViewReservationModal({
                                                         </td>
                                                         <td className="px-6 py-4 text-center whitespace-nowrap">
                                                             <span className="inline-block rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-[11px] font-black whitespace-nowrap text-orange-700 shadow-sm">
-                                                                {
-                                                                    res.details
-                                                                        .length
-                                                                }{' '}
-                                                                Hab.
+                                                                {res.guest_count}{' '}
+                                                                pers.
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="flex items-center justify-end gap-2">
-                                                                {/* Lápiz para editar reserva general */}
-                                                                <button
-                                                                    onClick={() =>
-                                                                        setEditingReservation(
-                                                                            res,
-                                                                        )
-                                                                    }
-                                                                    className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-                                                                    title="Editar Datos de Reserva"
-                                                                >
-                                                                    <Pencil className="h-4 w-4" />
-                                                                </button>
-
-                                                                {/* BOTÓN CANCELAR -> Dispara cancelModal */}
-                                                                {res.status !==
-                                                                    'cancelado' && (
+                                                            <div className="flex flex-col items-end gap-2">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    {/* Editar y Cancelar: más visibles (texto + color, no solo ícono gris) */}
                                                                     <button
-                                                                        onClick={() => {
-                                                                            setCancelingReservationId(
-                                                                                res.id,
-                                                                            );
-                                                                            setIsCancelModalOpen(
-                                                                                true,
-                                                                            );
-                                                                        }}
-                                                                        className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
-                                                                        title="Cancelar"
+                                                                        onClick={() =>
+                                                                            setEditingReservation(
+                                                                                res,
+                                                                            )
+                                                                        }
+                                                                        className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                                                                        title="Editar Datos de Reserva"
                                                                     >
-                                                                        <XCircle className="h-4 w-4" />
+                                                                        <Pencil className="h-3.5 w-3.5" />{' '}
+                                                                        Editar
                                                                     </button>
-                                                                )}
 
-                                                                <button
-                                                                    onClick={() =>
-                                                                        setAssigningReservation(
-                                                                            res,
-                                                                        )
-                                                                    }
-                                                                    className="ml-2 inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
-                                                                >
-                                                                    {buttonText}{' '}
-                                                                    <ArrowRight className="h-3.5 w-3.5" />
-                                                                </button>
+                                                                    {res.status !==
+                                                                        'cancelado' && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setCancelingReservationId(
+                                                                                    res.id,
+                                                                                );
+                                                                                setIsCancelModalOpen(
+                                                                                    true,
+                                                                                );
+                                                                            }}
+                                                                            className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                                            title="Cancelar"
+                                                                        >
+                                                                            <XCircle className="h-3.5 w-3.5" />{' '}
+                                                                            Cancelar
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setMatchmakingTarget(
+                                                                                {
+                                                                                    reservation:
+                                                                                        res,
+                                                                                    mode: 'assign',
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
+                                                                    >
+                                                                        <BedDouble className="h-3.5 w-3.5" />{' '}
+                                                                        Asignar
+                                                                        Habitación
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setMatchmakingTarget(
+                                                                                {
+                                                                                    reservation:
+                                                                                        res,
+                                                                                    mode: 'confirm',
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
+                                                                    >
+                                                                        <UserCheck className="h-3.5 w-3.5" />{' '}
+                                                                        Confirmar
+                                                                        Reserva
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                );
-                                            })}
+                                            ))}
                                         </tbody>
                                     </table>
                                 )}
@@ -634,13 +483,13 @@ export default function ViewReservationModal({
                         </div>
                     </section>
 
-                    {/* TABLA 2: LISTAS PARA CONFIRMAR */}
+                    {/* TABLA 2: RESERVAS ASIGNADAS (ya con habitaciones bloqueadas) */}
                     <section className="flex h-full flex-col xl:col-span-3">
                         <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
                             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
                                 <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-green-600 uppercase">
-                                    <UserCheck className="h-5 w-5" /> 2. Listas
-                                    para Confirmar ({readyForCheckin.length})
+                                    <UserCheck className="h-5 w-5" /> 2. Reservas
+                                    Asignadas ({readyForCheckin.length})
                                 </h2>
                             </div>
 
@@ -713,48 +562,62 @@ export default function ViewReservationModal({
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            {/* BOTÓN PARA RE-ASIGNAR O CAMBIAR HABITACIONES */}
-                                                            <button
-                                                                onClick={() =>
-                                                                    setAssigningReservation(
-                                                                        res,
-                                                                    )
-                                                                }
-                                                                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-                                                                title="Cambiar Habitaciones Asignadas"
-                                                            >
-                                                                <BedDouble className="h-4 w-4" />
-                                                            </button>
-
-                                                            {/* BOTÓN CANCELAR -> Dispara cancelModal */}
-                                                            {res.status !==
-                                                                'cancelado' && (
+                                                        <div className="flex flex-col items-end gap-2">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {/* Editar asignación: más visible (texto + color) */}
                                                                 <button
-                                                                    onClick={() => {
-                                                                        setCancelingReservationId(
-                                                                            res.id,
-                                                                        );
-                                                                        setIsCancelModalOpen(
-                                                                            true,
-                                                                        );
-                                                                    }}
-                                                                    className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-orange-50 hover:text-orange-600"
-                                                                    title="Cancelar"
+                                                                    onClick={() =>
+                                                                        setMatchmakingTarget(
+                                                                            {
+                                                                                reservation:
+                                                                                    res,
+                                                                                mode: 'assign',
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                    className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                                                                    title="Cambiar Habitaciones Asignadas"
                                                                 >
-                                                                    <XCircle className="h-4 w-4" />
+                                                                    <BedDouble className="h-3.5 w-3.5" />{' '}
+                                                                    Editar
+                                                                    asignación
                                                                 </button>
-                                                            )}
+
+                                                                {res.status !==
+                                                                    'cancelado' && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setCancelingReservationId(
+                                                                                res.id,
+                                                                            );
+                                                                            setIsCancelModalOpen(
+                                                                                true,
+                                                                            );
+                                                                        }}
+                                                                        className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                                        title="Cancelar"
+                                                                    >
+                                                                        <XCircle className="h-3.5 w-3.5" />{' '}
+                                                                        Cancelar
+                                                                    </button>
+                                                                )}
+                                                            </div>
 
                                                             <button
                                                                 onClick={() =>
-                                                                    setConfirmingStayRes(
-                                                                        res,
+                                                                    setMatchmakingTarget(
+                                                                        {
+                                                                            reservation:
+                                                                                res,
+                                                                            mode: 'confirm',
+                                                                        },
                                                                     )
                                                                 }
-                                                                className="ml-2 rounded-xl bg-green-600 px-5 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
+                                                                className="flex items-center gap-1.5 rounded-xl bg-green-600 px-5 py-2.5 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
                                                             >
-                                                                Confirmar
+                                                                <UserCheck className="h-4 w-4" />{' '}
+                                                                Registrar
+                                                                Llegada
                                                             </button>
                                                         </div>
                                                     </td>
@@ -918,12 +781,13 @@ export default function ViewReservationModal({
                 operators={operators}
             />
 
-            {/* Modal para ASIGNAR / REASIGNAR HABITACIONES */}
-            {assigningReservation && (
+            {/* Modal de MATCHMAKING: asignar habitaciones o confirmar/check-in */}
+            {matchmakingTarget && (
                 <AssignRoomsModal
-                    show={!!assigningReservation}
-                    onClose={() => setAssigningReservation(null)}
-                    reservation={assigningReservation}
+                    show={!!matchmakingTarget}
+                    onClose={() => setMatchmakingTarget(null)}
+                    reservation={matchmakingTarget.reservation}
+                    mode={matchmakingTarget.mode}
                     availableRooms={(rooms || []).filter(
                         (r) =>
                             r.status?.toUpperCase() !== 'MANTENIMIENTO' &&

@@ -2,334 +2,400 @@ import { router } from '@inertiajs/react';
 import {
     AlertTriangle,
     BedDouble,
+    Calendar,
     CheckCircle2,
-    Search,
-    X,
-    ChevronRight,
-    ArrowRight,
-    Undo2,
+    Loader2,
     Save,
-    Calendar
+    Search,
+    Undo2,
+    User,
+    Users,
+    X,
 } from 'lucide-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface AssignRoomsModalProps {
     show: boolean;
     onClose: () => void;
     reservation: any;
     availableRooms: any[];
+    /**
+     * 'assign'  -> "Asignar Habitación" (Tabla 1): solo arma los grupos
+     *              y bloquea las habitaciones (PATCH /rooms). Sin
+     *              precio, sin Checkin, la reserva sigue 'pendiente'.
+     * 'confirm' -> "Confirmar Reserva / Check-in": si la reserva YA
+     *              tiene todas sus habitaciones asignadas (viene de la
+     *              Tabla 2), salta directo a pedir precio por
+     *              habitación. Si no, hace el matchmaking primero y
+     *              recién después pide precio. Termina creando los
+     *              Checkins (PUT /reservas/{id} status=confirmada).
+     */
+    mode: 'assign' | 'confirm';
 }
 
-// --- FUNCIONES AUXILIARES PARA PRECIO Y BAÑO ---
-const getRoomPriceInfo = (room: any) => {
-    if (room.price && !Array.isArray(room.price)) return room.price;
-    if (room.prices && Array.isArray(room.prices)) {
-        return room.prices.find((p: any) => p.id === room.price_id) || room.prices[0];
-    }
-    return null;
-};
+const getRoomCapacity = (room: any): number =>
+    room.room_type?.capacity || room.roomType?.capacity || 1;
 
-const isMatchingBathroom = (dbVal?: string, filterVal?: string) => {
-    const db = dbVal?.toLowerCase() || '';
-    const filter = filterVal?.toLowerCase() || '';
-    if (!filter) return true; 
-    if (db === filter) return true;
-    if ((filter.includes('private') || filter.includes('privado')) && (db.includes('private') || db.includes('privado'))) return true;
-    if ((filter.includes('shared') || filter.includes('compartido')) && (db.includes('shared') || db.includes('compartido'))) return true;
-    return false;
-};
-
-// 🌟 NUEVA FUNCIÓN: CALCULAR PRECIO DE DELEGACIÓN POR CAMA
-const calculateDelegationPrice = (room: any, hasBreakfast: boolean = true): number => {
-    const priceInfo = getRoomPriceInfo(room);
-    const capacity = room.room_type?.capacity || room.roomType?.capacity || 1;
-    const bathroomType = priceInfo?.bathroom_type?.toLowerCase() || '';
-    
-    const isPrivate = bathroomType.includes('private') || bathroomType.includes('privado');
-    
-    let ratePerBed;
-    if (hasBreakfast) {
-        ratePerBed = isPrivate ? 90 : 60;
-    } else {
-        ratePerBed = 50;
-    }
-
-    const total = ratePerBed * capacity;
-
-    console.log('🔍 [DELEGACIÓN] Cálculo por cama', {
-        habitacion: room.number,
-        capacidad_camas: capacity,
-        tipo_bano: isPrivate ? 'PRIVADO' : 'COMPARTIDO',
-        con_desayuno: hasBreakfast,
-        tarifa_por_cama: ratePerBed,
-        total_calculado: `${ratePerBed} x ${capacity} = ${total}`,
-    });
-
-    return total;
-};
-
-// 🌟 NUEVA FUNCIÓN: DETERMINAR SI LA RESERVA ES DELEGACIÓN
-const isDelegationReservation = (reservation: any): boolean => {
-    return reservation?.special_agreement?.type === 'delegacion' || 
-           reservation?.type === 'delegacion' ||
-           reservation?.is_delegation === true;
-};
-
-// 🌟 NUEVA FUNCIÓN: DETERMINAR SI TIENE DESAYUNO
-const hasBreakfastInReservation = (reservation: any): boolean => {
-    if (reservation?.special_agreement?.has_breakfast !== undefined) {
-        return Boolean(reservation.special_agreement.has_breakfast);
-    }
-    if (reservation?.has_breakfast !== undefined) {
-        return Boolean(reservation.has_breakfast);
-    }
-    return true; // Por defecto con desayuno
-};
+const isRoomAlreadyAssigned = (reservation: any): boolean =>
+    (reservation?.details || []).length > 0 &&
+    reservation.details.every((d: any) => d.room_id !== null);
 
 export default function AssignRoomsModal({
     show,
     onClose,
     reservation,
-    availableRooms = []
+    availableRooms = [],
+    mode,
 }: AssignRoomsModalProps) {
+    // --- FASE: 'matchmaking' (armar grupos + elegir habitación) o
+    // 'pricing' (precio por habitación, solo en modo 'confirm') ---
+    const [phase, setPhase] = useState<'matchmaking' | 'pricing'>(
+        'matchmaking',
+    );
 
-    // --- ESTADOS ---
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [localAssignments, setLocalAssignments] = useState<Record<number, any>>({});
+    const totalPeople = Number(reservation?.guest_count) || 1;
+
+    // personIndex (1..N) -> room asignada en esta sesión del modal
+    const [assignedMap, setAssignedMap] = useState<Record<number, any>>({});
+    // Personas actualmente tildadas, esperando que se les elija habitación
+    const [selectedPeople, setSelectedPeople] = useState<number[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showSummary, setShowSummary] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // 🌟 CALCULAR SI ES DELEGACIÓN Y SI TIENE DESAYUNO
-    const isDelegation = isDelegationReservation(reservation);
-    const hasBreakfast = hasBreakfastInReservation(reservation);
+    // Grupos ya confirmados con habitación real (id + room_id), listos
+    // para la fase de precio. Se llenan desde reservation.details
+    // (si ya venía asignada) o después de guardar el matchmaking.
+    const [pricingRows, setPricingRows] = useState<
+        { detailId: number; roomNumber: string; price: string }[]
+    >([]);
 
     useEffect(() => {
-        if (show && reservation) {
-            const initialAssignments: Record<number, any> = {};
-            let firstEmptyIndex = -1;
+        if (!show || !reservation) return;
 
-            reservation.details.forEach((detail: any, idx: number) => {
-                if (detail.room) {
-                    initialAssignments[idx] = detail.room;
-                } else if (firstEmptyIndex === -1) {
-                    firstEmptyIndex = idx;
-                }
-            });
+        setSearchQuery('');
+        setIsProcessing(false);
+        setErrorMsg(null);
+        setAssignedMap({});
+        setSelectedPeople([]);
 
-            setLocalAssignments(initialAssignments);
-            setCurrentIndex(firstEmptyIndex !== -1 ? firstEmptyIndex : 0);
-            setSearchQuery('');
-            setShowSummary(false);
-            setIsProcessing(false);
+        const alreadyAssigned = isRoomAlreadyAssigned(reservation);
+
+        if (mode === 'confirm' && alreadyAssigned) {
+            // Ya pasó por "Asignar Habitación" -- directo a precio.
+            setPhase('pricing');
+            setPricingRows(
+                reservation.details.map((d: any) => ({
+                    detailId: d.id,
+                    roomNumber: d.room?.number ?? String(d.room_id),
+                    price: '',
+                })),
+            );
+        } else {
+            setPhase('matchmaking');
+            setPricingRows([]);
         }
-    }, [show, reservation]);
+    }, [show, reservation, mode]);
 
-    const activeDetail = reservation?.details[currentIndex];
-
-    // 🚀 CALCULADORA DE DÍAS (MARGEN DE SEGURIDAD) 🚀
     const daysUntilArrival = useMemo(() => {
         if (!reservation?.arrival_date) return 0;
         const arrival = new Date(reservation.arrival_date);
         const today = new Date();
         arrival.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
-        
-        const diffTime = arrival.getTime() - today.getTime();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return Math.ceil(
+            (arrival.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+        );
     }, [reservation?.arrival_date]);
 
-    // --- LÓGICA DE FILTRADO ---
+    // Habitaciones ya usadas por otro grupo en ESTA sesión del modal.
+    const usedRoomIds = useMemo(
+        () => Object.values(assignedMap).map((r: any) => r.id),
+        [assignedMap],
+    );
+
+    // Filtro en vivo: capacidad >= cantidad de personas tildadas ahora mismo.
     const filteredRooms = useMemo(() => {
-        if (!activeDetail) return [];
+        const neededCapacity = Math.max(1, selectedPeople.length);
 
-        const alreadyPickedIds = Object.entries(localAssignments)
-            .filter(([idx, _]) => Number(idx) !== currentIndex) 
-            .map(([_, room]) => room.id);
+        return availableRooms.filter((room) => {
+            if (usedRoomIds.includes(room.id)) return false;
+            if (getRoomCapacity(room) < neededCapacity) return false;
 
-        const expectedTypeId = String(activeDetail.requested_room_type_id || activeDetail.requested_room_type?.id);
-        const expectedBathroom = activeDetail.requested_bathroom || '';
-
-        return availableRooms.filter(room => {
-            if (alreadyPickedIds.includes(room.id)) return false;
-
-            const actualTypeId = String(room.room_type_id || room.room_type?.id || room.roomType?.id);
-            if (actualTypeId !== expectedTypeId) return false;
-
-            const priceInfo = getRoomPriceInfo(room);
-            const actualBathroom = priceInfo?.bathroom_type || '';
-
-            if (expectedBathroom && actualBathroom) {
-                if (!isMatchingBathroom(actualBathroom, expectedBathroom)) {
-                    return false; 
-                }
+            const roomStatus = room.status?.toUpperCase() || 'DESCONOCIDO';
+            if (roomStatus === 'RESERVADO' && daysUntilArrival <= 5) {
+                return false;
             }
 
             if (searchQuery) {
                 const query = searchQuery.toLowerCase().trim();
-                const roomNumber = String(room.number).toLowerCase();
-                if (!roomNumber.includes(query)) return false;
-            }
-
-           const roomStatus = room.status?.toUpperCase() || 'DESCONOCIDO';
-            if (roomStatus === 'RESERVADO') {
-                if (daysUntilArrival <= 5) {
-                    return false; 
+                if (!String(room.number).toLowerCase().includes(query)) {
+                    return false;
                 }
             }
 
             return true;
         });
-    }, [activeDetail, localAssignments, availableRooms, searchQuery, currentIndex, daysUntilArrival]); 
+    }, [availableRooms, usedRoomIds, selectedPeople, daysUntilArrival, searchQuery]);
 
-    // --- ACCIONES ---
-    const handleSelectRoom = (room: any) => {
-        setLocalAssignments(prev => ({
-            ...prev,
-            [currentIndex]: room
-        }));
-
-        if (currentIndex < reservation.details.length - 1) {
-            setTimeout(() => {
-                setCurrentIndex(prev => prev + 1);
-                setSearchQuery('');
-            }, 250);
+    const unassignedPeople = useMemo(() => {
+        const people: number[] = [];
+        for (let i = 1; i <= totalPeople; i++) {
+            if (!assignedMap[i]) people.push(i);
         }
+        return people;
+    }, [totalPeople, assignedMap]);
+
+    const togglePerson = (personIndex: number) => {
+        setSelectedPeople((prev) =>
+            prev.includes(personIndex)
+                ? prev.filter((p) => p !== personIndex)
+                : [...prev, personIndex],
+        );
     };
 
-    const submitFinal = () => {
-    setIsProcessing(true);
+    const assignRoomToSelected = (room: any) => {
+        if (selectedPeople.length === 0) return;
+        setAssignedMap((prev) => {
+            const next = { ...prev };
+            selectedPeople.forEach((p) => {
+                next[p] = room;
+            });
+            return next;
+        });
+        setSelectedPeople([]);
+        setSearchQuery('');
+    };
 
-    const payload = Object.entries(localAssignments).map(([idx, room]) => {
-        const priceInfo = getRoomPriceInfo(room);
-        const finalPrice = isDelegation
-            ? calculateDelegationPrice(room, hasBreakfast)
-            : (priceInfo?.amount || 0);
+    const allPeopleAssigned = unassignedPeople.length === 0;
 
-        return {
-            detail_id: reservation.details[Number(idx)].id,
-            room_id: room.id,
-            price: finalPrice, // 👈 NUEVO: se manda el precio calculado (90/60/50 si es Delegación)
-        };
-    });
+    // Grupos únicos (room -> personas) para mostrar en el resumen izquierdo.
+    const groupsSummary = useMemo(() => {
+        const byRoomId: Record<number, { room: any; people: number[] }> = {};
+        Object.entries(assignedMap).forEach(([personStr, room]) => {
+            const person = Number(personStr);
+            if (!byRoomId[room.id]) byRoomId[room.id] = { room, people: [] };
+            byRoomId[room.id].people.push(person);
+        });
+        return Object.values(byRoomId);
+    }, [assignedMap]);
 
-    router.post(`/reservas/${reservation.id}/assign-rooms`, {
-        assignments: payload
-    }, {
-        preserveScroll: true,
-        onSuccess: () => onClose(),
-        onFinish: () => setIsProcessing(false)
-    });
-};
+    const submitMatchmaking = () => {
+        setIsProcessing(true);
+        setErrorMsg(null);
+
+        const roomIds = groupsSummary.map((g) => g.room.id);
+
+        router.patch(
+            `/reservas/${reservation.id}/rooms`,
+            { room_ids: roomIds },
+            {
+                preserveScroll: true,
+                onSuccess: (page: any) => {
+                    if (mode === 'assign') {
+                        onClose();
+                        return;
+                    }
+
+                    // mode === 'confirm': tomamos la reserva ya
+                    // actualizada (con reservation_details reales, con
+                    // id) desde la respuesta, y pasamos a pedir precio.
+                    const fresh = (page?.props?.reservations || []).find(
+                        (r: any) => r.id === reservation.id,
+                    );
+
+                    if (fresh) {
+                        setPricingRows(
+                            fresh.details.map((d: any) => ({
+                                detailId: d.id,
+                                roomNumber: d.room?.number ?? String(d.room_id),
+                                price: '',
+                            })),
+                        );
+                        setPhase('pricing');
+                    } else {
+                        setErrorMsg(
+                            'Se guardó la asignación pero no se pudo continuar a precio automáticamente. Cierre y use "Confirmar Reserva" de nuevo.',
+                        );
+                    }
+                },
+                onError: (errs: Record<string, string>) => {
+                    setErrorMsg(Object.values(errs)[0] || 'Error al asignar.');
+                },
+                onFinish: () => setIsProcessing(false),
+            },
+        );
+    };
+
+    const updatePricingRow = (detailId: number, price: string) => {
+        setPricingRows((prev) =>
+            prev.map((row) =>
+                row.detailId === detailId ? { ...row, price } : row,
+            ),
+        );
+    };
+
+    const allPricesEntered =
+        pricingRows.length > 0 &&
+        pricingRows.every((row) => Number(row.price) > 0);
+
+    const submitConfirm = () => {
+        setIsProcessing(true);
+        setErrorMsg(null);
+
+        const assignments = pricingRows.map((row) => {
+            const detail = (reservation.details || []).find(
+                (d: any) => d.id === row.detailId,
+            );
+            return {
+                detail_id: row.detailId,
+                room_id: detail?.room_id,
+                price: Number(row.price),
+            };
+        });
+
+        router.put(
+            `/reservas/${reservation.id}`,
+            { status: 'confirmada', assignments },
+            {
+                preserveScroll: true,
+                onSuccess: () => onClose(),
+                onError: (errs: Record<string, string>) => {
+                    setErrorMsg(Object.values(errs)[0] || 'Error al confirmar.');
+                },
+                onFinish: () => setIsProcessing(false),
+            },
+        );
+    };
 
     if (!show || !reservation) return null;
 
-    const allAssigned = Object.keys(localAssignments).length === reservation.details.length;
-
     return (
-        <>
-            <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-                <div className="flex h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                    
-                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
-                        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                            <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
-                                <BedDouble className="h-5 w-5" />
-                            </div>
-                            ASIGNACIÓN DE HABITACIONES
-                            {isDelegation && (
-                                <span className="ml-2 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 uppercase">
-                                    DELEGACIÓN {hasBreakfast ? '(C/Desayuno)' : '(S/Desayuno)'}
-                                </span>
-                            )}
-                        </h2>
-                        <button onClick={onClose} className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600">
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
+            <div className="flex h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                    <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                        <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
+                            <BedDouble className="h-5 w-5" />
+                        </div>
+                        {phase === 'matchmaking'
+                            ? 'ASIGNAR HABITACIONES'
+                            : 'CONFIRMAR RESERVA / CHECK-IN'}
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
 
+                {errorMsg && (
+                    <div className="flex items-center gap-2 border-b border-red-100 bg-red-50 px-6 py-3 text-sm font-bold text-red-700">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        {errorMsg}
+                    </div>
+                )}
+
+                {phase === 'matchmaking' ? (
                     <div className="flex flex-1 overflow-hidden">
-                        {/* COLUMNA IZQUIERDA: LISTA DE REQUISITOS */}
-                        <div className="flex w-full flex-col border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4 overflow-y-auto">
+                        {/* COLUMNA IZQUIERDA: PERSONAS */}
+                        <div className="flex w-full flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4">
                             <div className="mb-4">
-                                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600">Reserva de</p>
-                                <h3 className="text-sm font-black uppercase text-gray-800">{reservation.guest?.full_name}</h3>
-                                
+                                <p className="text-[11px] font-bold tracking-widest text-gray-600 uppercase">
+                                    Reserva de
+                                </p>
+                                <h3 className="text-sm font-black text-gray-800 uppercase">
+                                    {reservation.guest?.full_name}
+                                </h3>
                                 <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-green-500">
                                     <Calendar className="h-3 w-3" />
-                                    {daysUntilArrival === 0 ? 'Llega Hoy' : 
-                                     daysUntilArrival === 1 ? 'Llega Mañana' : 
-                                     daysUntilArrival < 0 ? 'Reserva Pasada' : 
-                                     `Llega en ${daysUntilArrival} días`}
+                                    {daysUntilArrival === 0
+                                        ? 'Llega Hoy'
+                                        : daysUntilArrival === 1
+                                          ? 'Llega Mañana'
+                                          : daysUntilArrival < 0
+                                            ? 'Reserva Pasada'
+                                            : `Llega en ${daysUntilArrival} días`}
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <label className="mb-2 block text-xs font-bold uppercase text-gray-600">
-                                    Requisitos ({Object.keys(localAssignments).length}/{reservation.details.length})
-                                </label>
-                                
-                                {reservation.details.map((detail: any, idx: number) => {
-                                    const isSelected = currentIndex === idx;
-                                    const isAssigned = localAssignments[idx];
+                            <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-gray-600 uppercase">
+                                <Users className="h-3.5 w-3.5" />
+                                Personas ({totalPeople - unassignedPeople.length}/
+                                {totalPeople} asignadas)
+                            </label>
 
-                                    return (
-                                        <div 
-                                            key={idx}
-                                            onClick={() => setCurrentIndex(idx)}
-                                            className={`cursor-pointer rounded-xl border p-3 transition-colors duration-200 ${
-                                                isSelected 
-                                                ? 'border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1' 
-                                                : isAssigned 
-                                                    ? 'border-gray-200 bg-gray-50 hover:bg-gray-100' 
-                                                    : 'border-dashed border-gray-300 bg-white hover:border-green-300'
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <span className={`text-[11px] font-bold uppercase ${isSelected ? 'text-green-700' : 'text-gray-500'}`}>
-                                                    Petición {idx + 1}
-                                                </span>
-                                                {isAssigned && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                                            </div>
-                                            <div className="mt-1 text-xs font-black text-gray-800 uppercase leading-tight">
-                                                {detail.requested_room_type?.name}
-                                            </div>
-                                            <div className="text-[11px] font-bold text-gray-800 uppercase mt-0.5">
-                                                Baño: {detail.requested_bathroom === 'private' ? 'Privado' : 'Compartido'}
-                                            </div>
-                                            {isAssigned && (
-                                                <div className="mt-2 inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-[12px] font-bold text-green-700 border border-green-200">
-                                                    Hab. {isAssigned.number}
-                                                    {isDelegation && (
-                                                        <span className="text-purple-600">
-                                                            ({calculateDelegationPrice(isAssigned, hasBreakfast)} Bs)
-                                                        </span>
+                            <div className="space-y-2">
+                                {Array.from({ length: totalPeople }, (_, i) => i + 1).map(
+                                    (personIndex) => {
+                                        const assignedRoom = assignedMap[personIndex];
+                                        const isSelected =
+                                            selectedPeople.includes(personIndex);
+
+                                        return (
+                                            <div
+                                                key={personIndex}
+                                                onClick={() =>
+                                                    !assignedRoom &&
+                                                    togglePerson(personIndex)
+                                                }
+                                                className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
+                                                    assignedRoom
+                                                        ? 'border-green-200 bg-green-50'
+                                                        : isSelected
+                                                          ? 'cursor-pointer border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1'
+                                                          : 'cursor-pointer border-dashed border-gray-300 bg-white hover:border-green-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    {!assignedRoom && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() =>
+                                                                togglePerson(
+                                                                    personIndex,
+                                                                )
+                                                            }
+                                                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                                        />
                                                     )}
+                                                    <User className="h-4 w-4 text-gray-400" />
+                                                    <span className="text-xs font-bold text-gray-700 uppercase">
+                                                        Persona {personIndex}
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                                {assignedRoom ? (
+                                                    <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-black text-green-700">
+                                                        Hab. {assignedRoom.number}
+                                                    </span>
+                                                ) : (
+                                                    <CheckCircle2
+                                                        className={`h-4 w-4 ${isSelected ? 'text-green-500' : 'text-gray-200'}`}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    },
+                                )}
                             </div>
                         </div>
 
-                        {/* COLUMNA DERECHA: GRILLA DE HABITACIONES */}
+                        {/* COLUMNA DERECHA: HABITACIONES DISPONIBLES */}
                         <div className="flex flex-1 flex-col bg-gray-50">
-                            <div className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm z-10 flex flex-wrap items-center justify-between gap-4">
+                            <div className="z-10 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
                                 <div>
                                     <h3 className="text-sm font-black text-gray-800 uppercase">
-                                        {activeDetail?.requested_room_type?.name}
+                                        {selectedPeople.length > 0
+                                            ? `Elegir habitación para ${selectedPeople.length} persona(s)`
+                                            : 'Tilde una o más personas a la izquierda'}
                                     </h3>
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                        Filtro: Baño {activeDetail?.requested_bathroom === 'private' ? 'Privado' : activeDetail?.requested_bathroom === 'shared' ? 'Compartido' : 'No especificado'}
+                                    <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                        Mostrando habitaciones con capacidad ≥{' '}
+                                        {Math.max(1, selectedPeople.length)}
                                     </p>
-                                    {isDelegation && (
-                                        <p className="mt-1 text-[10px] font-bold text-purple-600 uppercase">
-                                            💰 Precio por cama: {hasBreakfast ? '90/60 Bs' : '50 Bs'}
-                                        </p>
-                                    )}
                                 </div>
-                                
                                 <div className="relative w-48">
                                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                         <Search className="h-3.5 w-3.5 text-gray-400" />
@@ -338,81 +404,72 @@ export default function AssignRoomsModal({
                                         type="text"
                                         placeholder="BUSCAR HAB..."
                                         value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 pl-9 pr-2 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
+                                        className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 pr-2 pl-9 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-5 relative">
-                                {filteredRooms.length === 0 ? (
-                                    <div className="flex h-full flex-col items-center justify-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300 py-12 shadow-sm">
-                                        <AlertTriangle className="h-12 w-12 opacity-20 mb-3 text-orange-500" />
-                                        <p className="text-xs font-bold uppercase text-center max-w-xs">
-                                            {searchQuery 
-                                                ? `No se encontró "${searchQuery}"` 
-                                                : `No hay habitaciones disponibles para esta fecha con el baño especificado.`}
+                            <div className="relative flex-1 overflow-y-auto p-5">
+                                {selectedPeople.length === 0 ? (
+                                    <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-12 text-gray-400 shadow-sm">
+                                        <Users className="mb-3 h-12 w-12 opacity-20" />
+                                        <p className="max-w-xs text-center text-xs font-bold uppercase">
+                                            Tilde a las personas que van a
+                                            compartir habitación (o solo una)
+                                        </p>
+                                    </div>
+                                ) : filteredRooms.length === 0 ? (
+                                    <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-12 text-gray-400 shadow-sm">
+                                        <AlertTriangle className="mb-3 h-12 w-12 text-orange-500 opacity-20" />
+                                        <p className="max-w-xs text-center text-xs font-bold uppercase">
+                                            No hay habitaciones libres con
+                                            capacidad para{' '}
+                                            {selectedPeople.length} persona(s)
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                                         {filteredRooms.map((room) => {
-                                            const isSelected = localAssignments[currentIndex]?.id === room.id;
-                                            
-                                            const priceInfo = getRoomPriceInfo(room);
-                                            const roomBath = priceInfo?.bathroom_type || 'N/A';
-                                            const translatedBath = roomBath.toLowerCase().includes('private') ? 'Privado' : roomBath.toLowerCase().includes('shared') ? 'Compartido' : roomBath;
-                                            
-                                            // 🌟 CÁLCULO DE PRECIO SEGÚN TIPO DE RESERVA
-                                            const roomPrice = isDelegation 
-                                                ? calculateDelegationPrice(room, hasBreakfast) 
-                                                : (priceInfo?.amount || 0);
-                                            
-                                            const roomStatus = room.status?.toUpperCase() || 'DESCONOCIDO';
-                                            const isFree = roomStatus === 'LIBRE' || roomStatus === 'DISPONIBLE';
-                                            const isOccupied = roomStatus === 'OCUPADO';
-                                            
-                                            const statusBadgeColor = isFree ? 'bg-green-100 text-green-700 border-green-200' :
-                                                                     isOccupied ? 'bg-red-100 text-red-700 border-red-200' :
-                                                                     'bg-orange-100 text-orange-700 border-orange-200';
+                                            const roomStatus =
+                                                room.status?.toUpperCase() ||
+                                                'DESCONOCIDO';
+                                            const isFree =
+                                                roomStatus === 'LIBRE' ||
+                                                roomStatus === 'DISPONIBLE';
+                                            const badgeColor = isFree
+                                                ? 'bg-green-100 text-green-700 border-green-200'
+                                                : 'bg-orange-100 text-orange-700 border-orange-200';
 
                                             return (
                                                 <button
                                                     key={room.id}
-                                                    onClick={() => handleSelectRoom(room)}
-                                                    className={`group relative flex flex-col items-center justify-center text-center outline-none border-2 rounded-xl p-4 transition-all duration-200 ${
-                                                        isSelected 
-                                                        ? 'border-green-500 bg-green-50 shadow-md scale-105 ring-2 ring-green-200 ring-offset-1' 
-                                                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 shadow-sm'
-                                                    }`}
+                                                    onClick={() =>
+                                                        assignRoomToSelected(room)
+                                                    }
+                                                    className="group relative flex flex-col items-center justify-center rounded-xl border-2 border-gray-200 bg-white p-4 text-center shadow-sm transition-all duration-200 hover:border-green-300 hover:bg-green-50"
                                                 >
-                                                    {isSelected && (
-                                                        <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
-                                                            <CheckCircle2 className="w-3 h-3" />
-                                                        </div>
-                                                    )}
-                                                    
-                                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                                                        {room.room_type?.name || activeDetail?.requested_room_type?.name}
+                                                    <span className="mb-1 text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                                        {room.room_type?.name ||
+                                                            'Habitación'}
                                                     </span>
-                                                    
-                                                    <span className={`text-3xl font-black ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>
+                                                    <span className="text-3xl font-black text-gray-800">
                                                         {room.number}
                                                     </span>
-
-                                                    <div className="flex flex-col gap-1 mt-2 w-full px-2">
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase w-full ${statusBadgeColor}`}>
+                                                    <div className="mt-2 flex w-full flex-col gap-1 px-2">
+                                                        <span
+                                                            className={`w-full rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${badgeColor}`}
+                                                        >
                                                             {roomStatus}
                                                         </span>
-                                                        
-                                                        <div className="flex items-center justify-center gap-1.5">
-                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200">
-                                                                Baño {translatedBath}
-                                                            </span>
-                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isDelegation ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                                Bs {roomPrice}
-                                                            </span>
-                                                        </div>
+                                                        <span className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-bold text-gray-600">
+                                                            Capacidad{' '}
+                                                            {getRoomCapacity(
+                                                                room,
+                                                            )}
+                                                        </span>
                                                     </div>
                                                 </button>
                                             );
@@ -422,114 +479,107 @@ export default function AssignRoomsModal({
                             </div>
                         </div>
                     </div>
+                ) : (
+                    /* ============ FASE PRECIO ============ */
+                    <div className="flex-1 overflow-y-auto p-6">
+                        <p className="mb-4 text-sm font-medium text-gray-600">
+                            Ingrese el precio real a cobrar por cada habitación de{' '}
+                            <strong className="text-gray-900">
+                                {reservation.guest?.full_name}
+                            </strong>
+                            . Al confirmar, se crea el registro oficial de
+                            Check-in.
+                        </p>
 
-                    <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-                        <button onClick={onClose} className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50">
+                        <div className="space-y-3">
+                            {pricingRows.map((row) => (
+                                <div
+                                    key={row.detailId}
+                                    className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <BedDouble className="h-5 w-5 text-green-500" />
+                                        <span className="text-sm font-black text-gray-800 uppercase">
+                                            Habitación {row.roomNumber}
+                                        </span>
+                                    </div>
+                                    <div className="relative w-36">
+                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-bold text-gray-400">
+                                            Bs
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.10"
+                                            value={row.price}
+                                            onChange={(e) =>
+                                                updatePricingRow(
+                                                    row.detailId,
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            className="w-full rounded-lg border-2 border-gray-300 bg-white py-2 pr-2 pl-9 text-right text-sm font-black text-gray-900 focus:border-green-500 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                    {phase === 'pricing' && mode === 'confirm' && !isRoomAlreadyAssigned(reservation) ? (
+                        <button
+                            onClick={() => setPhase('matchmaking')}
+                            className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
+                        >
+                            <Undo2 className="h-4 w-4" /> Volver a asignar
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onClose}
+                            className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
                             Cancelar
                         </button>
+                    )}
+
+                    {phase === 'matchmaking' ? (
                         <button
-                            onClick={() => setShowSummary(true)}
-                            disabled={!allAssigned}
-                            className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white shadow-md hover:bg-green-500 disabled:opacity-50"
+                            onClick={submitMatchmaking}
+                            disabled={!allPeopleAssigned || isProcessing}
+                            className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {allAssigned ? 'Revisar y Guardar' : 'Faltan Habitaciones'} 
-                            {allAssigned && <ArrowRight className="h-4 w-4" />}
+                            {isProcessing ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Save className="h-4 w-4" />
+                            )}
+                            {allPeopleAssigned
+                                ? mode === 'assign'
+                                    ? 'Guardar Asignación'
+                                    : 'Continuar a Precio'
+                                : `Faltan ${unassignedPeople.length} persona(s)`}
                         </button>
-                    </div>
+                    ) : (
+                        <button
+                            onClick={submitConfirm}
+                            disabled={!allPricesEntered || isProcessing}
+                            className="flex items-center gap-2 rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isProcessing ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <CheckCircle2 className="h-4 w-4" />
+                            )}
+                            {allPricesEntered
+                                ? 'Confirmar Entrada del Huésped'
+                                : 'Falta ingresar precio'}
+                        </button>
+                    )}
                 </div>
             </div>
-
-            {/* ========================================== */}
-            {/* 🛡️ PANTALLA DE RESUMEN Y CONFIRMACIÓN     */}
-            {/* ========================================== */}
-            {showSummary && (
-                <div className="fixed inset-0 z-[60] flex animate-in items-center justify-center bg-black/70 p-4 backdrop-blur-sm duration-200 zoom-in-95 fade-in">
-                    <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-                        
-                        <div className="border-b border-gray-100 bg-gray-50 px-6 py-4">
-                            <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                                <Save className="h-5 w-5 text-green-600" />
-                                RESUMEN DE ASIGNACIÓN
-                                {isDelegation && (
-                                    <span className="ml-2 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 uppercase">
-                                        DELEGACIÓN
-                                    </span>
-                                )}
-                            </h2>
-                        </div>
-
-                        <div className="p-6">
-                            <p className="mb-4 text-base font-medium text-gray-600">
-                                Estás a punto de asignar estas habitaciones para la reserva de <strong className="text-gray-900">{reservation.guest?.full_name}</strong>.
-                            </p>
-
-                            <div className="space-y-3 max-h-64 overflow-y-auto">
-                                {reservation.details.map((detail: any, idx: number) => {
-                                    const assignedRoom = localAssignments[idx];
-                                    
-                                    const priceInfo = getRoomPriceInfo(assignedRoom);
-                                    const roomBath = priceInfo?.bathroom_type || detail.requested_bathroom;
-                                    const translatedBath = roomBath?.toLowerCase().includes('private') ? 'Privado' : 'Compartido';
-
-                                    // 🌟 CALCULAR PRECIO FINAL PARA EL RESUMEN
-                                    const finalPrice = isDelegation 
-                                        ? calculateDelegationPrice(assignedRoom, hasBreakfast) 
-                                        : (priceInfo?.amount || 0);
-
-                                    return (
-                                        <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4">
-                                            <div>
-                                                <div className="text-[13px] font-bold uppercase text-gray-800">
-                                                    Requisito #{idx + 1}
-                                                </div>
-                                                <div className="text-base font-black uppercase text-gray-800">
-                                                    {detail.requested_room_type?.name}
-                                                </div>
-                                                <div className="text-[11px] font-bold text-gray-600 uppercase mt-0.5">
-                                                    Baño: {translatedBath}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-3">
-                                                <ArrowRight className="h-5 w-5 text-gray-300" />
-                                                <div className="text-right">
-                                                    <div className="text-[10px] font-bold uppercase text-green-600">
-                                                        Asignada
-                                                    </div>
-                                                    <div className="text-xl font-black text-gray-900">
-                                                        Hab. {assignedRoom?.number || '?'}
-                                                    </div>
-                                                    {isDelegation && (
-                                                        <div className="text-[11px] font-bold text-purple-600 mt-0.5">
-                                                            {finalPrice} Bs/noche
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-                            <button 
-                                onClick={() => setShowSummary(false)}
-                                className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-95"
-                            >
-                                <Undo2 className="h-4 w-4" /> Retroceder
-                            </button>
-                            <button 
-                                onClick={submitFinal}
-                                disabled={isProcessing}
-                                className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {isProcessing ? 'Guardando...' : 'Confirmar Asignación'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </> 
+        </div>
     );
 }
