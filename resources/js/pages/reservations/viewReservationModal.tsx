@@ -332,7 +332,7 @@ export default function ViewReservationModal({
                             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-green-500" />
                             <input
                                 type="text"
-                                placeholder="Buscar huésped o CI..."
+                                placeholder="Buscar al Solicitante"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-64 rounded-2xl border-gray-700 bg-gray-800 py-3 pr-4 pl-10 text-white placeholder-gray-400 shadow-lg transition-all focus:border-green-500 focus:ring-green-500 lg:w-80"

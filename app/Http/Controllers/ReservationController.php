@@ -171,11 +171,21 @@ class ReservationController extends Controller
                 $specialAgreementId = null;
 
                 if (in_array($typeRequest, ['corporativo', 'delegacion'])) {
+                    // El nombre de la empresa/delegación es opcional en el
+                    // form -- si se deja vacío, el convenio quedaba SIN
+                    // nombre (company_name null), invisible para el libro
+                    // mayor (SpecialAgreement::scopeGroupAccounts() exige
+                    // company_name no nulo). Para corporativo/delegación el
+                    // solicitante (guest) YA ES la empresa/institución (ej.
+                    // "FUTBOL SUCRE LIGA VARONES"), así que sirve de
+                    // fallback: nunca más nace sin nombre.
+                    $companyName = $request->filled('company_name')
+                        ? $request->input('company_name')
+                        : (\App\Models\Guest::find($guestId)->full_name ?? null);
+
                     $agreement = \App\Models\SpecialAgreement::create([
                         'type' => $typeRequest,
-                        'company_name' => $request->filled('company_name')
-                            ? $request->input('company_name')
-                            : null,
+                        'company_name' => $companyName,
                         'agreed_price' => 0,
                         'payment_frequency_days' => 0,
                     ]);
@@ -567,9 +577,12 @@ class ReservationController extends Controller
                     $tipoTratoNuevo = $typeRequest ?? ($request->boolean('is_delegation') ? 'delegacion' : 'corporativo');
                     $frecuenciaDias = (int) $request->input('corporate_days', 0);
                     $agreedPrice = $request->input('agreed_price', 0);
+                    // Mismo fallback que store(): sin nombre manual, se usa
+                    // el del guest solicitante -- nunca nace/queda sin
+                    // nombre (ver comentario largo en store()).
                     $companyName = $request->filled('company_name')
                         ? $request->input('company_name')
-                        : null;
+                        : ($reservation->guest->full_name ?? null);
 
                     $hadSpecialAgreement = !is_null($reservation->special_agreement_id);
 
@@ -598,14 +611,60 @@ class ReservationController extends Controller
                     }
 
                     // Actualizamos los datos base de la reserva omitiendo is_corporate/is_delegation
+                    // 🐛 'advance_payment' NO es una columna real (es un
+                    // accessor sobre payments) -- mandarla acá se
+                    // descartaba en silencio. El registro real del
+                    // adelanto pasa por el bloque de abajo.
                     $reservation->update([
                         'arrival_date' => $request->arrival_date ?? $reservation->arrival_date,
                         'duration_days' => $request->duration_days ?? $reservation->duration_days,
                         'guest_count' => $request->guest_count ?? $reservation->guest_count,
-                        'advance_payment' => $request->advance_payment ?? $reservation->advance_payment,
                         'special_agreement_id' => $reservation->special_agreement_id,
                         'status' => 'pendiente' // Forzamos pendiente porque se acaba de editar
                     ]);
+
+                    // 🐛 BUG DE DINERO CORREGIDO: esta rama recibía
+                    // payment_type/advance_payment/operator_id del form
+                    // (mismos campos que store()) pero nunca creaba el
+                    // Payment -- el dinero entraba a caja y no quedaba
+                    // registrado. advance_payment es el TOTAL deseado (el
+                    // form lo precarga con el total actual al abrir el
+                    // modal), no un incremento -- así que se cobra solo la
+                    // DIFERENCIA contra Reservation::advance_payment (el
+                    // accessor real, suma de Payments ADELANTO). Sin este
+                    // delta, reenviar el formulario sin tocar el monto
+                    // duplicaría el pago cada vez que se edita cualquier
+                    // otro campo.
+                    $montoTotalDeseado = round((float) $request->input('advance_payment', 0), 2);
+                    $montoYaRegistrado = round((float) $reservation->advance_payment, 2);
+                    $delta = round($montoTotalDeseado - $montoYaRegistrado, 2);
+
+                    if ($delta > 0) {
+                        $operatorId = $request->filled('operator_id') ? (int) $request->operator_id : null;
+                        $paymentType = $request->input('payment_type');
+
+                        if (empty($operatorId) || !in_array($paymentType, ['EFECTIVO', 'QR'], true)) {
+                            throw new \Exception('Debe seleccionar un operador y el método de pago para registrar el nuevo adelanto.');
+                        }
+
+                        // Mismo patrón que store(): apertura silenciosa,
+                        // NO Auth::id() (Terminal Compartida).
+                        $cajaAbierta = $this->findOpenShift($operatorId);
+
+                        \App\Models\Payment::create([
+                            'reservation_id' => $reservation->id,
+                            'user_id' => Auth::id(),
+                            'operator_id' => $operatorId,
+                            'cash_register_id' => $cajaAbierta->id,
+                            'amount' => $delta,
+                            'method' => $paymentType,
+                            'bank_name' => ($paymentType === 'EFECTIVO') ? null : $request->input('qr_bank'),
+                            'type' => 'ADELANTO',
+                            'payment_date' => now(),
+                        ]);
+
+                        Log::info("Adelanto adicional de Bs {$delta} registrado al editar la Reserva #{$reservation->id}.");
+                    }
 
                     // Sincronizamos las Habitaciones (Detalles)
                     if ($request->has('details')) {
