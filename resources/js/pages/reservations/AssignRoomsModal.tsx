@@ -39,6 +39,12 @@ interface AssignRoomsModalProps {
 const getRoomCapacity = (room: any): number =>
     room.room_type?.capacity || room.roomType?.capacity || 1;
 
+const getRoomTypeId = (room: any): string =>
+    String(room.room_type?.id ?? room.roomType?.id ?? '');
+
+const getRoomTypeName = (room: any): string =>
+    room.room_type?.name ?? room.roomType?.name ?? 'Sin tipo';
+
 const isRoomAlreadyAssigned = (reservation: any): boolean =>
     (reservation?.details || []).length > 0 &&
     reservation.details.every((d: any) => d.room_id !== null);
@@ -95,6 +101,8 @@ export default function AssignRoomsModal({
         number | null
     >(null);
     const [searchQuery, setSearchQuery] = useState('');
+    // Filtro por tipo de habitación en el grid de la derecha -- '' = todos.
+    const [roomTypeFilter, setRoomTypeFilter] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -119,6 +127,7 @@ export default function AssignRoomsModal({
         if (!show || !reservation) return;
 
         setSearchQuery('');
+        setRoomTypeFilter('');
         setIsProcessing(false);
         setErrorMsg(null);
         setSelectedPeople([]);
@@ -188,6 +197,26 @@ export default function AssignRoomsModal({
         [assignedMap],
     );
 
+    // Tipos de habitación presentes entre las disponibles, para el
+    // selector del filtro -- únicos, en el mismo orden en que se crearon
+    // (id ascendente, igual que en el resto del sistema: SIMPLE, DOBLE,
+    // TRIPLE...), no alfabético. "SALON" queda afuera a propósito: es un
+    // salón de eventos (capacidad 150), no una habitación asignable a un
+    // huésped en este matchmaking.
+    const roomTypeOptions = useMemo(() => {
+        const byId = new Map<string, { id: number; name: string }>();
+        availableRooms.forEach((room) => {
+            const rawId = room.room_type?.id ?? room.roomType?.id;
+            if (!rawId || byId.has(String(rawId))) return;
+
+            const name = getRoomTypeName(room);
+            if (name.trim().toUpperCase() === 'SALON') return;
+
+            byId.set(String(rawId), { id: Number(rawId), name });
+        });
+        return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+    }, [availableRooms]);
+
     // Filtro en vivo: capacidad >= cantidad de personas tildadas ahora mismo.
     // Se muestran en orden de número de habitación (natural: "2" antes que
     // "10"), no en el orden en que llegó el prop desde el backend.
@@ -210,6 +239,10 @@ export default function AssignRoomsModal({
                     return false;
                 }
 
+                if (roomTypeFilter && getRoomTypeId(room) !== roomTypeFilter) {
+                    return false;
+                }
+
                 if (searchQuery) {
                     const query = searchQuery.toLowerCase().trim();
                     if (!String(room.number).toLowerCase().includes(query)) {
@@ -225,7 +258,14 @@ export default function AssignRoomsModal({
                     sensitivity: 'base',
                 }),
             );
-    }, [availableRooms, usedRoomIds, selectedPeople, daysUntilArrival, searchQuery]);
+    }, [
+        availableRooms,
+        usedRoomIds,
+        selectedPeople,
+        daysUntilArrival,
+        roomTypeFilter,
+        searchQuery,
+    ]);
 
     const unassignedPeople = useMemo(() => {
         const people: number[] = [];
@@ -633,19 +673,47 @@ export default function AssignRoomsModal({
                                         {Math.max(1, selectedPeople.length)}
                                     </p>
                                 </div>
-                                <div className="relative w-48">
-                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                        <Search className="h-3.5 w-3.5 text-gray-400" />
+                                <div className="flex items-center gap-2">
+                                    <div className="relative w-40">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <BedDouble className="h-3.5 w-3.5 text-gray-400" />
+                                        </div>
+                                        <select
+                                            value={roomTypeFilter}
+                                            onChange={(e) =>
+                                                setRoomTypeFilter(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 py-0 pr-2 pl-9 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
+                                        >
+                                            <option value="">
+                                                Todos los tipos
+                                            </option>
+                                            {roomTypeOptions.map((rt) => (
+                                                <option
+                                                    key={rt.id}
+                                                    value={rt.id}
+                                                >
+                                                    {rt.name}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <input
-                                        type="text"
-                                        placeholder="BUSCAR HAB..."
-                                        value={searchQuery}
-                                        onChange={(e) =>
-                                            setSearchQuery(e.target.value)
-                                        }
-                                        className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 pr-2 pl-9 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
-                                    />
+                                    <div className="relative w-40">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Search className="h-3.5 w-3.5 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="BUSCAR HAB..."
+                                            value={searchQuery}
+                                            onChange={(e) =>
+                                                setSearchQuery(e.target.value)
+                                            }
+                                            className="h-8 w-full rounded-lg border-gray-200 bg-gray-50 pr-2 pl-9 text-[10px] font-bold text-gray-900 uppercase focus:border-green-500 focus:ring-green-500"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -665,7 +733,20 @@ export default function AssignRoomsModal({
                                             No hay habitaciones libres con
                                             capacidad para{' '}
                                             {selectedPeople.length} persona(s)
+                                            {roomTypeFilter &&
+                                                ' con ese tipo de habitación'}
                                         </p>
+                                        {roomTypeFilter && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setRoomTypeFilter('')
+                                                }
+                                                className="mt-3 text-[10px] font-black text-green-600 uppercase underline"
+                                            >
+                                                Quitar filtro de tipo
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
