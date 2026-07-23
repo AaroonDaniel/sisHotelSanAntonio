@@ -65,7 +65,6 @@ interface ReservationFormData {
     is_new_guest: boolean;
     guest_id: string;
     new_guest_name: string;
-    new_guest_ci: string;
     guest_count: number | '';
     arrival_date: string;
     duration_days: number;
@@ -99,7 +98,6 @@ export default function ReservationModal({
     // --- BUSCADOR DE HUÉSPED ---
     const [guestQuery, setGuestQuery] = useState('');
     const [isGuestDropdownOpen, setIsGuestDropdownOpen] = useState(false);
-    const [showNewGuestForm, setShowNewGuestForm] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const [availabilityData, setAvailabilityData] = useState<any>(null);
@@ -120,7 +118,6 @@ export default function ReservationModal({
         is_new_guest: false,
         guest_id: '',
         new_guest_name: '',
-        new_guest_ci: '',
         guest_count: 1,
         arrival_date: new Date().toISOString().split('T')[0],
         duration_days: 1,
@@ -149,22 +146,25 @@ export default function ReservationModal({
             guest_id: guest.id.toString(),
             is_new_guest: false,
             new_guest_name: '',
-            new_guest_ci: '',
         }));
         setGuestQuery(guest.full_name || `${guest.name} ${guest.last_name}`);
         setIsGuestDropdownOpen(false);
-        setShowNewGuestForm(false);
     };
 
-    const startNewGuest = () => {
+    // Sin paso de confirmación: apenas se escribe un nombre que no
+    // coincide con nadie, ya queda armado como huésped nuevo con ese
+    // nombre -- si el usuario en cambio clickea una coincidencia de la
+    // lista, selectGuest() lo pisa. Solo hace falta clickear algo cuando
+    // SÍ existe y se quiere reutilizar.
+    const handleQueryChange = (val: string) => {
+        setGuestQuery(val);
+        setIsGuestDropdownOpen(true);
         setData((prev) => ({
             ...prev,
             guest_id: '',
-            is_new_guest: true,
-            new_guest_name: guestQuery,
+            is_new_guest: val.trim().length > 0,
+            new_guest_name: val,
         }));
-        setShowNewGuestForm(true);
-        setIsGuestDropdownOpen(false);
     };
 
     // Cierra el dropdown al hacer click afuera.
@@ -207,7 +207,6 @@ export default function ReservationModal({
                 guest_id: String(reservationToEdit.guest_id || ''),
                 is_new_guest: false,
                 new_guest_name: '',
-                new_guest_ci: '',
                 arrival_date: reservationToEdit.arrival_date || '',
                 duration_days: Number(reservationToEdit.duration_days || 1),
                 guest_count: Number(reservationToEdit.guest_count || 1),
@@ -225,7 +224,6 @@ export default function ReservationModal({
                         `${reservationToEdit.guest.name} ${reservationToEdit.guest.last_name}`,
                 );
             }
-            setShowNewGuestForm(false);
         } else if (show && !reservationToEdit) {
             const today = new Date();
             const yyyy = today.getFullYear();
@@ -240,7 +238,6 @@ export default function ReservationModal({
             reset();
             clearErrors();
             setGuestQuery('');
-            setShowNewGuestForm(false);
         }
     }, [show, reservationToEdit]);
 
@@ -282,7 +279,6 @@ export default function ReservationModal({
             is_new_guest: currentData.is_new_guest,
             guest_id: currentData.guest_id,
             new_guest_name: currentData.new_guest_name,
-            new_guest_ci: currentData.new_guest_ci,
             guest_count: Number(currentData.guest_count),
             arrival_date: currentData.arrival_date,
             duration_days: currentData.duration_days,
@@ -389,22 +385,14 @@ export default function ReservationModal({
                             </div>
                             <input
                                 type="text"
-                                placeholder="Buscar por nombre o CI..."
+                                placeholder="Buscar por nombre o CI"
                                 className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
                                 value={guestQuery}
-                                onChange={(e) => {
-                                    const val = e.target.value.toUpperCase();
-                                    setGuestQuery(val);
-                                    setIsGuestDropdownOpen(true);
-                                    setShowNewGuestForm(false);
-                                    if (data.guest_id || data.is_new_guest) {
-                                        setData((prev) => ({
-                                            ...prev,
-                                            guest_id: '',
-                                            is_new_guest: false,
-                                        }));
-                                    }
-                                }}
+                                onChange={(e) =>
+                                    handleQueryChange(
+                                        e.target.value.toUpperCase(),
+                                    )
+                                }
                                 onFocus={() => {
                                     if (guestQuery.length > 0)
                                         setIsGuestDropdownOpen(true);
@@ -412,65 +400,36 @@ export default function ReservationModal({
                             />
                         </div>
 
-                        {isGuestDropdownOpen && guestQuery.length > 0 && (
-                            <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
-                                {filteredGuests.map((g) => (
-                                    <div
-                                        key={g.id}
-                                        onClick={() => selectGuest(g)}
-                                        className="cursor-pointer border-b px-4 py-2.5 transition-colors hover:bg-green-50"
-                                    >
-                                        <div className="text-sm font-bold text-gray-800 uppercase">
-                                            {g.full_name ||
-                                                `${g.name} ${g.last_name}`}
+                        {isGuestDropdownOpen &&
+                            guestQuery.length > 0 &&
+                            filteredGuests.length > 0 && (
+                                <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
+                                    {filteredGuests.map((g) => (
+                                        <div
+                                            key={g.id}
+                                            onClick={() => selectGuest(g)}
+                                            className="cursor-pointer border-b px-4 py-2.5 transition-colors hover:bg-green-50"
+                                        >
+                                            <div className="text-sm font-bold text-gray-800 uppercase">
+                                                {g.full_name ||
+                                                    `${g.name} ${g.last_name}`}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500">
+                                                CI:{' '}
+                                                {g.identification_number ||
+                                                    'S/N'}
+                                            </div>
                                         </div>
-                                        <div className="text-[10px] text-gray-500">
-                                            CI:{' '}
-                                            {g.identification_number || 'S/N'}
-                                        </div>
-                                    </div>
-                                ))}
-                                <div
-                                    onClick={startNewGuest}
-                                    className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-bold text-green-700 transition-colors hover:bg-green-50"
-                                >
-                                    <UserPlus className="h-4 w-4" />
-                                    Crear huésped nuevo: "{guestQuery}"
+                                    ))}
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        
-
-                        {/* Mini-formulario de alta rápida */}
-                        {showNewGuestForm && (
-                            <div className="mt-2 space-y-2 rounded-xl border border-green-200 bg-green-50 p-3">
-                                <p className="flex items-center gap-1 text-xs font-bold text-green-700">
-                                    <UserPlus className="h-3.5 w-3.5" />
-                                    Huésped nuevo
-                                </p>
-                                <input
-                                    type="text"
-                                    placeholder="Nombre completo"
-                                    value={data.new_guest_name}
-                                    onChange={(e) =>
-                                        setData(
-                                            'new_guest_name',
-                                            e.target.value.toUpperCase(),
-                                        )
-                                    }
-                                    className="w-full rounded-lg border border-green-300 py-2 text-sm font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="CI (opcional)"
-                                    value={data.new_guest_ci}
-                                    onChange={(e) =>
-                                        setData('new_guest_ci', e.target.value)
-                                    }
-                                    className="w-full rounded-lg border border-green-300 py-2 text-sm font-bold text-gray-700 focus:border-green-500 focus:ring-green-500"
-                                />
-                            </div>
+                        {data.is_new_guest && (
+                            <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-green-700">
+                                <UserPlus className="h-3.5 w-3.5" />
+                                Se registrará como huésped nuevo: "
+                                {data.new_guest_name}"
+                            </p>
                         )}
                         {errors.guest_id && (
                             <p className="mt-1 text-xs font-bold text-red-600">

@@ -48,7 +48,10 @@ class Reservation extends Model
     }
     public function getAdvancePaymentAttribute()
     {
-        return $this->payments()->where('type', 'ADELANTO')->sum('amount') ?? 0;
+        // sum() sobre un decimal de Postgres devuelve string vía PDO — sin
+        // el cast, el frontend recibe "150.00" en vez de 150 y revienta
+        // cualquier .toFixed() (ver CancelModal).
+        return (float) $this->payments()->where('type', 'ADELANTO')->sum('amount');
     }
 
     // 🚀 REDISEÑO: la reserva ya no fija payment_type propio (columna

@@ -77,7 +77,7 @@ export default function CancelModal({
                     <p className="text-gray-500">
                         Esta acción liberará las habitaciones asignadas inmediatamente.
                         {hasAdvance &&
-                            ` Esta reserva tiene un adelanto de ${advanceAmount.toFixed(2)} Bs que se devolverá.`}
+                            ` Esta reserva tiene un adelanto de ${Number(advanceAmount).toFixed(2)} Bs que se devolverá.`}
                         {' '}¿Estás seguro de continuar?
                     </p>
 

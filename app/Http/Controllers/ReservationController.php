@@ -138,7 +138,14 @@ class ReservationController extends Controller
                 if ($request->is_new_guest) {
                     $newGuest = \App\Models\Guest::create([
                         'full_name' => strtoupper($request->new_guest_name),
-                        'identification_number' => $request->new_guest_ci ?? null,
+                        // 🐛 guests.identification_number tiene UNIQUE: '' no
+                        // es lo mismo que NULL para Postgres, así que dos
+                        // huéspedes nuevos sin CI (huésped/grupo nuevo, solo
+                        // con nombre) chocaban contra el índice. filled()
+                        // trata '' igual que ausente -> NULL real.
+                        'identification_number' => $request->filled('new_guest_ci')
+                            ? $request->new_guest_ci
+                            : null,
                         'nationality' => 'BOLIVIA', // Adaptado a mayúsculas como en el resto de tu sistema
                         'profile_status' => 'INCOMPLETE',
                     ]);
@@ -415,26 +422,25 @@ class ReservationController extends Controller
                     // separadas: ReservationController::assignRooms(),
                     // ahora eliminado, y esta rama). El frontend manda,
                     // junto con el cambio de estado, un array
-                    // `assignments` con la habitación física y el precio
-                    // real que tecleó el recepcionista para cada detalle.
-                    // room_id se guarda en el detalle SOLO como
-                    // puente/historial (reservation_details.price ya no
-                    // existe) — el precio real vive únicamente en el
-                    // Checkin que se crea más abajo.
+                    // `assignments` con la habitación física de cada
+                    // detalle -- SIN precio: la reserva ya no designa
+                    // precio en ningún momento, el Checkin nace con
+                    // agreed_price=0 y se completa después al editar la
+                    // estadía (CheckinController::update()), que es donde
+                    // se ve si el adelanto cubre o no. room_id se guarda en
+                    // el detalle solo como puente/historial.
                     $assignments = $request->input('assignments', []);
 
                     if (empty($assignments)) {
-                        throw new \Exception('Debe asignar habitación y precio a cada detalle antes de confirmar.');
+                        throw new \Exception('Debe asignar habitación a cada detalle antes de confirmar.');
                     }
 
-                    $precioPorDetailId = [];
                     foreach ($assignments as $assignment) {
                         $detailId = $assignment['detail_id'] ?? null;
                         $roomId = $assignment['room_id'] ?? null;
-                        $price = $assignment['price'] ?? null;
 
-                        if (!$detailId || !$roomId || $price === null || $price === '') {
-                            throw new \Exception('Cada asignación debe incluir detalle, habitación y precio.');
+                        if (!$detailId || !$roomId) {
+                            throw new \Exception('Cada asignación debe incluir detalle y habitación.');
                         }
 
                         $detail = $reservation->details->firstWhere('id', (int) $detailId);
@@ -443,7 +449,6 @@ class ReservationController extends Controller
                         }
 
                         $detail->update(['room_id' => $roomId]);
-                        $precioPorDetailId[(int) $detailId] = (float) $price;
                     }
 
                     $reservation->unsetRelation('details');
@@ -477,6 +482,7 @@ class ReservationController extends Controller
 
                     $reservation->update(['status' => 'confirmada']);
                     $primerCheckinId = null;
+                    $checkinIdPorDetailId = [];
                     Log::info("✅ Reserva confirmada. Creando check-ins para cada habitación asignada... #{$reservation->id}");
 
                     foreach ($reservation->details as $index => $detail) {
@@ -501,18 +507,19 @@ class ReservationController extends Controller
                             'status' => 'activo',
                             'is_temporary' => true,
                             'notes' => $notaAsignacion,
-                            // 🚀 REDISEÑO: el precio real llega en el
-                            // Request (assignments[].price), tecleado por
-                            // el recepcionista al confirmar — ya no se lee
-                            // de reservation_details.price (columna
-                            // eliminada).
-                            'agreed_price' => $precioPorDetailId[$detail->id] ?? 0,
+                            // 🚀 REDISEÑO: la reserva ya no designa precio en
+                            // ningún momento -- nace en 0 y se completa
+                            // después al editar la estadía
+                            // (CheckinController::update()), que es donde se
+                            // ve si el adelanto ya recibido cubre o no.
+                            'agreed_price' => 0,
                             // Enlazar el acuerdo financiero y omitir la columna vieja 'agreed_price'
                             'special_agreement_id' => $reservation->special_agreement_id,
                         ]);
 
                         Log::info("Check-in Temporal creado (ID: {$checkin->id}) para la Habitación ID: {$detail->room_id}.");
                         $checkinIds[] = $checkin->id;
+                        $checkinIdPorDetailId[$detail->id] = $checkin->id;
                         if ($index === 0) {
                             $primerCheckinId = $checkin->id;
                         }
@@ -522,17 +529,28 @@ class ReservationController extends Controller
 
                     $pagos = Payment::where('reservation_id', $reservation->id)->get();
 
-                    if ($primerCheckinId && $pagos->isNotEmpty()) {
+                    // A qué Checkin se le atribuye el adelanto ya cobrado:
+                    // el que eligió el recepcionista (advance_detail_id,
+                    // solo tiene sentido con 2+ habitaciones en una reserva
+                    // normal -- en corporativo/delegación esto no aplica,
+                    // ese dinero se sigue viendo a nivel de special_agreement)
+                    // o el primero si no vino nada (caso de 1 sola habitación).
+                    $advanceDetailId = $request->input('advance_detail_id');
+                    $checkinIdParaAdelanto = ($advanceDetailId && isset($checkinIdPorDetailId[(int) $advanceDetailId]))
+                        ? $checkinIdPorDetailId[(int) $advanceDetailId]
+                        : $primerCheckinId;
+
+                    if ($checkinIdParaAdelanto && $pagos->isNotEmpty()) {
                         foreach ($pagos as $pago) {
                             $pago->update([
-                                'checkin_id'     => $primerCheckinId,
+                                'checkin_id'     => $checkinIdParaAdelanto,
                                 'reservation_id' => null,
                             ]);
                         }
 
                         $totalPagos = $pagos->sum('amount');
 
-                        Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in Principal ID: {$primerCheckinId}.");
+                        Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in ID: {$checkinIdParaAdelanto}.");
                     }
                 }
 

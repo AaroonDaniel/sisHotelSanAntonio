@@ -5,14 +5,12 @@ import RejectPaymentModal from '@/components/rejectPaymentModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
-    AlertCircle,
     ArrowLeft,
     BedDouble,
     Calendar,
     CalendarDays,
     CheckCircle2,
     ChevronLeft,
-    Clock,
     ExternalLink,
     FileImage,
     Globe,
@@ -126,6 +124,19 @@ export default function ViewReservationModal({
             ),
         [filteredReservations],
     );
+
+    // 🚀 REDISEÑO: las tablas 1 y 2 se fusionaron en un solo listado.
+    // Primero las reservas sin asignar (requieren acción), después las
+    // asignadas. Dentro de cada grupo, por fecha de llegada ascendente.
+    const allReservations = useMemo(() => {
+        const byArrival = (a: any, b: any) =>
+            new Date(a.arrival_date).getTime() -
+            new Date(b.arrival_date).getTime();
+        return [
+            ...[...pendingAssignment].sort(byArrival),
+            ...[...readyForCheckin].sort(byArrival),
+        ];
+    }, [pendingAssignment, readyForCheckin]);
 
     // ==========================================
     // 💻 VISTA PANTALLA COMPLETA: VERIFICACIÓN ONLINE
@@ -339,206 +350,90 @@ export default function ViewReservationModal({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:gap-8 xl:grid-cols-5">
-                    {/* TABLA 1: RESERVAS REGISTRADAS (sin habitación asignada todavía) */}
-                    <section className="flex h-full flex-col xl:col-span-2">
-                        <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
-                            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
-                                <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-orange-500 uppercase">
-                                    <Clock className="h-5 w-5" /> 1. Reservas
-                                    Registradas ({pendingAssignment.length})
-                                </h2>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto bg-white">
-                                {pendingAssignment.length === 0 ? (
-                                    <div className="flex h-full flex-col items-center justify-center p-20 text-gray-400">
-                                        <CheckCircle2 className="mb-4 h-12 w-12 opacity-20" />
-                                        <p className="text-sm font-bold tracking-wider uppercase">
-                                            No hay pendientes de cupo
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="border-b border-gray-100 bg-white">
-                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
-                                                    Huésped / Llegada
-                                                </th>
-                                                <th className="w-28 px-6 py-3 text-center text-[10px] font-black whitespace-nowrap text-gray-400 uppercase">
-                                                    Req.
-                                                </th>
-                                                <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
-                                                    Acciones
-                                                </th>
-                                            </tr>
-                                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                                            {pendingAssignment.map((res) => (
-                                                    <tr
-                                                        key={res.id}
-                                                        className="group transition-colors hover:bg-orange-50/30"
-                                                    >
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-sm font-black text-gray-800 uppercase">
-                                                                {
-                                                                    res.guest
-                                                                        ?.full_name
-                                                                }
-                                                            </div>
-                                                            <div className="mt-1 flex w-fit items-center gap-1.5 rounded-md border border-orange-100 bg-orange-50 px-2 py-0.5 text-orange-600">
-                                                                <CalendarDays className="h-3.5 w-3.5" />
-                                                                <span className="text-xs font-bold tracking-wide">
-                                                                    {
-                                                                        res.arrival_date
-                                                                    }
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center whitespace-nowrap">
-                                                            <span className="inline-block rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-[11px] font-black whitespace-nowrap text-orange-700 shadow-sm">
-                                                                {res.guest_count}{' '}
-                                                                pers.
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col items-end gap-2">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    {/* Editar y Cancelar: más visibles (texto + color, no solo ícono gris) */}
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            setEditingReservation(
-                                                                                res,
-                                                                            )
-                                                                        }
-                                                                        className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
-                                                                        title="Editar Datos de Reserva"
-                                                                    >
-                                                                        <Pencil className="h-3.5 w-3.5" />{' '}
-                                                                        Editar
-                                                                    </button>
-
-                                                                    {res.status !==
-                                                                        'cancelado' && (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setCancelingReservationId(
-                                                                                    res.id,
-                                                                                );
-                                                                                setIsCancelModalOpen(
-                                                                                    true,
-                                                                                );
-                                                                            }}
-                                                                            className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
-                                                                            title="Cancelar"
-                                                                        >
-                                                                            <XCircle className="h-3.5 w-3.5" />{' '}
-                                                                            Cancelar
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            setMatchmakingTarget(
-                                                                                {
-                                                                                    reservation:
-                                                                                        res,
-                                                                                    mode: 'assign',
-                                                                                },
-                                                                            )
-                                                                        }
-                                                                        className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
-                                                                    >
-                                                                        <BedDouble className="h-3.5 w-3.5" />{' '}
-                                                                        Asignar
-                                                                        Habitación
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            setMatchmakingTarget(
-                                                                                {
-                                                                                    reservation:
-                                                                                        res,
-                                                                                    mode: 'confirm',
-                                                                                },
-                                                                            )
-                                                                        }
-                                                                        className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-4 py-2 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
-                                                                    >
-                                                                        <UserCheck className="h-3.5 w-3.5" />{' '}
-                                                                        Confirmar
-                                                                        Reserva
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
+                {/* LISTADO ÚNICO: reservas sin asignar primero, luego asignadas */}
+                <section className="flex flex-col">
+                    <div className="flex flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
+                        <div className="flex flex-col gap-1 border-b border-gray-100 bg-gray-50/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-gray-700 uppercase">
+                                <Calendar className="h-5 w-5 text-green-600" />{' '}
+                                Reservas ({allReservations.length})
+                            </h2>
+                            <span className="text-xs font-bold text-gray-400">
+                                {pendingAssignment.length} sin asignar ·{' '}
+                                {readyForCheckin.length} asignada
+                                {readyForCheckin.length === 1 ? '' : 's'}
+                            </span>
                         </div>
-                    </section>
 
-                    {/* TABLA 2: RESERVAS ASIGNADAS (ya con habitaciones bloqueadas) */}
-                    <section className="flex h-full flex-col xl:col-span-3">
-                        <div className="flex h-full min-h-[450px] flex-col overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-xl">
-                            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-6 py-5">
-                                <h2 className="flex items-center gap-2 text-sm font-black tracking-widest text-green-600 uppercase">
-                                    <UserCheck className="h-5 w-5" /> 2. Reservas
-                                    Asignadas ({readyForCheckin.length})
-                                </h2>
+                        {allReservations.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-20 text-center text-gray-400">
+                                <CheckCircle2 className="mb-4 h-12 w-12 opacity-20" />
+                                <p className="text-sm font-bold tracking-wider uppercase">
+                                    No hay reservas
+                                </p>
                             </div>
-
-                            <div className="flex-1 overflow-y-auto bg-white">
-                                {readyForCheckin.length === 0 ? (
-                                    <div className="flex h-full flex-col items-center justify-center p-20 text-center text-gray-400">
-                                        <AlertCircle className="mb-4 h-12 w-12 opacity-20" />
-                                        <p className="text-sm font-bold tracking-wider uppercase">
-                                            Sin reservas para confirmar llegada
-                                        </p>
+                        ) : (
+                            <div className="w-full">
+                                {/* Cabecera de columnas — solo desde md, la vista chica usa tarjetas */}
+                                <div className="hidden border-b border-gray-100 bg-white px-6 py-3 md:flex md:items-center md:gap-4">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase md:flex-1">
+                                        Huésped / Llegada
                                     </div>
-                                ) : (
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="border-b border-gray-100 bg-white">
-                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
-                                                    Huésped / Llegada
-                                                </th>
-                                                <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase">
-                                                    Habitaciones
-                                                </th>
-                                                <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase">
-                                                    Acciones
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {readyForCheckin.map((res) => (
-                                                <tr
-                                                    key={res.id}
-                                                    className="transition-colors hover:bg-green-50/30"
-                                                >
-                                                    <td className="px-6 py-4">
-                                                        <div className="text-sm font-black text-gray-800 uppercase">
-                                                            {
-                                                                res.guest
-                                                                    ?.full_name
-                                                            }
-                                                        </div>
-                                                        <div className="mt-1 flex w-fit items-center gap-1.5 rounded-md border border-green-200 bg-green-100 px-2 py-0.5 text-green-700">
-                                                            <CalendarDays className="h-3.5 w-3.5" />
-                                                            <span className="text-xs font-bold tracking-wide">
-                                                                {
-                                                                    res.arrival_date
-                                                                }
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase md:w-24 md:flex-none">
+                                        Personas
+                                    </div>
+                                    <div className="text-[10px] font-black text-gray-400 uppercase md:flex-[2]">
+                                        Habitaciones
+                                    </div>
+                                    <div className="text-right text-[10px] font-black text-gray-400 uppercase md:w-[30rem] md:flex-none">
+                                        Acciones
+                                    </div>
+                                </div>
+
+                                <div className="divide-y divide-gray-50">
+                                    {allReservations.map((res) => {
+                                        const isUnassigned = res.details.some(
+                                            (d: any) => d.room_id === null,
+                                        );
+                                        return (
+                                            <div
+                                                key={res.id}
+                                                className={`flex flex-col gap-3 p-4 transition-colors md:flex-row md:items-center md:gap-4 md:px-6 md:py-4 ${isUnassigned ? 'hover:bg-orange-50/30' : 'hover:bg-green-50/30'}`}
+                                            >
+                                                {/* Huésped / Llegada */}
+                                                <div className="min-w-0 md:flex-1">
+                                                    <h3
+                                                        className="truncate text-sm font-black text-gray-800 uppercase"
+                                                        title={
+                                                            res.guest?.full_name
+                                                        }
+                                                    >
+                                                        {res.guest?.full_name}
+                                                    </h3>
+                                                    <div
+                                                        className={`mt-1 flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 ${isUnassigned ? 'border-orange-100 bg-orange-50 text-orange-600' : 'border-green-200 bg-green-100 text-green-700'}`}
+                                                    >
+                                                        <CalendarDays className="h-3.5 w-3.5" />
+                                                        <span className="text-xs font-bold tracking-wide">
+                                                            {res.arrival_date}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Personas */}
+                                                <div className="md:w-24 md:flex-none">
+                                                    <span className="inline-block shrink-0 rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-[11px] font-black whitespace-nowrap text-orange-700 shadow-sm">
+                                                        {res.guest_count} pers.
+                                                    </span>
+                                                </div>
+
+                                                {/* Habitaciones */}
+                                                <div className="min-w-0 md:flex-[2]">
+                                                    {isUnassigned ? (
+                                                        <span className="inline-block rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-black text-orange-600 uppercase">
+                                                            Sin asignar
+                                                        </span>
+                                                    ) : (
                                                         <div className="flex flex-wrap gap-1">
                                                             {res.details.map(
                                                                 (
@@ -560,76 +455,85 @@ export default function ViewReservationModal({
                                                                 ),
                                                             )}
                                                         </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex flex-col items-end gap-2">
-                                                            <div className="flex items-center gap-1.5">
-                                                                {/* Editar asignación: más visible (texto + color) */}
-                                                                <button
-                                                                    onClick={() =>
-                                                                        setMatchmakingTarget(
-                                                                            {
-                                                                                reservation:
-                                                                                    res,
-                                                                                mode: 'assign',
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                    className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
-                                                                    title="Cambiar Habitaciones Asignadas"
-                                                                >
-                                                                    <BedDouble className="h-3.5 w-3.5" />{' '}
-                                                                    Editar
-                                                                    asignación
-                                                                </button>
+                                                    )}
+                                                </div>
 
-                                                                {res.status !==
-                                                                    'cancelado' && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setCancelingReservationId(
-                                                                                res.id,
-                                                                            );
-                                                                            setIsCancelModalOpen(
-                                                                                true,
-                                                                            );
-                                                                        }}
-                                                                        className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
-                                                                        title="Cancelar"
-                                                                    >
-                                                                        <XCircle className="h-3.5 w-3.5" />{' '}
-                                                                        Cancelar
-                                                                    </button>
-                                                                )}
-                                                            </div>
+                                                {/* Acciones */}
+                                                <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto md:w-[30rem] md:flex-none md:justify-end">
+                                                    <button
+                                                        onClick={() =>
+                                                            setEditingReservation(
+                                                                res,
+                                                            )
+                                                        }
+                                                        className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                                                        title="Editar Datos de Reserva"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />{' '}
+                                                        Editar
+                                                    </button>
 
-                                                            <button
-                                                                onClick={() =>
-                                                                    setMatchmakingTarget(
-                                                                        {
-                                                                            reservation:
-                                                                                res,
-                                                                            mode: 'confirm',
-                                                                        },
-                                                                    )
-                                                                }
-                                                                className="flex items-center gap-1.5 rounded-xl bg-green-600 px-5 py-2.5 text-xs font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
-                                                            >
-                                                                <UserCheck className="h-4 w-4" />{' '}
-                                                                Registrar
-                                                                Llegada
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                                                    {res.status !==
+                                                        'cancelado' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setCancelingReservationId(
+                                                                    res.id,
+                                                                );
+                                                                setIsCancelModalOpen(
+                                                                    true,
+                                                                );
+                                                            }}
+                                                            className="flex shrink-0 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                            title="Cancelar"
+                                                        >
+                                                            <XCircle className="h-3.5 w-3.5" />{' '}
+                                                            Cancelar
+                                                        </button>
+                                                    )}
+
+                                                    {isUnassigned && (
+                                                        <button
+                                                            onClick={() =>
+                                                                setMatchmakingTarget(
+                                                                    {
+                                                                        reservation:
+                                                                            res,
+                                                                        mode: 'assign',
+                                                                    },
+                                                                )
+                                                            }
+                                                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-[11px] font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
+                                                        >
+                                                            <BedDouble className="h-3.5 w-3.5" />{' '}
+                                                            Asignar Habitación
+                                                        </button>
+                                                    )}
+
+                                                    <button
+                                                        onClick={() =>
+                                                            setMatchmakingTarget(
+                                                                {
+                                                                    reservation:
+                                                                        res,
+                                                                    mode: 'confirm',
+                                                                },
+                                                            )
+                                                        }
+                                                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
+                                                    >
+                                                        <UserCheck className="h-3.5 w-3.5" />{' '}
+                                                        Confirmar Reserva
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    </section>
-                </div>
+                        )}
+                    </div>
+                </section>
 
                 {/* ========================================== */}
                 {/* 👇 TABLA 3: RESERVAS ONLINE POR VERIFICAR 👇 */}
@@ -753,14 +657,12 @@ export default function ViewReservationModal({
                 }
                 operators={operators}
                 hasAdvance={
-                    (reservations.find(
-                        (r) => r.id === cancelingReservationId,
-                    )?.advance_payment ?? 0) > 0
+                    (reservations.find((r) => r.id === cancelingReservationId)
+                        ?.advance_payment ?? 0) > 0
                 }
                 advanceAmount={
-                    reservations.find(
-                        (r) => r.id === cancelingReservationId,
-                    )?.advance_payment ?? 0
+                    reservations.find((r) => r.id === cancelingReservationId)
+                        ?.advance_payment ?? 0
                 }
             />
 
@@ -798,4 +700,3 @@ export default function ViewReservationModal({
         </AuthenticatedLayout>
     );
 }
-
