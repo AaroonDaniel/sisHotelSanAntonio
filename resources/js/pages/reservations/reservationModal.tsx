@@ -43,6 +43,7 @@ export interface Reservation {
     special_agreement?: {
         id: number;
         type: 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';
+        company_name?: string | null;
     } | null;
     operator_id?: number | null;
     // Puente/historial (room_id se llena recién al confirmar) — de solo
@@ -69,6 +70,9 @@ interface ReservationFormData {
     arrival_date: string;
     duration_days: number;
     type: ReservationType;
+    // Nombre de la empresa/delegación (special_agreements.company_name).
+    // Solo se usa/envía cuando type es 'corporativo' o 'delegacion'.
+    company_name: string;
     advance_payment: number;
     payment_type: string;
     qr_bank: string;
@@ -122,6 +126,7 @@ export default function ReservationModal({
         arrival_date: new Date().toISOString().split('T')[0],
         duration_days: 1,
         type: 'estandar',
+        company_name: '',
         advance_payment: 0,
         payment_type: 'EFECTIVO',
         qr_bank: '',
@@ -211,6 +216,8 @@ export default function ReservationModal({
                 duration_days: Number(reservationToEdit.duration_days || 1),
                 guest_count: Number(reservationToEdit.guest_count || 1),
                 type: tipoExistente,
+                company_name:
+                    reservationToEdit.special_agreement?.company_name || '',
                 advance_payment: Number(reservationToEdit.advance_payment || 0),
                 payment_type: reservationToEdit.payment_type || 'EFECTIVO',
                 operator_id: reservationToEdit.operator_id
@@ -283,6 +290,10 @@ export default function ReservationModal({
             arrival_date: currentData.arrival_date,
             duration_days: currentData.duration_days,
             type: currentData.type,
+            company_name:
+                currentData.type !== 'estandar'
+                    ? currentData.company_name.trim()
+                    : '',
             advance_payment: Number(currentData.advance_payment) || 0,
             operator_id:
                 Number(currentData.advance_payment) > 0
@@ -469,7 +480,36 @@ export default function ReservationModal({
                                 </button>
                             ))}
                         </div>
-                        
+
+                        {data.type !== 'estandar' && (
+                            <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                                <label className="mb-1 block text-xs font-bold text-gray-600 uppercase">
+                                    Nombre de la empresa / delegación
+                                </label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <Building2 className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej. FUTBOLITO S.R.L."
+                                        value={data.company_name}
+                                        onChange={(e) =>
+                                            setData(
+                                                'company_name',
+                                                e.target.value.toUpperCase(),
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-gray-400 py-2.5 pl-10 text-sm font-bold text-gray-700 uppercase focus:border-green-500 focus:ring-green-500"
+                                    />
+                                </div>
+                                {errors.company_name && (
+                                    <p className="mt-1 text-xs font-bold text-red-600">
+                                        {errors.company_name}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* FECHA DE LLEGADA + NOCHES */}

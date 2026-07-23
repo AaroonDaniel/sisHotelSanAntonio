@@ -65,6 +65,11 @@ export default function AssignRoomsModal({
     const [phase, setPhase] = useState<'matchmaking' | 'confirming'>(
         'matchmaking',
     );
+    // Dentro de la fase 'matchmaking': una vez que todos tienen habitación,
+    // el usuario pasa a una pantalla de revisión (tarjetas por habitación)
+    // antes de guardar de verdad. No es una fase nueva -- solo cambia qué
+    // se muestra dentro de 'matchmaking'.
+    const [isReviewing, setIsReviewing] = useState(false);
 
     const totalPeople = Number(reservation?.guest_count) || 1;
     const advancePayment = Number(reservation?.advance_payment) || 0;
@@ -84,6 +89,11 @@ export default function AssignRoomsModal({
         id: number;
         number: string;
     } | null>(null);
+    // Qué "grupo armado" (habitación ya vinculada) está desplegado en la
+    // columna derecha, mostrando sus personas + botón Cancelar.
+    const [expandedGroupRoomId, setExpandedGroupRoomId] = useState<
+        number | null
+    >(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -113,6 +123,8 @@ export default function AssignRoomsModal({
         setErrorMsg(null);
         setSelectedPeople([]);
         setPendingRoom(null);
+        setExpandedGroupRoomId(null);
+        setIsReviewing(false);
 
         const alreadyAssigned = isRoomAlreadyAssigned(reservation);
 
@@ -223,6 +235,19 @@ export default function AssignRoomsModal({
         return people;
     }, [totalPeople, assignedMap]);
 
+    // La cola de "ya asignados" (bloque de abajo, izquierda) se deriva del
+    // mismo assignedMap -- no se mantiene una lista separada en estado.
+    const assignedPeopleList = useMemo(
+        () =>
+            Object.entries(assignedMap)
+                .map(([personStr, room]) => ({
+                    personIndex: Number(personStr),
+                    room,
+                }))
+                .sort((a, b) => a.personIndex - b.personIndex),
+        [assignedMap],
+    );
+
     const togglePerson = (personIndex: number) => {
         // Cambiar quién está tildado invalida cualquier habitación
         // tentativa (la capacidad requerida puede haber cambiado).
@@ -232,18 +257,6 @@ export default function AssignRoomsModal({
                 ? prev.filter((p) => p !== personIndex)
                 : [...prev, personIndex],
         );
-    };
-
-    // Suelta a una persona ya asignada (típicamente al editar una
-    // distribución reconstruida) para que vuelva al pool y se le pueda
-    // elegir otra habitación. Si era la última persona de esa
-    // habitación, la habitación vuelve a aparecer como disponible sola.
-    const unassignPerson = (personIndex: number) => {
-        setAssignedMap((prev) => {
-            const next = { ...prev };
-            delete next[personIndex];
-            return next;
-        });
     };
 
     // Clickear una tarjeta del grid solo la marca como candidata (o la
@@ -268,6 +281,33 @@ export default function AssignRoomsModal({
         setSelectedPeople([]);
         setSearchQuery('');
         setPendingRoom(null);
+    };
+
+    // Libera a todas las personas de una habitación (vuelven a Pendientes).
+    // Base compartida por los dos "deshacer": el de la tarjeta de revisión
+    // y el del grupo desplegado en la columna derecha.
+    const releaseRoomGroup = (roomId: number) => {
+        setAssignedMap((prev) => {
+            const next = { ...prev };
+            Object.keys(next).forEach((key) => {
+                if (next[Number(key)].id === roomId) delete next[Number(key)];
+            });
+            return next;
+        });
+    };
+
+    // Botón "Deshacer" de una tarjeta en la pantalla de revisión: además
+    // regresa a la pantalla de selección para que se les pueda asignar otra.
+    const undoRoomAssignment = (roomId: number) => {
+        releaseRoomGroup(roomId);
+        setIsReviewing(false);
+    };
+
+    // Botón "Cancelar" del grupo desplegado en la columna derecha (pantalla
+    // de selección, no la de revisión) -- solo cierra el desplegable.
+    const unassignRoomGroup = (roomId: number) => {
+        releaseRoomGroup(roomId);
+        setExpandedGroupRoomId(null);
     };
 
     const allPeopleAssigned = unassignedPeople.length === 0;
@@ -385,139 +425,196 @@ export default function AssignRoomsModal({
                 )}
 
                 {phase === 'matchmaking' ? (
-                    <div className="flex flex-1 overflow-hidden">
-                        {/* COLUMNA IZQUIERDA: PERSONAS */}
-                        <div className="flex w-full flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4">
+                    isReviewing ? (
+                        /* ============ REVISIÓN DE DISTRIBUCIÓN ============ */
+                        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
                             <div className="mb-4">
-                                <p className="text-[11px] font-bold tracking-widest text-gray-600 uppercase">
-                                    Reserva de
-                                </p>
                                 <h3 className="text-sm font-black text-gray-800 uppercase">
-                                    {reservation.guest?.full_name}
+                                    Revise la distribución antes de guardar
                                 </h3>
-                                <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-green-500">
-                                    <Calendar className="h-3 w-3" />
-                                    {daysUntilArrival === 0
-                                        ? 'Llega Hoy'
-                                        : daysUntilArrival === 1
-                                          ? 'Llega Mañana'
-                                          : daysUntilArrival < 0
-                                            ? 'Reserva Pasada'
-                                            : `Llega en ${daysUntilArrival} días`}
-                                </div>
+                                <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                    {groupsSummary.length} habitación(es) ·{' '}
+                                    {totalPeople} persona(s)
+                                </p>
                             </div>
 
-                            {pendingRoom && selectedPeople.length > 0 && (
-                                <div className="mb-4 rounded-xl border-2 border-green-400 bg-green-50 p-3">
-                                    <p className="mb-1 text-[11px] font-black tracking-widest text-green-700 uppercase">
-                                        Asignar Hab. {pendingRoom.number} a:
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {groupsSummary.map((g) => (
+                                    <div
+                                        key={g.room.id}
+                                        className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                                    >
+                                        <div className="mb-3 flex items-start justify-between gap-2 border-b border-gray-100 pb-3">
+                                            <div>
+                                                <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                                    {g.room.room_type?.name ||
+                                                        'Habitación'}
+                                                </p>
+                                                <p className="text-xl font-black text-gray-800">
+                                                    Hab. {g.room.number}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    undoRoomAssignment(
+                                                        g.room.id,
+                                                    )
+                                                }
+                                                className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-gray-600 transition hover:bg-gray-50"
+                                                title="Deshacer esta asignación"
+                                            >
+                                                <Undo2 className="h-3.5 w-3.5" />
+                                                Deshacer
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                                            <Users className="h-4 w-4 text-gray-400" />
+                                            <span className="text-sm font-bold text-gray-700 uppercase">
+                                                {g.people.length} persona
+                                                {g.people.length === 1
+                                                    ? ''
+                                                    : 's'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* COLUMNA IZQUIERDA: COLA DE PERSONAS (Pendientes / Asignados) */}
+                        <div className="w-full overflow-y-auto border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4">
+                                <div className="mb-4">
+                                    <p className="text-[11px] font-bold tracking-widest text-gray-600 uppercase">
+                                        Reserva de
                                     </p>
-                                    <p className="mb-3 text-xs font-bold text-gray-700">
-                                        {selectedPeople
-                                            .map((p) => `Persona ${p}`)
-                                            .join(', ')}
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={confirmRoomSelection}
-                                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2 text-[11px] font-black text-white uppercase shadow-md transition hover:bg-green-700"
-                                        >
-                                            <CheckCircle2 className="h-4 w-4" />
-                                            Confirmar Habitación
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setPendingRoom(null)
-                                            }
-                                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-500 transition hover:bg-gray-50"
-                                            title="Cancelar selección"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </button>
+                                    <h3 className="text-sm font-black text-gray-800 uppercase">
+                                        {reservation.guest?.full_name}
+                                    </h3>
+                                    <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-green-500">
+                                        <Calendar className="h-3 w-3" />
+                                        {daysUntilArrival === 0
+                                            ? 'Llega Hoy'
+                                            : daysUntilArrival === 1
+                                              ? 'Llega Mañana'
+                                              : daysUntilArrival < 0
+                                                ? 'Reserva Pasada'
+                                                : `Llega en ${daysUntilArrival} días`}
                                     </div>
                                 </div>
-                            )}
 
-                            <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-gray-600 uppercase">
-                                <Users className="h-3.5 w-3.5" />
-                                Personas ({totalPeople - unassignedPeople.length}/
-                                {totalPeople} asignadas)
-                            </label>
+                                {/* BLOQUE 1: PENDIENTES */}
+                                <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-gray-600 uppercase">
+                                    <Users className="h-3.5 w-3.5" />
+                                    Pendientes ({unassignedPeople.length})
+                                </label>
 
-                            <div className="space-y-2">
-                                {Array.from({ length: totalPeople }, (_, i) => i + 1).map(
-                                    (personIndex) => {
-                                        const assignedRoom = assignedMap[personIndex];
-                                        const isSelected =
-                                            selectedPeople.includes(personIndex);
+                                <div className="mb-6 space-y-2">
+                                    {unassignedPeople.length === 0 ? (
+                                        <p className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-center text-[11px] font-bold text-gray-400 uppercase">
+                                            Todos tienen habitación
+                                        </p>
+                                    ) : (
+                                        unassignedPeople.map(
+                                            (personIndex) => {
+                                                const isSelected =
+                                                    selectedPeople.includes(
+                                                        personIndex,
+                                                    );
 
-                                        return (
+                                                return (
+                                                    <div
+                                                        key={personIndex}
+                                                        onClick={() =>
+                                                            togglePerson(
+                                                                personIndex,
+                                                            )
+                                                        }
+                                                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-3 transition-colors ${
+                                                            isSelected
+                                                                ? 'border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1'
+                                                                : 'border-dashed border-gray-300 bg-white hover:border-green-300'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={
+                                                                    isSelected
+                                                                }
+                                                                onChange={() =>
+                                                                    togglePerson(
+                                                                        personIndex,
+                                                                    )
+                                                                }
+                                                                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                                            />
+                                                            <User className="h-4 w-4 text-gray-400" />
+                                                            <span className="text-xs font-bold text-gray-700 uppercase">
+                                                                Persona{' '}
+                                                                {personIndex}
+                                                            </span>
+                                                        </div>
+                                                        <CheckCircle2
+                                                            className={`h-4 w-4 ${isSelected ? 'text-green-500' : 'text-gray-200'}`}
+                                                        />
+                                                    </div>
+                                                );
+                                            },
+                                        )
+                                    )}
+                                </div>
+
+                                {/* BLOQUE 2: ASIGNADOS */}
+                                <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-gray-600 uppercase">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Asignados ({assignedPeopleList.length})
+                                </label>
+
+                                <div className="space-y-2">
+                                    {groupsSummary.length === 0 ? (
+                                        <p className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-center text-[11px] font-bold text-gray-400 uppercase">
+                                            Todavía no hay nadie asignado
+                                        </p>
+                                    ) : (
+                                        groupsSummary.map((g) => (
                                             <div
-                                                key={personIndex}
-                                                onClick={() =>
-                                                    !assignedRoom &&
-                                                    togglePerson(personIndex)
-                                                }
-                                                className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
-                                                    assignedRoom
-                                                        ? 'border-green-200 bg-green-50'
-                                                        : isSelected
-                                                          ? 'cursor-pointer border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1'
-                                                          : 'cursor-pointer border-dashed border-gray-300 bg-white hover:border-green-300'
-                                                }`}
+                                                key={g.room.id}
+                                                className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-3"
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    {!assignedRoom && (
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isSelected}
-                                                            onChange={() =>
-                                                                togglePerson(
-                                                                    personIndex,
-                                                                )
-                                                            }
-                                                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                                                        />
-                                                    )}
-                                                    <User className="h-4 w-4 text-gray-400" />
+                                                    <Users className="h-4 w-4 text-gray-400" />
                                                     <span className="text-xs font-bold text-gray-700 uppercase">
-                                                        Persona {personIndex}
+                                                        {g.people.length}{' '}
+                                                        persona
+                                                        {g.people.length === 1
+                                                            ? ''
+                                                            : 's'}
                                                     </span>
                                                 </div>
-                                                {assignedRoom ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-black text-green-700">
-                                                            Hab.{' '}
-                                                            {
-                                                                assignedRoom.number
-                                                            }
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                unassignPerson(
-                                                                    personIndex,
-                                                                );
-                                                            }}
-                                                            className="rounded p-0.5 text-green-500 transition-colors hover:bg-green-200 hover:text-green-800"
-                                                            title="Quitar de esta habitación"
-                                                        >
-                                                            <X className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <CheckCircle2
-                                                        className={`h-4 w-4 ${isSelected ? 'text-green-500' : 'text-gray-200'}`}
-                                                    />
-                                                )}
+                                                <div className="flex items-center gap-1">
+                                                    <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-black text-green-700">
+                                                        Hab. {g.room.number}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            releaseRoomGroup(
+                                                                g.room.id,
+                                                            );
+                                                        }}
+                                                        className="rounded p-0.5 text-green-500 transition-colors hover:bg-green-200 hover:text-green-800"
+                                                        title="Quitar del todo esta habitación"
+                                                    >
+                                                        <X className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
                                             </div>
-                                        );
-                                    },
-                                )}
-                            </div>
+                                        ))
+                                    )}
+                                </div>
                         </div>
 
                         {/* COLUMNA DERECHA: HABITACIONES DISPONIBLES */}
@@ -526,7 +623,7 @@ export default function AssignRoomsModal({
                                 <div>
                                     <h3 className="text-sm font-black text-gray-800 uppercase">
                                         {pendingRoom
-                                            ? `Hab. ${pendingRoom.number} seleccionada — confirme a la izquierda`
+                                            ? `Hab. ${pendingRoom.number} seleccionada — confirme abajo`
                                             : selectedPeople.length > 0
                                               ? `Elegir habitación para ${selectedPeople.length} persona(s)`
                                               : 'Tilde una o más personas a la izquierda'}
@@ -628,8 +725,132 @@ export default function AssignRoomsModal({
                                     </div>
                                 )}
                             </div>
+
+                            {/* ZONA DE ACCIONES: confirmar/cancelar la habitación
+                                tentativa, y los grupos ya armados -- separada del
+                                botón principal del footer, con más espacio acá. */}
+                            {(groupsSummary.length > 0 ||
+                                (pendingRoom &&
+                                    selectedPeople.length > 0)) && (
+                                <div className="border-t border-gray-200 bg-white p-4">
+                                    {pendingRoom &&
+                                        selectedPeople.length > 0 && (
+                                            <div className="mb-3 flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={
+                                                        confirmRoomSelection
+                                                    }
+                                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 text-[11px] font-black text-white uppercase shadow-md transition hover:bg-green-700"
+                                                >
+                                                    Asignar a Hab.{' '}
+                                                    {pendingRoom.number}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setPendingRoom(null)
+                                                    }
+                                                    className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-[11px] font-bold text-gray-600 uppercase transition hover:bg-gray-50"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        )}
+
+                                    {groupsSummary.length > 0 && (
+                                        <div>
+                                            <p className="mb-2 text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                                Grupos armados
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {groupsSummary.map((g) => (
+                                                    <button
+                                                        key={g.room.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setExpandedGroupRoomId(
+                                                                (prev) =>
+                                                                    prev ===
+                                                                    g.room.id
+                                                                        ? null
+                                                                        : g
+                                                                              .room
+                                                                              .id,
+                                                            )
+                                                        }
+                                                        className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase transition-colors ${
+                                                            expandedGroupRoomId ===
+                                                            g.room.id
+                                                                ? 'border-green-500 bg-green-100 text-green-700'
+                                                                : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                                                        }`}
+                                                    >
+                                                        Hab. {g.room.number} ·{' '}
+                                                        {g.people.length} pers.
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {expandedGroupRoomId !== null &&
+                                                (() => {
+                                                    const g =
+                                                        groupsSummary.find(
+                                                            (x) =>
+                                                                x.room.id ===
+                                                                expandedGroupRoomId,
+                                                        );
+                                                    if (!g) return null;
+                                                    return (
+                                                        <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-4">
+                                                            <div className="mb-2 flex items-center justify-between gap-2">
+                                                                <span className="text-sm font-black text-gray-800 uppercase">
+                                                                    Habitación{' '}
+                                                                    {
+                                                                        g.room
+                                                                            .number
+                                                                    }
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        unassignRoomGroup(
+                                                                            g
+                                                                                .room
+                                                                                .id,
+                                                                        )
+                                                                    }
+                                                                    className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                                                                    title="Deshacer esta asignación"
+                                                                >
+                                                                    Cancelar
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-sm font-bold text-gray-700">
+                                                                Hay{' '}
+                                                                {
+                                                                    g.people
+                                                                        .length
+                                                                }{' '}
+                                                                persona
+                                                                {g.people
+                                                                    .length ===
+                                                                1
+                                                                    ? ''
+                                                                    : 's'}{' '}
+                                                                en esta
+                                                                habitación.
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
+                    )
                 ) : (
                     /* ============ FASE CONFIRMAR (sin precio) ============ */
                     <div className="flex-1 overflow-y-auto p-6">
@@ -710,10 +931,20 @@ export default function AssignRoomsModal({
                 <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
                     {phase === 'confirming' && mode === 'confirm' && !isRoomAlreadyAssigned(reservation) ? (
                         <button
-                            onClick={() => setPhase('matchmaking')}
+                            onClick={() => {
+                                setPhase('matchmaking');
+                                setIsReviewing(false);
+                            }}
                             className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
                         >
                             <Undo2 className="h-4 w-4" /> Volver a asignar
+                        </button>
+                    ) : phase === 'matchmaking' && isReviewing ? (
+                        <button
+                            onClick={() => setIsReviewing(false)}
+                            className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
+                        >
+                            <Undo2 className="h-4 w-4" /> Volver a Editar
                         </button>
                     ) : (
                         <button
@@ -726,7 +957,12 @@ export default function AssignRoomsModal({
 
                     {phase === 'matchmaking' ? (
                         <button
-                            onClick={submitMatchmaking}
+                            onClick={() =>
+                                isReviewing
+                                    ? submitMatchmaking()
+                                    : allPeopleAssigned &&
+                                      setIsReviewing(true)
+                            }
                             disabled={!allPeopleAssigned || isProcessing}
                             className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -735,11 +971,11 @@ export default function AssignRoomsModal({
                             ) : (
                                 <Save className="h-4 w-4" />
                             )}
-                            {allPeopleAssigned
-                                ? mode === 'assign'
-                                    ? 'Guardar Asignación'
-                                    : 'Continuar'
-                                : `Faltan ${unassignedPeople.length} persona(s)`}
+                            {!allPeopleAssigned
+                                ? `Faltan ${unassignedPeople.length} persona(s)`
+                                : isReviewing
+                                  ? 'Guardar Asignación'
+                                  : 'Revisar Distribución'}
                         </button>
                     ) : (
                         <button

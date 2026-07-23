@@ -88,10 +88,12 @@ class ReservationController extends Controller
                 // 🚀 REDISEÑO (decisión A): la reserva NO crea ni referencia
                 // ninguna Cuenta Grupal real — eso se decide después, en el
                 // checkin. "type" es solo una etiqueta de intención
-                // ('normal' por defecto); el "nombre de empresa" es
-                // simplemente el guest elegido como solicitante, ya se
-                // guarda así hoy (ej. "FUTBOL C" como huésped normal).
+                // ('normal' por defecto).
                 'type' => 'nullable|string|in:normal,estandar,corporativo,delegacion',
+                // Nombre de la empresa/delegación (special_agreements.company_name).
+                // Solo tiene sentido si type es corporativo o delegacion; se
+                // ignora en el resto de los casos.
+                'company_name' => 'nullable|string|max:255',
 
                 // 🚀 REDISEÑO: un detalle es solo "quiero una habitación" —
                 // ni precio ni tipo/baño solicitado se guardan ya en la
@@ -157,20 +159,23 @@ class ReservationController extends Controller
                 // =========================================================
                 // 🚀 REDISEÑO (decisión A, aclarada): la reserva NO ofrece
                 // ningún selector de convenio ni recibe special_agreement_id
-                // del frontend — el usuario solo marca "type". Como el
+                // del frontend — el usuario solo marca "type" y, si
+                // corresponde, el nombre de la empresa/delegación. Como el
                 // campo special_agreement_id YA existe (FK nullable), no
                 // hace falta columna nueva: si el type es corporativo o
                 // delegación, se crea automáticamente un SpecialAgreement
-                // "en blanco" (una sola consulta) que únicamente anota ese
-                // type — sin company_name, sin selector, sin reutilizar
-                // ninguno existente. La Cuenta Grupal "real" (con nombre de
-                // empresa, saldo, etc.) se arma después, en el checkin.
+                // (una sola consulta) que anota ese type + company_name —
+                // sin selector, sin reutilizar ninguno existente. La Cuenta
+                // Grupal "real" (saldo, etc.) se arma después, en el checkin.
                 $typeRequest = $request->input('type');
                 $specialAgreementId = null;
 
                 if (in_array($typeRequest, ['corporativo', 'delegacion'])) {
                     $agreement = \App\Models\SpecialAgreement::create([
                         'type' => $typeRequest,
+                        'company_name' => $request->filled('company_name')
+                            ? $request->input('company_name')
+                            : null,
                         'agreed_price' => 0,
                         'payment_frequency_days' => 0,
                     ]);
@@ -562,6 +567,9 @@ class ReservationController extends Controller
                     $tipoTratoNuevo = $typeRequest ?? ($request->boolean('is_delegation') ? 'delegacion' : 'corporativo');
                     $frecuenciaDias = (int) $request->input('corporate_days', 0);
                     $agreedPrice = $request->input('agreed_price', 0);
+                    $companyName = $request->filled('company_name')
+                        ? $request->input('company_name')
+                        : null;
 
                     $hadSpecialAgreement = !is_null($reservation->special_agreement_id);
 
@@ -569,6 +577,7 @@ class ReservationController extends Controller
                         // De Estandar a Especial
                         $agreement = \App\Models\SpecialAgreement::create([
                             'type' => $tipoTratoNuevo,
+                            'company_name' => $companyName,
                             'agreed_price' => $agreedPrice,
                             'payment_frequency_days' => $frecuenciaDias,
                         ]);
@@ -582,6 +591,7 @@ class ReservationController extends Controller
                         // Sigue siendo Especial, actualizamos datos por si cambiaron el precio en la edicion
                         $reservation->specialAgreement->update([
                             'type' => $tipoTratoNuevo,
+                            'company_name' => $companyName,
                             'agreed_price' => $agreedPrice,
                             'payment_frequency_days' => $frecuenciaDias,
                         ]);

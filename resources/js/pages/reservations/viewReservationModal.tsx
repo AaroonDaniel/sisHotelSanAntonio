@@ -6,7 +6,6 @@ import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowLeft,
-    BedDouble,
     Calendar,
     CalendarDays,
     CheckCircle2,
@@ -14,13 +13,11 @@ import {
     ExternalLink,
     FileImage,
     Globe,
-    Pencil,
     Plus,
     Search,
-    UserCheck,
-    XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { FaBed, FaEdit, FaTimesCircle, FaUserCheck } from 'react-icons/fa';
 import AssignRoomsModal from './AssignRoomsModal';
 import ReservationModal from './reservationModal';
 
@@ -385,7 +382,7 @@ export default function ViewReservationModal({
                                     <div className="text-[10px] font-black text-gray-400 uppercase md:flex-[2]">
                                         Habitaciones
                                     </div>
-                                    <div className="text-right text-[10px] font-black text-gray-400 uppercase md:w-[30rem] md:flex-none">
+                                    <div className="text-right text-[10px] font-black text-gray-400 uppercase md:w-36 md:flex-none">
                                         Acciones
                                     </div>
                                 </div>
@@ -459,18 +456,17 @@ export default function ViewReservationModal({
                                                 </div>
 
                                                 {/* Acciones */}
-                                                <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto md:w-[30rem] md:flex-none md:justify-end">
+                                                <div className="flex items-center gap-4 md:w-36 md:flex-none md:justify-end">
                                                     <button
                                                         onClick={() =>
                                                             setEditingReservation(
                                                                 res,
                                                             )
                                                         }
-                                                        className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                                                        className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100"
                                                         title="Editar Datos de Reserva"
                                                     >
-                                                        <Pencil className="h-3.5 w-3.5" />{' '}
-                                                        Editar
+                                                        <FaEdit className="h-6 w-6" />
                                                     </button>
 
                                                     {res.status !==
@@ -484,31 +480,32 @@ export default function ViewReservationModal({
                                                                     true,
                                                                 );
                                                             }}
-                                                            className="flex shrink-0 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100"
                                                             title="Cancelar"
                                                         >
-                                                            <XCircle className="h-3.5 w-3.5" />{' '}
-                                                            Cancelar
+                                                            <FaTimesCircle className="h-6 w-6" />
                                                         </button>
                                                     )}
 
-                                                    {isUnassigned && (
-                                                        <button
-                                                            onClick={() =>
-                                                                setMatchmakingTarget(
-                                                                    {
-                                                                        reservation:
-                                                                            res,
-                                                                        mode: 'assign',
-                                                                    },
-                                                                )
-                                                            }
-                                                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-[11px] font-black text-white uppercase shadow-md transition-all hover:bg-orange-700 active:scale-95"
-                                                        >
-                                                            <BedDouble className="h-3.5 w-3.5" />{' '}
-                                                            Asignar Habitación
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() =>
+                                                            setMatchmakingTarget(
+                                                                {
+                                                                    reservation:
+                                                                        res,
+                                                                    mode: 'assign',
+                                                                },
+                                                            )
+                                                        }
+                                                        className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100"
+                                                        title={
+                                                            isUnassigned
+                                                                ? 'Asignar Habitación'
+                                                                : 'Cambiar Habitaciones Asignadas'
+                                                        }
+                                                    >
+                                                        <FaBed className="h-6 w-6" />
+                                                    </button>
 
                                                     <button
                                                         onClick={() =>
@@ -520,10 +517,10 @@ export default function ViewReservationModal({
                                                                 },
                                                             )
                                                         }
-                                                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-black text-white uppercase shadow-md transition-all hover:bg-green-700 active:scale-95"
+                                                        className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100"
+                                                        title="Confirmar Reserva"
                                                     >
-                                                        <UserCheck className="h-3.5 w-3.5" />{' '}
-                                                        Confirmar Reserva
+                                                        <FaUserCheck className="h-6 w-6" />
                                                     </button>
                                                 </div>
                                             </div>
