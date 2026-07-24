@@ -331,6 +331,20 @@ class ReservationController extends Controller
 
                 // --- 1. SI CANCELAN LA RESERVA ---
                 if ($statusUpper === 'CANCELADO' || $statusUpper === 'CANCELADA') {
+                    // 🔒 BLOQUEO: una reserva 'confirmada' ya generó un
+                    // Checkin real (habitación OCUPADO, el Payment del
+                    // adelanto perdió reservation_id -- ver update() rama
+                    // CONFIRMADO). Cancelar por acá NO encuentra el Payment
+                    // (búsqueda por reservation_id) y no genera DEVOLUCION
+                    // en silencio, y además liberaba la habitación con el
+                    // Checkin todavía activo encima. A partir de
+                    // 'confirmada', la fuente de verdad pasa a ser el
+                    // Checkin -- anular/hacer checkout se hace desde ahí
+                    // (CheckinController), no cancelando la reserva.
+                    if ($reservation->status === 'confirmada') {
+                        throw new \Exception('Esta reserva ya fue confirmada y tiene un Check-in activo. Para anularla, hágalo desde la habitación (Check-in), no desde Reservas.');
+                    }
+
                     // 🔒 CANDADO DE IDEMPOTENCIA: $statusUpper viene del status
                     // DESEADO en el request, no del estado ANTERIOR real de la
                     // reserva — hay que leer $reservation->status ANTES de

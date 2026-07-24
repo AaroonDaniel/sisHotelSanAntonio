@@ -490,7 +490,9 @@ export default function ReservationsIndex({
                                                         </button>
 
                                                         {res.status !==
-                                                            'cancelado' && (
+                                                            'cancelado' &&
+                                                            res.status !==
+                                                                'confirmada' && (
                                                             <button
                                                                 onClick={() => {
                                                                     setCancelingReservationId(
@@ -505,6 +507,15 @@ export default function ReservationsIndex({
                                                             >
                                                                 <XCircle className="h-4 w-4" />
                                                             </button>
+                                                        )}
+                                                        {res.status ===
+                                                            'confirmada' && (
+                                                            <span
+                                                                className="rounded-lg p-2 text-gray-300"
+                                                                title="Ya confirmada -- para anularla, hágalo desde el Check-in en Habitaciones"
+                                                            >
+                                                                <XCircle className="h-4 w-4" />
+                                                            </span>
                                                         )}
 
                                                         {hasRole(
