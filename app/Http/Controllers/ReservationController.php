@@ -482,6 +482,36 @@ class ReservationController extends Controller
 
                     $reservation->unsetRelation('details');
 
+                    // --- Decisión "grupal vs individual" para corporativo/
+                    // delegación ---
+                    // Toda reserva corporativo/delegación ya trae un
+                    // SpecialAgreement creado en store()/update() (con
+                    // company_name -- ver esa lógica), pero eso NO implica
+                    // que la empresa pague: puede ser solo una etiqueta
+                    // ("viene de tal institución") y el huésped paga
+                    // individual. Se pregunta acá, al confirmar, porque es
+                    // el único momento donde ya se sabe con certeza cómo se
+                    // va a facturar la estadía real. Si es individual, el
+                    // convenio auto-creado nunca se usó -- se borra (mismo
+                    // patrón que la rama de edición cuando pasa de Especial
+                    // a Estandar, más abajo) y la reserva sigue como si
+                    // nunca hubiera tenido special_agreement_id: el Checkin
+                    // nace sin convenio y el adelanto se liga al checkin
+                    // (crédito del huésped), no al grupo.
+                    if ($reservation->special_agreement_id) {
+                        $paymentMode = $request->input('payment_mode');
+
+                        if (!in_array($paymentMode, ['grupal', 'individual'], true)) {
+                            throw new \Exception('Debe indicar si esta reserva corporativa/delegación se paga de forma grupal o individual antes de confirmar.');
+                        }
+
+                        if ($paymentMode === 'individual') {
+                            \App\Models\SpecialAgreement::where('id', $reservation->special_agreement_id)->delete();
+                            $reservation->update(['special_agreement_id' => null]);
+                            $reservation->unsetRelation('specialAgreement');
+                        }
+                    }
+
                     // 🛑 VALIDACIÓN PREVIA: ninguna habitación de la reserva puede tener
                     // ya un check-in activo de otro huésped. Si alguna lo tiene, abortamos
                     // TODA la confirmación (no se crea ningún check-in) y avisamos cuál falta reasignar.

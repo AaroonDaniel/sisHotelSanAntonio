@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import {
     AlertTriangle,
     BedDouble,
+    Building2,
     Calendar,
     CheckCircle2,
     Loader2,
@@ -75,8 +76,23 @@ export default function AssignRoomsModal({
     const totalPeople = Number(reservation?.guest_count) || 1;
     const advancePayment = Number(reservation?.advance_payment) || 0;
     // Corporativo/delegación resuelve el adelanto vía special_agreement_id
-    // (saldo de grupo) -- ahí nunca hace falta elegir habitación.
+    // (saldo de grupo) -- ahí nunca hace falta elegir habitación. Pero
+    // solo si de verdad se va a pagar grupal (ver paymentMode abajo): el
+    // convenio se crea automáticamente para TODA reserva corporativo/
+    // delegación, aunque el huésped termine pagando individual.
     const hasSpecialAgreement = Boolean(reservation?.special_agreement_id);
+    // Si tiene convenio, hay que preguntar cómo se factura la estadía real
+    // antes de poder confirmar: 'grupal' (la empresa paga, se usa el
+    // convenio/libro mayor) o 'individual' (el huésped paga como
+    // cualquier otro, el convenio auto-creado se borra al confirmar).
+    const [paymentMode, setPaymentMode] = useState<
+        'grupal' | 'individual' | null
+    >(null);
+    const needsPaymentModeChoice = hasSpecialAgreement;
+    // Para todo lo que ya dependía de "es individual" (a qué habitación va
+    // el adelanto), tratar 'individual' igual que una reserva sin convenio.
+    const effectivelyIndividual =
+        !hasSpecialAgreement || paymentMode === 'individual';
 
     // personIndex (1..N) -> room asignada en esta sesión del modal
     const [assignedMap, setAssignedMap] = useState<Record<number, any>>({});
@@ -113,10 +129,13 @@ export default function AssignRoomsModal({
     );
 
     // Solo hay que preguntar cuando realmente hay ambigüedad: reserva
-    // normal, con adelanto, y más de una habitación entre las que elegir.
+    // normal (o corporativo/delegación bajado a individual), con adelanto,
+    // y más de una habitación entre las que elegir.
     const needsAdvancePicker =
-        !hasSpecialAgreement && advancePayment > 0 && confirmRows.length > 1;
-    const canConfirm = !needsAdvancePicker || advanceDetailId !== null;
+        effectivelyIndividual && advancePayment > 0 && confirmRows.length > 1;
+    const canConfirm =
+        (!needsPaymentModeChoice || paymentMode !== null) &&
+        (!needsAdvancePicker || advanceDetailId !== null);
 
     useEffect(() => {
         if (!show || !reservation) return;
@@ -128,6 +147,7 @@ export default function AssignRoomsModal({
         setSelectedPeople([]);
         setPendingRoom(null);
         setExpandedGroupRoomId(null);
+        setPaymentMode(null);
 
         const alreadyAssigned = isRoomAlreadyAssigned(reservation);
 
@@ -408,6 +428,9 @@ export default function AssignRoomsModal({
             status: 'confirmada',
             assignments,
         };
+        if (needsPaymentModeChoice) {
+            payload.payment_mode = paymentMode;
+        }
         if (advancePayment > 0 && advanceDetailId) {
             payload.advance_detail_id = advanceDetailId;
         }
@@ -914,6 +937,59 @@ export default function AssignRoomsModal({
                 ) : (
                     /* ============ FASE CONFIRMAR (sin precio) ============ */
                     <div className="flex-1 overflow-y-auto p-6">
+                        {needsPaymentModeChoice && (
+                            <div className="mb-5 rounded-xl border-2 border-purple-200 bg-purple-50 p-4">
+                                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-black tracking-widest text-purple-700 uppercase">
+                                    <Building2 className="h-3.5 w-3.5" />
+                                    {reservation.special_agreement
+                                        ?.company_name ||
+                                        `Convenio ${reservation.special_agreement?.type ?? ''}`}
+                                </p>
+                                <p className="mb-3 text-xs font-medium text-purple-800">
+                                    ¿Cómo se paga esta estadía?
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setPaymentMode('grupal')
+                                        }
+                                        className={`rounded-lg border-2 p-3 text-left transition ${
+                                            paymentMode === 'grupal'
+                                                ? 'border-purple-500 bg-white shadow-sm'
+                                                : 'border-purple-200 bg-white/50 hover:border-purple-300'
+                                        }`}
+                                    >
+                                        <p className="text-xs font-black text-purple-900 uppercase">
+                                            Grupal
+                                        </p>
+                                        <p className="text-[11px] text-purple-600">
+                                            La empresa/institución paga las
+                                            noches
+                                        </p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setPaymentMode('individual')
+                                        }
+                                        className={`rounded-lg border-2 p-3 text-left transition ${
+                                            paymentMode === 'individual'
+                                                ? 'border-purple-500 bg-white shadow-sm'
+                                                : 'border-purple-200 bg-white/50 hover:border-purple-300'
+                                        }`}
+                                    >
+                                        <p className="text-xs font-black text-purple-900 uppercase">
+                                            Individual
+                                        </p>
+                                        <p className="text-[11px] text-purple-600">
+                                            El huésped paga directamente
+                                        </p>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <p className="mb-4 text-sm font-medium text-gray-600">
                             {needsAdvancePicker ? (
                                 <>
@@ -1035,7 +1111,10 @@ export default function AssignRoomsModal({
                             )}
                             {canConfirm
                                 ? 'Confirmar Entrada del Huésped'
-                                : 'Elija a qué habitación va el adelanto'}
+                                : needsPaymentModeChoice &&
+                                    paymentMode === null
+                                  ? '¿Grupal o individual?'
+                                  : 'Elija a qué habitación va el adelanto'}
                         </button>
                     )}
                 </div>

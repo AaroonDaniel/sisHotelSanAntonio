@@ -19,6 +19,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import ReservationDetailModal from './ReservationDetailModal';
 import ReservationModal, { Guest, Reservation } from './reservationModal';
 
 // 🚀 REDISEÑO: Room/Price/RoomType ya no viven en reservationModal.tsx
@@ -151,6 +152,8 @@ export default function ReservationsIndex({
     const [statusFilter, setStatusFilter] = useState('');
     const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
     const [editingReservation, setEditingReservation] =
+        useState<Reservation | null>(null);
+    const [viewingReservation, setViewingReservation] =
         useState<Reservation | null>(null);
 
     // Estados para los modales
@@ -459,6 +462,18 @@ export default function ReservationsIndex({
 
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={() =>
+                                                                setViewingReservation(
+                                                                    res,
+                                                                )
+                                                            }
+                                                            className="group relative rounded-lg p-2 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                                                            title="Ver Detalle de Reserva"
+                                                        >
+                                                            <Search className="h-4 w-4" />
+                                                        </button>
+
                                                         {res.status ===
                                                             'pendiente' && (
                                                             <button
@@ -610,6 +625,13 @@ export default function ReservationsIndex({
                             ? `/reservas/${confirmingReservationId}`
                             : null
                     }
+                />
+
+                <ReservationDetailModal
+                    show={!!viewingReservation}
+                    onClose={() => setViewingReservation(null)}
+                    reservation={viewingReservation}
+                    operators={Operators}
                 />
             </div>
         </AuthenticatedLayout>

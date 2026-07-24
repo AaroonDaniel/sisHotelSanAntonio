@@ -11,9 +11,7 @@ import {
     Loader2,
     Save,
     Search,
-    User,
     UserPlus,
-    Users,
     X,
 } from 'lucide-react';
 import { FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
@@ -525,82 +523,37 @@ export default function ReservationModal({
                                 <input
                                     type="date"
                                     value={data.arrival_date}
-                                    min={
-                                        new Date().toISOString().split('T')[0]
-                                    }
+                                    min={new Date().toISOString().split('T')[0]}
                                     onChange={(e) =>
                                         setData('arrival_date', e.target.value)
                                     }
-                                    className="w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-gray-700 focus:border-green-500 focus:ring-green-500"
+                                    className="h-11 w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-gray-700 focus:border-green-500 focus:ring-green-500"
                                 />
                             </div>
-                            
                         </div>
 
                         <div>
                             <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
-                                Noches
+                                Cantidad de Personas
                             </label>
-                            <div className="flex items-center justify-center gap-3 rounded-xl border border-gray-400 py-1.5">
+                            <div className="flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-gray-400">
                                 <button
                                     type="button"
                                     onClick={() =>
-                                        setData(
-                                            'duration_days',
-                                            Math.max(
-                                                1,
-                                                Number(data.duration_days) - 1,
+                                        handleGuestCountChange(
+                                            String(
+                                                Math.max(
+                                                    1,
+                                                    (Number(data.guest_count) ||
+                                                        1) - 1,
+                                                ),
                                             ),
                                         )
                                     }
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-lg font-bold text-gray-700 transition hover:bg-gray-200"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-lg font-bold text-gray-700 transition hover:bg-gray-200"
                                 >
                                     −
                                 </button>
-                                <span className="w-8 text-center text-xl font-black text-gray-800">
-                                    {data.duration_days}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setData(
-                                            'duration_days',
-                                            Number(data.duration_days) + 1,
-                                        )
-                                    }
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-green-100 text-lg font-bold text-green-700 transition hover:bg-green-200"
-                                >
-                                    +
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* CANTIDAD DE PERSONAS */}
-                    <div>
-                        <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
-                            Cantidad de personas
-                        </label>
-                        <div className="flex items-center justify-center gap-4 rounded-xl border border-blue-300 bg-blue-50 py-2">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    handleGuestCountChange(
-                                        String(
-                                            Math.max(
-                                                1,
-                                                (Number(data.guest_count) ||
-                                                    1) - 1,
-                                            ),
-                                        ),
-                                    )
-                                }
-                                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
-                            >
-                                −
-                            </button>
-                            <div className="flex items-center gap-2">
-                                <Users className="h-5 w-5 text-blue-500" />
                                 <input
                                     type="number"
                                     min={1}
@@ -625,14 +578,56 @@ export default function ReservationModal({
                                     }}
                                     className="m-0 w-14 [appearance:textfield] rounded-md border border-blue-300 bg-white text-center text-2xl font-black text-blue-900 outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        handleGuestCountChange(
+                                            String(
+                                                (Number(data.guest_count) ||
+                                                    1) + 1,
+                                            ),
+                                        )
+                                    }
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-lg font-bold text-green-700 transition hover:bg-green-200"
+                                >
+                                    +
+                                </button>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* CANTIDAD DE NOCHES */}
+                    <div>
+                        <label className="mb-1 block text-center text-xs font-bold text-gray-600 uppercase">
+                            Cantidad de noches
+                        </label>
+                        <div className="flex items-center justify-center gap-3 rounded-xl border border-blue-300 bg-blue-50 py-1">
                             <button
                                 type="button"
                                 onClick={() =>
-                                    handleGuestCountChange(
-                                        String(
-                                            (Number(data.guest_count) || 1) + 1,
+                                    setData(
+                                        'duration_days',
+                                        Math.max(
+                                            1,
+                                            Number(data.duration_days) - 1,
                                         ),
+                                    )
+                                }
+                                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
+                            >
+                                −
+                            </button>
+
+                            <span className="w-14 text-center text-2xl font-black text-gray-800">
+                                {data.duration_days}
+                            </span>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setData(
+                                        'duration_days',
+                                        Number(data.duration_days) + 1,
                                     )
                                 }
                                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xl font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
@@ -702,7 +697,7 @@ export default function ReservationModal({
                                         }
                                         className={`flex-1 rounded-md py-1.5 text-xs font-bold transition-all ${data.payment_type === 'QR' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                     >
-                                        QR 
+                                        QR
                                     </button>
                                 </div>
 
@@ -731,10 +726,7 @@ export default function ReservationModal({
                                                 type="button"
                                                 title={banco.id}
                                                 onClick={() =>
-                                                    setData(
-                                                        'qr_bank',
-                                                        banco.id,
-                                                    )
+                                                    setData('qr_bank', banco.id)
                                                 }
                                                 className={`relative flex h-10 w-full items-center justify-center rounded-lg border p-1 transition-all duration-200 ${
                                                     data.qr_bank === banco.id

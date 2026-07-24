@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { FaBed, FaEdit, FaTimesCircle, FaUserCheck } from 'react-icons/fa';
 import AssignRoomsModal from './AssignRoomsModal';
+import ReservationDetailModal from './ReservationDetailModal';
 import ReservationModal from './reservationModal';
 
 interface Props {
@@ -49,6 +50,7 @@ export default function ViewReservationModal({
         mode: 'assign' | 'confirm';
     } | null>(null);
     const [editingReservation, setEditingReservation] = useState<any>(null);
+    const [viewingReservation, setViewingReservation] = useState<any>(null);
 
     // 👇 Estado para la vista de Verificación de Pago Online 👇
     const [verifyingOnlineRes, setVerifyingOnlineRes] = useState<any>(null);
@@ -457,7 +459,19 @@ export default function ViewReservationModal({
                                                 </div>
 
                                                 {/* Acciones */}
-                                                <div className="flex items-center gap-4 md:w-36 md:flex-none md:justify-end">
+                                                <div className="flex items-center gap-4 md:w-44 md:flex-none md:justify-end">
+                                                    <button
+                                                        onClick={() =>
+                                                            setViewingReservation(
+                                                                res,
+                                                            )
+                                                        }
+                                                        className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100"
+                                                        title="Ver Detalle de Reserva"
+                                                    >
+                                                        <Search className="h-6 w-6" />
+                                                    </button>
+
                                                     <button
                                                         onClick={() =>
                                                             setEditingReservation(
@@ -695,6 +709,14 @@ export default function ViewReservationModal({
                     )}
                 />
             )}
+
+            {/* Modal de DETALLE (solo lectura) */}
+            <ReservationDetailModal
+                show={!!viewingReservation}
+                onClose={() => setViewingReservation(null)}
+                reservation={viewingReservation}
+                operators={operators}
+            />
         </AuthenticatedLayout>
     );
 }
