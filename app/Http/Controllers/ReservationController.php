@@ -544,28 +544,57 @@ class ReservationController extends Controller
 
                     $pagos = Payment::where('reservation_id', $reservation->id)->get();
 
-                    // A qué Checkin se le atribuye el adelanto ya cobrado:
-                    // el que eligió el recepcionista (advance_detail_id,
-                    // solo tiene sentido con 2+ habitaciones en una reserva
-                    // normal -- en corporativo/delegación esto no aplica,
-                    // ese dinero se sigue viendo a nivel de special_agreement)
-                    // o el primero si no vino nada (caso de 1 sola habitación).
-                    $advanceDetailId = $request->input('advance_detail_id');
-                    $checkinIdParaAdelanto = ($advanceDetailId && isset($checkinIdPorDetailId[(int) $advanceDetailId]))
-                        ? $checkinIdPorDetailId[(int) $advanceDetailId]
-                        : $primerCheckinId;
+                    if ($pagos->isNotEmpty()) {
+                        if ($reservation->special_agreement_id) {
+                            // 🐛 CORREGIDO (doble conteo): en corporativo/
+                            // delegación el adelanto es fondo del GRUPO, no
+                            // del huésped -- special_agreement_id seteado,
+                            // checkin_id NULL a propósito. CheckinController
+                            // suma "pagado por el huésped" filtrando
+                            // Checkin::payments() por checkin_id (ver
+                            // checkout(), líneas ~1922-1937): si este Payment
+                            // tuviera checkin_id, el checkout lo contaría
+                            // como crédito del huésped Y el libro mayor
+                            // (SpecialAgreement::availableLedgerBalance(),
+                            // vía total_deposited) lo contaría como fondo del
+                            // grupo -- las mismas noches pagadas dos veces.
+                            // Al no tener checkin_id, desaparece de los 5
+                            // puntos de CheckinController que filtran por esa
+                            // columna, y solo lo ve el libro mayor.
+                            foreach ($pagos as $pago) {
+                                $pago->update([
+                                    'special_agreement_id' => $reservation->special_agreement_id,
+                                    'checkin_id'            => null,
+                                    'reservation_id'        => null,
+                                ]);
+                            }
 
-                    if ($checkinIdParaAdelanto && $pagos->isNotEmpty()) {
-                        foreach ($pagos as $pago) {
-                            $pago->update([
-                                'checkin_id'     => $checkinIdParaAdelanto,
-                                'reservation_id' => null,
-                            ]);
+                            $totalPagos = $pagos->sum('amount');
+                            Log::info("Adelanto de Bs {$totalPagos} transferido al fondo del grupo (SpecialAgreement ID: {$reservation->special_agreement_id}).");
+                        } else {
+                            // Reserva normal: sin cambios -- el adelanto
+                            // sigue siendo crédito del huésped en SU
+                            // checkin. A qué Checkin se atribuye: el que
+                            // eligió el recepcionista (advance_detail_id,
+                            // solo tiene sentido con 2+ habitaciones) o el
+                            // primero si no vino nada (1 sola habitación).
+                            $advanceDetailId = $request->input('advance_detail_id');
+                            $checkinIdParaAdelanto = ($advanceDetailId && isset($checkinIdPorDetailId[(int) $advanceDetailId]))
+                                ? $checkinIdPorDetailId[(int) $advanceDetailId]
+                                : $primerCheckinId;
+
+                            if ($checkinIdParaAdelanto) {
+                                foreach ($pagos as $pago) {
+                                    $pago->update([
+                                        'checkin_id'     => $checkinIdParaAdelanto,
+                                        'reservation_id' => null,
+                                    ]);
+                                }
+
+                                $totalPagos = $pagos->sum('amount');
+                                Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in ID: {$checkinIdParaAdelanto}.");
+                            }
                         }
-
-                        $totalPagos = $pagos->sum('amount');
-
-                        Log::info("Adelanto de Bs {$totalPagos} transferido al Check-in ID: {$checkinIdParaAdelanto}.");
                     }
                 }
 
