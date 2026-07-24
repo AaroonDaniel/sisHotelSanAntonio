@@ -122,17 +122,18 @@ export default function ViewReservationModal({
         [filteredReservations],
     );
 
-    // 🚀 REDISEÑO: las tablas 1 y 2 se fusionaron en un solo listado.
-    // Primero las reservas sin asignar (requieren acción), después las
-    // asignadas. Dentro de cada grupo, por fecha de llegada ascendente.
+    // 🚀 REDISEÑO: las tablas 1 y 2 se fusionaron en un solo listado, sin
+    // agrupar por asignadas/sin asignar -- todas mezcladas, por orden de
+    // registro (cuándo se creó la reserva): la más nueva arriba, como un
+    // feed de actividad -- cada reserva que entra se reordena a la
+    // cabeza de la lista. El color (naranja/verde) de cada fila sigue
+    // distinguiendo sin asignar vs asignada.
     const allReservations = useMemo(() => {
-        const byArrival = (a: any, b: any) =>
-            new Date(a.arrival_date).getTime() -
-            new Date(b.arrival_date).getTime();
-        return [
-            ...[...pendingAssignment].sort(byArrival),
-            ...[...readyForCheckin].sort(byArrival),
-        ];
+        return [...pendingAssignment, ...readyForCheckin].sort(
+            (a: any, b: any) =>
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime(),
+        );
     }, [pendingAssignment, readyForCheckin]);
 
     // ==========================================

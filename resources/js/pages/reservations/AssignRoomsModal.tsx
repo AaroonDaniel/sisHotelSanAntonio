@@ -71,11 +71,6 @@ export default function AssignRoomsModal({
     const [phase, setPhase] = useState<'matchmaking' | 'confirming'>(
         'matchmaking',
     );
-    // Dentro de la fase 'matchmaking': una vez que todos tienen habitación,
-    // el usuario pasa a una pantalla de revisión (tarjetas por habitación)
-    // antes de guardar de verdad. No es una fase nueva -- solo cambia qué
-    // se muestra dentro de 'matchmaking'.
-    const [isReviewing, setIsReviewing] = useState(false);
 
     const totalPeople = Number(reservation?.guest_count) || 1;
     const advancePayment = Number(reservation?.advance_payment) || 0;
@@ -133,7 +128,6 @@ export default function AssignRoomsModal({
         setSelectedPeople([]);
         setPendingRoom(null);
         setExpandedGroupRoomId(null);
-        setIsReviewing(false);
 
         const alreadyAssigned = isRoomAlreadyAssigned(reservation);
 
@@ -336,15 +330,8 @@ export default function AssignRoomsModal({
         });
     };
 
-    // Botón "Deshacer" de una tarjeta en la pantalla de revisión: además
-    // regresa a la pantalla de selección para que se les pueda asignar otra.
-    const undoRoomAssignment = (roomId: number) => {
-        releaseRoomGroup(roomId);
-        setIsReviewing(false);
-    };
-
-    // Botón "Cancelar" del grupo desplegado en la columna derecha (pantalla
-    // de selección, no la de revisión) -- solo cierra el desplegable.
+    // Botón "Cancelar" del grupo desplegado en la columna derecha -- solo
+    // cierra el desplegable.
     const unassignRoomGroup = (roomId: number) => {
         releaseRoomGroup(roomId);
         setExpandedGroupRoomId(null);
@@ -465,63 +452,6 @@ export default function AssignRoomsModal({
                 )}
 
                 {phase === 'matchmaking' ? (
-                    isReviewing ? (
-                        /* ============ REVISIÓN DE DISTRIBUCIÓN ============ */
-                        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-                            <div className="mb-4">
-                                <h3 className="text-sm font-black text-gray-800 uppercase">
-                                    Revise la distribución antes de guardar
-                                </h3>
-                                <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
-                                    {groupsSummary.length} habitación(es) ·{' '}
-                                    {totalPeople} persona(s)
-                                </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {groupsSummary.map((g) => (
-                                    <div
-                                        key={g.room.id}
-                                        className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                                    >
-                                        <div className="mb-3 flex items-start justify-between gap-2 border-b border-gray-100 pb-3">
-                                            <div>
-                                                <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
-                                                    {g.room.room_type?.name ||
-                                                        'Habitación'}
-                                                </p>
-                                                <p className="text-xl font-black text-gray-800">
-                                                    Hab. {g.room.number}
-                                                </p>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    undoRoomAssignment(
-                                                        g.room.id,
-                                                    )
-                                                }
-                                                className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-gray-600 transition hover:bg-gray-50"
-                                                title="Deshacer esta asignación"
-                                            >
-                                                <Undo2 className="h-3.5 w-3.5" />
-                                                Deshacer
-                                            </button>
-                                        </div>
-                                        <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-                                            <Users className="h-4 w-4 text-gray-400" />
-                                            <span className="text-sm font-bold text-gray-700 uppercase">
-                                                {g.people.length} persona
-                                                {g.people.length === 1
-                                                    ? ''
-                                                    : 's'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
                     <div className="flex flex-1 overflow-hidden">
                         {/* COLUMNA IZQUIERDA: COLA DE PERSONAS (Pendientes / Asignados) */}
                         <div className="w-full overflow-y-auto border-r border-gray-100 bg-white p-6 md:w-1/3 lg:w-1/4">
@@ -662,17 +592,21 @@ export default function AssignRoomsModal({
                             <div className="z-10 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
                                 <div>
                                     <h3 className="text-sm font-black text-gray-800 uppercase">
-                                        {pendingRoom
-                                            ? `Hab. ${pendingRoom.number} seleccionada — confirme abajo`
-                                            : selectedPeople.length > 0
-                                              ? `Elegir habitación para ${selectedPeople.length} persona(s)`
-                                              : 'Tilde una o más personas a la izquierda'}
+                                        {allPeopleAssigned
+                                            ? 'Revise la distribución antes de guardar'
+                                            : pendingRoom
+                                              ? `Hab. ${pendingRoom.number} seleccionada — confirme abajo`
+                                              : selectedPeople.length > 0
+                                                ? `Elegir habitación para ${selectedPeople.length} persona(s)`
+                                                : 'Tilde una o más personas a la izquierda'}
                                     </h3>
                                     <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
-                                        Mostrando habitaciones con capacidad ≥{' '}
-                                        {Math.max(1, selectedPeople.length)}
+                                        {allPeopleAssigned
+                                            ? `${groupsSummary.length} habitación(es) · ${totalPeople} persona(s)`
+                                            : `Mostrando habitaciones con capacidad ≥ ${Math.max(1, selectedPeople.length)}`}
                                     </p>
                                 </div>
+                                {!allPeopleAssigned && (
                                 <div className="flex items-center gap-2">
                                     <div className="relative w-40">
                                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -715,10 +649,62 @@ export default function AssignRoomsModal({
                                         />
                                     </div>
                                 </div>
+                                )}
                             </div>
 
                             <div className="relative flex-1 overflow-y-auto p-5">
-                                {selectedPeople.length === 0 ? (
+                                {allPeopleAssigned ? (
+                                    /* Todos con habitación: revisión inline
+                                       en el mismo espacio del grid -- si se
+                                       deshace una, vuelve solo a mostrar el
+                                       grid de habitaciones (allPeopleAssigned
+                                       pasa a false). */
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                        {groupsSummary.map((g) => (
+                                            <div
+                                                key={g.room.id}
+                                                className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                                            >
+                                                <div className="mb-3 flex items-start justify-between gap-2 border-b border-gray-100 pb-3">
+                                                    <div>
+                                                        <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                                                            {g.room.room_type
+                                                                ?.name ||
+                                                                'Habitación'}
+                                                        </p>
+                                                        <p className="text-xl font-black text-gray-800">
+                                                            Hab.{' '}
+                                                            {g.room.number}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            releaseRoomGroup(
+                                                                g.room.id,
+                                                            )
+                                                        }
+                                                        className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-gray-600 transition hover:bg-gray-50"
+                                                        title="Deshacer esta asignación"
+                                                    >
+                                                        <Undo2 className="h-3.5 w-3.5" />
+                                                        Deshacer
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                                                    <Users className="h-4 w-4 text-gray-400" />
+                                                    <span className="text-sm font-bold text-gray-700 uppercase">
+                                                        {g.people.length}{' '}
+                                                        persona
+                                                        {g.people.length === 1
+                                                            ? ''
+                                                            : 's'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : selectedPeople.length === 0 ? (
                                     <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-12 text-gray-400 shadow-sm">
                                         <Users className="mb-3 h-12 w-12 opacity-20" />
                                         <p className="max-w-xs text-center text-xs font-bold uppercase">
@@ -809,33 +795,27 @@ export default function AssignRoomsModal({
 
                             {/* ZONA DE ACCIONES: confirmar/cancelar la habitación
                                 tentativa, y los grupos ya armados -- separada del
-                                botón principal del footer, con más espacio acá. */}
-                            {(groupsSummary.length > 0 ||
+                                botón principal del footer, con más espacio acá.
+                                No se muestra cuando ya está todo asignado: esa
+                                revisión ya se ve arriba, en el cuerpo. */}
+                            {!allPeopleAssigned &&
+                                (groupsSummary.length > 0 ||
                                 (pendingRoom &&
                                     selectedPeople.length > 0)) && (
                                 <div className="border-t border-gray-200 bg-white p-4">
                                     {pendingRoom &&
                                         selectedPeople.length > 0 && (
-                                            <div className="mb-3 flex gap-2">
+                                            <div className="mb-3 flex items-center justify-center">
                                                 <button
                                                     type="button"
                                                     onClick={
                                                         confirmRoomSelection
                                                     }
-                                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 text-[11px] font-black text-white uppercase shadow-md transition hover:bg-green-700"
+                                                    className="flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-5 py-2.5 text-[15px] font-black text-white uppercase shadow-md transition hover:bg-green-700"
                                                 >
-                                                    Asignar a Hab.{' '}
-                                                    {pendingRoom.number}
+                                                    Asignar 
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setPendingRoom(null)
-                                                    }
-                                                    className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-[11px] font-bold text-gray-600 uppercase transition hover:bg-gray-50"
-                                                >
-                                                    Cancelar
-                                                </button>
+                                                
                                             </div>
                                         )}
 
@@ -931,7 +911,6 @@ export default function AssignRoomsModal({
                             )}
                         </div>
                     </div>
-                    )
                 ) : (
                     /* ============ FASE CONFIRMAR (sin precio) ============ */
                     <div className="flex-1 overflow-y-auto p-6">
@@ -1012,20 +991,10 @@ export default function AssignRoomsModal({
                 <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
                     {phase === 'confirming' && mode === 'confirm' && !isRoomAlreadyAssigned(reservation) ? (
                         <button
-                            onClick={() => {
-                                setPhase('matchmaking');
-                                setIsReviewing(false);
-                            }}
+                            onClick={() => setPhase('matchmaking')}
                             className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
                         >
                             <Undo2 className="h-4 w-4" /> Volver a asignar
-                        </button>
-                    ) : phase === 'matchmaking' && isReviewing ? (
-                        <button
-                            onClick={() => setIsReviewing(false)}
-                            className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                        >
-                            <Undo2 className="h-4 w-4" /> Volver a Editar
                         </button>
                     ) : (
                         <button
@@ -1038,12 +1007,7 @@ export default function AssignRoomsModal({
 
                     {phase === 'matchmaking' ? (
                         <button
-                            onClick={() =>
-                                isReviewing
-                                    ? submitMatchmaking()
-                                    : allPeopleAssigned &&
-                                      setIsReviewing(true)
-                            }
+                            onClick={submitMatchmaking}
                             disabled={!allPeopleAssigned || isProcessing}
                             className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -1054,9 +1018,9 @@ export default function AssignRoomsModal({
                             )}
                             {!allPeopleAssigned
                                 ? `Faltan ${unassignedPeople.length} persona(s)`
-                                : isReviewing
+                                : mode === 'assign'
                                   ? 'Guardar Asignación'
-                                  : 'Revisar Distribución'}
+                                  : 'Continuar'}
                         </button>
                     ) : (
                         <button

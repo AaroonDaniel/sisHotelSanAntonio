@@ -870,7 +870,11 @@ class ReservationController extends Controller
             ->whereIn('status', ['pendiente'])
             // 👇 2. NUEVO FILTRO: Solo trae reservas cuya fecha de llegada sea HOY o en el futuro
             ->where('arrival_date', '>=', $today)
-            ->orderBy('arrival_date', 'asc')
+            // Orden por registro (created_at), no por fecha de llegada --
+            // la más nueva primero (el frontend además re-ordena así
+            // mismo al fusionar sin-asignar + asignadas, ver
+            // viewReservationModal.tsx).
+            ->orderBy('created_at', 'desc')
             ->get();
 
 
