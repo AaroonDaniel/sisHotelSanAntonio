@@ -34,6 +34,7 @@ class GroupAccountController extends Controller
     public function index()
     {
         $accounts = SpecialAgreement::groupAccounts()
+            ->where('status', '!=', 'cerrado')
             ->withCount(['checkins' => fn ($q) => $q->where('status', 'activo')])
             ->orderByDesc('created_at')
             ->get()

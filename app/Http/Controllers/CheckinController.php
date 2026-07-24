@@ -203,8 +203,6 @@ class CheckinController extends Controller
             'payment_method' => 'nullable|required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
-            'discount' => 'nullable|numeric|min:0',
-            'is_corporate' => 'nullable|boolean',
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
             'corporate_days' => 'nullable|integer',
             'agreed_price' => 'nullable|numeric|min:0',
@@ -416,8 +414,7 @@ class CheckinController extends Controller
             $roomModelForPrice = \App\Models\Room::with('price')->findOrFail($validatedCheckin['room_id']);
             $basePrice  = (float) ($roomModelForPrice->price->amount ?? 0);
 
-            $isSpecialDeal = $request->boolean('is_corporate')
-                || in_array($request->input('type'), ['corporativo', 'delegacion']);
+            $isSpecialDeal = in_array($request->input('type'), ['corporativo', 'delegacion']);
 
             $isAutoAdjust = $request->boolean('auto_adjust_price');
 
@@ -435,18 +432,9 @@ class CheckinController extends Controller
                 $agreedPrice = $request->filled('agreed_price') ? (float) $request->input('agreed_price') : $basePrice;
             }
 
-            // El descuento manual sigue teniendo prioridad sobre el precio calculado.
-            // Sin piso del 50%: el mínimo permitido es 0 (estadía gratuita),
-            // nunca un monto negativo.
-            if ($request->filled('discount') && is_numeric($request->discount) && $request->discount >= 0) {
-                $agreedPrice = max(0, (float) $request->discount);
-            }
-
-
             $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
             $specialAgreementId = null;
-            $isAutoAdjust = $request->boolean('auto_adjust_price');
             $groupAccountId = $request->input('group_account_id');
 
             if ($groupAccountId) {
@@ -719,7 +707,13 @@ class CheckinController extends Controller
             // =========================================================
             if ($isFullTransfer) {
                 $totalGuests = count($allGuestIds);
-                $nuevoAgreedPrice = $this->calculateAgreedPrice($newRoomId, $totalGuests);
+                // 🚀 PRECIO POR HUÉSPED: si el checkin ya tiene titular_price,
+                // CheckinObserver::saving() va a pisar agreed_price de todos
+                // modos (el precio personal pactado no cambia con la
+                // habitación) — evitamos la consulta a Room/Price para nada.
+                $nuevoAgreedPrice = is_null($checkin->titular_price)
+                    ? $this->calculateAgreedPrice($newRoomId, $totalGuests)
+                    : $checkin->agreed_price;
                 $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
                 $deudaHastaAhora = $diasPasados * ($checkin->agreed_price ?? 0);
 
@@ -776,7 +770,14 @@ class CheckinController extends Controller
                 $newNewTitularId = $leavingIds[0];
                 $newNewCompanions = array_slice($leavingIds, 1);
 
-                $precioViejaHabitacion = $this->calculateAgreedPrice($checkin->room_id, count($stayingIds));
+                // 🚀 PRECIO POR HUÉSPED: igual que en la transferencia
+                // completa, si el checkin que SE QUEDA ya tiene
+                // titular_price, el observer lo va a pisar de todos modos.
+                $precioViejaHabitacion = is_null($checkin->titular_price)
+                    ? $this->calculateAgreedPrice($checkin->room_id, count($stayingIds))
+                    : $checkin->agreed_price;
+                // El checkin NUEVO (los que se van) nace sin titular_price,
+                // así que este sí es el precio real que se persiste.
                 $precioNuevaHabitacion = $this->calculateAgreedPrice($newRoomId, count($leavingIds));
 
                 $diasPasados = $this->calculateBillableDays($checkin, $ahora, true);
@@ -824,7 +825,6 @@ class CheckinController extends Controller
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
-                    'advance_payment' => 0,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
                     // 🚀 BLINDAJE DE CUENTAS GRUPALES: el check-in nuevo
                     // hereda ESTRICTAMENTE el special_agreement_id (Cuenta
@@ -1097,7 +1097,6 @@ class CheckinController extends Controller
                 'schedule_id' => 'nullable|exists:schedules,id',
 
                 // --- Campos viejos / Nuevos ---
-                'is_corporate' => 'nullable|boolean',
                 'type' => 'nullable|string|in:estandar,corporativo,delegacion',
                 'corporate_days' => 'nullable|integer', // Lo recibimos para guardarlo en la nueva tabla
                 'agreed_price' => 'nullable|numeric|min:0',
@@ -1322,22 +1321,14 @@ class CheckinController extends Controller
             $maxCapacity = $roomModelUpdate->roomType->capacity ?? 1;
             $basePrice = $roomModelUpdate->price->amount ?? 0;
 
-            $isCorporateNow = $request->boolean('is_corporate');
             $isAutoAdjustNow = $request->boolean('auto_adjust_price');
             $typeRequest = $request->input('type');
 
             // 🌟 Consideramos el Auto Ajuste como un Grupo Especial
-            $isSpecialGroupNow = $isCorporateNow || $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
+            $isSpecialGroupNow = $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
 
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
             $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
-
-            // 🌟 Recalculamos matemáticamente en caso de que agreguen/quiten personas al editar
-            if ($isAutoAdjustNow) {
-                $updatedAgreedPrice = $this->calculateAgreedPrice($validated['room_id'], $totalGuests);
-            } else {
-                $updatedAgreedPrice = $request->filled('agreed_price') ? $request->input('agreed_price') : $precioActualGuardado;
-            }
 
             $extraNotes = "";
 
@@ -1513,9 +1504,6 @@ class CheckinController extends Controller
                         'payment_date'     => now(),
                     ]);
                 }
-
-                // Guardamos el acumulado en la tabla checkins (si tienes la columna)
-                $updateData['advance_payment'] = $nuevoMonto;
             }
 
             // Ya no mandamos is_corporate, agreed_price, etc. en el updateData
@@ -3645,9 +3633,13 @@ class CheckinController extends Controller
 
                 // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
                 // "origen->destino".
+                // 🚀 PRECIO POR HUÉSPED: si ya tiene titular_price, el
+                // observer lo pisa de todos modos al guardar.
                 $checkin->update([
                     'guest_id' => $stayingIds[0], // Nombra a un nuevo titular para los que se quedan
-                    'agreed_price' => $this->calculateAgreedPrice($checkin->room_id, count($stayingIds)),
+                    'agreed_price' => is_null($checkin->titular_price)
+                        ? $this->calculateAgreedPrice($checkin->room_id, count($stayingIds))
+                        : $checkin->agreed_price,
                     'price_effective_since' => $ahora,
                     'duration_days' => 1,
                     'notes' => $checkin->notes . " | " . $checkin->room->number . "->" . $targetCheckin->room->number,
@@ -3708,8 +3700,12 @@ class CheckinController extends Controller
             // Recalculamos la tarifa y aplicamos el nuevo estado is_temporary.
             // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
             // "origen->destino".
+            // 🚀 PRECIO POR HUÉSPED: si el destino ya tiene titular_price,
+            // el observer lo pisa de todos modos al guardar.
             $targetCheckin->update([
-                'agreed_price' => $this->calculateAgreedPrice($targetCheckin->room_id, $totalGuestsNow),
+                'agreed_price' => is_null($targetCheckin->titular_price)
+                    ? $this->calculateAgreedPrice($targetCheckin->room_id, $totalGuestsNow)
+                    : $targetCheckin->agreed_price,
                 'price_effective_since' => $ahora,
                 'duration_days' => 1,
                 'notes' => ltrim($targetCheckin->notes . " | " . \App\Models\Room::find($oldRoomId)->number . "->" . $targetCheckin->room->number, " | "),
@@ -3719,79 +3715,6 @@ class CheckinController extends Controller
             return redirect()->back()->with('success', $isFullTransfer ? 'Fusión exitosa. Los huéspedes y sus deudas se unieron a la nueva habitación, la original pasó a LIMPIEZA.' : 'Fusión parcial exitosa.');
         });
     }
-    /*Fucion a futuro* */
-    // Ejemplo lógico (no copres esto todavía, es para que entiendas el flujo)
-
-    // --- CONVERSIÓN DE RESERVA A CHECK-IN ---
-    public function storeFromReservation(Request $request)
-    {
-        $request->validate([
-            'reservation_id' => 'required|exists:reservations,id'
-        ]);
-
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
-            // Traemos la reserva con todas sus habitaciones y el huésped
-            $reservation = \App\Models\Reservation::with(['details.room', 'guest'])->findOrFail($request->reservation_id);
-
-            $primerCheckinId = null;
-
-            // Recorremos CADA HABITACIÓN reservada
-            foreach ($reservation->details as $index => $detail) {
-
-                $arrivalDate = $reservation->arrival_date ?? now();
-
-                // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
-                // "Reserva [Nombre del Cliente]", sin ID de reserva ni
-                // etiquetas adicionales.
-                $baseNotes = 'Reserva ' . $reservation->guest->full_name;
-
-                $checkin = \App\Models\Checkin::create([
-                    'guest_id' => $reservation->guest_id,
-                    'room_id'  => $detail->room_id,
-                    'user_id'  => \Illuminate\Support\Facades\Auth::id() ?? 1,
-                    'check_in_date' => now(),
-                    'actual_arrival_date' => now(),
-                    'duration_days' => $reservation->duration_days ?? 1,
-                    'advance_payment' => 0,
-                    'origin' => null, // 🚨 ESTO ES CLAVE: El sistema detectará que "Faltan Datos"
-                    'status' => 'activo',
-                    'is_temporary' => false,
-                    'notes' => strtoupper($baseNotes), // 🚀 Guardamos con la etiqueta
-                    'schedule_id' => $reservation->schedule_id, // Sin el error de clone
-                ]);
-
-                if ($index === 0) {
-                    $primerCheckinId = $checkin->id;
-                }
-
-                // Pasamos la habitación a OCUPADO en la BD (Se verá Ámbar en el frontend)
-                \App\Models\Room::where('id', $detail->room_id)->update(['status' => 'OCUPADO']);
-            }
-
-            // Trasladamos el pago (Adelanto)
-            $pagos = \App\Models\Payment::where('reservation_id', $reservation->id)->get();
-
-            if ($primerCheckinId && $pagos->isNotEmpty()) {
-                foreach ($pagos as $pago) {
-                    $pago->update([
-                        'checkin_id'     => $primerCheckinId,
-                        'reservation_id' => null,
-                    ]);
-                }
-
-                $totalPagos = $pagos->sum('amount');
-
-                \App\Models\Checkin::where('id', $primerCheckinId)
-                    ->update(['advance_payment' => $totalPagos]);
-            }
-
-            // Marcamos la reserva original como completada
-            $reservation->update(['status' => 'completada']);
-
-            return redirect()->back()->with('success', 'Reserva confirmada. Por favor, ingrese a la habitación para completar los datos faltantes del Check-in.');
-        });
-    }
-
     // =========================================================================
     // 🚀 CHECKOUT MÚLTIPLE (FINALIZACIÓN GRUPAL)
     // =========================================================================

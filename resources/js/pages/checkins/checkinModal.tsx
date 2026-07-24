@@ -194,7 +194,6 @@ export interface CheckinData {
     qr_bank?: string | null;
     is_temporary?: boolean;
     auto_adjust_price?: boolean;
-    is_corporate?: boolean | number;
     special_agreement?: {
         id: number;
         type: 'corporativo' | 'delegacion' | 'AJUSTE DE PRECIO';

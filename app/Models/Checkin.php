@@ -22,7 +22,6 @@ class Checkin extends Model
         'user_id',
         'checkin_operator_id',
         'checkout_operator_id',
-        'reservation_id',
         'check_in_date',
         'duration_days',
         'check_out_date',
@@ -186,18 +185,6 @@ class Checkin extends Model
         return $this->hasMany(Payment::class);
     }
 
-    /**
-     * Total realmente pagado por el Huésped.
-     *
-     * sum('amount') de SQL ya resta automáticamente los montos negativos
-     * (devoluciones), por lo que NO se debe filtrar por 'type' ni invertir
-     * signos manualmente. La contabilidad cuadra sola.
-     */
-    public function getRealPaidAttribute()
-    {
-        return (float) $this->payments()->sum('amount');
-    }
-
     public function parentCheckin()
     {
         return $this->belongsTo(Checkin::class, 'parent_checkin_id');
@@ -297,13 +284,6 @@ class Checkin extends Model
         if ($operatorId && ($operator = User::find($operatorId))) {
             $activity->causer()->associate($operator);
         }
-    }
-
-
-    public function guests()
-    {
-        // Si usas una tabla intermedia llamada checkin_guests
-        return $this->belongsToMany(Guest::class, 'checkin_guests', 'checkin_id', 'guest_id');
     }
 
     //Mutador al guarda el monto  por convenios

@@ -361,7 +361,11 @@ class RoomController
         // 🚀 Cuentas Grupales activas (Delegación/Corporativo unificados):
         // alimenta el selector de "Check-in Rápido" en CheckinModal para
         // asignar una habitación directamente a una de estas cuentas.
+        // Excluye 'cerrado' -- una cuenta ya cerrada no debe poder recibir
+        // una asignación nueva (ver ReservationController::update(), rama
+        // CANCELADO, que es quien las cierra).
         $groupAccounts = \App\Models\SpecialAgreement::groupAccounts()
+            ->where('status', '!=', 'cerrado')
             ->orderBy('company_name')
             ->get(['id', 'type', 'company_name', 'origin', 'total_advance', 'total_consumed'])
             ->map(fn ($a) => [
