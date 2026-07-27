@@ -1109,12 +1109,13 @@ export default function CheckinModal({
         show,
     ]);
 
-    // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
-    // agreed_price queda SIEMPRE derivado de titular_price + Σ
-    // companions.price mientras dure esta sesión de edición — así todo el
-    // bloque de "Total a cobrar" (más abajo) sigue funcionando sin
-    // tocarlo, solo que ahora recibe un valor calculado en vez de uno
-    // editado a mano. redondeo a 1 decimal, mismo criterio "oficial" que
+    // 🚀 PRECIO POR HUÉSPED: agreed_price queda SIEMPRE derivado de
+    // titular_price + Σ companions.price (solo tipo 'estandar'). El input
+    // de "Total a cobrar" SÍ es editable a mano, pero nunca escribe
+    // agreed_price directamente -- escribe titular_price (ver su onBlur),
+    // y es este efecto el que recalcula agreed_price a partir de ahí. Un
+    // solo sentido (titular_price -> agreed_price) evita que ambos se
+    // pisen entre sí. Redondeo a 1 decimal, mismo criterio "oficial" que
     // usa el backend (Checkin::setAgreedPriceAttribute()).
     useEffect(() => {
         if (data.type !== 'estandar') return;
@@ -2962,13 +2963,15 @@ export default function CheckinModal({
                                     </div>
                                     )}
 
-                                    {/* 🚀 PRECIO POR HUÉSPED (Fase 1, solo
-                                    tipo 'estandar' por ahora): cada persona
-                                    del carrusel lleva su propio precio por
-                                    noche. El "Total a cobrar" de más abajo
-                                    pasa a ser de solo lectura (suma) en
-                                    cuanto se usa este campo. */}
-                                    {data.type === 'estandar' && (
+                                    {/* 🚀 PRECIO POR HUÉSPED: con UN SOLO
+                                    huésped (sin acompañantes) el precio se
+                                    edita únicamente desde "Total a cobrar"
+                                    (panel derecho, más abajo) — este input
+                                    por persona solo hace falta cuando hay
+                                    acompañantes para poder cobrar distinto
+                                    por persona (ej. con/sin desayuno). */}
+                                    {data.type === 'estandar' &&
+                                        companionsList.length > 0 && (
                                         <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">
                                                 Precio (por noche)
@@ -3530,7 +3533,38 @@ export default function CheckinModal({
                                                               originalPrice *
                                                                   noches,
                                                           );
-                                                const minTotal = 0;
+
+                                                // 🚀 PRECIO POR HUÉSPED: al
+                                                // editar el Total en
+                                                // 'estandar', el ajuste cae
+                                                // SOLO en titular_price — los
+                                                // acompañantes conservan su
+                                                // propio precio ya puesto.
+                                                // El Total nunca puede bajar
+                                                // de lo que ya suman los
+                                                // acompañantes (evita un
+                                                // titular_price negativo).
+                                                const sumaAcompanantesTotal =
+                                                    data.type === 'estandar'
+                                                        ? (
+                                                              data.companions ||
+                                                              []
+                                                          ).reduce(
+                                                              (acc, c) =>
+                                                                  acc +
+                                                                  (Number(
+                                                                      c.price,
+                                                                  ) || 0),
+                                                              0,
+                                                          )
+                                                        : 0;
+                                                const minTotal =
+                                                    data.type === 'estandar'
+                                                        ? redondearMoneda(
+                                                              sumaAcompanantesTotal *
+                                                                  noches,
+                                                          )
+                                                        : 0;
 
                                                 return (
                                                     <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
@@ -3665,10 +3699,20 @@ export default function CheckinModal({
                                                                             rawVal ===
                                                                             ''
                                                                         ) {
-                                                                            setData(
-                                                                                'agreed_price',
-                                                                                '',
-                                                                            );
+                                                                            // 🚀 PRECIO POR HUÉSPED: vaciar el
+                                                                            // Total en 'estandar' NO borra
+                                                                            // titular_price (evitaríamos el
+                                                                            // bug de agreed_price en 0) — solo
+                                                                            // cierra la edición.
+                                                                            if (
+                                                                                data.type !==
+                                                                                'estandar'
+                                                                            ) {
+                                                                                setData(
+                                                                                    'agreed_price',
+                                                                                    '',
+                                                                                );
+                                                                            }
                                                                             setEditingTotal(
                                                                                 null,
                                                                             );
@@ -3679,6 +3723,17 @@ export default function CheckinModal({
                                                                             Number(
                                                                                 rawVal,
                                                                             );
+
+                                                                        if (
+                                                                            data.type ===
+                                                                                'estandar' &&
+                                                                            inputVal <
+                                                                                minTotal
+                                                                        ) {
+                                                                            alert(
+                                                                                `El Total no puede ser menor a ${minTotal.toFixed(2)} Bs: ya hay ${sumaAcompanantesTotal.toFixed(2)} Bs/noche asignados a los acompañantes.`,
+                                                                            );
+                                                                        }
 
                                                                         if (
                                                                             inputVal >
@@ -3710,38 +3765,55 @@ export default function CheckinModal({
                                                                                           : inputVal,
                                                                                   );
 
-                                                                        setData(
-                                                                            (
-                                                                                prev,
-                                                                            ) => ({
-                                                                                ...prev,
-                                                                                agreed_price:
-                                                                                    valorAGuardar,
-                                                                                ...(prev.type ===
-                                                                                    'estandar' &&
-                                                                                inputVal !==
-                                                                                    maxTotal
-                                                                                    ? {
-                                                                                          auto_adjust_price: false,
-                                                                                      }
-                                                                                    : {}),
-                                                                            }),
-                                                                        );
+                                                                        if (
+                                                                            data.type ===
+                                                                            'estandar'
+                                                                        ) {
+                                                                            // El ajuste manual del Total cae
+                                                                            // SOLO en titular_price -- los
+                                                                            // acompañantes quedan como están.
+                                                                            // agreed_price NO se toca acá: lo
+                                                                            // deriva solo el useEffect de
+                                                                            // titular_price + Σ
+                                                                            // companions.price, para no pisarlo
+                                                                            // en un tira-y-afloja con ese mismo
+                                                                            // efecto.
+                                                                            const nuevoTitular =
+                                                                                Math.max(
+                                                                                    0,
+                                                                                    redondearMoneda(
+                                                                                        valorAGuardar -
+                                                                                            sumaAcompanantesTotal,
+                                                                                    ),
+                                                                                );
+                                                                            setData(
+                                                                                (
+                                                                                    prev,
+                                                                                ) => ({
+                                                                                    ...prev,
+                                                                                    titular_price:
+                                                                                        nuevoTitular,
+                                                                                    auto_adjust_price: false,
+                                                                                }),
+                                                                            );
+                                                                        } else {
+                                                                            setData(
+                                                                                (
+                                                                                    prev,
+                                                                                ) => ({
+                                                                                    ...prev,
+                                                                                    agreed_price:
+                                                                                        valorAGuardar,
+                                                                                }),
+                                                                            );
+                                                                        }
 
                                                                         setEditingTotal(
                                                                             null,
                                                                         );
                                                                     }}
                                                                     disabled={
-                                                                        isReadOnly ||
-                                                                        // 🚀 PRECIO POR HUÉSPED (Fase 1): en
-                                                                        // 'estandar' el Total ya no se edita
-                                                                        // de golpe -- es la suma de
-                                                                        // titular_price + Σ
-                                                                        // companions.price, se edita por
-                                                                        // persona en el carrusel de arriba.
-                                                                        data.type ===
-                                                                            'estandar'
+                                                                        isReadOnly
                                                                     }
                                                                     className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
                                                                     placeholder="0.00"
