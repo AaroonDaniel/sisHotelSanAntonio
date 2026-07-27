@@ -32,7 +32,6 @@ class Checkin extends Model
         'actual_arrival_date',
         'carried_balance',
         'is_temporary',
-        'parent_checkin_id',
         'special_agreement_id',
         'agreed_price',
         'titular_price',
@@ -183,11 +182,6 @@ class Checkin extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
-    }
-
-    public function parentCheckin()
-    {
-        return $this->belongsTo(Checkin::class, 'parent_checkin_id');
     }
 
     public function specialAgreement(): BelongsTo

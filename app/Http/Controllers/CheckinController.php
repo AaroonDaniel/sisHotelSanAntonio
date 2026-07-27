@@ -486,14 +486,14 @@ class CheckinController extends Controller
                 'duration_days' => $validatedCheckin['duration_days'] ?? 0,
 
                 'agreed_price' => $agreedPrice,
-                // 🚀 PRECIO POR HUÉSPED (Fase 1): si el frontend manda
-                // titular_price, se guarda acá — CheckinObserver::saving()
-                // ya recalcula agreed_price = titular_price (todavía sin
-                // acompañantes) en este mismo guardado. Si no viene
-                // (frontend viejo o storeFromReservation()), queda null y
-                // agreed_price se queda con el $agreedPrice de arriba, sin
-                // cambios de comportamiento.
-                'titular_price' => $request->filled('titular_price') ? (float) $request->input('titular_price') : null,
+                // 🚀 PRECIO POR PERSONA: exclusivo de corporativo/
+                // delegación (convenio institucional con tarifa propia
+                // por huésped). Una asignación NORMAL nunca guarda esto
+                // -- su precio es siempre el de tabla ($agreedPrice de
+                // arriba), sin que CheckinObserver lo recalcule.
+                'titular_price' => ($isSpecialDeal && $request->filled('titular_price'))
+                    ? (float) $request->input('titular_price')
+                    : null,
                 'special_agreement_id' => $specialAgreementId,
                 'notes' => isset($validatedCheckin['notes']) ? strtoupper($validatedCheckin['notes']) : null,
                 'status' => 'activo',
@@ -835,7 +835,6 @@ class CheckinController extends Controller
                     // total_consumed_real aunque agreed_price siguiera
                     // siendo el pactado.
                     'special_agreement_id' => $checkin->special_agreement_id,
-                    'parent_checkin_id' => null,
                     'carried_balance' => 0,
                     // 🚀 CORRECCIÓN CLAVE PARA REACT:
                     // Iniciamos como true por precaución, pero lo validaremos justo abajo
@@ -1426,16 +1425,16 @@ class CheckinController extends Controller
                 'notes' => $notasFinales,
                 'origin' => $cleanOrigin,
                 'agreed_price' => $updatedAgreedPrice,
-                // 🚀 PRECIO POR HUÉSPED (Fase 1): si no viene en el
-                // request, se conserva el que ya tenía (puede ser null
-                // — checkin nunca migrado a precio por huésped). Si el
-                // checkin YA tiene titular_price (propio o heredado del
-                // backfill), CheckinObserver::saving() recalcula
-                // agreed_price acá mismo y pisa el valor de arriba con
-                // titular_price + Σ companions.price — ver Observer.
-                'titular_price' => $request->filled('titular_price')
-                    ? (float) $request->input('titular_price')
-                    : $checkin->titular_price,
+                // 🚀 PRECIO POR PERSONA: exclusivo de corporativo/
+                // delegación. Si el tipo actual NO es uno de esos dos,
+                // se fuerza a null (una asignación normal no guarda
+                // esto, sin importar lo que tuviera antes) para que
+                // CheckinObserver deje de recalcular agreed_price acá.
+                'titular_price' => in_array($typeRequest, ['corporativo', 'delegacion'])
+                    ? ($request->filled('titular_price')
+                        ? (float) $request->input('titular_price')
+                        : $checkin->titular_price)
+                    : null,
                 'special_agreement_id' => $checkin->special_agreement_id, // Conectamos con la llave de la nueva tabla
                 // 🐛 BUG CORREGIDO: 'schedule_id' faltaba tanto en la
                 // validación como acá — el selector de horario en el
@@ -1571,18 +1570,6 @@ class CheckinController extends Controller
         // =========================================================
         $originalCheckInDate = $checkin->check_in_date;
         $totalDiasHistorial = 0;
-
-        $currentParentId = $checkin->parent_checkin_id;
-        while ($currentParentId) {
-            $parent = \App\Models\Checkin::find($currentParentId);
-            if ($parent) {
-                $originalCheckInDate = $parent->check_in_date;
-                $totalDiasHistorial += max(1, intval($parent->duration_days));
-                $currentParentId = $parent->parent_checkin_id;
-            } else {
-                break;
-            }
-        }
 
         // Días SIEMPRE limpios (calendario, sin la vieja "+1 noche"): el
         // recargo por salida tardía ahora lo calcula por separado
@@ -2700,18 +2687,6 @@ class CheckinController extends Controller
         $originalCheckInDate = $checkin->check_in_date;
         $totalDiasHistorial = 0;
 
-        $currentParentId = $checkin->parent_checkin_id;
-        while ($currentParentId) {
-            $parent = \App\Models\Checkin::find($currentParentId);
-            if ($parent) {
-                $originalCheckInDate = $parent->check_in_date;
-                $totalDiasHistorial += max(1, intval($parent->duration_days));
-                $currentParentId = $parent->parent_checkin_id;
-            } else {
-                break;
-            }
-        }
-
         $salida = $checkin->check_out_date ? \Carbon\Carbon::parse($checkin->check_out_date) : now();
         $diasACobrar = $this->calculateBillableDays($checkin, $salida);
         $diasExcedidos = $diasACobrar - max(1, intval($checkin->duration_days));
@@ -3052,18 +3027,6 @@ class CheckinController extends Controller
             // Rastreo de historial (para mostrar fecha de ingreso original)
             $originalCheckInDate = $checkin->check_in_date;
             $totalDiasHistorial  = 0;
-
-            $currentParentId = $checkin->parent_checkin_id;
-            while ($currentParentId) {
-                $parent = \App\Models\Checkin::find($currentParentId);
-                if ($parent) {
-                    $originalCheckInDate = $parent->check_in_date;
-                    $totalDiasHistorial += max(1, intval($parent->duration_days));
-                    $currentParentId     = $parent->parent_checkin_id;
-                } else {
-                    break;
-                }
-            }
 
             // Días reales y precio unitario que se cobró (los tomamos de los detalles).
             $detalleHospedaje = $nuevaFactura->details->first(

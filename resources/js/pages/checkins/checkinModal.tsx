@@ -567,14 +567,23 @@ export default function CheckinModal({
                 type: 'estandar',
                 corporate_days: 0,
                 agreed_price: origPrice,
+                // 🚀 PRECIO POR PERSONA: exclusivo de corporativo/
+                // delegación -- al volver a estándar se limpia, el
+                // precio pasa a ser el de tabla sin desglose por persona.
+                titular_price: '',
                 group_account_id: '',
             }));
         } else {
+            const precioConvenio = Math.max(0, origPrice - 20);
             setData((prev) => ({
                 ...prev,
                 type: tipo,
                 auto_adjust_price: false,
-                agreed_price: Math.max(0, origPrice - 20),
+                agreed_price: precioConvenio,
+                // 🚀 PRECIO POR PERSONA: arranca igualado al precio de
+                // convenio (sin acompañantes todavía) -- editable de
+                // inmediato por persona en el carrusel.
+                titular_price: precioConvenio,
                 corporate_days: tipo === 'corporativo' ? 1 : 0,
                 group_account_id: keepGroupAccount
                     ? prev.group_account_id
@@ -982,12 +991,15 @@ export default function CheckinModal({
                     agreed_price: originalRoomPriceForNew
                         ? Number(originalRoomPriceForNew)
                         : 0,
-                    // 🚀 PRECIO POR HUÉSPED (Fase 1): arranca igualado al
-                    // precio de la habitación (sin acompañantes todavía,
-                    // el Total = titular_price). Editable de inmediato.
-                    titular_price: originalRoomPriceForNew
+                    // 🚀 PRECIO POR PERSONA: exclusivo de corporativo/
+                    // delegación. Solo arranca seteado acá cuando el tipo
+                    // inicial YA es 'delegacion' (viene de una reserva con
+                    // precio pactado por cama). Para 'estandar' queda
+                    // vacío -- el precio de una asignación normal es
+                    // siempre el de tabla, sin desglose por persona.
+                    titular_price: initialAgreedPrice
                         ? Number(originalRoomPriceForNew)
-                        : 0,
+                        : '',
                     corporate_days: 0,
                     checkin_operator_id: '',
                 }));
@@ -1090,16 +1102,16 @@ export default function CheckinModal({
         // (evita la confusión de ver 220 -> 120 -> 100 al asignar).
         if (!data.auto_adjust_price) return;
 
-        // 🚀 PRECIO POR HUÉSPED (Fase 1, decisión confirmada: opción "a"):
-        // el ajuste por ocupación mueve SOLO el precio del titular — los
-        // acompañantes conservan el precio que ya tengan puesto. El
-        // Total visible se recalcula solo (ver el efecto de más abajo que
-        // deriva agreed_price = titular_price + Σ companions.price).
+        // 🚀 ASIGNACIÓN NORMAL: el precio por persona (titular_price) es
+        // EXCLUSIVO de corporativo/delegación -- una asignación estándar
+        // no negocia precio por persona, cobra el de tabla según
+        // ocupación. El ajuste por disponibilidad/ocupación mueve
+        // agreed_price directo.
         if (
             newCalculatedPrice > 0 &&
-            Number(data.titular_price) !== newCalculatedPrice
+            Number(data.agreed_price) !== newCalculatedPrice
         ) {
-            setData('titular_price', newCalculatedPrice);
+            setData('agreed_price', newCalculatedPrice);
         }
     }, [
         data.companions?.length,
@@ -1109,16 +1121,15 @@ export default function CheckinModal({
         show,
     ]);
 
-    // 🚀 PRECIO POR HUÉSPED: agreed_price queda SIEMPRE derivado de
-    // titular_price + Σ companions.price (solo tipo 'estandar'). El input
-    // de "Total a cobrar" SÍ es editable a mano, pero nunca escribe
-    // agreed_price directamente -- escribe titular_price (ver su onBlur),
-    // y es este efecto el que recalcula agreed_price a partir de ahí. Un
-    // solo sentido (titular_price -> agreed_price) evita que ambos se
-    // pisen entre sí. Redondeo a 1 decimal, mismo criterio "oficial" que
-    // usa el backend (Checkin::setAgreedPriceAttribute()).
+    // 🚀 PRECIO POR PERSONA: exclusivo de corporativo/delegación (convenio
+    // institucional con tarifa propia por huésped, ej. Bs 90 a uno y Bs
+    // 100 a otro). Una asignación normal NO pasa por acá -- su precio sale
+    // directo de la tabla (Price/RoomType), sin desglose por persona.
+    // agreed_price = titular_price + Σ companions.price, redondeo a 1
+    // decimal, mismo criterio "oficial" que usa el backend
+    // (Checkin::setAgreedPriceAttribute()).
     useEffect(() => {
-        if (data.type !== 'estandar') return;
+        if (data.type !== 'corporativo' && data.type !== 'delegacion') return;
 
         const sumaAcompanantes = (data.companions || []).reduce(
             (acc, c) => acc + (Number(c.price) || 0),
@@ -2963,15 +2974,16 @@ export default function CheckinModal({
                                     </div>
                                     )}
 
-                                    {/* 🚀 PRECIO POR HUÉSPED: con UN SOLO
-                                    huésped (sin acompañantes) el precio se
-                                    edita únicamente desde "Total a cobrar"
-                                    (panel derecho, más abajo) — este input
-                                    por persona solo hace falta cuando hay
-                                    acompañantes para poder cobrar distinto
-                                    por persona (ej. con/sin desayuno). */}
-                                    {data.type === 'estandar' &&
-                                        companionsList.length > 0 && (
+                                    {/* 🚀 PRECIO POR PERSONA: exclusivo de
+                                    corporativo/delegación (convenio
+                                    institucional, ej. Bs 90 a uno y Bs 100
+                                    a otro). Una asignación NORMAL no pasa
+                                    por acá -- su precio es siempre el de
+                                    tabla (Price/RoomType), editable solo
+                                    desde "Total a cobrar" (panel derecho,
+                                    más abajo), sin desglose por persona. */}
+                                    {(data.type === 'corporativo' ||
+                                        data.type === 'delegacion') && (
                                         <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">
                                                 Precio (por noche)
@@ -3534,37 +3546,7 @@ export default function CheckinModal({
                                                                   noches,
                                                           );
 
-                                                // 🚀 PRECIO POR HUÉSPED: al
-                                                // editar el Total en
-                                                // 'estandar', el ajuste cae
-                                                // SOLO en titular_price — los
-                                                // acompañantes conservan su
-                                                // propio precio ya puesto.
-                                                // El Total nunca puede bajar
-                                                // de lo que ya suman los
-                                                // acompañantes (evita un
-                                                // titular_price negativo).
-                                                const sumaAcompanantesTotal =
-                                                    data.type === 'estandar'
-                                                        ? (
-                                                              data.companions ||
-                                                              []
-                                                          ).reduce(
-                                                              (acc, c) =>
-                                                                  acc +
-                                                                  (Number(
-                                                                      c.price,
-                                                                  ) || 0),
-                                                              0,
-                                                          )
-                                                        : 0;
-                                                const minTotal =
-                                                    data.type === 'estandar'
-                                                        ? redondearMoneda(
-                                                              sumaAcompanantesTotal *
-                                                                  noches,
-                                                          )
-                                                        : 0;
+                                                const minTotal = 0;
 
                                                 return (
                                                     <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
@@ -3699,20 +3681,10 @@ export default function CheckinModal({
                                                                             rawVal ===
                                                                             ''
                                                                         ) {
-                                                                            // 🚀 PRECIO POR HUÉSPED: vaciar el
-                                                                            // Total en 'estandar' NO borra
-                                                                            // titular_price (evitaríamos el
-                                                                            // bug de agreed_price en 0) — solo
-                                                                            // cierra la edición.
-                                                                            if (
-                                                                                data.type !==
-                                                                                'estandar'
-                                                                            ) {
-                                                                                setData(
-                                                                                    'agreed_price',
-                                                                                    '',
-                                                                                );
-                                                                            }
+                                                                            setData(
+                                                                                'agreed_price',
+                                                                                '',
+                                                                            );
                                                                             setEditingTotal(
                                                                                 null,
                                                                             );
@@ -3723,17 +3695,6 @@ export default function CheckinModal({
                                                                             Number(
                                                                                 rawVal,
                                                                             );
-
-                                                                        if (
-                                                                            data.type ===
-                                                                                'estandar' &&
-                                                                            inputVal <
-                                                                                minTotal
-                                                                        ) {
-                                                                            alert(
-                                                                                `El Total no puede ser menor a ${minTotal.toFixed(2)} Bs: ya hay ${sumaAcompanantesTotal.toFixed(2)} Bs/noche asignados a los acompañantes.`,
-                                                                            );
-                                                                        }
 
                                                                         if (
                                                                             inputVal >
@@ -3753,6 +3714,10 @@ export default function CheckinModal({
                                                                                 inputVal,
                                                                             );
 
+                                                                        // 🚀 ASIGNACIÓN NORMAL: agreed_price
+                                                                        // se edita directo acá, sin pasar por
+                                                                        // titular_price (exclusivo de
+                                                                        // corporativo/delegación).
                                                                         const valorAGuardar =
                                                                             data.type ===
                                                                             'delegacion'
@@ -3765,48 +3730,23 @@ export default function CheckinModal({
                                                                                           : inputVal,
                                                                                   );
 
-                                                                        if (
-                                                                            data.type ===
-                                                                            'estandar'
-                                                                        ) {
-                                                                            // El ajuste manual del Total cae
-                                                                            // SOLO en titular_price -- los
-                                                                            // acompañantes quedan como están.
-                                                                            // agreed_price NO se toca acá: lo
-                                                                            // deriva solo el useEffect de
-                                                                            // titular_price + Σ
-                                                                            // companions.price, para no pisarlo
-                                                                            // en un tira-y-afloja con ese mismo
-                                                                            // efecto.
-                                                                            const nuevoTitular =
-                                                                                Math.max(
-                                                                                    0,
-                                                                                    redondearMoneda(
-                                                                                        valorAGuardar -
-                                                                                            sumaAcompanantesTotal,
-                                                                                    ),
-                                                                                );
-                                                                            setData(
-                                                                                (
-                                                                                    prev,
-                                                                                ) => ({
-                                                                                    ...prev,
-                                                                                    titular_price:
-                                                                                        nuevoTitular,
-                                                                                    auto_adjust_price: false,
-                                                                                }),
-                                                                            );
-                                                                        } else {
-                                                                            setData(
-                                                                                (
-                                                                                    prev,
-                                                                                ) => ({
-                                                                                    ...prev,
-                                                                                    agreed_price:
-                                                                                        valorAGuardar,
-                                                                                }),
-                                                                            );
-                                                                        }
+                                                                        setData(
+                                                                            (
+                                                                                prev,
+                                                                            ) => ({
+                                                                                ...prev,
+                                                                                agreed_price:
+                                                                                    valorAGuardar,
+                                                                                ...(prev.type ===
+                                                                                    'estandar' &&
+                                                                                inputVal !==
+                                                                                    maxTotal
+                                                                                    ? {
+                                                                                          auto_adjust_price: false,
+                                                                                      }
+                                                                                    : {}),
+                                                                            }),
+                                                                        );
 
                                                                         setEditingTotal(
                                                                             null,

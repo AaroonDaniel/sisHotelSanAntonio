@@ -583,18 +583,6 @@ class InvoiceController extends Controller
 
         // --- RASTREO HISTÓRICO PARA FECHA DE INGRESO ---
         $originalCheckInDate = $checkin->check_in_date ?? now();
-        if ($checkin) {
-            $currentParentId = $checkin->parent_checkin_id;
-            while ($currentParentId) {
-                $parent = \App\Models\Checkin::find($currentParentId);
-                if ($parent) {
-                    $originalCheckInDate = $parent->check_in_date;
-                    $currentParentId     = $parent->parent_checkin_id;
-                } else {
-                    break;
-                }
-            }
-        }
 
         // --- CÁLCULO DE TOTALES ---
         $granTotal = (float) $invoice->total_amount;
