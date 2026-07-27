@@ -586,14 +586,12 @@ class ReportController extends Controller
 
         [$rangoInicio, $rangoFin] = $this->normalizeRangeBounds($startDate, $endDate);
 
-        if ($userId && $userId !== 'todos' && $startDate === $endDate) {
-            $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
-
-            if ($ultimaCaja) {
-                $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
-                $rangoFin = $ultimaCaja->closed_at ?? now();
-            }
-        }
+        // 🐛 BUG CORREGIDO (mismo caso que generateFinancialReportPdf()):
+        // antes esto angostaba $rangoInicio/$rangoFin al último turno del
+        // operador, perdiendo los movimientos de turnos anteriores ya
+        // cerrados si tuvo más de uno el mismo día. El rango del día
+        // completo que pidió el usuario ya quedó calculado arriba — no se
+        // toca más.
 
         // Recepcionista que todavía no eligió avatar: nada que mostrar.
         if ($userId === null) {
