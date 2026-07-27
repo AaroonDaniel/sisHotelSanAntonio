@@ -43,6 +43,66 @@ class ReportController extends Controller
     }
 
     /**
+     * Expande [$rangoInicio, $rangoFin] para que cubra COMPLETOS todos los
+     * turnos del operador que se solapan con el rango pedido — no solo la
+     * porción de cada turno que cae dentro del día calendario.
+     *
+     * Por qué hace falta: un turno que cruza la medianoche (ej. abierto a
+     * las 22:00 de un día, cerrado a las 07:00 del día siguiente) tiene
+     * pagos a ambos lados del corte de medianoche. Si el rango se quedara
+     * tal cual en el día calendario pedido, ese turno quedaría partido en
+     * dos reportes distintos, sin que ninguno de los dos lo muestre
+     * completo. Acá se ensancha el rango hacia atrás/adelante hasta cubrir
+     * el `opened_at` más temprano y el `closed_at` (o "ahora" si sigue
+     * abierto) más tardío de TODOS los turnos que tocan el rango original
+     * — sin importar cuántos turnos haya ese día (a diferencia del bug
+     * viejo, que solo miraba el más reciente) NI cuántos días haya durado
+     * el turno: se muestra completo siempre, sin tope (decisión de
+     * negocio explícita — todos los pagos de un turno deben verse sin
+     * importar cuánto tiempo pase).
+     *
+     * Si el operador cierra caja y vuelve a abrir otro turno después (para
+     * cubrir un cambio, por ejemplo), ese es un turno NUEVO e independiente
+     * — cada uno expande el rango con su propia ventana real, sin mezclar
+     * sus movimientos entre sí más allá de lo que el rango pedido ya cubre.
+     *
+     * Devuelve [$rangoInicio expandido, $rangoFin expandido, turno más
+     * reciente encontrado (o null)] — el turno se sigue usando solo para
+     * mostrar el left_amount en el PDF, nunca para recortar el rango.
+     */
+    private function expandRangeToCoverShifts(string $userId, string $rangoInicio, string $rangoFin): array
+    {
+        $turnos = CashRegister::where('user_id', $userId)
+            ->where('opened_at', '<=', $rangoFin)
+            ->where(function ($q) use ($rangoInicio) {
+                $q->whereNull('closed_at')->orWhere('closed_at', '>=', $rangoInicio);
+            })
+            ->orderByDesc('opened_at')
+            ->get();
+
+        if ($turnos->isEmpty()) {
+            return [$rangoInicio, $rangoFin, null];
+        }
+
+        $inicioExpandido = Carbon::parse($rangoInicio);
+        $finExpandido = Carbon::parse($rangoFin);
+
+        foreach ($turnos as $turno) {
+            $abre = Carbon::parse($turno->opened_at);
+            if ($abre->lt($inicioExpandido)) {
+                $inicioExpandido = $abre;
+            }
+
+            $cierra = $turno->closed_at ? Carbon::parse($turno->closed_at) : now();
+            if ($cierra->gt($finExpandido)) {
+                $finExpandido = $cierra;
+            }
+        }
+
+        return [$inicioExpandido->toDateTimeString(), $finExpandido->toDateTimeString(), $turnos->first()];
+    }
+
+    /**
      * Normaliza start_date/end_date a límites de rango Carbon-parseables.
      * Acepta tanto fechas puras ("2026-07-16", día completo 00:00–23:59,
      * usadas por la vista agregada "Todos") como datetimes exactos
@@ -586,12 +646,14 @@ class ReportController extends Controller
 
         [$rangoInicio, $rangoFin] = $this->normalizeRangeBounds($startDate, $endDate);
 
-        // 🐛 BUG CORREGIDO (mismo caso que generateFinancialReportPdf()):
-        // antes esto angostaba $rangoInicio/$rangoFin al último turno del
-        // operador, perdiendo los movimientos de turnos anteriores ya
-        // cerrados si tuvo más de uno el mismo día. El rango del día
-        // completo que pidió el usuario ya quedó calculado arriba — no se
-        // toca más.
+        // 🐛 BUG CORREGIDO (mismo caso que generateFinancialReportPdf()): ya
+        // no se angosta al último turno del operador (perdía turnos
+        // anteriores del mismo día) — ahora se EXPANDE para cubrir
+        // completos todos los turnos que tocan el día pedido, incluidos
+        // los que cruzan la medianoche. Ver expandRangeToCoverShifts().
+        if ($userId && $userId !== 'todos' && $startDate === $endDate) {
+            [$rangoInicio, $rangoFin] = $this->expandRangeToCoverShifts($userId, $rangoInicio, $rangoFin);
+        }
 
         // Recepcionista que todavía no eligió avatar: nada que mostrar.
         if ($userId === null) {
@@ -779,8 +841,6 @@ class ReportController extends Controller
             $rangoFin = $cashRegister->closed_at ?? now();
             $startDate = \Carbon\Carbon::parse($rangoInicio)->toDateString();
             $endDate = \Carbon\Carbon::parse($rangoFin)->toDateString();
-            // Turno exacto ya identificado por su ID: sirve para imprimir
-            // el left_amount más abajo.
             $cashRegisterResuelto = $cashRegister;
         } else {
             // ==========================================
@@ -794,18 +854,8 @@ class ReportController extends Controller
             $cashRegisterResuelto = null;
 
             if ($userId !== 'todos' && $startDate === $endDate) {
-                // 🐛 BUG CORREGIDO: antes esto ANGOSTABA $rangoInicio/$rangoFin
-                // al turno encontrado (el más reciente que se solapa con el
-                // día) — si un operador tuvo MÁS DE UN turno el mismo día
-                // (ej. cerró uno de forma inesperada y abrió otro para
-                // seguir trabajando), el reporte del día completo terminaba
-                // viendo SOLO el último turno, perdiendo los movimientos de
-                // los turnos anteriores ya cerrados (y a veces reportando
-                // "sin movimientos" cuando sí los hubo). $ultimaCaja ahora
-                // solo se usa para mostrar el left_amount en el PDF — el
-                // rango de fechas que pidió el usuario ($rangoInicio/
-                // $rangoFin ya calculados arriba) se respeta tal cual.
-                $cashRegisterResuelto = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
+                [$rangoInicio, $rangoFin, $cashRegisterResuelto] =
+                    $this->expandRangeToCoverShifts($userId, $rangoInicio, $rangoFin);
             }
         }
 
