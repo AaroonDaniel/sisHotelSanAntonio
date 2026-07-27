@@ -839,16 +839,13 @@ class ReportController extends Controller
         if ($userId !== 'todos') $aperturaQuery->where('user_id', $userId);
         $totalApertura = $aperturaQuery->sum('opening_amount');
 
-        // 🛑 Turno sin ningún movimiento (ni pagos ni gastos): no tiene
-        // sentido generar/imprimir un cierre en blanco. 'todos' queda
-        // fuera de esta regla (vista agregada de supervisión, no un cierre
-        // de turno puntual) y también el modo cash_register_id: eso es
-        // HISTORIAL (un turno que ya fue cerrado en el pasado, quizás sin
-        // movimientos), no un intento de generar/cerrar uno nuevo — se debe
-        // poder revisar igual.
-        if (!$cashRegisterId && $userId !== 'todos' && $payments->isEmpty() && $gastos->isEmpty()) {
-            abort(422, 'No se registraron nuevos movimientos (ingresos/egresos) desde su último cierre. No hay nada que cerrar.');
-        }
+        // 🚀 Turno sin ningún movimiento (ni pagos ni gastos): antes esto
+        // bloqueaba con un 422 (pantalla de error cruda). Ahora, en vez de
+        // abortar, el PDF se genera igual con un aviso de "sin
+        // movimientos" — así el recepcionista/administrador puede
+        // confirmar que de verdad no hubo nada (ej. un check-in registrado
+        // sin cobro) sin toparse con un error de sistema.
+        $sinMovimientos = !$cashRegisterId && $userId !== 'todos' && $payments->isEmpty() && $gastos->isEmpty();
 
         // ==========================================
         // 3. GENERACIÓN DEL PDF
@@ -875,6 +872,13 @@ class ReportController extends Controller
         $rangoTexto = "Desde: " . \Carbon\Carbon::parse($rangoInicio)->format('d/m/Y H:i') . "  Hasta: " . \Carbon\Carbon::parse($rangoFin)->format('d/m/Y H:i');
         $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'L');
         $pdf->Ln(6);
+
+        if ($sinMovimientos) {
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->SetFillColor(255, 243, 205);
+            $pdf->Cell(0, 8, utf8_decode('NO SE REGISTRARON MOVIMIENTOS.'), 1, 1, 'C', true);
+            $pdf->Ln(4);
+        }
 
         $granTotalEfectivo = 0;
         $granTotalQR = 0;
