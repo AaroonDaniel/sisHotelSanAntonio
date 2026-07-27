@@ -43,32 +43,29 @@ class ReportController extends Controller
     }
 
     /**
-     * Expande [$rangoInicio, $rangoFin] para que cubra COMPLETOS todos los
-     * turnos del operador que se solapan con el rango pedido — no solo la
-     * porción de cada turno que cae dentro del día calendario.
+     * Reemplaza [$rangoInicio, $rangoFin] (el día calendario pedido) por la
+     * ventana REAL de todos los turnos del operador que se solapan con ese
+     * día — no medianoche a medianoche, sino desde que de verdad abrió el
+     * más temprano hasta que de verdad cerró el más tardío (o "ahora" si
+     * el más reciente sigue abierto).
      *
      * Por qué hace falta: un turno que cruza la medianoche (ej. abierto a
      * las 22:00 de un día, cerrado a las 07:00 del día siguiente) tiene
-     * pagos a ambos lados del corte de medianoche. Si el rango se quedara
-     * tal cual en el día calendario pedido, ese turno quedaría partido en
-     * dos reportes distintos, sin que ninguno de los dos lo muestre
-     * completo. Acá se ensancha el rango hacia atrás/adelante hasta cubrir
-     * el `opened_at` más temprano y el `closed_at` (o "ahora" si sigue
-     * abierto) más tardío de TODOS los turnos que tocan el rango original
-     * — sin importar cuántos turnos haya ese día (a diferencia del bug
-     * viejo, que solo miraba el más reciente) NI cuántos días haya durado
-     * el turno: se muestra completo siempre, sin tope (decisión de
-     * negocio explícita — todos los pagos de un turno deben verse sin
-     * importar cuánto tiempo pase).
+     * pagos a ambos lados del corte de medianoche — con el día calendario
+     * puro, ese turno quedaría partido en dos reportes. Y aunque no cruce
+     * la medianoche, mostrar "Desde: 00:00" cuando el turno recién abrió
+     * a las 09:00 es simplemente falso — el reporte debe decir la hora
+     * real en la que empezó a registrar, sin importar cuántos turnos haya
+     * tenido ese día ni cuántos días haya durado (decisión de negocio
+     * explícita, sin tope).
      *
      * Si el operador cierra caja y vuelve a abrir otro turno después (para
      * cubrir un cambio, por ejemplo), ese es un turno NUEVO e independiente
-     * — cada uno expande el rango con su propia ventana real, sin mezclar
-     * sus movimientos entre sí más allá de lo que el rango pedido ya cubre.
+     * — cada uno aporta su propia ventana real al total.
      *
-     * Devuelve [$rangoInicio expandido, $rangoFin expandido, turno más
-     * reciente encontrado (o null)] — el turno se sigue usando solo para
-     * mostrar el left_amount en el PDF, nunca para recortar el rango.
+     * Devuelve [inicio real, fin real, turno más reciente encontrado (o
+     * null)] — ese turno es el que decide si el "Hasta" se muestra o no
+     * (si sigue `ABIERTA`, el llamador debe omitir el "Hasta").
      */
     private function expandRangeToCoverShifts(string $userId, string $rangoInicio, string $rangoFin): array
     {
@@ -84,22 +81,22 @@ class ReportController extends Controller
             return [$rangoInicio, $rangoFin, null];
         }
 
-        $inicioExpandido = Carbon::parse($rangoInicio);
-        $finExpandido = Carbon::parse($rangoFin);
+        $inicioReal = null;
+        $finReal = null;
 
         foreach ($turnos as $turno) {
             $abre = Carbon::parse($turno->opened_at);
-            if ($abre->lt($inicioExpandido)) {
-                $inicioExpandido = $abre;
+            if ($inicioReal === null || $abre->lt($inicioReal)) {
+                $inicioReal = $abre;
             }
 
             $cierra = $turno->closed_at ? Carbon::parse($turno->closed_at) : now();
-            if ($cierra->gt($finExpandido)) {
-                $finExpandido = $cierra;
+            if ($finReal === null || $cierra->gt($finReal)) {
+                $finReal = $cierra;
             }
         }
 
-        return [$inicioExpandido->toDateTimeString(), $finExpandido->toDateTimeString(), $turnos->first()];
+        return [$inicioReal->toDateTimeString(), $finReal->toDateTimeString(), $turnos->first()];
     }
 
     /**
@@ -919,7 +916,15 @@ class ReportController extends Controller
         // Estampa de tiempo EXACTA (Día/Mes/Año Hora:Minuto) de apertura y
         // cierre, no solo la fecha: crítico para auditar turnos que cruzan
         // la medianoche, donde "Desde/Hasta" sin hora sería ambiguo.
-        $rangoTexto = "Desde: " . \Carbon\Carbon::parse($rangoInicio)->format('d/m/Y H:i') . "  Hasta: " . \Carbon\Carbon::parse($rangoFin)->format('d/m/Y H:i');
+        // "Desde" es la hora REAL en que se registró el primer movimiento
+        // (nunca medianoche). "Hasta" solo se muestra si el turno YA
+        // cerró — mientras siga en curso (ABIERTA) no se inventa una hora
+        // de cierre que todavía no pasó.
+        $turnoSigueAbierto = $cashRegisterResuelto && is_null($cashRegisterResuelto->closed_at);
+        $rangoTexto = "Desde: " . \Carbon\Carbon::parse($rangoInicio)->format('d/m/Y H:i');
+        if (!$turnoSigueAbierto) {
+            $rangoTexto .= "  Hasta: " . \Carbon\Carbon::parse($rangoFin)->format('d/m/Y H:i');
+        }
         $pdf->Cell(0, 5, utf8_decode($rangoTexto), 0, 1, 'L');
         $pdf->Ln(6);
 
