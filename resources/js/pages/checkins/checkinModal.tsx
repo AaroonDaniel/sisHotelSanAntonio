@@ -1070,6 +1070,29 @@ export default function CheckinModal({
             : originalPrice;
     };
 
+    // 🚀 AJUSTE DE PRECIO: al PRENDER el botón guardamos el precio que
+    // había justo antes (por si el recepcionista lo activó pensando en
+    // otra cantidad de personas); al APAGARLO, se retoma ese precio en
+    // vez de dejar el último valor auto-calculado.
+    const precioPrevioAjusteRef = useRef<number | string | null>(null);
+    const autoAdjustEncendidoRef = useRef<boolean>(false);
+
+    useEffect(() => {
+        if (data.type !== 'estandar') return;
+
+        const encendidoAhora = !!data.auto_adjust_price;
+
+        if (encendidoAhora && !autoAdjustEncendidoRef.current) {
+            precioPrevioAjusteRef.current = data.agreed_price;
+        } else if (!encendidoAhora && autoAdjustEncendidoRef.current) {
+            if (precioPrevioAjusteRef.current !== null) {
+                setData('agreed_price', precioPrevioAjusteRef.current);
+            }
+        }
+
+        autoAdjustEncendidoRef.current = encendidoAhora;
+    }, [data.auto_adjust_price, data.type]);
+
     // Referencia para distinguir la HIDRATACIÓN inicial (carga del modal) de
     // los cambios activos del recepcionista. En modo edición no debemos pisar
     // el `agreed_price` guardado en BD al abrir; solo al modificar huéspedes.

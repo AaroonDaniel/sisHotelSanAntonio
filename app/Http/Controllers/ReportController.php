@@ -796,15 +796,18 @@ class ReportController extends Controller
             $cashRegisterResuelto = null;
 
             if ($userId !== 'todos' && $startDate === $endDate) {
-                $ultimaCaja = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
-
-                if ($ultimaCaja) {
-                    $rangoInicio = $ultimaCaja->opened_at ?? $ultimaCaja->created_at;
-                    $rangoFin = $ultimaCaja->closed_at ?? now();
-                    // Turno único identificado por solapamiento de fechas:
-                    // también sirve para imprimir el left_amount.
-                    $cashRegisterResuelto = $ultimaCaja;
-                }
+                // 🐛 BUG CORREGIDO: antes esto ANGOSTABA $rangoInicio/$rangoFin
+                // al turno encontrado (el más reciente que se solapa con el
+                // día) — si un operador tuvo MÁS DE UN turno el mismo día
+                // (ej. cerró uno de forma inesperada y abrió otro para
+                // seguir trabajando), el reporte del día completo terminaba
+                // viendo SOLO el último turno, perdiendo los movimientos de
+                // los turnos anteriores ya cerrados (y a veces reportando
+                // "sin movimientos" cuando sí los hubo). $ultimaCaja ahora
+                // solo se usa para mostrar el left_amount en el PDF — el
+                // rango de fechas que pidió el usuario ($rangoInicio/
+                // $rangoFin ya calculados arriba) se respeta tal cual.
+                $cashRegisterResuelto = $this->findShiftOverlapping($userId, $rangoInicio, $rangoFin);
             }
         }
 
