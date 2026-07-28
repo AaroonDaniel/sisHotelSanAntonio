@@ -442,17 +442,7 @@ export default function CheckinModal({
         .includes('reserva');
     const [showReservationToast, setShowReservationToast] = useState(false);
     const [showIncompleteToast, setShowIncompleteToast] = useState(false);
-    // Console.log para verificar que React sí detecta la reserva
-    useEffect(() => {
-        if (show && checkinToEdit) {
-            console.log('\n=================================');
-            console.log('🏨 ABRIENDO MODAL DE CHECK-IN');
-            console.log('-> Notas del Checkin:', checkinToEdit.notes);
-            console.log('-> ¿Viene de Reserva?:', isFromReservation);
-            console.log('=================================\n');
-        }
-    }, [show, checkinToEdit]);
-
+    
     useEffect(() => {
         if (show && isFromReservation) {
             // Mostrar el toast al abrir el modal si viene de reserva
@@ -962,17 +952,7 @@ export default function CheckinModal({
                     ? Number(initialAgreedPrice)
                     : initialRoomObj?.price?.amount || 0;
 
-                console.log('🔍 [CHECKIN] Cálculo de precio inicial', {
-                    room_id: initialRoomId,
-                    room_number: initialRoomObj?.number,
-                    room_capacity: initialRoomObj?.room_type?.capacity,
-                    price_normal_tabla: initialRoomObj?.price?.amount,
-                    initialAgreedPrice_recibido: initialAgreedPrice,
-                    precio_final_usado: originalRoomPriceForNew,
-                    origen: initialAgreedPrice
-                        ? 'RESERVA DELEGACIÓN (detail.price)'
-                        : 'PRECIO NORMAL DE TABLA',
-                });
+               
 
                 // Valores iniciales
                 setData((prev) => ({
@@ -1569,12 +1549,10 @@ export default function CheckinModal({
     // A. NUEVA FUNCIÓN: Se encarga ÚNICAMENTE de hablar con el Backend (Laravel)
     // Hemos movido aquí tu código original intacto.
     const executeSubmit = () => {
-        // 🚀 ESPÍA: Vemos exactamente qué viaja hacia Laravel
-        console.log('🚀 [SUBMIT] PAQUETE ENVIADO A LARAVEL:', data);
-
+       
         // Camino de Éxito (onSuccess)
         const onSuccess = (page: any) => {
-            console.log('✅ RESPUESTA EXITOSA DEL SERVIDOR:', page);
+           
             reset(); // Limpia los campos del formulario.
             onClose(true); // Cierra la ventana modal y actualiza la vista.
         };
@@ -1592,20 +1570,18 @@ export default function CheckinModal({
 
         // Lógica de Envío
         if (checkinToEdit) {
-            console.log('-> Método: PUT (Actualizar)');
+            
             // 👇 VOLVIMOS A TU RUTA ORIGINAL: /checks
             put(`/checks/${checkinToEdit.id}`, {
                 onSuccess,
                 onError,
-                onFinish: () => console.log('🏁 Petición PUT terminada.'),
             });
         } else {
-            console.log('-> Método: POST (Nuevo Registro)');
+
             // 👇 VOLVIMOS A TU RUTA ORIGINAL: /checks
             post('/checks', {
                 onSuccess,
                 onError,
-                onFinish: () => console.log('🏁 Petición POST terminada.'),
             });
         }
     };
@@ -1629,17 +1605,6 @@ export default function CheckinModal({
             return;
         }
 
-        // 🚀 1. ESPÍAS: VEMOS QUÉ ESTAMOS INTENTANDO GUARDAR
-        console.log('🚀 =========================================');
-        console.log('🚀 [SUBMIT] VALIDANDO ANTES DE ENVIAR');
-        console.log('-> 📦 Paquete de datos actual:', data);
-        console.log(
-            '-> 💸 Auto-Ajuste MARCADO:',
-            data.auto_adjust_price,
-            '| Precio:',
-            data.agreed_price,
-        );
-
         // =========================================================
         // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
         // No aplica en Check-in Rápido a Cuenta Grupal: ahí el costo se
@@ -1648,10 +1613,7 @@ export default function CheckinModal({
         if (data.type === 'corporativo' && !isQuickGroupMode) {
             const montoAdelanto = Number(data.advance_payment);
 
-            if (!montoAdelanto || montoAdelanto <= 0) {
-                console.log(
-                    '-> 🛑 BLOQUEADO: Intento de guardar Corporativo sin adelanto.',
-                );
+            if (!montoAdelanto || montoAdelanto <= 0) {                
                 // 1. Alerta en pantalla
                 alert(
                     "⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.",
@@ -1677,7 +1639,7 @@ export default function CheckinModal({
             }
         }
 
-        console.log('-> ✅ CANDADOS SUPERADOS. Ejecutando executeSubmit()...');
+        
         executeSubmit();
     };
 
@@ -1936,18 +1898,6 @@ export default function CheckinModal({
                 blanca de abajo, así el panel lateral nunca se recorta
                 aunque quede fuera del ancho de esta caja. */}
             <div className="relative w-full max-w-5xl overflow-visible">
-                {/* ===================================================== */}
-                {/* 🔴 PANEL LATERAL DE OPERADOR — side-toolbar flotando a   */}
-                {/* la derecha de la caja blanca (no arriba): en laptops     */}
-                {/* (1366x768) sobra ancho pero falta alto, así que un        */}
-                {/* panel vertical pegado al borde derecho nunca choca con   */}
-                {/* los bordes superior/inferior del navegador. left-full +  */}
-                {/* ml-4 (en vez de un -right-[Npx] fijo) hace que se ancle  */}
-                {/* justo después del borde derecho de la caja SIN adivinar  */}
-                {/* su ancho a mano. Solo aplica a asignaciones NUEVAS o sin */}
-                {/* operador guardado todavía; si ya hay uno, se reemplaza   */}
-                {/* por el texto "asignado por:" junto a la X (más abajo).   */}
-                {/* ===================================================== */}
                 {!hasSavedOperator && (
                     <div
                         className={`absolute top-0 left-full z-50 ml-4 max-h-[80vh] w-28 overflow-y-auto rounded-lg border-2 p-3 shadow-lg transition-all ${
@@ -1993,9 +1943,25 @@ export default function CheckinModal({
                             <div className="rounded-lg bg-green-100 p-1.5 text-green-600">
                                 <Clock className="h-5 w-5" />
                             </div>
-                            {checkinToEdit
-                                ? `Asignación: Hab. ${rooms.find((r) => r.id === Number(data.room_id))?.number || ''}`
-                                : 'Asignación'}
+                            {(() => {
+                                const roomHeader = rooms.find(
+                                    (r) => r.id === Number(data.room_id),
+                                );
+                                if (!roomHeader) return 'HABITACIÓN';
+
+                                const rawType =
+                                    (roomHeader as any)?.price
+                                        ?.bathroom_type ||
+                                    (roomHeader as any)?.room_type
+                                        ?.bathroom_type;
+                                const bathroomLabel = rawType
+                                    ? typeBathroom[
+                                          String(rawType).toUpperCase()
+                                      ] || rawType
+                                    : '';
+
+                                return `HABITACIÓN ${roomHeader.number}${bathroomLabel ? ` BAÑO: ${bathroomLabel}` : ''}`;
+                            })()}
                         </h2>
 
                         <div className="flex items-center">
@@ -3573,85 +3539,23 @@ export default function CheckinModal({
 
                                                 return (
                                                     <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
-                                                        {/* IZQUIERDA: Habitación + Costo por 1 Noche */}
-                                                        <div className="flex flex-col items-start">
+                                                        {/* IZQUIERDA: Habitación + cantidad de huéspedes, misma fila (sin precio por noche) */}
+                                                        <div className="flex items-center gap-3">
                                                             <label className="flex items-center gap-2 text-2xl leading-none font-black text-green-700">
                                                                 HAB{' '}
                                                                 {selectedRoom?.number ||
                                                                     'N/A'}
                                                             </label>
-                                                            <div className="mt-1 flex items-center gap-2">
-                                                                {isAutoAdjusted ? (
-                                                                    <>
-                                                                        <span className="text-sm font-bold text-gray-400 line-through">
-                                                                            {
-                                                                                originalPrice
-                                                                            }{' '}
-                                                                            Bs
-                                                                        </span>
-                                                                        <span className="text-sm font-black text-green-800">
-                                                                            {Number(
-                                                                                finalPrice,
-                                                                            ).toFixed(
-                                                                                2,
-                                                                            )}{' '}
-                                                                            Bs /
-                                                                            noche
-                                                                        </span>
-                                                                        {data.type ===
-                                                                            'estandar' &&
-                                                                            priceDelta !==
-                                                                                0 && (
-                                                                                <span
-                                                                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase shadow-sm ${priceDelta < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
-                                                                                >
-                                                                                    {priceDelta <
-                                                                                    0
-                                                                                        ? '▼'
-                                                                                        : '▲'}{' '}
-                                                                                    {Math.abs(
-                                                                                        priceDelta,
-                                                                                    ).toFixed(
-                                                                                        2,
-                                                                                    )}{' '}
-                                                                                    Bs
-                                                                                </span>
-                                                                            )}
-                                                                        <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
-                                                                            {
-                                                                                occupantsCount
-                                                                            }{' '}
-                                                                            húesp.
-                                                                        </span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="text-sm font-bold text-green-800">
-                                                                            {Number(
-                                                                                finalPrice,
-                                                                            ).toFixed(
-                                                                                2,
-                                                                            )}{' '}
-                                                                            Bs /
-                                                                            noche
-                                                                        </span>
-                                                                        <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
-                                                                            {
-                                                                                occupantsCount
-                                                                            }{' '}
-                                                                            húesp.
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </div>
+                                                            <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-blue-700 uppercase shadow-sm">
+                                                                {
+                                                                    occupantsCount
+                                                                }{' '}
+                                                                húesp.
+                                                            </span>
                                                         </div>
 
-                                                        {/* DERECHA: Total a cobrar */}
+                                                        {/* DERECHA: campo editable (sin título "Total a cobrar") */}
                                                         <div className="flex flex-col border-l border-green-200 pl-4 text-right">
-                                                            <span className="mb-0.5 text-[11px] font-bold text-green-700 uppercase">
-                                                                {tituloTotal}
-                                                            </span>
-
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <input
                                                                     type="number"
@@ -3785,20 +3689,6 @@ export default function CheckinModal({
                                                                     Bs
                                                                 </span>
                                                             </div>
-                                                            {noches > 1 && (
-                                                                <span className="mt-0.5 text-[10px] font-medium text-gray-500">
-                                                                    {Number(
-                                                                        finalPrice,
-                                                                    ).toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    x {noches}{' '}
-                                                                    {data.type !==
-                                                                    'estandar'
-                                                                        ? 'días'
-                                                                        : 'noches'}
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     </div>
                                                 );

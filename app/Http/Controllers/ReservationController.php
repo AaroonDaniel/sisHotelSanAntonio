@@ -547,7 +547,7 @@ class ReservationController extends Controller
                     foreach ($reservation->details as $index => $detail) {
                         if (!$detail->room_id) continue;
 
-                        $notaAsignacion = 'RESERVA #' . $reservation->id . ' - RESERVADO POR: ' . $reservation->guest->full_name;
+                        $notaAsignacion ='RESERVADO POR: ' . $reservation->guest->full_name;
 
                         if ($index > 0) {
                             $notaAsignacion .= ' (HABITACIÓN ADICIONAL)';
@@ -558,7 +558,14 @@ class ReservationController extends Controller
                             'guest_id' => $reservation->guest_id,
                             'room_id'  => $detail->room_id,
                             'user_id'  => Auth::id() ?? 1,
-                            'check_in_date' => $reservation->arrival_date ?? now(),
+                            // 🐛 BUG CORREGIDO: antes usaba $reservation->arrival_date,
+                            // que es solo FECHA (sin hora) -- siempre quedaba a las
+                            // 00:00 al mostrarse en el formulario de Check-in. Ahora
+                            // usa la hora REAL de confirmación, igual que
+                            // actual_arrival_date (coherente con el flujo normal de
+                            // CheckinController::store(), donde check_in_date también
+                            // es "ahora mismo", no una fecha pelada).
+                            'check_in_date' => now(),
                             'actual_arrival_date' => now(),
                             'duration_days' => $reservation->duration_days ?? 1,
 
@@ -646,8 +653,12 @@ class ReservationController extends Controller
                 else {
                     // Evaluamos los cambios en el trato especial
                     $typeRequest = $request->input('type');
-                    $isSpecialGroupNow = $request->boolean('is_corporate') || $request->boolean('is_delegation') || in_array($typeRequest, ['corporativo', 'delegacion']);
-                    $tipoTratoNuevo = $typeRequest ?? ($request->boolean('is_delegation') ? 'delegacion' : 'corporativo');
+                    // 🐛 BUG CORREGIDO: is_corporate/is_delegation nunca
+                    // los manda el frontend (reservationModal.tsx) -- solo
+                    // 'type' importa en la práctica, igual que ya se
+                    // limpió en CheckinController.
+                    $isSpecialGroupNow = in_array($typeRequest, ['corporativo', 'delegacion']);
+                    $tipoTratoNuevo = $typeRequest ?? 'corporativo';
                     $frecuenciaDias = (int) $request->input('corporate_days', 0);
                     $agreedPrice = $request->input('agreed_price', 0);
                     // Mismo fallback que store(): sin nombre manual, se usa

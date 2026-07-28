@@ -233,19 +233,20 @@ class RoomController
                 ->sortBy('date')
                 ->values()
                 ->toArray();
-
-            // Asignamos el arreglo de reservas futuras a la habitación
             $room->future_reservations = $futureReservations;
-
-            // 🚀 "RESERVADO HOY": a diferencia de future_reservations (solo
-            // 'pendiente', desde hoy en adelante), este SOLO considera
-            // reservas cuya llegada es EXACTAMENTE hoy (zona horaria del
-            // hotel, config/app.php → America/La_Paz) y que todavía no
-            // pasaron a check-in real (status 'pendiente' o 'confirmada').
-            // Alimenta el banner "RESERVADO HOY" del grid principal.
+            // 🐛 BUG CORREGIDO: filtrar por "no tiene check-in activo"
+            // no alcanzaba -- una vez que el check-in se FINALIZA
+            // (checkout), la habitación vuelve a no tener check-in activo,
+            // y como reservation.status se queda en 'confirmada' para
+            // siempre (no hay transición posterior), el banner reaparecía
+            // después del checkout. Ahora se filtra directo por
+            // status='pendiente' (mismo criterio que future_reservations,
+            // arriba): en cuanto se confirma, la reserva deja de contar
+            // para este banner para siempre, sin importar qué pase después
+            // con el check-in.
             $todayReservationDetail = \App\Models\ReservationDetail::where('room_id', $room->id)
                 ->whereHas('reservation', function ($query) {
-                    $query->whereIn('status', ['pendiente', 'confirmada'])
+                    $query->where('status', 'pendiente')
                         ->whereDate('arrival_date', now()->toDateString());
                 })
                 ->with(['reservation.guest'])
@@ -258,13 +259,6 @@ class RoomController
                 ]
                 : null;
 
-            // 🚀 MOTOR DE FACTURACIÓN GRUPAL: si el check-in activo de esta
-            // habitación pertenece a una Cuenta Grupal real (tiene
-            // company_name), le inyectamos el saldo REAL calculado en vivo
-            // (total_deposited/total_consumed/balance) para que el banner
-            // del OccupiedRoomModal no dependa de los contadores manuales,
-            // y forzamos individual_debt a 0 (REGLA DE ORO: el huésped de
-            // un grupo nunca debe nada a nivel personal).
             foreach ($room->checkins as $checkin) {
                 $isRealGroupAccount = $checkin->specialAgreement && !empty($checkin->specialAgreement->company_name);
                 if ($isRealGroupAccount) {

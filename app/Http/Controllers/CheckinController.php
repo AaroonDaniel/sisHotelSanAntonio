@@ -3441,83 +3441,10 @@ class CheckinController extends Controller
         return ['tier' => 'full', 'fee' => round($agreedPrice * 1.0, 2), 'label' => 'Noche Extra'];
     }
 
-    // --- LÓGICA INTELIGENTE DE COBRO (CORREGIDA) ---
-    private function calculateBillableDays(Checkin $checkin, Carbon $fechaSalidaReal, $waivePenalty = false)
-    {
-        // 1. Si ya está finalizado en BD, respetamos lo histórico
-        if ($checkin->status === 'finalizado') {
-            return max(1, intval($checkin->duration_days));
-        }
-
-        // 🚀 ANCLA DE PRECIO: si esta estadía tuvo una transferencia o
-        // fusión a mitad de camino, 'price_effective_since' marca el
-        // momento exacto desde el cual rige el precio ACTUAL. Las noches
-        // anteriores a ese momento ya quedaron cobradas como una deuda fija
-        // en 'carried_balance' (ver transfer()/merge()), así que aquí NO
-        // deben volver a contarse al precio nuevo.
-        $usingTransferAnchor = !is_null($checkin->price_effective_since);
-        $ingreso = Carbon::parse($checkin->price_effective_since ?? $checkin->check_in_date);
-
-        // AJUSTE DE ENTRADA (Mantenemos tolerancia automática al entrar)
-        // Solo aplica al ingreso ORIGINAL del huésped al hotel: el ancla de
-        // una transferencia/fusión ya es una hora exacta y no debe
-        // beneficiarse de la tolerancia de horario oficial.
-        if (!$usingTransferAnchor && $checkin->schedule) {
-            $horaOficialEntrada = Carbon::parse($ingreso->format('Y-m-d') . ' ' . $checkin->schedule->check_in_time);
-            $inicioTolerancia = $horaOficialEntrada->copy()->subMinutes($checkin->schedule->entry_tolerance_minutes);
-
-            if ($ingreso->between($inicioTolerancia, $horaOficialEntrada)) {
-                $ingreso = $horaOficialEntrada;
-            }
-        }
-
-        // 🛡️ BLINDAJE: la salida nunca puede ser anterior al ingreso (p. ej.
-        // fechas mal cargadas en pruebas). Evita noches/montos negativos: mínimo 1.
-        if ($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule)->lt($this->resolveBusinessDate($ingreso, $checkin->schedule))) {
-            return 1;
-        }
-
-        // =========================================================
-        // 🚀 CASO A: SI SE PRESIONÓ EL BOTÓN DE TOLERANCIA
-        // =========================================================
-        if ($waivePenalty) {
-            $diasCalendario = $this->resolveBusinessDate($ingreso, $checkin->schedule)->diffInDays($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule));
-            // Retorna los días limpios, perdonando la noche extra
-            return $diasCalendario == 0 ? 1 : $diasCalendario;
-        }
-
-        // --- LÓGICA DE DÍA OPERATIVO (Business Date, NO calendario ciego) ---
-        // Una entrada de madrugada (ej. 02:00, antes de la hora de corte
-        // del horario propio de este checkin) pertenece a la noche del
-        // día anterior — de lo contrario se regalan casi 24h de
-        // habitación (ver resolveBusinessDate()).
-        $diasBase = $this->resolveBusinessDate($ingreso, $checkin->schedule)->diffInDays($this->resolveBusinessDate($fechaSalidaReal, $checkin->schedule));
-
-        if ($diasBase == 0) {
-            return 1;
-        }
-
-        if (!$checkin->schedule) {
-            return max(intval($checkin->duration_days), ceil($ingreso->floatDiffInDays($fechaSalidaReal)));
-        }
-
-        // =========================================================
-        // 🛑 CASO B: LÓGICA ESTRICTA (DÍAS POSTERIORES)
-        // =========================================================
-        $horario = $checkin->schedule;
-
-        // HORA OFICIAL EXACTA (Ya NO le sumamos la tolerancia aquí)
-        $limiteSalidaHoy = Carbon::parse($fechaSalidaReal->format('Y-m-d') . ' ' . $horario->check_out_time);
-
-        // ¿Pasó del minuto exacto de salida oficial?
-        if ($fechaSalidaReal->greaterThan($limiteSalidaHoy)) {
-            // SE PASÓ: Cobra el día extra de forma automática y estricta
-            return $diasBase + 1;
-        } else {
-            // SALIÓ A TIEMPO
-            return $diasBase;
-        }
-    }
+    // calculateBillableDays() se extrajo a App\Traits\ResolvesBusinessDate
+    // (ya disponible acá vía ChargesGroupAccountLedger, que la compone) —
+    // para que RoomHistoryController pueda usar exactamente la misma
+    // lógica sin duplicarla.
 
     // ===================================================================
     // FUNCIÓN: FUSIÓN DE HABITACIONES (UNIR A GRUPO)

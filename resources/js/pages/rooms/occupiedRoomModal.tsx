@@ -673,9 +673,11 @@ export default function OccupiedRoomModal({
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="flex items-center justify-between text-xs text-gray-500">
-                                            <span>Tarifa por Noche:</span>
-                                            <span className="flex items-center gap-1.5 font-bold text-gray-700">
+                                        <div className="flex items-center justify-between text-sm text-gray-500">
+                                            <span className="font-bold">
+                                                Tarifa por Noche:
+                                            </span>
+                                            <span className="flex items-center gap-1.5 text-lg font-black text-gray-800">
                                                 {formatCurrency(pricePerNight)}
                                                 {!isSpecialGroup && (
                                                     <button
@@ -688,28 +690,23 @@ export default function OccupiedRoomModal({
                                                         title="Cambiar tarifa a partir de hoy"
                                                         className="text-gray-400 transition hover:text-emerald-600"
                                                     >
-                                                        <Pencil className="h-3 w-3" />
+                                                        <Pencil className="h-4 w-4" />
                                                     </button>
                                                 )}
                                             </span>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs text-gray-500">
-                                            <span>
-                                                Hospedaje Actual ({days}{' '}
-                                                noches):
-                                            </span>
-                                            <span>
-                                                {formatCurrency(
-                                                    currentRoomCost,
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between text-xs text-gray-500">
-                                            <span>Consumos / Servicios:</span>
-                                            <span>
-                                                {formatCurrency(servicesCost)}
-                                            </span>
-                                        </div>
+                                        {servicesCost > 0 && (
+                                            <div className="flex justify-between text-xs text-gray-500">
+                                                <span>
+                                                    Consumos / Servicios:
+                                                </span>
+                                                <span>
+                                                    {formatCurrency(
+                                                        servicesCost,
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="my-1 border-t border-dashed border-gray-200"></div>
                                         <div className="flex justify-between text-sm font-bold text-gray-800">
                                             <span>TOTAL CONSUMIDO:</span>

@@ -260,12 +260,16 @@ export default function RoomsStatus({
     const [roomToFinishMaintenance, setRoomToFinishMaintenance] =
         useState<Room | null>(null);
 
-    // Detslles de historial de adelantos y pagos realizados
+    // Historial financiero COMPLETO de la habitación (todas las estadías,
+    // no solo la activa) -- se pide bajo demanda al abrir el modal.
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [historyCheckinData, setHistoryCheckinData] = useState<any>(null);
+    const [historyRoomData, setHistoryRoomData] = useState<{
+        id: number;
+        number: string;
+    } | null>(null);
 
-    const handleOpenHistory = (checkin: any, room: any) => {
-        setHistoryCheckinData({ ...checkin, room: room });
+    const handleOpenHistory = (_checkin: any, room: any) => {
+        setHistoryRoomData({ id: room.id, number: room.number });
         setIsHistoryModalOpen(true);
     };
 
@@ -1591,9 +1595,15 @@ export default function RoomsStatus({
                                     habitación está libre (clic = check-in
                                     directo) como si ya está ocupada (solo
                                     informativo). */}
+                                {/* 🐛 BUG CORREGIDO: la banda quedó más
+                                    chica (menos padding, ícono y texto
+                                    reducidos) para que quepa en el espacio
+                                    que ya existía SIN empujar el número de
+                                    habitación hacia abajo -- las tarjetas
+                                    "Disponible" ya no se ven afectadas. */}
                                 {todayReservation && (
-                                    <div className="absolute top-0 right-0 left-0 z-40 flex items-center justify-center gap-1 rounded-t-lg bg-yellow-400 px-2 py-1 text-[10px] font-black tracking-wide text-yellow-900 shadow-sm">
-                                        <Clock className="h-3 w-3 shrink-0" />
+                                    <div className="absolute top-0 right-0 left-0 z-40 flex items-center justify-center gap-1 rounded-t-lg bg-yellow-400 px-1.5 py-0.5 text-[8px] leading-tight font-black tracking-wide text-yellow-900 shadow-sm">
+                                        <Clock className="h-2.5 w-2.5 shrink-0" />
                                         <span className="truncate">
                                             RESERVADO HOY:{' '}
                                             {todayReservation.guest}
@@ -1604,9 +1614,7 @@ export default function RoomsStatus({
                                 <div className="pointer-events-none absolute -top-2 -right-2 rotate-12 transform opacity-30">
                                     {config.icon}
                                 </div>
-                                <div
-                                    className={`pointer-events-none relative z-10 p-4 text-white ${todayReservation ? 'pt-7' : ''}`}
-                                >
+                                <div className="pointer-events-none relative z-10 p-4 text-white">
                                     <h3 className="text-2xl font-extrabold tracking-tight">
                                         {room.number}
                                     </h3>
@@ -1920,9 +1928,9 @@ export default function RoomsStatus({
                 show={isHistoryModalOpen}
                 onClose={() => {
                     setIsHistoryModalOpen(false);
-                    setHistoryCheckinData(null);
+                    setHistoryRoomData(null);
                 }}
-                checkin={historyCheckinData}
+                room={historyRoomData}
             />
             <CleanConfirmModal
                 show={isCleanConfirmModalOpen}
@@ -4040,49 +4048,72 @@ function CheckoutConfirmationModal({
 function FinancialHistoryModal({
     show,
     onClose,
-    checkin,
+    room,
 }: {
     show: boolean;
     onClose: () => void;
-    checkin: any;
+    room: { id: number; number: string } | null;
 }) {
-    if (!show || !checkin) return null;
+    const [loading, setLoading] = useState(false);
+    const [days, setDays] = useState<any[]>([]);
+    const [page, setPage] = useState(0);
+    const PAGE_SIZE = 10;
 
-    // 🛠️ Función mágica para reparar fechas de Laravel
-    const parseLaravelDate = (dateString: string) => {
-        if (!dateString) return new Date();
-        return new Date(dateString.replace(' ', 'T'));
+    // 🚀 "Historial de la Hab. [Nro]": Control de Hospedaje, formato
+    // planilla plana (una fila por noche/persona, fecha como columna) --
+    // se pide bajo demanda cada vez que se abre el modal, sin salir de la
+    // pantalla de habitaciones.
+    useEffect(() => {
+        if (!show || !room) return;
+
+        setLoading(true);
+        setDays([]);
+        setPage(0);
+        fetch(`/rooms/${room.id}/daily-history`)
+            .then((res) => res.json())
+            .then((data) => setDays(data.days || []))
+            .finally(() => setLoading(false));
+    }, [show, room?.id]);
+
+    // Aplana los días agrupados del backend en una lista continua de filas
+    // -- ya vienen ordenados del más reciente al más antiguo.
+    const rows = days.flatMap((day) =>
+        day.people.map((p: any, idx: number) => ({
+            ...p,
+            date: day.date,
+            _key: `${day.date}-${p.checkin_id}-${idx}`,
+        })),
+    );
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages - 1);
+    const pageRows = rows.slice(
+        currentPage * PAGE_SIZE,
+        currentPage * PAGE_SIZE + PAGE_SIZE,
+    );
+
+    if (!show || !room) return null;
+
+    const formatDate = (dateString: string) => {
+        // 'YYYY-MM-DD' -> Carbon ya viene sin hora; parseamos como fecha
+        // local para no correrse un día por huso horario.
+        const [y, m, d] = dateString.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('es-BO', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        });
     };
-
-    // Terminal Compartida: quién cobró de verdad es 'operador' (el avatar
-    // elegido), no 'user' (siempre la cuenta genérica 'recepcion'). 'user'
-    // solo se usa como respaldo en pagos viejos anteriores a ese campo.
-    const resolvePaymentOperatorName = (p: any) =>
-        p.operador?.full_name ||
-        p.operador?.nickname ||
-        p.user?.full_name ||
-        p.user?.nickname ||
-        'Sistema';
-
-    const room = checkin.room;
-
-    // Total realmente pagado. Las devoluciones YA se guardan con monto
-    // negativo en BD, por lo que solo se SUMA el array completo. Restar
-    // por type === 'DEVOLUCION' provocaría una doble resta.
-    const payments = checkin.payments || [];
-    const totalPaid = payments.reduce((acc: number, p: any) => {
-        return acc + (parseFloat(p.amount) || 0);
-    }, 0);
 
     return (
         <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 fade-in">
-            <div className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+            <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-3">
                     <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-yellow-100 p-1.5 text-yellow-600 shadow-inner">
                             <History className="h-5 w-5" />
                         </div>
-                        Historial Financiero
+                        Historial de la Hab. {room.number}
                     </h3>
                     <button
                         onClick={onClose}
@@ -4092,130 +4123,210 @@ function FinancialHistoryModal({
                     </button>
                 </div>
 
-                <div className="custom-scrollbar flex-1 overflow-y-auto p-6">
-                    <div className="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-                        <div>
-                            <p className="text-xs font-bold tracking-wider text-gray-500 uppercase">
-                                Titular de la Habitación
-                            </p>
-                            <p className="mt-0.5 text-base font-black text-gray-800">
-                                {checkin.guest?.full_name || 'Desconocido'}
-                            </p>
+                <div className="flex-1 overflow-hidden p-4">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12 text-gray-400">
+                            Cargando historial...
                         </div>
-                        <div className="text-right">
-                            <p className="text-xs font-bold tracking-wider text-gray-500 uppercase">
-                                Total Adelantos
-                            </p>
-                            <p className="mt-0.5 text-2xl font-black text-emerald-600">
-                                Bs. {totalPaid.toFixed(2)}
-                            </p>
-                        </div>
-                    </div>
-
-                    <h4 className="mb-3 flex items-center gap-2 text-sm font-black tracking-wider text-gray-700 uppercase">
-                        <Banknote className="h-4 w-4 text-gray-400" /> Detalle
-                        de Pagos
-                    </h4>
-
-                    {payments.length > 0 ? (
-                        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-                            <table className="w-full text-left text-sm">
-                                <thead className="border-b border-gray-200 bg-gray-100">
-                                    <tr>
-                                        <th className="px-4 py-3 text-xs font-bold tracking-wider text-gray-600 uppercase">
-                                            Fecha y Hora
-                                        </th>
-                                        <th className="px-4 py-3 text-center text-xs font-bold tracking-wider text-gray-600 uppercase">
-                                            Método
-                                        </th>
-                                        <th className="px-4 py-3 text-right text-xs font-bold tracking-wider text-gray-600 uppercase">
-                                            Monto
-                                        </th>
-                                        <th className="px-4 py-3 text-xs font-bold tracking-wider text-gray-600 uppercase">
-                                            Operador
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 bg-white">
-                                    {payments.map((p: any) => (
-                                        <tr
-                                            key={p.id}
-                                            className="transition-colors hover:bg-gray-50"
-                                        >
-                                            {/* 🚀 AQUÍ TAMBIÉN APLICAMOS LA FUNCIÓN REPARADORA */}
-                                            <td className="px-4 py-3 font-medium text-gray-600">
-                                                {parseLaravelDate(
-                                                    p.created_at,
-                                                ).toLocaleString('es-BO', {
-                                                    day: '2-digit',
-                                                    month: '2-digit',
-                                                    year: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true,
-                                                })}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span
-                                                    className={`rounded-md px-2.5 py-1 text-[10px] font-black tracking-wider uppercase shadow-sm ${
-                                                        p.method?.toLowerCase() ===
-                                                        'qr'
-                                                            ? 'border border-indigo-200 bg-indigo-100 text-indigo-700'
-                                                            : p.method?.toLowerCase() ===
-                                                                'efectivo'
-                                                              ? 'border border-emerald-200 bg-emerald-100 text-emerald-700'
-                                                              : 'border border-gray-200 bg-gray-100 text-gray-700'
-                                                    }`}
-                                                >
-                                                    {p.method || p.type}
-                                                    {/* Aquí agregamos la validación del banco */}
-                                                    {p.method?.toLowerCase() ===
-                                                        'qr' &&
-                                                        p.bank_name && (
-                                                            <span className="ml-1 opacity-80">
-                                                                ({p.bank_name})
-                                                            </span>
-                                                        )}
-                                                </span>
-                                            </td>
-                                            <td
-                                                className={`px-4 py-3 text-right font-black ${p.type === 'DEVOLUCION' ? 'text-red-500' : 'text-gray-800'}`}
-                                            >
-                                                {p.type === 'DEVOLUCION'
-                                                    ? '-'
-                                                    : '+'}{' '}
-                                                Bs.{' '}
-                                                {parseFloat(p.amount).toFixed(
-                                                    2,
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex items-center gap-1.5 text-sm font-black tracking-wide text-gray-800 uppercase">
-                                                    <UserIcon className="h-4 w-4 text-indigo-500" />
-                                                    {resolvePaymentOperatorName(
-                                                        p,
-                                                    )}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
+                    ) : rows.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
                             <Banknote className="mx-auto mb-2 h-8 w-8 text-gray-300" />
                             <p className="font-medium text-gray-500">
-                                No hay pagos registrados aún.
+                                Esta habitación todavía no tiene noches
+                                registradas.
                             </p>
                         </div>
+                    ) : (
+                        <>
+                            {/* Planilla plana: encabezado UNA sola vez
+                                arriba, fecha como columna más -- desde sm
+                                hacia arriba. */}
+                            <div className="hidden overflow-hidden rounded-xl border border-gray-200 shadow-sm sm:block">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="border-b border-gray-200 bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Fecha
+                                            </th>
+                                            <th className="px-3 py-2 text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Pernoctante
+                                            </th>
+                                            <th className="px-3 py-2 text-center text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Método
+                                            </th>
+                                            <th className="px-3 py-2 text-right text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Recaudado
+                                            </th>
+                                            <th className="px-3 py-2 text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Pagado a
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 bg-white">
+                                        {pageRows.map((p: any) => (
+                                            <tr key={p._key}>
+                                                <td className="px-3 py-2 whitespace-nowrap text-gray-500">
+                                                    {formatDate(p.date)}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <span className="flex items-center gap-1.5 font-bold text-gray-800">
+                                                        {p.is_active && (
+                                                            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                                                        )}
+                                                        <span className="truncate">
+                                                            {p.name}
+                                                        </span>
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                    {p.payment ? (
+                                                        <span
+                                                            className={`rounded-md px-2 py-0.5 text-[10px] font-black tracking-wider uppercase shadow-sm ${
+                                                                p.payment.method?.toLowerCase() ===
+                                                                'qr'
+                                                                    ? 'border border-indigo-200 bg-indigo-100 text-indigo-700'
+                                                                    : 'border border-emerald-200 bg-emerald-100 text-emerald-700'
+                                                            }`}
+                                                        >
+                                                            {p.payment.method}
+                                                            {p.payment.method?.toLowerCase() ===
+                                                                'qr' &&
+                                                                p.payment
+                                                                    .bank_name && (
+                                                                    <span className="ml-1 opacity-80">
+                                                                        (
+                                                                        {
+                                                                            p
+                                                                                .payment
+                                                                                .bank_name
+                                                                        }
+
+                                                                        )
+                                                                    </span>
+                                                                )}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-300">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {p.payment ? (
+                                                        <span className="font-black text-emerald-600">
+                                                            Bs.{' '}
+                                                            {Number(
+                                                                p.payment
+                                                                    .amount,
+                                                            ).toFixed(2)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-300">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    {p.payment ? (
+                                                        <span className="flex items-center gap-1 font-bold text-gray-700 uppercase">
+                                                            <UserIcon className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                                                            <span className="truncate">
+                                                                {
+                                                                    p.payment
+                                                                        .operator_name
+                                                                }
+                                                            </span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-300">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Versión compacta para pantallas chicas: no
+                                caben 5 columnas, se colapsa a una fila por
+                                persona con fecha + dato en línea. */}
+                            <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:hidden">
+                                {pageRows.map((p: any) => (
+                                    <div key={p._key} className="px-4 py-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex min-w-0 items-center gap-1.5">
+                                                {p.is_active && (
+                                                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                                                )}
+                                                <p className="truncate text-sm font-bold text-gray-800">
+                                                    {p.name}
+                                                </p>
+                                            </div>
+                                            <span className="shrink-0 text-[10px] font-bold text-gray-400">
+                                                {formatDate(p.date)}
+                                            </span>
+                                        </div>
+                                        <p className="mt-0.5 text-xs text-gray-500">
+                                            {p.payment ? (
+                                                <>
+                                                    <span className="font-black text-emerald-600">
+                                                        Bs.{' '}
+                                                        {Number(
+                                                            p.payment.amount,
+                                                        ).toFixed(2)}
+                                                    </span>{' '}
+                                                    · {p.payment.method} ·{' '}
+                                                    {p.payment.operator_name}
+                                                </>
+                                            ) : (
+                                                <span className="text-gray-300">
+                                                    — · — · —
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Anterior / Siguiente -- todo agrupado a la
+                                derecha, sin scroll infinito */}
+                            <div className="mt-2 flex items-center justify-end gap-3">
+                                <span className="text-xs font-bold text-gray-500">
+                                    Página {currentPage + 1} de {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={currentPage === 0}
+                                    onClick={() =>
+                                        setPage((p) => Math.max(0, p - 1))
+                                    }
+                                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    ◀ Anterior
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={currentPage >= totalPages - 1}
+                                    onClick={() =>
+                                        setPage((p) =>
+                                            Math.min(totalPages - 1, p + 1),
+                                        )
+                                    }
+                                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    Siguiente ▶
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
 
-                <div className="flex shrink-0 justify-end border-t border-gray-100 bg-gray-50 p-4">
+                <div className="flex shrink-0 justify-end border-t border-gray-100 bg-gray-50 px-4 py-2.5">
                     <button
                         onClick={onClose}
-                        className="rounded-xl border border-gray-300 bg-white px-6 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-100 active:scale-95"
+                        className="rounded-xl border border-gray-300 bg-white px-6 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-100 active:scale-95"
                     >
                         Cerrar
                     </button>

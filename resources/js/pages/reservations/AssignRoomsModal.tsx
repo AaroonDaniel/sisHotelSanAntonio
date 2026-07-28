@@ -239,6 +239,16 @@ export default function AssignRoomsModal({
 
         return availableRooms
             .filter((room) => {
+                // 🐛 BUG CORREGIDO: el SALÓN de eventos (capacidad 150) solo
+                // se excluía del dropdown del filtro, pero seguía
+                // apareciendo en la grilla de habitaciones para distribuir
+                // huéspedes -- no debe ofrecerse nunca acá, en ningún caso.
+                if (
+                    getRoomTypeName(room).trim().toUpperCase() === 'SALON'
+                ) {
+                    return false;
+                }
+
                 if (usedRoomIds.includes(room.id)) return false;
                 if (getRoomCapacity(room) < neededCapacity) return false;
 

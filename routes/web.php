@@ -220,6 +220,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Trazabilidad de activo: historial de estadías por habitación
     Route::get('/room-history', [App\Http\Controllers\RoomHistoryController::class, 'index'])->name('room-history.index');
+    // JSON on-demand: mismo historial completo (todas las estadías, no solo
+    // la activa), consumido por el modal "Historial Financiero" de
+    // rooms/status.tsx sin salir de la pantalla.
+    Route::get('/rooms/{room}/history-data', [App\Http\Controllers\RoomHistoryController::class, 'historyData'])->name('rooms.history-data');
+    // "Historial de la Hab. [Nro]": Control de Hospedaje por día, mismo
+    // patrón de fetch on-demand desde el modal.
+    Route::get('/rooms/{room}/daily-history', [App\Http\Controllers\RoomHistoryController::class, 'dailyLedger'])->name('rooms.daily-history');
 
     // Mantenimiento
     Route::get('/mantenimientos', [App\Http\Controllers\MaintenanceController::class, 'index'])->name('maintenances.index');
