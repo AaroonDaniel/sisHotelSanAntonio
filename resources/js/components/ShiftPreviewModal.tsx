@@ -5,10 +5,10 @@ interface ShiftPreviewModalProps {
     /** Caja puntual a previsualizar (panel gerencial: ya se sabe cuál). */
     cashRegisterId?: number | null;
     /**
-     * URL ya armada (flujo del recepcionista en status.tsx: turno propio en
-     * curso, filtrado por operador + rango de fechas, no por un
-     * cash_register_id puntual). Si se pasa, tiene prioridad sobre
-     * `cashRegisterId`.
+     * URL ya armada (flujo del recepcionista en status.tsx: su turno
+     * ABIERTA en curso, resuelto en el backend vía `current_shift=1` +
+     * `user_id`, no por un `cash_register_id` puntual conocido de
+     * antemano). Si se pasa, tiene prioridad sobre `cashRegisterId`.
      */
     url?: string | null;
     onClose: () => void;

@@ -137,6 +137,18 @@ export default function AssignRoomsModal({
         (!needsPaymentModeChoice || paymentMode !== null) &&
         (!needsAdvancePicker || advanceDetailId !== null);
 
+    // Si cambia grupal <-> individual, la habitación elegida para el
+    // adelanto (cuando hay que elegir entre varias) queda obsoleta -- se
+    // pudo haber marcado por error antes del cambio, y dejarla marcada
+    // daría a entender que esa habitación sigue recibiendo el adelanto
+    // completo sin que el usuario lo haya confirmado de nuevo.
+    const handlePaymentModeChange = (mode: 'grupal' | 'individual') => {
+        setPaymentMode(mode);
+        if (confirmRows.length > 1) {
+            setAdvanceDetailId(null);
+        }
+    };
+
     useEffect(() => {
         if (!show || !reservation) return;
 
@@ -948,54 +960,86 @@ export default function AssignRoomsModal({
                     /* ============ FASE CONFIRMAR (sin precio) ============ */
                     <div className="flex-1 overflow-y-auto p-6">
                         {needsPaymentModeChoice && (
-                            <div className="mb-5 rounded-xl border-2 border-purple-200 bg-purple-50 p-4">
-                                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-black tracking-widest text-purple-700 uppercase">
-                                    <Building2 className="h-3.5 w-3.5" />
-                                    {reservation.special_agreement
-                                        ?.company_name ||
-                                        `Convenio ${reservation.special_agreement?.type ?? ''}`}
+                            <div className="mb-5">
+                                <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-600">
+                                    <Building2 className="h-4 w-4 text-gray-500" />
+                                    <span>
+                                        {reservation.special_agreement
+                                            ?.company_name ||
+                                            `Convenio ${reservation.special_agreement?.type ?? ''}`}{' '}
+                                        — ¿cómo se paga esta estadía?
+                                    </span>
                                 </p>
-                                <p className="mb-3 text-xs font-medium text-purple-800">
-                                    ¿Cómo se paga esta estadía?
-                                </p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        type="button"
+                                <div className="space-y-3">
+                                    <div
                                         onClick={() =>
-                                            setPaymentMode('grupal')
+                                            handlePaymentModeChange('grupal')
                                         }
-                                        className={`rounded-lg border-2 p-3 text-left transition ${
+                                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-colors ${
                                             paymentMode === 'grupal'
-                                                ? 'border-purple-500 bg-white shadow-sm'
-                                                : 'border-purple-200 bg-white/50 hover:border-purple-300'
+                                                ? 'border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1'
+                                                : 'border-gray-200 bg-gray-50'
                                         }`}
                                     >
-                                        <p className="text-xs font-black text-purple-900 uppercase">
-                                            Grupal
-                                        </p>
-                                        <p className="text-[11px] text-purple-600">
-                                            La empresa/institución paga las
-                                            noches
-                                        </p>
-                                    </button>
-                                    <button
-                                        type="button"
+                                        <div className="flex items-center gap-2">
+                                            <Building2 className="h-5 w-5 text-green-500" />
+                                            <div>
+                                                <span className="block text-sm font-black text-gray-800 uppercase">
+                                                    Grupal
+                                                </span>
+                                                <span className="block text-xs font-medium text-gray-500">
+                                                    La empresa/institución paga
+                                                    las noches
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {paymentMode === 'grupal' ? (
+                                            <span className="flex items-center gap-1 rounded-full bg-green-600 px-3 py-1 text-[11px] font-black text-white uppercase">
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                Elegido
+                                            </span>
+                                        ) : (
+                                            <span className="rounded-full border border-gray-300 px-3 py-1 text-[11px] font-bold text-gray-500 uppercase">
+                                                Elegir
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div
                                         onClick={() =>
-                                            setPaymentMode('individual')
+                                            handlePaymentModeChange(
+                                                'individual',
+                                            )
                                         }
-                                        className={`rounded-lg border-2 p-3 text-left transition ${
+                                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-colors ${
                                             paymentMode === 'individual'
-                                                ? 'border-purple-500 bg-white shadow-sm'
-                                                : 'border-purple-200 bg-white/50 hover:border-purple-300'
+                                                ? 'border-green-400 bg-green-50 ring-2 ring-green-100 ring-offset-1'
+                                                : 'border-gray-200 bg-gray-50'
                                         }`}
                                     >
-                                        <p className="text-xs font-black text-purple-900 uppercase">
-                                            Individual
-                                        </p>
-                                        <p className="text-[11px] text-purple-600">
-                                            El huésped paga directamente
-                                        </p>
-                                    </button>
+                                        <div className="flex items-center gap-2">
+                                            <User className="h-5 w-5 text-green-500" />
+                                            <div>
+                                                <span className="block text-sm font-black text-gray-800 uppercase">
+                                                    Individual
+                                                </span>
+                                                <span className="block text-xs font-medium text-gray-500">
+                                                    El huésped paga
+                                                    directamente
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {paymentMode === 'individual' ? (
+                                            <span className="flex items-center gap-1 rounded-full bg-green-600 px-3 py-1 text-[11px] font-black text-white uppercase">
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                Elegido
+                                            </span>
+                                        ) : (
+                                            <span className="rounded-full border border-gray-300 px-3 py-1 text-[11px] font-bold text-gray-500 uppercase">
+                                                Elegir
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}

@@ -229,11 +229,12 @@ export default function RoomsStatus({
 
     const confirmQuickPreview = () => {
         if (!previewOperatorId) return;
-        const today = new Date().toISOString().slice(0, 10);
+        // La caja EN USO ahora mismo, no un rango de fechas: mezclar por
+        // fecha juntaba el turno abierto con uno anterior ya cerrado el
+        // mismo día y el PDF salía como si nunca se hubiera cerrado nada.
         const params = new URLSearchParams({
             user_id: previewOperatorId,
-            start_date: today,
-            end_date: today,
+            current_shift: '1',
             record_type: 'ambos',
         });
         setPreviewPickerOpen(false);

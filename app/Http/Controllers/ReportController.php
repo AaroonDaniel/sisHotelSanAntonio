@@ -808,10 +808,60 @@ class ReportController extends Controller
         return response()->json(['Shifts' => $shifts]);
     }
 
+    /**
+     * PDF corto para "Lista de Cobros" cuando el operador seleccionado no
+     * tiene ninguna caja ABIERTA en este momento (ya la cerró y todavía no
+     * volvió a abrir otra) — evita un 404/500 crudo en el iframe del modal.
+     */
+    private function noOpenShiftPdf()
+    {
+        $pdf = new \FPDF('P', 'mm', 'Letter');
+        $pdf->SetMargins(15, 15, 15);
+        $pdf->AddPage();
+        $pdf->SetFont('Arial', 'B', 12);
+        $pdf->Cell(0, 6, utf8_decode('REPORTE DE CAJA'), 0, 1, 'C');
+        $pdf->Ln(10);
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->SetFillColor(255, 243, 205);
+        $pdf->Cell(0, 8, utf8_decode('EL OPERADOR NO TIENE UNA CAJA ABIERTA EN ESTE MOMENTO.'), 1, 1, 'C', true);
+
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="sin-turno-abierto.pdf"');
+    }
+
     public function generateFinancialReportPdf(Request $request)
     {
         $cashRegisterId = $request->query('cash_register_id');
         $recordType = $request->query('record_type', 'ambos');
+
+        // "Lista de Cobros" (rooms/status.tsx): el recepcionista quiere ver
+        // la caja que el operador tiene EN USO ahora mismo, no un rango de
+        // fechas — mezclar por fecha (expandRangeToCoverShifts) terminaba
+        // juntando el turno abierto con uno anterior ya cerrado el mismo
+        // día, y el PDF salía como si nunca se hubiera cerrado nada (sin
+        // "Hasta", sin la apertura real de ese cierre). Resolvemos aquí su
+        // turno ABIERTA puntual y de ahí en adelante reutilizamos el mismo
+        // camino que ya usa correctamente el panel de Aperturas y Cierres
+        // (MODO TURNO ESPECÍFICO), sin mezclar con turnos anteriores.
+        if (!$cashRegisterId && $request->boolean('current_shift')) {
+            if (
+                !Auth::user()->hasRole('recepcionista') &&
+                !Auth::user()->can('reportes.financiero')
+            ) {
+                abort(403, 'No tienes permiso para generar este reporte.');
+            }
+
+            $turnoAbierto = CashRegister::where('user_id', $request->query('user_id'))
+                ->where('status', 'ABIERTA')
+                ->first();
+
+            if (!$turnoAbierto) {
+                return $this->noOpenShiftPdf();
+            }
+
+            $cashRegisterId = $turnoAbierto->id;
+        }
 
         if ($cashRegisterId) {
             // ==========================================
