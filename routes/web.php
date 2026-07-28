@@ -18,8 +18,8 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
-use App\Http\Controllers\OnlineBookingController;
-use App\Http\Controllers\AdminBookingController;
+//use App\Http\Controllers\OnlineBookingController;
+//use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
@@ -27,7 +27,7 @@ use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\DataAuditController;
 use App\Http\Controllers\GroupAccountController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
+//use Inertia\Inertia;
 
 Route::redirect('/', '/login');
 
@@ -194,6 +194,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/history', [ReportController::class, 'shiftsHistory'])->name('reports.financialHistory')->middleware('permission:reportes.financiero');
     Route::get('/reports/financialMovement', [ReportController::class, 'financialMovement'])->name('reports.financialMovement')->middleware('permission:reportes.financiero');
+    // Control de Hospedaje: checklist operativo de habitaciones + limpieza,
+    // sin permiso especial (a diferencia de los reportes financieros de
+    // arriba) — cualquier usuario logueado de la terminal puede imprimirlo.
+    Route::get('/reports/lodging-control/pdf', [ReportController::class, 'generateLodgingControlPdf'])->name('reports.lodgingControlPdf');
 
     // Administración: Aperturas y Cierres (historial de turnos + informe consolidado por día)
     // Exclusivo para el rol Administrador: los recepcionistas no deben

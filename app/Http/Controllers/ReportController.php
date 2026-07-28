@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Checkin;
 use App\Models\Guest;
+use App\Models\Room;
 use App\Models\User;
 use App\Models\Payment;
 use App\Models\Expense;
@@ -828,6 +829,192 @@ class ReportController extends Controller
         return response($pdf->Output('S'), 200)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="sin-turno-abierto.pdf"');
+    }
+
+    /**
+     * "Control de Hospedaje": checklist operativo para recepción/limpieza.
+     * Sin permiso especial (a diferencia de los reportes de caja) —
+     * cualquier usuario de la terminal puede imprimirlo. Lista TODAS las
+     * habitaciones (ocupadas o no) y, abajo, una tabla en blanco de ropa
+     * de cama para que el personal la llene a mano.
+     */
+    public function generateLodgingControlPdf(Request $request)
+    {
+        // Sin tabla nueva: la ocupación de cualquier día (de ayer, de hoy,
+        // de la semana pasada) ya vive en `checkins` — check_in_date es la
+        // llegada real y check_out_date queda en null mientras la estadía
+        // sigue activa y se llena recién al hacer checkout real (ver
+        // CheckinController). Reconstruimos "quién dormía en cada
+        // habitación ese día" comparando ese rango contra la fecha
+        // pedida, en vez de depender de status='activo' (que solo sirve
+        // para "ahora mismo").
+        $fecha = $request->filled('date')
+            ? Carbon::parse($request->query('date'))->startOfDay()
+            : Carbon::now()->startOfDay();
+        $fechaStr = $fecha->toDateString();
+
+        $rooms = Room::with([
+            'checkins' => function ($q) use ($fechaStr) {
+                $q->whereDate('check_in_date', '<=', $fechaStr)
+                    ->where(function ($q2) use ($fechaStr) {
+                        $q2->whereNull('check_out_date')
+                            ->orWhereDate('check_out_date', '>=', $fechaStr);
+                    })
+                    ->with([
+                        'guest',
+                        'companions',
+                        'specialAgreement',
+                        'payments' => function ($query) {
+                            $query->orderBy('created_at');
+                        },
+                        'payments.operador:id,full_name,nickname',
+                        'payments.user:id,full_name,nickname',
+                    ]);
+            },
+        ])->get()->sortBy('number', SORT_NATURAL)->values();
+
+        // Márgenes asimétricos: izquierda 1cm (deja aire para encuadernar/
+        // perforar), arriba/derecha/abajo 0.5cm.
+        $pdf = new \FPDF('P', 'mm', 'Legal');
+        $pdf->SetMargins(10, 5, 5);
+        $pdf->SetAutoPageBreak(true, 5);
+        $pdf->AddPage();
+
+        // Ancho útil real (ancho de hoja Legal - márgenes izq/der): las
+        // tablas de abajo sacan sus columnas de esto para llenar toda la
+        // hoja, no un valor fijo adivinado.
+        $anchoUtil = $pdf->GetPageWidth() - 10 - 5;
+
+        $pdf->SetFont('Arial', 'B', 13);
+        $pdf->Cell(0, 6, utf8_decode('CONTROL DE HOSPEDAJE'), 0, 1, 'C');
+
+        $diasSemana = [
+            'Sunday' => 'DOMINGO', 'Monday' => 'LUNES', 'Tuesday' => 'MARTES',
+            'Wednesday' => 'MIERCOLES', 'Thursday' => 'JUEVES', 'Friday' => 'VIERNES',
+            'Saturday' => 'SABADO',
+        ];
+        $hoy = $fecha;
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->Cell(0, 4, utf8_decode($diasSemana[$hoy->format('l')] . ', ' . $hoy->format('d/m/Y')), 0, 1, 'L');
+        $pdf->Ln(1);
+
+        // --- Tabla de habitaciones ---
+        // Anchos proporcionales sobre $anchoUtil (Pza 7% / Pernoctantes 54% /
+        // Movilidad 14% / Recaudado 10% / Pagado 15%), la última columna
+        // absorbe el redondeo para que la suma cierre exacto con el ancho
+        // de la hoja.
+        $colPza = round($anchoUtil * 0.07, 1);
+        $colPernoctantes = round($anchoUtil * 0.54, 1);
+        $colMovilidad = round($anchoUtil * 0.14, 1);
+        $colRecaudado = round($anchoUtil * 0.10, 1);
+        $colPagado = round($anchoUtil - $colPza - $colPernoctantes - $colMovilidad - $colRecaudado, 1);
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->SetFillColor(240, 240, 240);
+        $pdf->Cell($colPza, 4, 'Pza.', 1, 0, 'C', true);
+        $pdf->Cell($colPernoctantes, 4, 'Pernoctantes', 1, 0, 'C', true);
+        $pdf->Cell($colMovilidad, 4, 'Movilidad', 1, 0, 'C', true);
+        $pdf->Cell($colRecaudado, 4, 'Recaudado', 1, 0, 'C', true);
+        $pdf->Cell($colPagado, 4, 'Pagado', 1, 1, 'C', true);
+
+        $pdf->SetFont('Arial', '', 7.5);
+        foreach ($rooms as $room) {
+            $checkin = $room->checkins->first();
+
+            $pernoctantes = '-';
+            $recaudadoTexto = '-';
+            $ultimoOperador = '-';
+
+            if ($checkin) {
+                // Titular con nombre completo; acompañantes solo con el
+                // primer nombre (la fila ya es angosta y son varios).
+                $primerNombre = fn ($nombre) => trim(strtok((string) $nombre, ' '));
+
+                $nombres = collect([$checkin->guest->full_name ?? null])
+                    ->filter()
+                    ->merge(
+                        $checkin->companions
+                            ->pluck('full_name')
+                            ->filter()
+                            ->map($primerNombre)
+                    )
+                    ->implode(', ');
+                $pernoctantes = $nombres !== '' ? $nombres : '-';
+
+                // Acumulado SOLO hasta la fecha vista (inclusive): si estás
+                // mirando "ayer", no debe sumar pagos hechos hoy después.
+                $finDelDia = $hoy->copy()->endOfDay();
+                $recaudado = $checkin->payments
+                    ->filter(fn ($p) => Carbon::parse($p->created_at)->lte($finDelDia))
+                    ->sum(function ($p) {
+                        return $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+                    });
+                $recaudadoTexto = number_format($recaudado, 2);
+
+                // "Pagado" solo debe reflejar un cobro de HOY, no el
+                // último pago histórico del checkin (eso mostraba un
+                // operador de días atrás, sin relación con la jornada de
+                // este reporte — parecía un nombre puesto al azar).
+                $pagoDeHoy = $checkin->payments
+                    ->filter(fn ($p) => Carbon::parse($p->created_at)->isSameDay($hoy))
+                    ->last();
+
+                // Cuentas grupales reales (corporativo/delegación con
+                // company_name): el cobro se registra a nivel del convenio
+                // (special_agreement_id, sin checkin_id) — no aparece en
+                // $checkin->payments, hay que buscarlo aparte.
+                $esGrupoReal = $checkin->specialAgreement
+                    && !empty($checkin->specialAgreement->company_name);
+                if (!$pagoDeHoy && $esGrupoReal) {
+                    $pagoDeHoy = Payment::where('special_agreement_id', $checkin->specialAgreement->id)
+                        ->whereDate('created_at', $hoy->toDateString())
+                        ->with(['operador:id,full_name,nickname', 'user:id,full_name,nickname'])
+                        ->orderBy('created_at')
+                        ->get()
+                        ->last();
+                }
+
+                if ($pagoDeHoy) {
+                    $ultimoOperador = $pagoDeHoy->operador->nickname
+                        ?? $pagoDeHoy->user->nickname
+                        ?? '-';
+                }
+            }
+
+            $pdf->Cell($colPza, 4, utf8_decode($room->number), 1, 0, 'C');
+            $pdf->Cell($colPernoctantes, 4, utf8_decode(substr($pernoctantes, 0, 90)), 1, 0, 'L');
+            $pdf->Cell($colMovilidad, 4, '', 1, 0, 'C');
+            $pdf->Cell($colRecaudado, 4, $recaudadoTexto, 1, 0, 'R');
+            $pdf->Cell($colPagado, 4, utf8_decode(substr($ultimoOperador, 0, 18)), 1, 1, 'C');
+        }
+
+        $pdf->Ln(2);
+
+        // --- Tabla de limpieza (checklist en blanco) ---
+        // LIMPIEZA/TOTAL angostas (nombre corto / un número), OBSERVACIONES
+        // se lleva el resto del ancho útil para que se pueda escribir a
+        // mano. Misma lógica que la tabla de arriba: la última columna
+        // absorbe el redondeo para cerrar exacto con $anchoUtil.
+        $colLimpieza = round($anchoUtil * 0.18, 1);
+        $colTotal = round($anchoUtil * 0.13, 1);
+        $colObservaciones = round($anchoUtil - $colLimpieza - $colTotal, 1);
+
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->SetFillColor(240, 240, 240);
+        $pdf->Cell($colLimpieza, 5, utf8_decode('LIMPIEZA'), 1, 0, 'C', true);
+        $pdf->Cell($colTotal, 5, 'TOTAL', 1, 0, 'C', true);
+        $pdf->Cell($colObservaciones, 5, utf8_decode('OBSERVACIONES'), 1, 1, 'C', true);
+
+        $pdf->SetFont('Arial', '', 8);
+        foreach (['Sabanas', 'Fundas', 'Toallas', 'Edredones'] as $item) {
+            $pdf->Cell($colLimpieza, 6, utf8_decode($item), 1, 0, 'L');
+            $pdf->Cell($colTotal, 6, '', 1, 0, 'C');
+            $pdf->Cell($colObservaciones, 6, '', 1, 1, 'C');
+        }
+
+        return response($pdf->Output('S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="control-hospedaje-' . $hoy->format('Y-m-d') . '.pdf"');
     }
 
     public function generateFinancialReportPdf(Request $request)

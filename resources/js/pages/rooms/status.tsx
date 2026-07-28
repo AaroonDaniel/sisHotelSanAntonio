@@ -40,8 +40,8 @@ import { useEffect, useState } from 'react';
 import DetailModal from '../checkindetails/detailModal';
 import CheckinModal, {
     CheckinData,
-    Guest as ModalGuest,
     GroupAccount,
+    Guest as ModalGuest,
     Room as ModalRoom,
     Operator,
 } from '../checkins/checkinModal';
@@ -241,6 +241,31 @@ export default function RoomsStatus({
         setQuickPreviewUrl(
             `/reports/financial/pdf?${params.toString()}&t=${Date.now()}`,
         );
+    };
+
+    // "Control de Hospedaje": checklist operativo (no financiero), abierto
+    // a cualquier usuario logueado — sin selector de operador, va directo.
+    // Navegable por día (anterior/siguiente): el backend reconstruye la
+    // ocupación de cualquier fecha desde `checkins`, sin tabla propia.
+    const [lodgingControlDate, setLodgingControlDate] = useState(() =>
+        new Date().toISOString().slice(0, 10),
+    );
+
+    const buildLodgingControlUrl = (date: string) =>
+        `/reports/lodging-control/pdf?date=${date}&t=${Date.now()}`;
+
+    const handleOpenLodgingControl = () => {
+        const today = new Date().toISOString().slice(0, 10);
+        setLodgingControlDate(today);
+        setQuickPreviewUrl(buildLodgingControlUrl(today));
+    };
+
+    const shiftLodgingControlDate = (deltaDays: number) => {
+        const [y, m, d] = lodgingControlDate.split('-').map(Number);
+        const next = new Date(y, m - 1, d + deltaDays);
+        const nextStr = next.toISOString().slice(0, 10);
+        setLodgingControlDate(nextStr);
+        setQuickPreviewUrl(buildLodgingControlUrl(nextStr));
     };
 
     // Detalles de una nueva vista para los datos del usuario
@@ -1231,9 +1256,113 @@ export default function RoomsStatus({
 
             <div className="mx-auto max-w-7xl px-4 py-1 sm:px-6 lg:px-8">
                 {/* HEADER Y FILTROS */}
-                <div className="mb-8 flex w-full flex-col justify-between gap-4 lg:flex-row lg:items-end">
-                    {/* --- LADO IZQUIERDO: Título y Botones --- */}
-                    <div className="shrink-0">
+                {/* Siempre en columna (sin lg:flex-row): si el título
+                    compartiera fila con los filtros, estos se quedaban sin
+                    ancho suficiente para los 6 controles y envolvían a dos
+                    líneas aunque el contenedor de filtros ya estuviera bien
+                    armado. Así el bloque de filtros usa el ancho completo
+                    de la página. */}
+                <div className="mb-8 flex w-full flex-col gap-4">
+                    {/* FILA 1: botones de acción + filtros, todo en un
+                        único contenedor. flex-wrap: con 6 elementos, en
+                        pantallas angostas bajan de línea limpiamente en vez
+                        de generar scroll horizontal. */}
+                    <div className="flex w-full flex-wrap items-center gap-3">
+                        <button
+                            onClick={handleOpenLodgingControl}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-emerald-200 shadow-sm transition-all hover:bg-emerald-500/40 hover:text-white active:scale-95"
+                            title="Checklist de habitaciones y limpieza para imprimir"
+                        >
+                            <BedDouble className="h-5 w-5" />
+                            Control de Hospedaje
+                        </button>
+                        <button
+                            onClick={handleOpenQuickPreview}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95"
+                            title="Ver resumen visual del dinero cobrado"
+                        >
+                            <FileText className="h-5 w-5" />
+                            Lista de Cobros
+                        </button>
+
+                        {/* Selector de Tipo de Habitación (ancho natural) */}
+                        <div className="relative">
+                            <select
+                                value={selectedRoomType}
+                                onChange={(e) =>
+                                    setSelectedRoomType(e.target.value)
+                                }
+                                className="cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                            >
+                                <option value="">TODOS</option>
+                                {RoomTypes?.map((type) => (
+                                    <option key={type.id} value={type.id}>
+                                        {type.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Selector de Tipo de Baño (ancho natural) */}
+                        <div className="relative">
+                            <select
+                                value={selectedBathroom}
+                                onChange={(e) =>
+                                    setSelectedBathroom(e.target.value)
+                                }
+                                className="cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
+                            >
+                                <option value="">TIPO BAÑO</option>
+                                <option value="private">PRIVADO</option>
+                                <option value="shared">COMPARTIDO</option>
+                            </select>
+                        </div>
+
+                        {/* Barra de Búsqueda: toma el espacio sobrante sin colapsar */}
+                        <div className="relative min-w-[160px] flex-1">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                <Search className="h-4 w-4 text-gray-400" />
+                            </div>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
+                                placeholder="BUSCAR..."
+                            />
+                        </div>
+
+                        {/* Campo de Fecha */}
+                        <div className="relative flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) =>
+                                    setSelectedDate(e.target.value)
+                                }
+                                className="w-36 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                style={{ colorScheme: 'dark' }}
+                                title="Filtrar por fecha exacta de ingreso"
+                            />
+
+                            {selectedDate && (
+                                <button
+                                    onClick={() => setSelectedDate('')}
+                                    className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white uppercase shadow-md transition-colors hover:bg-red-500 active:scale-95"
+                                    title="Borrar filtro de fecha"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* FILA 2: título + botón "Finalizar Estadía" + badges
+                        de estado, todos en la misma fila (justify-between
+                        para que el título quede a la izquierda y los
+                        badges a la derecha, flex-wrap para pantallas
+                        angostas). */}
+                    <div className="flex w-full flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-4">
                             <h2 className="text-3xl font-bold text-white">
                                 Habitaciones
@@ -1283,101 +1412,9 @@ export default function RoomsStatus({
                                 )}
                             </div>
                         </div>
-                    </div>
 
-                    {/* --- LADO DERECHO: Filtros --- */}
-                    <div className="flex w-full min-w-0 flex-1 flex-col items-end gap-3">
-                        {/* PRIMERA FILA: Controles de Filtros */}
-                        {/* Eliminamos 'justify-end' para evitar el corte izquierdo, usamos 'xl:ml-auto' en el primer botón */}
-                        <div className="flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-2">
-                            <button
-                                onClick={handleOpenQuickPreview}
-                                // MAGIA AQUÍ: w-auto y xl:ml-auto empujan toda la fila a la derecha sin cortarla
-                                className="flex w-auto shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-bold whitespace-nowrap text-blue-200 shadow-sm transition-all hover:bg-blue-500/40 hover:text-white active:scale-95 xl:ml-auto"
-                                title="Ver resumen visual del dinero cobrado"
-                            >
-                                <FileText className="h-5 w-5" />
-                                Lista de Cobros
-                            </button>
-
-                            {/* Selector de Tipo de Habitación (Reducido a w-32) */}
-                            <div
-                                className={`relative shrink-0 ${(auth as any).active_register ? '' : 'xl:ml-auto'}`}
-                            >
-                                <select
-                                    value={selectedRoomType}
-                                    onChange={(e) =>
-                                        setSelectedRoomType(e.target.value)
-                                    }
-                                    className="block w-32 cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
-                                >
-                                    <option value="">TODOS</option>
-                                    {RoomTypes?.map((type) => (
-                                        <option key={type.id} value={type.id}>
-                                            {type.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Selector de Tipo de Baño (Reducido a w-36) */}
-                            <div className="relative shrink-0">
-                                <select
-                                    value={selectedBathroom}
-                                    onChange={(e) =>
-                                        setSelectedBathroom(e.target.value)
-                                    }
-                                    className="block w-36 cursor-pointer rounded-xl border-gray-700 bg-gray-800 py-2 pr-8 pl-3 text-sm text-white focus:border-emerald-500 focus:ring-emerald-500"
-                                >
-                                    <option value="">TIPO BAÑO</option>
-                                    <option value="private">PRIVADO</option>
-                                    <option value="shared">COMPARTIDO</option>
-                                </select>
-                            </div>
-
-                            {/* Barra de Búsqueda (Flexible) */}
-                            <div className="relative max-w-[350px] min-w-[150px] flex-1">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <Search className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) =>
-                                        setSearchTerm(e.target.value)
-                                    }
-                                    className="block w-full rounded-xl border-gray-700 bg-gray-800 py-2 pl-9 text-sm text-white placeholder-gray-400 focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="BUSCAR..."
-                                />
-                            </div>
-
-                            {/* Campo de Fecha (Ajustado) */}
-                            <div className="relative flex shrink-0 items-center gap-2">
-                                <input
-                                    type="date"
-                                    value={selectedDate}
-                                    onChange={(e) =>
-                                        setSelectedDate(e.target.value)
-                                    }
-                                    className="block w-36 cursor-pointer rounded-xl border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-white shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                    style={{ colorScheme: 'dark' }}
-                                    title="Filtrar por fecha exacta de ingreso"
-                                />
-
-                                {selectedDate && (
-                                    <button
-                                        onClick={() => setSelectedDate('')}
-                                        className="flex shrink-0 items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white uppercase shadow-md transition-colors hover:bg-red-500 active:scale-95"
-                                        title="Borrar filtro de fecha"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* SEGUNDA FILA: Badges de Estado */}
-                        <div className="flex w-full flex-wrap justify-end gap-2">
+                        {/* Badges de Estado */}
+                        <div className="flex flex-wrap items-center gap-2">
                             <Badge
                                 count={countStatus('available')}
                                 label="Libre"
@@ -2012,6 +2049,19 @@ export default function RoomsStatus({
             <ShiftPreviewModal
                 url={quickPreviewUrl}
                 onClose={() => setQuickPreviewUrl(null)}
+                // Flechas de día solo cuando el PDF abierto es el de
+                // "Control de Hospedaje" — "Lista de Cobros" comparte este
+                // mismo modal pero siempre es el turno abierto ACTUAL, sin
+                // navegación por fecha.
+                {...(quickPreviewUrl?.startsWith(
+                    '/reports/lodging-control/pdf',
+                )
+                    ? {
+                          dateLabel: lodgingControlDate,
+                          onPrevDay: () => shiftLodgingControlDate(-1),
+                          onNextDay: () => shiftLodgingControlDate(1),
+                      }
+                    : {})}
             />
         </AuthenticatedLayout>
     );
@@ -2080,9 +2130,7 @@ function CheckoutConfirmationModal({
     // 🚨 BARRERA DE SEGURIDAD: monto "en espera" mientras se confirma en el
     // modal — el total NO se toca hasta que el recepcionista confirme.
     const [showDiscountConfirm, setShowDiscountConfirm] = useState(false);
-    const [pendingDiscount, setPendingDiscount] = useState<number | null>(
-        null,
-    );
+    const [pendingDiscount, setPendingDiscount] = useState<number | null>(null);
 
     const handleConfirmarRebaja = () => {
         const val = parseFloat(rebaja);
@@ -2821,8 +2869,7 @@ function CheckoutConfirmationModal({
                                                                 </div>
                                                             </>
                                                         )}
-                                                        {montoDescuento >
-                                                            0 && (
+                                                        {montoDescuento > 0 && (
                                                             <>
                                                                 <div>
                                                                     <span className="font-bold text-green-600">
@@ -3053,7 +3100,7 @@ function CheckoutConfirmationModal({
                                                                 Descuento (Bs)
                                                                 {penalidadLateCheckout >
                                                                     0 && (
-                                                                    <span className="ml-1 font-normal normal-case text-red-400">
+                                                                    <span className="ml-1 font-normal text-red-400 normal-case">
                                                                         (sobre
                                                                         subtotal{' '}
                                                                         {subtotal.toFixed(
@@ -4201,7 +4248,6 @@ function FinancialHistoryModal({
                                                                                 .payment
                                                                                 .bank_name
                                                                         }
-
                                                                         )
                                                                     </span>
                                                                 )}

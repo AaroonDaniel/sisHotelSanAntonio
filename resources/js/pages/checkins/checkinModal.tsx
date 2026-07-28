@@ -563,6 +563,27 @@ export default function CheckinModal({
                 titular_price: '',
                 group_account_id: '',
             }));
+        } else if (tipo === 'corporativo') {
+            // 🚀 TARIFA FIJA CORPORATIVO: ya no se deriva del precio de
+            // tabla ni de un descuento -- es un monto fijo POR PERSONA
+            // según el tipo de baño de la habitación (Bs 60 compartido /
+            // Bs 100 privado), igual para cualquier tipo de habitación.
+            const bathroomType = selectedRoom?.price?.bathroom_type;
+            const precioConvenio = bathroomType === 'shared' ? 60 : 100;
+            setData((prev) => ({
+                ...prev,
+                type: tipo,
+                auto_adjust_price: false,
+                agreed_price: precioConvenio,
+                // Arranca igualado a la tarifa fija (sin acompañantes
+                // todavía) -- editable de inmediato por persona en el
+                // carrusel.
+                titular_price: precioConvenio,
+                corporate_days: 1,
+                group_account_id: keepGroupAccount
+                    ? prev.group_account_id
+                    : '',
+            }));
         } else {
             const precioConvenio = Math.max(0, origPrice - 20);
             setData((prev) => ({
@@ -574,7 +595,7 @@ export default function CheckinModal({
                 // convenio (sin acompañantes todavía) -- editable de
                 // inmediato por persona en el carrusel.
                 titular_price: precioConvenio,
-                corporate_days: tipo === 'corporativo' ? 1 : 0,
+                corporate_days: 0,
                 group_account_id: keepGroupAccount
                     ? prev.group_account_id
                     : '',
@@ -838,6 +859,16 @@ export default function CheckinModal({
                     corporate_days:
                         checkinToEdit.special_agreement
                             ?.payment_frequency_days || 0,
+                    // 🚀 CUENTA GRUPAL: si el convenio vinculado tiene
+                    // company_name, es una Cuenta Grupal REAL (no un
+                    // convenio ad-hoc de una sola habitación) -- se
+                    // preselecciona en el dropdown para que al reabrir el
+                    // checkin no haya que volver a elegirla, quede tal
+                    // cual se guardó.
+                    group_account_id: checkinToEdit.special_agreement
+                        ?.company_name
+                        ? String(checkinToEdit.special_agreement.id)
+                        : '',
                     checkin_operator_id: checkinToEdit.checkin_operator_id
                         ? String(checkinToEdit.checkin_operator_id)
                         : '',
@@ -1336,7 +1367,15 @@ export default function CheckinModal({
                 profession: '',
                 origin: '',
                 phone: '',
-                price: '',
+                // 🚀 TARIFA FIJA CORPORATIVO: cada acompañante nuevo
+                // arranca con la misma tarifa por persona que el titular
+                // (Bs 60 compartido / Bs 100 privado), no vacío.
+                price:
+                    data.type === 'corporativo'
+                        ? currentRoom?.price?.bathroom_type === 'shared'
+                            ? 60
+                            : 100
+                        : '',
             };
             setData('companions', [...companionsList, newCompanion]);
             setCurrentIndex((prev) => prev + 1);
@@ -2964,15 +3003,15 @@ export default function CheckinModal({
                                     )}
 
                                     {/* 🚀 PRECIO POR PERSONA: exclusivo de
-                                    corporativo/delegación (convenio
-                                    institucional, ej. Bs 90 a uno y Bs 100
-                                    a otro). Una asignación NORMAL no pasa
-                                    por acá -- su precio es siempre el de
-                                    tabla (Price/RoomType), editable solo
-                                    desde "Total a cobrar" (panel derecho,
-                                    más abajo), sin desglose por persona. */}
-                                    {(data.type === 'corporativo' ||
-                                        data.type === 'delegacion') && (
+                                    delegación (convenio institucional, ej.
+                                    Bs 90 a uno y Bs 100 a otro). Corporativo
+                                    ya NO usa este campo aparte -- su precio
+                                    por persona se edita directo en la
+                                    tarjeta verde "HAB {número}" (más abajo).
+                                    Una asignación NORMAL no pasa por acá --
+                                    su precio es siempre el de tabla
+                                    (Price/RoomType). */}
+                                    {data.type === 'delegacion' && (
                                         <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">
                                                 Precio (por noche)
@@ -3445,12 +3484,6 @@ export default function CheckinModal({
                                                         ),
                                                     );
 
-                                                const corporateBasePrice =
-                                                    Math.max(
-                                                        0,
-                                                        originalPrice - 20,
-                                                    );
-
                                                 let finalPrice = originalPrice;
 
                                                 if (data.type !== 'estandar') {
@@ -3538,6 +3571,7 @@ export default function CheckinModal({
                                                 const minTotal = 0;
 
                                                 return (
+                                                    <div className="flex flex-col gap-1.5">
                                                     <div className="-mx-1 flex h-auto max-w-md items-center justify-between">
                                                         {/* IZQUIERDA: Habitación + cantidad de huéspedes, misma fila (sin precio por noche) */}
                                                         <div className="flex items-center gap-3">
@@ -3554,142 +3588,228 @@ export default function CheckinModal({
                                                             </span>
                                                         </div>
 
-                                                        {/* DERECHA: campo editable (sin título "Total a cobrar") */}
-                                                        <div className="flex flex-col border-l border-green-200 pl-4 text-right">
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.10"
-                                                                    min={
-                                                                        minTotal
-                                                                    }
-                                                                    max={
-                                                                        maxTotal
-                                                                    }
-                                                                    value={
-                                                                        editingTotal !==
-                                                                        null
-                                                                            ? editingTotal
-                                                                            : total >
-                                                                                0
-                                                                              ? String(
-                                                                                    total,
-                                                                                )
-                                                                              : ''
-                                                                    }
-                                                                    onFocus={() => {
-                                                                        setEditingTotal(
-                                                                            total >
-                                                                                0
-                                                                                ? String(
-                                                                                      total,
-                                                                                  )
-                                                                                : '',
-                                                                        );
-                                                                    }}
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) => {
-                                                                        setEditingTotal(
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                        );
-                                                                    }}
-                                                                    onBlur={(
-                                                                        e,
-                                                                    ) => {
-                                                                        const rawVal =
-                                                                            e
-                                                                                .target
-                                                                                .value;
-
-                                                                        if (
-                                                                            rawVal ===
+                                                        {/* DERECHA: corporativo edita el precio POR PERSONA
+                                                            actual acá mismo (ya no hay campo aparte en la
+                                                            ficha); delegación/estándar siguen editando el
+                                                            total como antes. */}
+                                                        {data.type ===
+                                                        'corporativo' ? (
+                                                            <div className="flex flex-col items-end border-l border-green-200 pl-4 text-right">
+                                                                <label className="text-[10px] font-bold text-green-700 uppercase">
+                                                                    Precio
+                                                                    Huésped{' '}
+                                                                    {currentIndex +
+                                                                        1}
+                                                                </label>
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        step="1"
+                                                                        min={
+                                                                            0
+                                                                        }
+                                                                        value={
+                                                                            currentPerson.price ??
                                                                             ''
-                                                                        ) {
-                                                                            setData(
-                                                                                'agreed_price',
-                                                                                '',
+                                                                        }
+                                                                        disabled={
+                                                                            isReadOnly
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) => {
+                                                                            const raw =
+                                                                                e
+                                                                                    .target
+                                                                                    .value;
+                                                                            handlePriceChange(
+                                                                                raw ===
+                                                                                    ''
+                                                                                    ? ''
+                                                                                    : String(
+                                                                                          Math.round(
+                                                                                              Number(
+                                                                                                  raw,
+                                                                                              ),
+                                                                                          ),
+                                                                                      ),
                                                                             );
+                                                                        }}
+                                                                        className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
+                                                                        placeholder="0"
+                                                                    />
+                                                                    <span className="text-2xl leading-none font-black text-gray-900">
+                                                                        Bs
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col border-l border-green-200 pl-4 text-right">
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.10"
+                                                                        min={
+                                                                            minTotal
+                                                                        }
+                                                                        max={
+                                                                            maxTotal
+                                                                        }
+                                                                        value={
+                                                                            editingTotal !==
+                                                                            null
+                                                                                ? editingTotal
+                                                                                : total >
+                                                                                    0
+                                                                                  ? String(
+                                                                                        total,
+                                                                                    )
+                                                                                  : ''
+                                                                        }
+                                                                        onFocus={() => {
+                                                                            setEditingTotal(
+                                                                                total >
+                                                                                    0
+                                                                                    ? String(
+                                                                                          total,
+                                                                                      )
+                                                                                    : '',
+                                                                            );
+                                                                        }}
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) => {
+                                                                            setEditingTotal(
+                                                                                e
+                                                                                    .target
+                                                                                    .value,
+                                                                            );
+                                                                        }}
+                                                                        onBlur={(
+                                                                            e,
+                                                                        ) => {
+                                                                            const rawVal =
+                                                                                e
+                                                                                    .target
+                                                                                    .value;
+
+                                                                            if (
+                                                                                rawVal ===
+                                                                                ''
+                                                                            ) {
+                                                                                setData(
+                                                                                    'agreed_price',
+                                                                                    '',
+                                                                                );
+                                                                                setEditingTotal(
+                                                                                    null,
+                                                                                );
+                                                                                return;
+                                                                            }
+
+                                                                            let inputVal =
+                                                                                Number(
+                                                                                    rawVal,
+                                                                                );
+
+                                                                            if (
+                                                                                inputVal >
+                                                                                maxTotal
+                                                                            )
+                                                                                inputVal =
+                                                                                    maxTotal;
+                                                                            if (
+                                                                                inputVal <
+                                                                                minTotal
+                                                                            )
+                                                                                inputVal =
+                                                                                    minTotal;
+
+                                                                            inputVal =
+                                                                                redondearMoneda(
+                                                                                    inputVal,
+                                                                                );
+
+                                                                            // 🚀 ASIGNACIÓN NORMAL: agreed_price
+                                                                            // se edita directo acá, sin pasar por
+                                                                            // titular_price (exclusivo de
+                                                                            // delegación -- corporativo ya no
+                                                                            // pasa por esta rama).
+                                                                            const valorAGuardar =
+                                                                                data.type ===
+                                                                                'delegacion'
+                                                                                    ? inputVal
+                                                                                    : redondearMoneda(
+                                                                                          noches >
+                                                                                              0
+                                                                                              ? inputVal /
+                                                                                                    noches
+                                                                                              : inputVal,
+                                                                                      );
+
+                                                                            setData(
+                                                                                (
+                                                                                    prev,
+                                                                                ) => ({
+                                                                                    ...prev,
+                                                                                    agreed_price:
+                                                                                        valorAGuardar,
+                                                                                    ...(prev.type ===
+                                                                                        'estandar' &&
+                                                                                    inputVal !==
+                                                                                        maxTotal
+                                                                                        ? {
+                                                                                              auto_adjust_price: false,
+                                                                                          }
+                                                                                        : {}),
+                                                                                }),
+                                                                            );
+
                                                                             setEditingTotal(
                                                                                 null,
                                                                             );
-                                                                            return;
+                                                                        }}
+                                                                        disabled={
+                                                                            isReadOnly
                                                                         }
+                                                                        className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                    <span className="text-2xl leading-none font-black text-gray-900">
+                                                                        Bs
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
 
-                                                                        let inputVal =
-                                                                            Number(
-                                                                                rawVal,
-                                                                            );
-
-                                                                        if (
-                                                                            inputVal >
-                                                                            maxTotal
-                                                                        )
-                                                                            inputVal =
-                                                                                maxTotal;
-                                                                        if (
-                                                                            inputVal <
-                                                                            minTotal
-                                                                        )
-                                                                            inputVal =
-                                                                                minTotal;
-
-                                                                        inputVal =
-                                                                            redondearMoneda(
-                                                                                inputVal,
-                                                                            );
-
-                                                                        // 🚀 ASIGNACIÓN NORMAL: agreed_price
-                                                                        // se edita directo acá, sin pasar por
-                                                                        // titular_price (exclusivo de
-                                                                        // corporativo/delegación).
-                                                                        const valorAGuardar =
-                                                                            data.type ===
-                                                                            'delegacion'
-                                                                                ? inputVal
-                                                                                : redondearMoneda(
-                                                                                      noches >
-                                                                                          0
-                                                                                          ? inputVal /
-                                                                                                noches
-                                                                                          : inputVal,
-                                                                                  );
-
-                                                                        setData(
-                                                                            (
-                                                                                prev,
-                                                                            ) => ({
-                                                                                ...prev,
-                                                                                agreed_price:
-                                                                                    valorAGuardar,
-                                                                                ...(prev.type ===
-                                                                                    'estandar' &&
-                                                                                inputVal !==
-                                                                                    maxTotal
-                                                                                    ? {
-                                                                                          auto_adjust_price: false,
-                                                                                      }
-                                                                                    : {}),
-                                                                            }),
-                                                                        );
-
-                                                                        setEditingTotal(
-                                                                            null,
-                                                                        );
-                                                                    }}
-                                                                    disabled={
-                                                                        isReadOnly
-                                                                    }
-                                                                    className="w-[85px] [appearance:textfield] rounded-md border border-green-300 bg-white px-1 py-0 text-right text-2xl leading-none font-black text-gray-900 shadow-inner focus:border-green-500 focus:ring-1 focus:ring-green-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
-                                                                    placeholder="0.00"
-                                                                />
-                                                                <span className="text-2xl leading-none font-black text-gray-900">
-                                                                    Bs
+                                                    {/* 🚀 CONFIRMACIÓN GRANDE: una vez que ya hay precio
+                                                        Y duración de estadía cargados, se muestra bien
+                                                        visible cada cuántos días se cobrará el monto
+                                                        pactado -- para que quede clarísimo antes de
+                                                        guardar. */}
+                                                    {data.type ===
+                                                        'corporativo' &&
+                                                        total > 0 &&
+                                                        Number(
+                                                            data.duration_days,
+                                                        ) > 0 && (
+                                                            <div className="rounded-lg bg-green-600 px-3 py-2 text-center shadow-sm">
+                                                                <span className="text-lg font-black text-white">
+                                                                    Cada{' '}
+                                                                    {noches}{' '}
+                                                                    día
+                                                                    {noches ===
+                                                                    1
+                                                                        ? ''
+                                                                        : 's'}{' '}
+                                                                    se
+                                                                    cobrará
+                                                                    Bs{' '}
+                                                                    {total}
                                                                 </span>
                                                             </div>
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })()}

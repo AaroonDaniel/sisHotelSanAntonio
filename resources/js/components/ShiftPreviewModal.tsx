@@ -1,4 +1,4 @@
-import { FileText, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, X } from 'lucide-react';
 import { useMemo } from 'react';
 
 interface ShiftPreviewModalProps {
@@ -12,6 +12,16 @@ interface ShiftPreviewModalProps {
      */
     url?: string | null;
     onClose: () => void;
+    /**
+     * Navegación por día (solo la usa "Control de Hospedaje" — un reporte
+     * reconstruible para cualquier fecha desde `checkins`, sin tabla
+     * propia). "Lista de Cobros" no pasa estas props, así que no le
+     * aparecen flechas: no tiene sentido navegar por fecha ahí, siempre
+     * es el turno abierto ACTUAL.
+     */
+    dateLabel?: string;
+    onPrevDay?: () => void;
+    onNextDay?: () => void;
 }
 
 /**
@@ -25,12 +35,12 @@ export default function ShiftPreviewModal({
     cashRegisterId,
     url,
     onClose,
+    dateLabel,
+    onPrevDay,
+    onNextDay,
 }: ShiftPreviewModalProps) {
     const isOpen = !!url || (cashRegisterId !== null && cashRegisterId !== undefined);
 
-    // El cache-bust (`t=`) debe fijarse UNA sola vez por apertura, no en
-    // cada render — si se recalculara con Date.now() en el cuerpo del
-    // componente, el iframe recargaría el PDF en cada re-render ajeno.
     const src = useMemo(() => {
         if (url) return url;
         if (cashRegisterId !== null && cashRegisterId !== undefined) {
@@ -44,14 +54,39 @@ export default function ShiftPreviewModal({
 
     return (
         <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in">
-            <div className="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
+            <div className="flex h-[85vh] w-full max-w-5xl animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
                     <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <div className="rounded-lg bg-blue-100 p-1.5 text-blue-600">
                             <FileText className="h-5 w-5" />
                         </div>
-                        Caja (Informativo)
+                        Control
                     </h3>
+
+                    {(onPrevDay || onNextDay) && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={onPrevDay}
+                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200"
+                                title="Día anterior"
+                            >
+                                <ChevronLeft className="h-5 w-5" />
+                            </button>
+                            {dateLabel && (
+                                <span className="text-sm font-bold whitespace-nowrap text-gray-700">
+                                    {dateLabel}
+                                </span>
+                            )}
+                            <button
+                                onClick={onNextDay}
+                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200"
+                                title="Día siguiente"
+                            >
+                                <ChevronRight className="h-5 w-5" />
+                            </button>
+                        </div>
+                    )}
+
                     <button
                         onClick={onClose}
                         className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-200"

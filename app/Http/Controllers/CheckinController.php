@@ -770,9 +770,22 @@ class CheckinController extends Controller
                 $newNewTitularId = $leavingIds[0];
                 $newNewCompanions = array_slice($leavingIds, 1);
 
-                // 🚀 PRECIO POR HUÉSPED: igual que en la transferencia
-                // completa, si el checkin que SE QUEDA ya tiene
-                // titular_price, el observer lo va a pisar de todos modos.
+                // 🚀 PRECIO POR HUÉSPED: mapa guest_id -> precio pactado,
+                // capturado ANTES de tocar nada. Así, sin importar a qué
+                // habitación termine cada quien (incluso si el titular
+                // original se va y un acompañante lo reemplaza como
+                // titular del lado que se queda), cada persona se lleva
+                // EXACTAMENTE el precio que ya tenía -- ni se pierde ni se
+                // duplica al dividir la cuenta.
+                $hasTitularPrice = !is_null($checkin->titular_price);
+                $priceMap = [];
+                if ($hasTitularPrice) {
+                    $priceMap[$titularId] = (float) $checkin->titular_price;
+                    foreach ($checkin->companions as $comp) {
+                        $priceMap[$comp->id] = (float) ($comp->pivot->price ?? 0);
+                    }
+                }
+
                 $precioViejaHabitacion = is_null($checkin->titular_price)
                     ? $this->calculateAgreedPrice($checkin->room_id, count($stayingIds))
                     : $checkin->agreed_price;
@@ -798,15 +811,26 @@ class CheckinController extends Controller
                     $checkin->increment('carried_balance', $deudaHastaAhora);
                 }
 
+                // 🚀 ORDEN IMPORTA: sincronizamos los acompañantes que se
+                // QUEDAN antes de guardar -- si no, CheckinObserver
+                // recalcularía agreed_price contra la lista VIEJA de
+                // acompañantes (la reducción todavía no habría llegado a
+                // la BD), inflando el total con gente que ya se fue.
+                $checkin->companions()->sync(
+                    $hasTitularPrice
+                        ? collect($newOldCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
+                        : $newOldCompanions,
+                );
+
                 $checkin->update([
                     'guest_id' => $newOldTitularId,
+                    'titular_price' => $hasTitularPrice ? ($priceMap[$newOldTitularId] ?? 0) : null,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioViejaHabitacion,
                     'special_agreement_id' => $checkin->special_agreement_id,
                     'price_effective_since' => $ahora,
                     'duration_days' => 1,
                     'notes' => $checkin->notes . $noteAdditionStay
                 ]);
-                $checkin->companions()->sync($newOldCompanions);
                 \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'OCUPADO']);
 
                 // 2. Creamos la cuenta a los que se VAN
@@ -825,6 +849,7 @@ class CheckinController extends Controller
                     'schedule_id' => $checkin->schedule_id,
                     'origin' => $checkin->origin,
                     'duration_days' => 0,
+                    'titular_price' => $hasTitularPrice ? ($priceMap[$newNewTitularId] ?? 0) : null,
                     'agreed_price' => $hasSpecialAgreement ? $checkin->agreed_price : $precioNuevaHabitacion,
                     // 🚀 BLINDAJE DE CUENTAS GRUPALES: el check-in nuevo
                     // hereda ESTRICTAMENTE el special_agreement_id (Cuenta
@@ -845,7 +870,19 @@ class CheckinController extends Controller
                 ]);
 
                 if (!empty($newNewCompanions)) {
-                    $nuevoCheckin->companions()->sync($newNewCompanions);
+                    $nuevoCheckin->companions()->sync(
+                        $hasTitularPrice
+                            ? collect($newNewCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
+                            : $newNewCompanions,
+                    );
+                    // 🚀 Al crear el checkin todavía no existían sus
+                    // acompañantes en la BD (el sync recién ocurrió arriba),
+                    // así que el primer cálculo del Observer los ignoró.
+                    // Este guardado extra fuerza el recálculo ya con la
+                    // suma real.
+                    if ($hasTitularPrice) {
+                        $nuevoCheckin->save();
+                    }
                 }
 
                 // 🚀 MÓDULO 3: REGISTRO HISTÓRICO PARA LOS QUE SE DIVIDIERON
@@ -3480,6 +3517,20 @@ class CheckinController extends Controller
             $ahora = now();
             $userId = \Illuminate\Support\Facades\Auth::id() ?? 1;
 
+            // 🚀 PRECIO POR HUÉSPED: mapa guest_id -> precio pactado del
+            // checkin de ORIGEN, capturado ANTES de tocar nada -- para que
+            // cada quien se lleve su propio precio a la habitación destino
+            // (tanto en fusión completa como parcial), sin perderlo ni
+            // duplicarlo.
+            $hasOriginTitularPrice = !is_null($checkin->titular_price);
+            $originPriceMap = [];
+            if ($hasOriginTitularPrice) {
+                $originPriceMap[$checkin->guest_id] = (float) $checkin->titular_price;
+                foreach ($checkin->companions as $comp) {
+                    $originPriceMap[$comp->id] = (float) ($comp->pivot->price ?? 0);
+                }
+            }
+
             // =======================================================
             // 🛑 FASE 1: DESVINCULAR Y MOVER DEUDAS PRIMERO
             // =======================================================
@@ -3521,12 +3572,26 @@ class CheckinController extends Controller
                     $checkin->increment('carried_balance', $deudaHastaAhoraMerge);
                 }
 
+                // 🚀 ORDEN IMPORTA: sincronizamos primero a los acompañantes
+                // que se QUEDAN (con su precio real conservado) -- si el
+                // update() de abajo corriera antes, el Observer
+                // recalcularía agreed_price contra la lista VIEJA completa
+                // (los que se van todavía no habrían sido desvinculados).
+                $newStayCompanions = array_slice($stayingIds, 1);
+                $checkin->companions()->sync(
+                    $hasOriginTitularPrice
+                        ? collect($newStayCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $originPriceMap[$id] ?? 0]])->all()
+                        : $newStayCompanions,
+                );
+
                 // 🚀 ESTANDARIZACIÓN DE COMENTARIOS: formato ultra-corto
                 // "origen->destino".
-                // 🚀 PRECIO POR HUÉSPED: si ya tiene titular_price, el
-                // observer lo pisa de todos modos al guardar.
+                // 🚀 PRECIO POR HUÉSPED: si el titular original se va y un
+                // acompañante lo reemplaza, se lleva SU propio precio (no
+                // el del titular anterior) como nuevo titular_price.
                 $checkin->update([
                     'guest_id' => $stayingIds[0], // Nombra a un nuevo titular para los que se quedan
+                    'titular_price' => $hasOriginTitularPrice ? ($originPriceMap[$stayingIds[0]] ?? 0) : null,
                     'agreed_price' => is_null($checkin->titular_price)
                         ? $this->calculateAgreedPrice($checkin->room_id, count($stayingIds))
                         : $checkin->agreed_price,
@@ -3534,8 +3599,6 @@ class CheckinController extends Controller
                     'duration_days' => 1,
                     'notes' => $checkin->notes . " | " . $checkin->room->number . "->" . $targetCheckin->room->number,
                 ]);
-                // Desvinculamos a los que se fueron de la vieja habitación
-                $checkin->companions()->sync(array_slice($stayingIds, 1));
             }
 
             // =======================================================
@@ -3543,15 +3606,31 @@ class CheckinController extends Controller
             // =======================================================
             $targetCompanionIds = $targetCheckin->companions->pluck('id')->toArray();
 
+            // 🚀 PRECIO POR HUÉSPED: si el destino ya cobra por persona,
+            // hay que preservar el precio que YA tenía cada acompañante
+            // suyo (sync() con un array plano de IDs los dejaría en null),
+            // y asignarle a cada recién llegado el precio que traía del
+            // checkin de origen -- antes se perdía en silencio.
+            $hasTargetTitularPrice = !is_null($targetCheckin->titular_price);
+            $targetSyncData = [];
+            if ($hasTargetTitularPrice) {
+                foreach ($targetCheckin->companions as $comp) {
+                    $targetSyncData[$comp->id] = ['price' => (float) ($comp->pivot->price ?? 0)];
+                }
+            }
+
             foreach ($selectedGuests as $guestId) {
                 // Evitar duplicados si por algún error ya estaban
                 if (!in_array($guestId, $targetCompanionIds) && $guestId !== $targetCheckin->guest_id) {
                     $targetCompanionIds[] = $guestId;
+                    if ($hasTargetTitularPrice) {
+                        $targetSyncData[$guestId] = ['price' => $originPriceMap[$guestId] ?? 0];
+                    }
                 }
             }
 
             // Sincronizamos la nueva familia gigante en la habitación destino
-            $targetCheckin->companions()->sync($targetCompanionIds);
+            $targetCheckin->companions()->sync($hasTargetTitularPrice ? $targetSyncData : $targetCompanionIds);
 
             // 🚀 MÓDULO 3: REGISTRO HISTÓRICO (La auditoría exige saber de dónde salieron)
             \App\Models\RoomTransfer::create([
