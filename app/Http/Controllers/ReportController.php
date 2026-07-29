@@ -848,9 +848,16 @@ class ReportController extends Controller
         // habitación ese día" comparando ese rango contra la fecha
         // pedida, en vez de depender de status='activo' (que solo sirve
         // para "ahora mismo").
+        $hoyTope = Carbon::now()->startOfDay();
         $fecha = $request->filled('date')
             ? Carbon::parse($request->query('date'))->startOfDay()
-            : Carbon::now()->startOfDay();
+            : $hoyTope->copy();
+        // Nunca a futuro: mañana todavía no pasó, no hay nada real que
+        // mostrar. Si alguien arma la URL a mano con una fecha futura,
+        // se recorta a hoy en vez de devolver un checklist vacío o falso.
+        if ($fecha->gt($hoyTope)) {
+            $fecha = $hoyTope->copy();
+        }
         $fechaStr = $fecha->toDateString();
 
         $rooms = Room::with([

@@ -67,7 +67,8 @@ export default function ShiftPreviewModal({
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={onPrevDay}
-                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200"
+                                disabled={!onPrevDay}
+                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
                                 title="Día anterior"
                             >
                                 <ChevronLeft className="h-5 w-5" />
@@ -77,9 +78,13 @@ export default function ShiftPreviewModal({
                                     {dateLabel}
                                 </span>
                             )}
+                            {/* No hay flecha "siguiente" más allá de hoy:
+                                mañana todavía no pasó, no hay nada real que
+                                mostrar todavía. */}
                             <button
                                 onClick={onNextDay}
-                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200"
+                                disabled={!onNextDay}
+                                className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
                                 title="Día siguiente"
                             >
                                 <ChevronRight className="h-5 w-5" />

@@ -2059,7 +2059,13 @@ export default function RoomsStatus({
                     ? {
                           dateLabel: lodgingControlDate,
                           onPrevDay: () => shiftLodgingControlDate(-1),
-                          onNextDay: () => shiftLodgingControlDate(1),
+                          // Nunca a futuro: sin flecha "siguiente" una vez
+                          // que ya estás viendo el día de hoy.
+                          onNextDay:
+                              lodgingControlDate <
+                              new Date().toISOString().slice(0, 10)
+                                  ? () => shiftLodgingControlDate(1)
+                                  : undefined,
                       }
                     : {})}
             />
