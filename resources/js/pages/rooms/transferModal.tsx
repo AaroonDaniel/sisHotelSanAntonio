@@ -291,29 +291,6 @@ export default function TransferModal({
                                 </div>
                             </div>
 
-                            {/* 🚀 MÓDULO 3: CAMPO OBLIGATORIO DE MOTIVO */}
-                            <div>
-                                <label className="mb-2 block text-xs font-bold text-gray-800 uppercase">
-                                    Motivo del Traslado <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <FileText className="absolute left-3 top-3 h-4 w-4 text-gray-800" />
-                                    <textarea
-                                        value={data.reason}
-                                        onChange={(e) => setData('reason', e.target.value)}
-                                        placeholder="Motivo..."
-                                        className={`w-full resize-none rounded-xl border p-3 pl-9 text-base text-gray-800 shadow-base focus:ring-green-500 ${
-                                            errors.reason ? 'border-red-300 focus:border-red-500 bg-red-50/30' : 'border-gray-800 focus:border-green-500'
-                                        }`}
-                                        rows={3}
-                                        required
-                                    />
-                                </div>
-                                {errors.reason && (
-                                    <p className="mt-1 text-[10px] font-bold text-red-500 uppercase">{errors.reason}</p>
-                                )}
-                            </div>
-
                             
 
                         </div>
@@ -463,10 +440,9 @@ export default function TransferModal({
                     >
                         Cancelar
                     </button>
-                    {/* 🚀 MÓDULO 3: El botón de confirmar ahora requiere que 'data.reason' NO esté vacío */}
                     <button
                         onClick={handleSubmit}
-                        disabled={processing || !currentSelectedId || data.selected_guests.length === 0 || data.reason.trim().length < 3}
+                        disabled={processing || !currentSelectedId || data.selected_guests.length === 0}
                         className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {processing ? 'Procesando...' : 'Confirmar Cambio'}

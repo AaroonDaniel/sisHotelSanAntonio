@@ -730,12 +730,12 @@ class CheckinController extends Controller
 
     public function transfer(Request $request, Checkin $checkin)
     {
-        // 🚀 MÓDULO 3: Agregamos 'reason' como campo obligatorio para la auditoría
+        // 🚀 'reason' ya no es obligatorio -- queda como nota opcional.
         $request->validate([
             'new_room_id' => 'required|exists:rooms,id|different:room_id',
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
-            'reason' => 'required|string|max:255', // El motivo exigido por recepción
+            'reason' => 'nullable|string|max:255',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
@@ -778,7 +778,7 @@ class CheckinController extends Controller
                     'to_room_id' => $newRoomId,
                     'user_id' => $userId,
                     'transfer_date' => $ahora,
-                    'reason' => strtoupper(trim($request->reason)),
+                    'reason' => $request->filled('reason') ? strtoupper(trim($request->reason)) : 'SIN MOTIVO ESPECIFICADO',
                 ]);
 
                 \App\Models\Room::where('id', $oldRoomId)->update(['status' => 'LIMPIEZA']);
@@ -946,7 +946,7 @@ class CheckinController extends Controller
                     'to_room_id' => $newRoomId,
                     'user_id' => $userId,
                     'transfer_date' => $ahora,
-                    'reason' => 'DIVISIÓN DE GRUPO - ' . strtoupper(trim($request->reason)),
+                    'reason' => 'DIVISIÓN DE GRUPO' . ($request->filled('reason') ? ' - ' . strtoupper(trim($request->reason)) : ''),
                 ]);
 
                 $newRoom->update(['status' => 'OCUPADO']);
@@ -1820,6 +1820,19 @@ class CheckinController extends Controller
                 'description' => 'ADELANTO A CUENTA',
                 'type' => 'PAGO'
             ]);
+
+            // 🚀 Si este checkin es corporativo/delegación individual (sin
+            // Cuenta Grupal real), este pago recién se volvió visible para
+            // el libro mayor (ver SpecialAgreement::getTotalDepositedAttribute()) --
+            // hay que revisar si ya alcanza para cubrir algún ciclo
+            // 'pendiente' (pasar de DEBE a AL DÍA), igual que ya hace
+            // GroupAccountController::addAdvance() para el abono grupal.
+            // Sin esto, aunque el huésped pagara el total completo, el
+            // ciclo se quedaría marcado 'pendiente' para siempre.
+            if ($checkin->special_agreement_id) {
+                $agreement = \App\Models\SpecialAgreement::find($checkin->special_agreement_id);
+                $agreement?->coverPendingCharges();
+            }
         });
 
         // 3. Respuesta para Inertia (Recarga automática)
@@ -3635,7 +3648,7 @@ class CheckinController extends Controller
             'target_room_id' => 'required|exists:rooms,id',
             'selected_guests' => 'required|array|min:1',
             'selected_guests.*' => 'integer',
-            'reason' => 'required|string|max:255', // 🚀 MÓDULO 3: El motivo es obligatorio para la auditoría
+            'reason' => 'nullable|string|max:255',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin) {
@@ -3811,7 +3824,7 @@ class CheckinController extends Controller
                 'to_room_id' => $targetCheckin->room_id,
                 'user_id' => $userId,
                 'transfer_date' => $ahora,
-                'reason' => 'FUSIÓN DE CUENTAS - ' . strtoupper(trim($request->reason)),
+                'reason' => 'FUSIÓN DE CUENTAS' . ($request->filled('reason') ? ' - ' . strtoupper(trim($request->reason)) : ''),
             ]);
 
             // =================================================================

@@ -247,15 +247,21 @@ export default function RoomsStatus({
     // a cualquier usuario logueado — sin selector de operador, va directo.
     // Navegable por día (anterior/siguiente): el backend reconstruye la
     // ocupación de cualquier fecha desde `checkins`, sin tabla propia.
+    //
+    // "Hoy" es el día de calendario real (no el día hotelero por hora de
+    // checkout que se probó antes: eso hacía que los cobros de la mañana
+    // no aparecieran hasta pasada la hora de checkout del Schedule).
+    const getTodayStr = () => new Date().toISOString().slice(0, 10);
+
     const [lodgingControlDate, setLodgingControlDate] = useState(() =>
-        new Date().toISOString().slice(0, 10),
+        getTodayStr(),
     );
 
     const buildLodgingControlUrl = (date: string) =>
         `/reports/lodging-control/pdf?date=${date}&t=${Date.now()}`;
 
     const handleOpenLodgingControl = () => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getTodayStr();
         setLodgingControlDate(today);
         setQuickPreviewUrl(buildLodgingControlUrl(today));
     };
@@ -551,6 +557,40 @@ export default function RoomsStatus({
             return null;
         }
         if (tipo === 'corporativo') {
+            // 🚀 SEMÁFORO REAL: si este checkin ya usa frecuencia por
+            // persona (corporate_payment_schedules/charges), el estado
+            // sale directo del libro mayor real -- inyectado por
+            // RoomController::attachPaymentFrequencies() -- en vez de
+            // re-simular ciclos con agreed_price combinado, la
+            // frecuencia vieja del convenio (siempre 0 en Cuenta Grupal
+            // real) y pagos en efectivo que en pago grupal van al fondo,
+            // no al checkin. Solo cae al cálculo viejo si el checkin no
+            // tiene ninguna fila de frecuencia por persona (legado).
+            if (activeCheckin.corporate_billing_status) {
+                const { level, pending_amount } =
+                    activeCheckin.corporate_billing_status;
+
+                // 🚀 Naranja "DEBE", no rojo "MOROSO": que falte pagar es
+                // un estado normal y esperado (pagan tarde, pagan de a
+                // poco) -- nunca bloquea ni cancela nada, solo sigue
+                // acumulando hasta que el operador/dueño decida anular el
+                // convenio. El rojo/alarma no aplica acá. Sin monto -- solo
+                // la palabra "DEBE", el número no se muestra acá.
+                if (level === 'moroso') {
+                    return {
+                        level: 'debe',
+                        badge: 'bg-amber-400 text-amber-900 shadow-sm border border-amber-500 font-bold',
+                        text: 'DEBE',
+                    };
+                }
+
+                return {
+                    level: 'al_dia',
+                    badge: 'bg-emerald-500 text-white shadow-sm border border-emerald-600',
+                    text: 'AL DIA',
+                };
+            }
+
             return computeCorporativoState(activeCheckin, convenio);
         }
         return null;
@@ -2059,11 +2099,10 @@ export default function RoomsStatus({
                     ? {
                           dateLabel: lodgingControlDate,
                           onPrevDay: () => shiftLodgingControlDate(-1),
-                          // Nunca a futuro: sin flecha "siguiente" una vez
-                          // que ya estás viendo el día de hoy.
+                          // Nunca a futuro: sin flecha "siguiente" una
+                          // vez que ya estás viendo el día de hoy.
                           onNextDay:
-                              lodgingControlDate <
-                              new Date().toISOString().slice(0, 10)
+                              lodgingControlDate < getTodayStr()
                                   ? () => shiftLodgingControlDate(1)
                                   : undefined,
                       }

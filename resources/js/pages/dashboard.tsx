@@ -293,9 +293,15 @@ export default function Dashboard({
                     icon: Vault,
                     url: '/admin/shift-reports',
                     anyPerm: ['reportes.financiero'],
-                },              
-               
-                
+                },
+                {
+                    // Sin anyPerm: igual que el botón "Control de
+                    // Hospedaje" en Habitaciones, cualquier usuario
+                    // logueado puede verlo (no es un reporte financiero).
+                    name: 'Reportes de Control de Hospedaje',
+                    icon: ClipboardList,
+                    url: '/reports/lodging-control',
+                },
             ],
         },
     ]

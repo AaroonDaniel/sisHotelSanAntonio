@@ -971,10 +971,13 @@ export default function CheckinModal({
                             : '',
                 }));
 
-                // 🌟 LÓGICA PARA MOSTRAR LA CAJA "OTRO" SI TENÍA UN NÚMERO PERSONALIZADO
+                // 🌟 LÓGICA PARA MOSTRAR LA CAJA "OTRO" SI TENÍA UN NÚMERO
+                // PERSONALIZADO -- lee la frecuencia POR PERSONA del
+                // titular (titular_payment_frequency_days), no la vieja
+                // del convenio compartido (siempre 0 en Cuenta Grupal real).
                 if (checkinToEdit.special_agreement?.type === 'corporativo') {
                     const frec = String(
-                        checkinToEdit.special_agreement.payment_frequency_days,
+                        checkinToEdit.titular_payment_frequency_days ?? '',
                     );
                     if (frec && !['1', '7', '15', '30'].includes(frec)) {
                         setIsCustomFrequency(true);
@@ -2291,12 +2294,7 @@ export default function CheckinModal({
                                                                 >
                                                                     {
                                                                         acc.company_name
-                                                                    }{' '}
-                                                                    (saldo:{' '}
-                                                                    {acc.balance.toFixed(
-                                                                        2,
-                                                                    )}{' '}
-                                                                    Bs)
+                                                                    }
                                                                 </option>
                                                             ),
                                                         )}
@@ -3382,7 +3380,7 @@ export default function CheckinModal({
                                                     está activo — ya no ocupan una fila propia debajo. */}
                                                 {data.type ===
                                                     'corporativo' && (
-                                                    <div className="flex flex-1 animate-in items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 duration-300 fade-in slide-in-from-left-1">
+                                                    <div className="flex flex-1 animate-in items-center gap-0.5 rounded-lg border border-indigo-200 bg-indigo-50 px-0.5 py-1 duration-300 fade-in slide-in-from-left-1">
                                                         <span className="text-[11px] font-bold whitespace-nowrap text-indigo-800">
                                                             Frecuencia
                                                             (Huésped{' '}
@@ -3832,29 +3830,57 @@ export default function CheckinModal({
                                                         Y duración de estadía cargados, se muestra bien
                                                         visible cada cuántos días se cobrará el monto
                                                         pactado -- para que quede clarísimo antes de
-                                                        guardar. */}
-                                                    {data.type ===
-                                                        'corporativo' &&
-                                                        total > 0 &&
-                                                        Number(
-                                                            data.duration_days,
-                                                        ) > 0 && (
-                                                            <div className="rounded-lg bg-green-600 px-3 py-2 text-center shadow-sm">
-                                                                <span className="text-lg font-black text-white">
-                                                                    Cada{' '}
-                                                                    {noches}{' '}
-                                                                    día
-                                                                    {noches ===
-                                                                    1
-                                                                        ? ''
-                                                                        : 's'}{' '}
-                                                                    se
-                                                                    cobrará
-                                                                    Bs{' '}
-                                                                    {total}
-                                                                </span>
-                                                            </div>
-                                                        )}
+                                                        guardar.
+                                                        🚀 SOLO DE LA PERSONA ACTUAL: cada quien tiene
+                                                        su propio precio Y su propia frecuencia (uno
+                                                        cada 3 días, otro cada 2) -- no se mezclan en un
+                                                        solo total combinado, ni siquiera al transferir
+                                                        o fusionar habitaciones. */}
+                                                    {(() => {
+                                                        const nochesPersona =
+                                                            Number(
+                                                                currentPerson.frequency,
+                                                            ) || 0;
+                                                        const totalPersona =
+                                                            redondearMoneda(
+                                                                (Number(
+                                                                    currentPerson.price,
+                                                                ) || 0) *
+                                                                    nochesPersona,
+                                                            );
+
+                                                        return (
+                                                            data.type ===
+                                                                'corporativo' &&
+                                                            totalPersona >
+                                                                0 &&
+                                                            nochesPersona >
+                                                                0 &&
+                                                            Number(
+                                                                data.duration_days,
+                                                            ) > 0 && (
+                                                                <div className="rounded-lg bg-green-600 px-3 py-2 text-center shadow-sm">
+                                                                    <span className="text-lg font-black text-white">
+                                                                        Cada{' '}
+                                                                        {
+                                                                            nochesPersona
+                                                                        }{' '}
+                                                                        día
+                                                                        {nochesPersona ===
+                                                                        1
+                                                                            ? ''
+                                                                            : 's'}{' '}
+                                                                        se
+                                                                        cobrará
+                                                                        Bs{' '}
+                                                                        {
+                                                                            totalPersona
+                                                                        }
+                                                                    </span>
+                                                                </div>
+                                                            )
+                                                        );
+                                                    })()}
                                                     </div>
                                                 );
                                             })()}

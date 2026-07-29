@@ -832,6 +832,30 @@ class ReportController extends Controller
     }
 
     /**
+     * Página del historial de "Control de Hospedaje". No hay ninguna
+     * tabla de "reportes guardados" que listar — el checklist se
+     * reconstruye al vuelo para cualquier fecha desde `checkins` (ver
+     * generateLodgingControlPdf()). Esta vista es solo un selector de
+     * fecha con el mismo PDF embebido, para revisar un día pasado sin
+     * pasar por Habitaciones.
+     */
+    public function lodgingControlHistory(Request $request)
+    {
+        $hoy = Carbon::now()->startOfDay();
+        $fecha = $request->filled('date')
+            ? Carbon::parse($request->query('date'))->startOfDay()
+            : $hoy->copy();
+
+        if ($fecha->gt($hoy)) {
+            $fecha = $hoy->copy();
+        }
+
+        return Inertia::render('reports/lodging-control-history', [
+            'date' => $fecha->toDateString(),
+        ]);
+    }
+
+    /**
      * "Control de Hospedaje": checklist operativo para recepción/limpieza.
      * Sin permiso especial (a diferencia de los reportes de caja) —
      * cualquier usuario de la terminal puede imprimirlo. Lista TODAS las
@@ -852,9 +876,9 @@ class ReportController extends Controller
         $fecha = $request->filled('date')
             ? Carbon::parse($request->query('date'))->startOfDay()
             : $hoyTope->copy();
-        // Nunca a futuro: mañana todavía no pasó, no hay nada real que
-        // mostrar. Si alguien arma la URL a mano con una fecha futura,
-        // se recorta a hoy en vez de devolver un checklist vacío o falso.
+        // Nunca a futuro: si alguien arma la URL a mano con una fecha
+        // futura, se recorta a hoy en vez de devolver un checklist vacío
+        // o falso.
         if ($fecha->gt($hoyTope)) {
             $fecha = $hoyTope->copy();
         }
@@ -906,13 +930,13 @@ class ReportController extends Controller
         $pdf->Ln(1);
 
         // --- Tabla de habitaciones ---
-        // Anchos proporcionales sobre $anchoUtil (Pza 7% / Pernoctantes 54% /
-        // Movilidad 14% / Recaudado 10% / Pagado 15%), la última columna
+        // Anchos proporcionales sobre $anchoUtil (Pza 7% / Pernoctantes 40% /
+        // Movilidad 12% / Recaudado 10% / Pagado 31%), la última columna
         // absorbe el redondeo para que la suma cierre exacto con el ancho
         // de la hoja.
         $colPza = round($anchoUtil * 0.07, 1);
-        $colPernoctantes = round($anchoUtil * 0.54, 1);
-        $colMovilidad = round($anchoUtil * 0.14, 1);
+        $colPernoctantes = round($anchoUtil * 0.40, 1);
+        $colMovilidad = round($anchoUtil * 0.12, 1);
         $colRecaudado = round($anchoUtil * 0.10, 1);
         $colPagado = round($anchoUtil - $colPza - $colPernoctantes - $colMovilidad - $colRecaudado, 1);
 
@@ -930,7 +954,7 @@ class ReportController extends Controller
 
             $pernoctantes = '-';
             $recaudadoTexto = '-';
-            $ultimoOperador = '-';
+            $pagadoTexto = '-';
 
             if ($checkin) {
                 // Titular con nombre completo; acompañantes solo con el
@@ -948,51 +972,52 @@ class ReportController extends Controller
                     ->implode(', ');
                 $pernoctantes = $nombres !== '' ? $nombres : '-';
 
-                // Acumulado SOLO hasta la fecha vista (inclusive): si estás
-                // mirando "ayer", no debe sumar pagos hechos hoy después.
-                $finDelDia = $hoy->copy()->endOfDay();
-                $recaudado = $checkin->payments
-                    ->filter(fn ($p) => Carbon::parse($p->created_at)->lte($finDelDia))
-                    ->sum(function ($p) {
-                        return $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
-                    });
-                $recaudadoTexto = number_format($recaudado, 2);
+                // Tanto "Recaudado" como "Pagado" son del día puntual que
+                // se está viendo (no acumulado de toda la estadía) — igual
+                // que la hoja de turno de cada operador: qué se cobró HOY
+                // y quién lo hizo. Un abono de cuenta grupal es un
+                // depósito puntual a una bolsa común (no está atado a una
+                // habitación ni a una noche en particular, ver
+                // SpecialAgreement); si se arrastrara como acumulado, el
+                // mismo abono aparecería repetido todos los días en TODAS
+                // las habitaciones del grupo, como si se hubiera vuelto a
+                // pagar cada día.
+                $pagosIndividualesHoy = $checkin->payments
+                    ->filter(fn ($p) => Carbon::parse($p->created_at)->isSameDay($hoy));
 
-                // "Pagado" solo debe reflejar un cobro de HOY, no el
-                // último pago histórico del checkin (eso mostraba un
-                // operador de días atrás, sin relación con la jornada de
-                // este reporte — parecía un nombre puesto al azar).
-                $pagoDeHoy = $checkin->payments
-                    ->filter(fn ($p) => Carbon::parse($p->created_at)->isSameDay($hoy))
-                    ->last();
-
-                // Cuentas grupales reales (corporativo/delegación con
-                // company_name): el cobro se registra a nivel del convenio
-                // (special_agreement_id, sin checkin_id) — no aparece en
-                // $checkin->payments, hay que buscarlo aparte.
                 $esGrupoReal = $checkin->specialAgreement
                     && !empty($checkin->specialAgreement->company_name);
-                if (!$pagoDeHoy && $esGrupoReal) {
-                    $pagoDeHoy = Payment::where('special_agreement_id', $checkin->specialAgreement->id)
+                $pagosGrupoHoy = $esGrupoReal
+                    ? Payment::where('special_agreement_id', $checkin->specialAgreement->id)
                         ->whereDate('created_at', $hoy->toDateString())
                         ->with(['operador:id,full_name,nickname', 'user:id,full_name,nickname'])
-                        ->orderBy('created_at')
                         ->get()
-                        ->last();
-                }
+                    : collect();
 
-                if ($pagoDeHoy) {
-                    $ultimoOperador = $pagoDeHoy->operador->nickname
-                        ?? $pagoDeHoy->user->nickname
-                        ?? '-';
-                }
+                $pagosDeHoy = $pagosIndividualesHoy->concat($pagosGrupoHoy)
+                    ->sortBy('created_at');
+
+                $recaudado = $pagosDeHoy->sum(function ($p) {
+                    return $p->type === 'DEVOLUCION' ? -abs($p->amount) : (float) $p->amount;
+                });
+                $recaudadoTexto = $pagosDeHoy->isNotEmpty()
+                    ? number_format($recaudado, 2)
+                    : '-';
+
+                // "Pagado": solo el/los nombre(s) del operador que cobró
+                // hoy, sin monto (el monto ya está en "Recaudado").
+                $pagadoTexto = $pagosDeHoy
+                    ->map(fn ($p) => $p->operador->nickname ?? $p->user->nickname ?? '-')
+                    ->unique()
+                    ->implode(', ');
+                $pagadoTexto = $pagadoTexto !== '' ? $pagadoTexto : '-';
             }
 
             $pdf->Cell($colPza, 4, utf8_decode($room->number), 1, 0, 'C');
-            $pdf->Cell($colPernoctantes, 4, utf8_decode(substr($pernoctantes, 0, 90)), 1, 0, 'L');
+            $pdf->Cell($colPernoctantes, 4, utf8_decode(substr($pernoctantes, 0, 68)), 1, 0, 'L');
             $pdf->Cell($colMovilidad, 4, '', 1, 0, 'C');
             $pdf->Cell($colRecaudado, 4, $recaudadoTexto, 1, 0, 'R');
-            $pdf->Cell($colPagado, 4, utf8_decode(substr($ultimoOperador, 0, 18)), 1, 1, 'C');
+            $pdf->Cell($colPagado, 4, utf8_decode(substr($pagadoTexto, 0, 42)), 1, 1, 'L');
         }
 
         $pdf->Ln(2);

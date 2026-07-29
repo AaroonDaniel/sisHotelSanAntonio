@@ -43,10 +43,29 @@ class SpecialAgreement extends Model
      * Suma real de TODO el dinero depositado en la cuenta: adelanto
      * inicial + cualquier abono posterior (tabla payments,
      * special_agreement_id). Fuente de verdad en vivo.
+     *
+     * 🚀 CONVENIO AD-HOC INDIVIDUAL (sin company_name): a diferencia de
+     * una Cuenta Grupal real, sus pagos NUNCA se mueven a
+     * special_agreement_id -- el huésped paga como cualquier checkin
+     * normal, atado a su propio checkin_id (ver
+     * ReservationController/CheckinController: eso solo se reasigna para
+     * Cuentas Grupales reales, pago 'grupal'). Sin esto, cualquier abono
+     * en efectivo de un convenio individual sería invisible acá, y cada
+     * ciclo de corporate_payment_charges saldría 'pendiente' sin
+     * importar cuánto se hubiera pagado.
      */
     public function getTotalDepositedAttribute(): float
     {
-        return round((float) $this->payments()->sum('amount'), 2);
+        $total = (float) $this->payments()->sum('amount');
+
+        if (empty($this->company_name)) {
+            $total += (float) \App\Models\Payment::whereIn(
+                'checkin_id',
+                $this->checkins()->pluck('checkins.id'),
+            )->sum('amount');
+        }
+
+        return round($total, 2);
     }
 
     /**

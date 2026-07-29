@@ -198,6 +198,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // sin permiso especial (a diferencia de los reportes financieros de
     // arriba) — cualquier usuario logueado de la terminal puede imprimirlo.
     Route::get('/reports/lodging-control/pdf', [ReportController::class, 'generateLodgingControlPdf'])->name('reports.lodgingControlPdf');
+    // Historial: no hay tabla de "reportes guardados" (Control de
+    // Hospedaje se recalcula al vuelo para cualquier fecha desde
+    // `checkins`) — esta página es solo un selector de fecha + el mismo
+    // PDF embebido, para poder revisar un día pasado sin ir a Habitaciones.
+    Route::get('/reports/lodging-control', [ReportController::class, 'lodgingControlHistory'])->name('reports.lodgingControlHistory');
 
     // Administración: Aperturas y Cierres (historial de turnos + informe consolidado por día)
     // Exclusivo para el rol Administrador: los recepcionistas no deben

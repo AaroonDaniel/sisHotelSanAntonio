@@ -396,10 +396,23 @@ class RoomController
      * special_agreement_id) -- ver esa tabla para el porqué no vive en
      * special_agreements (un solo convenio puede tener a cada persona
      * cobrándose con una frecuencia distinta).
+     *
+     * 🚀 SEMÁFORO REAL: también inyecta 'corporate_billing_status'
+     * ('moroso'/'al_dia' + el monto pendiente), leído directo de
+     * App\Models\CorporatePaymentCharge (el libro mayor real del
+     * prepago) -- para que la tarjeta de la habitación (status.tsx,
+     * computeCorporativoState()) no tenga que RE-SIMULAR su propio
+     * cálculo de ciclos con datos que ya no representan cómo se cobra de
+     * verdad (agreed_price combinado, frecuencia del convenio siempre 0
+     * en Cuenta Grupal real, pagos en efectivo que en pago grupal van al
+     * fondo y no al checkin). Si no hay ninguna fila en
+     * corporate_payment_schedules, queda null y el frontend cae al
+     * cálculo viejo (checkins legado, previos a este sistema).
      */
     private function attachPaymentFrequencies(\App\Models\Checkin $checkin): void
     {
         $checkin->titular_payment_frequency_days = null;
+        $checkin->corporate_billing_status = null;
 
         if (!$checkin->special_agreement_id) {
             return;
@@ -415,6 +428,44 @@ class RoomController
 
         foreach ($checkin->companions as $comp) {
             $comp->frequency = $freqMap[$comp->id] ?? null;
+        }
+
+        if ($freqMap->isNotEmpty()) {
+            $pendiente = \App\Models\CorporatePaymentCharge::where('special_agreement_id', $checkin->special_agreement_id)
+                ->whereIn('guest_id', $guestIds)
+                ->where('status', 'pendiente')
+                ->sum('amount');
+
+            // 🚀 CONSUMIDO DE ESTA HABITACIÓN (no del grupo entero): suma
+            // real de todo lo ya cargado (cubierto + pendiente) a las
+            // personas de ESTE checkin, leído directo del libro mayor real
+            // -- distinto de SpecialAgreement::total_consumed_real, que
+            // suma TODAS las habitaciones del convenio junto.
+            $consumido = \App\Models\CorporatePaymentCharge::where('special_agreement_id', $checkin->special_agreement_id)
+                ->whereIn('guest_id', $guestIds)
+                ->sum('amount');
+
+            // 🚀 PRÓXIMO CICLO: cuánto costará el siguiente bloque de
+            // cobro de estas personas juntas -- sirve para avisar "fondo
+            // bajo" ANTES de que el próximo cobro quede pendiente por
+            // falta de saldo, no solo cuando ya está en déficit.
+            // 🚀 sum(Closure) de Collection solo pasa el VALOR, no la
+            // llave -- por eso un foreach en vez de encadenar sum().
+            $proximoCiclo = 0.0;
+            foreach ($freqMap as $guestId => $frecuencia) {
+                $precio = $guestId === $checkin->guest_id
+                    ? (float) $checkin->titular_price
+                    : (float) (optional($checkin->companions->firstWhere('id', $guestId))->pivot->price ?? 0);
+
+                $proximoCiclo += $precio * max(1, (int) $frecuencia);
+            }
+
+            $checkin->corporate_billing_status = [
+                'level' => $pendiente > 0 ? 'moroso' : 'al_dia',
+                'pending_amount' => (float) $pendiente,
+                'consumed_amount' => (float) $consumido,
+                'next_cycle_cost' => (float) $proximoCiclo,
+            ];
         }
     }
 

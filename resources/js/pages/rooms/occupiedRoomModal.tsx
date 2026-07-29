@@ -62,7 +62,7 @@ const toLaPazLocalDate = (dateString: string | Date): Date => {
 };
 
 interface CorpState {
-    level: 'moroso' | 'pendiente' | 'al_dia';
+    level: 'moroso' | 'debe' | 'pendiente' | 'al_dia';
     badge: string;
     text: string;
 }
@@ -123,6 +123,13 @@ export default function OccupiedRoomModal({
 
     const [expandedGuestId, setExpandedGuestId] = useState<number | null>(null);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
+    // 🚀 Bug real: el abono al FONDO GRUPAL (dentro de la tarjeta
+    // "Convenio Corporativo", solo cuando el fondo real no alcanza) usaba
+    // el MISMO estado que "Nuevo Pago / Adelanto" individual -- al abrir
+    // el pago normal de un convenio individual (sin grupo), también se
+    // abría por error el formulario de abono al fondo grupal. Estado
+    // propio, separado.
+    const [showGroupTopupForm, setShowGroupTopupForm] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [showChangePriceModal, setShowChangePriceModal] = useState(false);
@@ -228,6 +235,7 @@ export default function OccupiedRoomModal({
     const handleClose = () => {
         setExpandedGuestId(null);
         setShowPaymentForm(false);
+        setShowGroupTopupForm(false);
         setShowConfirmModal(false);
         setPaymentOperatorError(null);
         resetPayment();
@@ -351,10 +359,12 @@ export default function OccupiedRoomModal({
     // badge del modal y el de la card de habitación son siempre idénticos.
     //
     // Aquí solo se deriva información COMPLEMENTARIA para mostrar al
-    // recepcionista: la frecuencia pactada y la fecha del próximo
-    // vencimiento, calculada desde `starts_at` (el momento en que el
-    // convenio REALMENTE empezó — no necesariamente el check_in_date de
-    // la estadía, si el convenio se activó después del ingreso real).
+    // recepcionista: la frecuencia pactada del TITULAR (cada persona
+    // puede tener la suya propia -- ver App\Models\CorporatePaymentSchedule
+    // -- esto solo muestra la del titular como referencia) y la fecha del
+    // próximo cobro, calculada desde `starts_at`/check_in_date. El monto
+    // pendiente real (si lo hay) ya viene resuelto en `corpState` desde
+    // el libro mayor real, no se recalcula acá.
     // =================================================================
     const agreementInfo = useMemo<{
         frequency: number;
@@ -363,7 +373,13 @@ export default function OccupiedRoomModal({
         const agreement = liveCheckin?.special_agreement;
         if (!agreement) return null;
 
-        const frequency = parseInt(agreement.payment_frequency_days ?? '0', 10);
+        // 🚀 Frecuencia POR PERSONA (titular) -- ya no la del convenio
+        // compartido (agreement.payment_frequency_days), que en una
+        // Cuenta Grupal real siempre vale 0.
+        const frequency = parseInt(
+            String(liveCheckin?.titular_payment_frequency_days ?? '0'),
+            10,
+        );
 
         if (!frequency || frequency <= 0) {
             return { frequency: 0, dueDate: null };
@@ -443,6 +459,7 @@ export default function OccupiedRoomModal({
                     onSuccess: () => {
                         resetPayment();
                         setShowPaymentForm(false);
+                        setShowGroupTopupForm(false);
                         setShowConfirmModal(false);
                     },
                     onError: (errors) => {
@@ -462,6 +479,7 @@ export default function OccupiedRoomModal({
             onSuccess: () => {
                 resetPayment();
                 setShowPaymentForm(false);
+                setShowGroupTopupForm(false);
                 setShowConfirmModal(false);
             },
             onError: (errors) => {
@@ -563,19 +581,42 @@ export default function OccupiedRoomModal({
                                     : 'CORPORATIVO'}
                                 : {groupAgreement?.company_name}
                             </span>
-                            {groupFinancial && (
-                                <span
-                                    className={`text-sm font-bold ${
-                                        groupFinancial.balance >= 0
-                                            ? 'text-emerald-700'
-                                            : 'text-red-600'
-                                    }`}
-                                >
-                                    {groupFinancial.balance >= 0
-                                        ? `Fondo Grupal Disponible: ${formatCurrency(groupFinancial.balance)}`
-                                        : `Deuda del Grupo: -${formatCurrency(Math.abs(groupFinancial.balance))}`}
-                                </span>
-                            )}
+                            {/* 🚀 Ya no se muestra el monto del fondo acá --
+                                solo el nombre (arriba) y, si se está por
+                                acabar o ya se acabó, un aviso de texto sin
+                                números (mismo criterio que el panel de
+                                abajo). Si está bien, no se muestra nada. */}
+                            {groupFinancial &&
+                                (() => {
+                                    const nextCycleCost =
+                                        liveCheckin.corporate_billing_status
+                                            ?.next_cycle_cost ?? 0;
+                                    const isInsufficient =
+                                        groupFinancial.balance < 0;
+                                    const isLow =
+                                        !isInsufficient &&
+                                        nextCycleCost > 0 &&
+                                        groupFinancial.balance <
+                                            nextCycleCost;
+
+                                    if (!isInsufficient && !isLow) {
+                                        return null;
+                                    }
+
+                                    return (
+                                        <span
+                                            className={`text-xs font-bold uppercase ${
+                                                isInsufficient
+                                                    ? 'text-red-600'
+                                                    : 'text-amber-700'
+                                            }`}
+                                        >
+                                            {isInsufficient
+                                                ? '⚠️ Fondo sin saldo — se sigue acumulando'
+                                                : '⚠️ Fondo quedándose sin saldo'}
+                                        </span>
+                                    );
+                                })()}
                         </div>
                     )}
 
@@ -661,25 +702,73 @@ export default function OccupiedRoomModal({
                                         </div>
                                     </div>
 
-                                    {/* Resumen Financiero */}
+                                    {/* Resumen Financiero -- ya no se muestra el
+                                        saldo anterior arrastrado (confundía al
+                                        recepcionista al trasladar de habitación);
+                                        se sigue sumando internamente al cobro
+                                        real, solo se dejó de exponer acá. */}
                                     <div className="mb-4 space-y-1">
-                                        {oldDebt > 0 && (
-                                            <div className="flex justify-between rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                                                <span className="font-bold">
-                                                    SALDO ANTERIOR (ARRASTRADO):
+                                        {/* 🚀 Corporativo/delegación: precio POR
+                                            PERSONA -- mostrar un solo "Tarifa
+                                            por Noche: Bs 160" (la suma de
+                                            todos) da a entender que esa es
+                                            la tarifa de una sola persona,
+                                            cuando en realidad cada quien
+                                            paga la suya. */}
+                                        {isSpecialGroup ? (
+                                            <div>
+                                                <span className="mb-1 block text-xs font-bold text-gray-500 uppercase">
+                                                    Tarifa por Persona / Noche:
                                                 </span>
-                                                <span className="font-bold">
-                                                    {formatCurrency(oldDebt)}
-                                                </span>
+                                                <div className="space-y-0.5">
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="text-gray-600">
+                                                            {liveCheckin.guest
+                                                                ?.full_name ||
+                                                                'Titular'}
+                                                        </span>
+                                                        <span className="font-bold text-gray-800">
+                                                            {formatCurrency(
+                                                                Number(
+                                                                    liveCheckin.titular_price,
+                                                                ) || 0,
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    {liveCheckin.companions?.map(
+                                                        (c: any) => (
+                                                            <div
+                                                                key={c.id}
+                                                                className="flex justify-between text-sm"
+                                                            >
+                                                                <span className="text-gray-600">
+                                                                    {
+                                                                        c.full_name
+                                                                    }
+                                                                </span>
+                                                                <span className="font-bold text-gray-800">
+                                                                    {formatCurrency(
+                                                                        Number(
+                                                                            c
+                                                                                .pivot
+                                                                                ?.price,
+                                                                        ) || 0,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                </div>
                                             </div>
-                                        )}
-                                        <div className="flex items-center justify-between text-sm text-gray-500">
-                                            <span className="font-bold">
-                                                Tarifa por Noche:
-                                            </span>
-                                            <span className="flex items-center gap-1.5 text-lg font-black text-gray-800">
-                                                {formatCurrency(pricePerNight)}
-                                                {!isSpecialGroup && (
+                                        ) : (
+                                            <div className="flex items-center justify-between text-sm text-gray-500">
+                                                <span className="font-bold">
+                                                    Tarifa por Noche:
+                                                </span>
+                                                <span className="flex items-center gap-1.5 text-lg font-black text-gray-800">
+                                                    {formatCurrency(
+                                                        pricePerNight,
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() =>
@@ -692,9 +781,9 @@ export default function OccupiedRoomModal({
                                                     >
                                                         <Pencil className="h-4 w-4" />
                                                     </button>
-                                                )}
-                                            </span>
-                                        </div>
+                                                </span>
+                                            </div>
+                                        )}
                                         {servicesCost > 0 && (
                                             <div className="flex justify-between text-xs text-gray-500">
                                                 <span>
@@ -707,13 +796,28 @@ export default function OccupiedRoomModal({
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="my-1 border-t border-dashed border-gray-200"></div>
-                                        <div className="flex justify-between text-sm font-bold text-gray-800">
-                                            <span>TOTAL CONSUMIDO:</span>
-                                            <span>
-                                                {formatCurrency(grandTotal)}
-                                            </span>
-                                        </div>
+                                        {/* 🚀 TOTAL CONSUMIDO: oculto en Cuenta
+                                            Grupal real -- mezcla la tarifa
+                                            combinada con el saldo arrastrado
+                                            congelado, y no representa lo que
+                                            de verdad se cobra ahí (eso lo
+                                            dice el panel "Estado de Cuenta
+                                            Grupal", con el libro mayor real). */}
+                                        {!isRealGroupAccount && (
+                                            <>
+                                                <div className="my-1 border-t border-dashed border-gray-200"></div>
+                                                <div className="flex justify-between text-sm font-bold text-gray-800">
+                                                    <span>
+                                                        TOTAL CONSUMIDO:
+                                                    </span>
+                                                    <span>
+                                                        {formatCurrency(
+                                                            grandTotal,
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* --- BARRA DE ESTADO DE PAGOS ---
@@ -1174,148 +1278,129 @@ export default function OccupiedRoomModal({
                                         </div>
 
                                         <div className="space-y-3 p-5">
-                                            {/* Datos del convenio */}
-                                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                                <div>
+                                            {/* Datos del convenio -- solo lo justo:
+                                                el tipo de trato y el NOMBRE del
+                                                convenio (si es Cuenta Grupal
+                                                real). El precio ya no es un
+                                                solo número por convenio (es
+                                                por persona), así que no hay
+                                                un "Precio Pactado" único que
+                                                mostrar acá. */}
+                                            <div className="text-sm">
+                                                <span className="block text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                                                    Tipo de Trato
+                                                </span>
+                                                <span className="font-bold text-gray-800 capitalize">
+                                                    {liveCheckin
+                                                        .special_agreement
+                                                        ?.type ??
+                                                        'Corporativo'}
+                                                </span>
+                                            </div>
+                                            {isRealGroupAccount && (
+                                                <div className="text-sm">
                                                     <span className="block text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                                                        Tipo de Trato
-                                                    </span>
-                                                    <span className="font-bold text-gray-800 capitalize">
-                                                        {liveCheckin
-                                                            .special_agreement
-                                                            ?.type ??
-                                                            'Corporativo'}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                                                        Precio Pactado
+                                                        Convenio
                                                     </span>
                                                     <span className="font-bold text-indigo-700">
-                                                        {formatCurrency(
-                                                            parseFloat(
-                                                                liveCheckin
-                                                                    .special_agreement
-                                                                    ?.agreed_price ??
-                                                                    liveCheckin.agreed_price ??
-                                                                    0,
-                                                            ),
-                                                        )}
+                                                        {
+                                                            groupAgreement?.company_name
+                                                        }
                                                     </span>
                                                 </div>
-                                            </div>
+                                            )}
 
-                                            {/* 🚀 MOTOR DE FACTURACIÓN GRUPAL: panel
-                                                "Estado de Cuenta Grupal" — reemplaza
-                                                por completo el cobro individual
-                                                (ver BARRA DE ESTADO DE PAGOS oculta
-                                                arriba). Muestra el saldo REAL en
-                                                vivo del grupo y, si está en
-                                                déficit, permite abonar desde aquí
-                                                mismo. */}
+                                            {/* 🚀 MOTOR DE FACTURACIÓN GRUPAL: ya no se
+                                                muestra ningún número del fondo acá (ni
+                                                consumido, ni saldo, ni cuánto falta) --
+                                                eso vive únicamente en /group-accounts.
+                                                Acá solo aparece un AVISO DE TEXTO si el
+                                                fondo se está por acabar o ya se acabó.
+                                                Los cobros NUNCA se detienen por esto --
+                                                se siguen acumulando igual (como
+                                                'pendiente' en el libro mayor), el aviso
+                                                es solo para que alguien recargue a
+                                                tiempo. Si está bien, no se muestra nada. */}
                                             {isRealGroupAccount &&
-                                                groupFinancial && (
-                                                    <div className="space-y-2">
-                                                        <h4 className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-gray-500 uppercase">
-                                                            <Wallet className="h-3.5 w-3.5" />
-                                                            Estado de Cuenta
-                                                            Grupal
-                                                        </h4>
-                                                        <div className="grid grid-cols-3 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
-                                                            <div>
-                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
-                                                                    Depositado
-                                                                </span>
-                                                                <span className="text-sm font-black text-gray-800">
-                                                                    {formatCurrency(
-                                                                        groupFinancial.total_deposited,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
-                                                                    Consumido
-                                                                </span>
-                                                                <span className="text-sm font-black text-gray-800">
-                                                                    {formatCurrency(
-                                                                        groupFinancial.total_consumed,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="block text-[9px] font-bold tracking-wider text-gray-400 uppercase">
-                                                                    Saldo
-                                                                </span>
-                                                                <span
-                                                                    className={`text-sm font-black ${
-                                                                        groupFinancial.balance >=
-                                                                        0
-                                                                            ? 'text-emerald-600'
-                                                                            : 'text-red-600'
+                                                groupFinancial &&
+                                                (() => {
+                                                    const nextCycleCost =
+                                                        liveCheckin
+                                                            .corporate_billing_status
+                                                            ?.next_cycle_cost ??
+                                                        0;
+                                                    const isInsufficient =
+                                                        groupFinancial.balance <
+                                                        0;
+                                                    const isLow =
+                                                        !isInsufficient &&
+                                                        nextCycleCost > 0 &&
+                                                        groupFinancial.balance <
+                                                            nextCycleCost;
+
+                                                    if (
+                                                        !isInsufficient &&
+                                                        !isLow
+                                                    ) {
+                                                        return null;
+                                                    }
+
+                                                    return (
+                                                        <div className="space-y-2">
+                                                            <h4 className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-gray-500 uppercase">
+                                                                <Wallet className="h-3.5 w-3.5" />
+                                                                Estado de
+                                                                Cuenta Grupal
+                                                            </h4>
+                                                            <div
+                                                                className={`rounded-lg border p-3 ${
+                                                                    isInsufficient
+                                                                        ? 'border-red-300 bg-red-50'
+                                                                        : 'border-amber-300 bg-amber-50'
+                                                                }`}
+                                                            >
+                                                                <p
+                                                                    className={`flex items-start gap-1.5 text-xs font-bold ${
+                                                                        isInsufficient
+                                                                            ? 'text-red-700'
+                                                                            : 'text-amber-700'
                                                                     }`}
                                                                 >
-                                                                    {formatCurrency(
-                                                                        groupFinancial.balance,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        {groupFinancial.balance >=
-                                                        0 ? (
-                                                            <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-                                                                ✅ Cubierto por
-                                                                el Fondo
-                                                                Grupal
-                                                            </div>
-                                                        ) : (
-                                                            <div className="rounded-lg border border-red-300 bg-red-50 p-3">
-                                                                <p className="flex items-start gap-1.5 text-xs font-bold text-red-700">
                                                                     <AlertTriangle className="h-4 w-4 shrink-0" />
                                                                     <span>
-                                                                        ⚠️
-                                                                        FONDO
-                                                                        GRUPAL
-                                                                        INSUFICIENTE.
-                                                                        El
-                                                                        depósito
-                                                                        no
-                                                                        cubre
-                                                                        todas
-                                                                        las
-                                                                        habitaciones
-                                                                        asignadas.
-                                                                        Faltan:{' '}
-                                                                        {formatCurrency(
-                                                                            Math.abs(
-                                                                                groupFinancial.balance,
-                                                                            ),
-                                                                        )}
-                                                                        .
+                                                                        {isInsufficient
+                                                                            ? 'El fondo grupal se quedó sin saldo. Los cobros no se detienen, se siguen acumulando -- avise para recargar.'
+                                                                            : 'El fondo grupal se está quedando sin saldo. Avise para recargar antes del próximo cobro.'}
                                                                     </span>
                                                                 </p>
-                                                                {!showPaymentForm && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() =>
-                                                                            setShowPaymentForm(
-                                                                                true,
-                                                                            )
-                                                                        }
-                                                                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700"
-                                                                    >
-                                                                        <Banknote className="h-4 w-4" />
-                                                                        Abonar
-                                                                        al
-                                                                        Fondo
-                                                                        Grupal
-                                                                    </button>
-                                                                )}
+                                                                {isInsufficient &&
+                                                                    !showGroupTopupForm && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setShowGroupTopupForm(
+                                                                                    true,
+                                                                                )
+                                                                            }
+                                                                            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700"
+                                                                        >
+                                                                            <Banknote className="h-4 w-4" />
+                                                                            Abonar
+                                                                            al
+                                                                            Fondo
+                                                                            Grupal
+                                                                        </button>
+                                                                    )}
                                                             </div>
-                                                        )}
+                                                        </div>
+                                                    );
+                                                })()}
 
-                                                        {/* Formulario compacto de abono directo al fondo grupal */}
-                                                        {showPaymentForm && (
+                                                        {/* Formulario compacto de abono directo al fondo grupal --
+                                                            estado propio (showGroupTopupForm), separado del "Nuevo
+                                                            Pago / Adelanto" individual de arriba (bug arreglado: antes
+                                                            compartían el mismo estado y uno abría al otro). */}
+                                                        {showGroupTopupForm && (
                                                             <form
                                                                 onSubmit={
                                                                     handlePreSubmit
@@ -1333,7 +1418,7 @@ export default function OccupiedRoomModal({
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => {
-                                                                            setShowPaymentForm(
+                                                                            setShowGroupTopupForm(
                                                                                 false,
                                                                             );
                                                                             setPaymentOperatorError(
@@ -1512,17 +1597,21 @@ export default function OccupiedRoomModal({
                                                                     }
                                                                     className="w-full rounded bg-red-600 py-1.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                                                                 >
-                                                                    {processingPayment
+                                                    {processingPayment
                                                                         ? 'Guardando...'
                                                                         : 'CONFIRMAR ABONO'}
                                                                 </button>
                                                             </form>
                                                         )}
-                                                    </div>
-                                                )}
 
-                                            {/* Frecuencia / fecha límite (info complementaria) */}
-                                            {agreementInfo &&
+                                            {/* Frecuencia / fecha límite (info complementaria) --
+                                                SOLO Cuenta Grupal real: para un convenio
+                                                individual no hay "cuenta" a la que abonar
+                                                acá (eso se hace con "Nuevo Pago / Adelanto"
+                                                de arriba), así que esta info de más no
+                                                aporta y se saca. */}
+                                            {isRealGroupAccount &&
+                                            agreementInfo &&
                                             agreementInfo.frequency > 0 ? (
                                                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                                                     <CalendarClock className="h-4 w-4 text-gray-400" />
@@ -1541,18 +1630,18 @@ export default function OccupiedRoomModal({
                                                             <>
                                                                 <span className="text-gray-500">
                                                                     {' '}
-                                                                    · Próximo
-                                                                    vencimiento:{' '}
+                                                                    ·
+                                                                    Próximo
+                                                                    cobro:{' '}
                                                                 </span>
                                                                 <span
                                                                     className={`font-bold ${
                                                                         corpState?.level ===
-                                                                        'moroso'
-                                                                            ? 'text-red-600'
-                                                                            : corpState?.level ===
-                                                                                'pendiente'
-                                                                              ? 'text-amber-600'
-                                                                              : 'text-emerald-600'
+                                                                            'debe' ||
+                                                                        corpState?.level ===
+                                                                            'pendiente'
+                                                                            ? 'text-amber-600'
+                                                                            : 'text-emerald-600'
                                                                     }`}
                                                                 >
                                                                     {agreementInfo.dueDate.toLocaleDateString(
