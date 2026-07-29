@@ -265,6 +265,7 @@ class RoomController
                     $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
                 }
                 $checkin->individual_debt = $isRealGroupAccount ? 0.0 : null;
+                $this->attachPaymentFrequencies($checkin);
             }
 
             return $room;
@@ -298,6 +299,7 @@ class RoomController
                 $checkin->specialAgreement->financial_summary = $checkin->specialAgreement->financialSummary();
             }
             $checkin->individual_debt = $isRealGroupAccount ? 0.0 : null;
+            $this->attachPaymentFrequencies($checkin);
         }
 
         // 3. Reservas pendientes
@@ -384,6 +386,36 @@ class RoomController
             'Operators'    => \App\Models\User::operadores()->get(),
             'GroupAccounts' => $groupAccounts,
         ]);
+    }
+
+    /**
+     * Frecuencia de cobro POR PERSONA (corporativo/delegación): inyecta
+     * 'titular_payment_frequency_days' en el checkin y 'frequency' en
+     * cada acompañante (mismo patrón que financial_summary más arriba),
+     * leyendo App\Models\CorporatePaymentSchedule por (guest_id,
+     * special_agreement_id) -- ver esa tabla para el porqué no vive en
+     * special_agreements (un solo convenio puede tener a cada persona
+     * cobrándose con una frecuencia distinta).
+     */
+    private function attachPaymentFrequencies(\App\Models\Checkin $checkin): void
+    {
+        $checkin->titular_payment_frequency_days = null;
+
+        if (!$checkin->special_agreement_id) {
+            return;
+        }
+
+        $guestIds = array_merge([$checkin->guest_id], $checkin->companions->pluck('id')->toArray());
+
+        $freqMap = \App\Models\CorporatePaymentSchedule::where('special_agreement_id', $checkin->special_agreement_id)
+            ->whereIn('guest_id', $guestIds)
+            ->pluck('payment_frequency_days', 'guest_id');
+
+        $checkin->titular_payment_frequency_days = $freqMap[$checkin->guest_id] ?? null;
+
+        foreach ($checkin->companions as $comp) {
+            $comp->frequency = $freqMap[$comp->id] ?? null;
+        }
     }
 
     public function markAsMaintenance(Request $request, Room $room)

@@ -58,3 +58,9 @@ Schedule::call(function () {
 // después de la limpieza de reservas de arriba para no competir por lock
 // de BD en el mismo minuto exacto.
 Schedule::command('groupaccounts:daily-charge')->dailyAt('00:05');
+
+// Libro mayor de cobros POR PERSONA en bloques de N días (frecuencia
+// propia de cada huésped) -- hermano del comando de arriba, se salta
+// entre sí para nunca cobrar el mismo checkin dos veces (ver
+// ChargeGroupAccountsDailyCommand::handle()).
+Schedule::command('groupaccounts:corporate-schedule-charge')->dailyAt('00:10');

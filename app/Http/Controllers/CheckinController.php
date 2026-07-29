@@ -39,6 +39,10 @@ class CheckinController extends Controller
     // composición (ver el propio trait) — no declarar ambos, PHP no deja
     // dos traits proveyendo el mismo método a la misma clase.
     use \App\Traits\ChargesGroupAccountLedger;
+    // ChargesCorporatePaymentSchedule a propósito NO compone
+    // ResolvesBusinessDate (ver ese trait) -- por eso puede convivir acá
+    // junto con ChargesGroupAccountLedger sin el mismo conflicto.
+    use \App\Traits\ChargesCorporatePaymentSchedule;
 
     public function index()
     {
@@ -196,6 +200,9 @@ class CheckinController extends Controller
             // más abajo y CheckinGuestObserver.
             'titular_price' => 'nullable|numeric|min:0',
             'companions.*.price' => 'nullable|numeric|min:0',
+            // 🚀 FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación):
+            // se guarda en corporate_payment_schedules, no en el pivote.
+            'companions.*.frequency' => 'nullable|integer|min:1',
 
             // Pagos y Convenios
             'selected_services' => 'nullable|array',
@@ -610,11 +617,58 @@ class CheckinController extends Controller
                                 ? (float) $compData['price']
                                 : null,
                         ];
+                        // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: guardado aparte
+                        // (corporate_payment_schedules), no en el pivote —
+                        // ver el bloque de más abajo.
+                        if (isset($compData['frequency']) && $compData['frequency'] !== '') {
+                            $companionFrequencies[$companion->id] = (int) $compData['frequency'];
+                        }
                     }
                 }
 
                 if (!empty($idsParaSincronizar)) {
                     $checkin->companions()->sync($idsParaSincronizar);
+                }
+            }
+
+            // --- FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación) ---
+            // 🚀 Clavada por (guest_id, special_agreement_id), no por
+            // checkin_id -- así sobrevive cualquier transferencia de
+            // habitación sin código de arrastre (ver migración
+            // create_corporate_payment_schedules_table). Independiente del
+            // precio, que sigue viviendo en titular_price/checkin_guests.price.
+            if ($isSpecialDeal && $specialAgreementId) {
+                if ($request->filled('corporate_days')) {
+                    $titularSchedule = \App\Models\CorporatePaymentSchedule::updateOrCreate(
+                        ['guest_id' => $guestId, 'special_agreement_id' => $specialAgreementId],
+                        ['payment_frequency_days' => (int) $request->input('corporate_days')],
+                    );
+                }
+                foreach ($companionFrequencies ?? [] as $companionGuestId => $frequency) {
+                    \App\Models\CorporatePaymentSchedule::updateOrCreate(
+                        ['guest_id' => $companionGuestId, 'special_agreement_id' => $specialAgreementId],
+                        ['payment_frequency_days' => $frequency],
+                    );
+                }
+
+                // 🚀 PREPAGO INMEDIATO: no se espera al cron de mañana --
+                // el primer bloque de cada persona se cobra ya mismo, en
+                // el momento del check-in (ver ChargesCorporatePaymentSchedule).
+                $checkin->refresh()->load('guest', 'companions', 'schedule');
+                $hoy = $this->resolveBusinessDate(now(), $checkin->schedule);
+
+                if (isset($titularSchedule)) {
+                    $anchor = $this->resolveBusinessDate(\Carbon\Carbon::parse($checkin->check_in_date), $checkin->schedule);
+                    $this->chargeGuestCycles($checkin, $checkin->guest, $titularSchedule, $anchor, $hoy, (float) $checkin->titular_price, false);
+                }
+                foreach ($checkin->companions as $companion) {
+                    if (!array_key_exists($companion->id, $companionFrequencies ?? [])) {
+                        continue;
+                    }
+                    $compSchedule = \App\Models\CorporatePaymentSchedule::where('guest_id', $companion->id)
+                        ->where('special_agreement_id', $specialAgreementId)->first();
+                    $compAnchor = $this->resolveBusinessDate(\Carbon\Carbon::parse($companion->pivot->created_at), $checkin->schedule);
+                    $this->chargeGuestCycles($checkin, $companion, $compSchedule, $compAnchor, $hoy, (float) ($companion->pivot->price ?? 0), false);
                 }
             }
 
@@ -1300,6 +1354,12 @@ class CheckinController extends Controller
                             'origin' => !empty($compData['origin']) ? strtoupper(trim($compData['origin'])) : null,
                             'price' => $priceParaGuardar,
                         ];
+                        // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: guardado aparte
+                        // (corporate_payment_schedules) más abajo, una vez
+                        // resuelto special_agreement_id de esta edición.
+                        if (isset($compData['frequency']) && $compData['frequency'] !== '') {
+                            $companionFrequencies[$companion->id] = (int) $compData['frequency'];
+                        }
                     }
                 }
             }
@@ -1411,6 +1471,44 @@ class CheckinController extends Controller
                     ]
                 );
                 $checkin->special_agreement_id = $agreement->id;
+
+                // --- FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación) ---
+                // 🚀 Solo para corporativo/delegación real -- el auto-ajuste
+                // (isAutoAdjustNow) no tiene precio ni frecuencia por
+                // persona, es un solo checkin normal con tarifa recalculada.
+                // Clavada por (guest_id, special_agreement_id), no por
+                // checkin_id -- ver migración create_corporate_payment_schedules_table.
+                if (in_array($typeRequest, ['corporativo', 'delegacion']) && $request->filled('corporate_days')) {
+                    $titularSchedule = \App\Models\CorporatePaymentSchedule::updateOrCreate(
+                        ['guest_id' => $guestIdToUse, 'special_agreement_id' => $agreement->id],
+                        ['payment_frequency_days' => (int) $request->input('corporate_days')],
+                    );
+                    foreach ($companionFrequencies ?? [] as $companionGuestId => $frequency) {
+                        \App\Models\CorporatePaymentSchedule::updateOrCreate(
+                            ['guest_id' => $companionGuestId, 'special_agreement_id' => $agreement->id],
+                            ['payment_frequency_days' => $frequency],
+                        );
+                    }
+
+                    // 🚀 PREPAGO INMEDIATO: mismo criterio que store() -- no
+                    // se espera al cron de mañana, el bloque vigente de
+                    // cada persona se cobra ya mismo al guardar la edición.
+                    $checkinFresco = $checkin->fresh(['guest', 'companions', 'schedule']);
+                    $hoy = $this->resolveBusinessDate(now(), $checkinFresco->schedule);
+
+                    $anchorTitular = $this->resolveBusinessDate(\Carbon\Carbon::parse($checkinFresco->price_effective_since ?? $checkinFresco->check_in_date), $checkinFresco->schedule);
+                    $this->chargeGuestCycles($checkinFresco, $checkinFresco->guest, $titularSchedule, $anchorTitular, $hoy, (float) $checkinFresco->titular_price, false);
+
+                    foreach ($checkinFresco->companions as $companion) {
+                        if (!array_key_exists($companion->id, $companionFrequencies ?? [])) {
+                            continue;
+                        }
+                        $compSchedule = \App\Models\CorporatePaymentSchedule::where('guest_id', $companion->id)
+                            ->where('special_agreement_id', $agreement->id)->first();
+                        $compAnchor = $this->resolveBusinessDate(\Carbon\Carbon::parse($companion->pivot->created_at), $checkinFresco->schedule);
+                        $this->chargeGuestCycles($checkinFresco, $companion, $compSchedule, $compAnchor, $hoy, (float) ($companion->pivot->price ?? 0), false);
+                    }
+                }
             } elseif ($hadSpecialAgreement && !$isSpecialGroupNow) {
                 // De especial a normal: se revoca el convenio. Contamos los
                 // días bajo trato corporativo desde que el convenio
@@ -3407,7 +3505,7 @@ class CheckinController extends Controller
      */
     private function applyGroupAccountCoverage(Checkin $checkin, int $finalDays, bool $persist): ?array
     {
-        $checkin->loadMissing('specialAgreement');
+        $checkin->loadMissing('specialAgreement', 'companions', 'guest');
         $agreement = $checkin->specialAgreement;
 
         if (!$agreement || empty($agreement->company_name)) {
@@ -3415,7 +3513,52 @@ class CheckinController extends Controller
         }
 
         if ($persist) {
-            $this->chargeUpToBusinessDay($checkin, $finalDays);
+            $guestIds = array_merge([$checkin->guest_id], $checkin->companions->pluck('id')->toArray());
+
+            $schedulesByGuestId = \App\Models\CorporatePaymentSchedule::where('special_agreement_id', $agreement->id)
+                ->whereIn('guest_id', $guestIds)
+                ->get()
+                ->keyBy('guest_id');
+
+            if ($schedulesByGuestId->isNotEmpty()) {
+                // 🚀 Este checkin usa frecuencia por persona -- se cierra
+                // el ÚLTIMO bloque de cada quien (aunque quede
+                // incompleto, ya se van), en vez del libro diario de
+                // checkin completo (mutuamente excluyentes, ver
+                // ChargeGroupAccountsDailyCommand::handle()).
+                $anchor = \Carbon\Carbon::parse($checkin->price_effective_since ?? $checkin->check_in_date);
+                $anchorDay = $this->resolveBusinessDate($anchor, $checkin->schedule);
+                $throughDay = $anchorDay->copy()->addDays(max(0, $finalDays - 1));
+
+                $titularSchedule = $schedulesByGuestId->get($checkin->guest_id);
+                if ($titularSchedule) {
+                    $this->chargeGuestCycles(
+                        $checkin, $checkin->guest, $titularSchedule,
+                        $anchorDay, $throughDay, (float) $checkin->titular_price, true,
+                    );
+                }
+
+                foreach ($checkin->companions as $companion) {
+                    $schedule = $schedulesByGuestId->get($companion->id);
+                    if (!$schedule) {
+                        continue;
+                    }
+                    $compAnchor = \Carbon\Carbon::parse($companion->pivot->created_at);
+                    $compArrivalDay = $this->resolveBusinessDate($compAnchor, $checkin->schedule);
+                    // El acompañante no puede "empezar" después del día
+                    // final del checkout (ej. se sumó hoy mismo) -- se
+                    // limita a throughDay como mínimo para no invertir el
+                    // rango.
+                    $compArrivalDay = $compArrivalDay->lte($throughDay) ? $compArrivalDay : $throughDay->copy();
+
+                    $this->chargeGuestCycles(
+                        $checkin, $companion, $schedule,
+                        $compArrivalDay, $throughDay, (float) ($companion->pivot->price ?? 0), true,
+                    );
+                }
+            } else {
+                $this->chargeUpToBusinessDay($checkin, $finalDays);
+            }
         }
 
         return [
@@ -3531,6 +3674,20 @@ class CheckinController extends Controller
                 }
             }
 
+            // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: mapa guest_id -> días,
+            // leído de corporate_payment_schedules bajo el convenio de
+            // ORIGEN, capturado ANTES de tocar nada. Clavada por
+            // (guest_id, special_agreement_id) -- si el destino tiene un
+            // convenio DISTINTO, se re-crea la fila bajo ese convenio nuevo
+            // más abajo (FASE 2); la vieja queda de historial, no se borra.
+            $originFrequencyMap = [];
+            if ($checkin->special_agreement_id) {
+                $originFrequencyMap = \App\Models\CorporatePaymentSchedule::where('special_agreement_id', $checkin->special_agreement_id)
+                    ->whereIn('guest_id', $allGuestIds)
+                    ->pluck('payment_frequency_days', 'guest_id')
+                    ->all();
+            }
+
             // =======================================================
             // 🛑 FASE 1: DESVINCULAR Y MOVER DEUDAS PRIMERO
             // =======================================================
@@ -3631,6 +3788,21 @@ class CheckinController extends Controller
 
             // Sincronizamos la nueva familia gigante en la habitación destino
             $targetCheckin->companions()->sync($hasTargetTitularPrice ? $targetSyncData : $targetCompanionIds);
+
+            // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: si el destino tiene
+            // convenio y la persona traía una frecuencia guardada bajo el
+            // convenio de ORIGEN, se re-crea bajo el convenio DESTINO
+            // (pueden ser distintos) -- la fila vieja queda de historial.
+            if ($targetCheckin->special_agreement_id) {
+                foreach ($selectedGuests as $guestId) {
+                    if (isset($originFrequencyMap[$guestId])) {
+                        \App\Models\CorporatePaymentSchedule::updateOrCreate(
+                            ['guest_id' => $guestId, 'special_agreement_id' => $targetCheckin->special_agreement_id],
+                            ['payment_frequency_days' => $originFrequencyMap[$guestId]],
+                        );
+                    }
+                }
+            }
 
             // 🚀 MÓDULO 3: REGISTRO HISTÓRICO (La auditoría exige saber de dónde salieron)
             \App\Models\RoomTransfer::create([

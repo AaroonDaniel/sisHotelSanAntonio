@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Checkin;
+use App\Models\CorporatePaymentSchedule;
 use App\Traits\ChargesGroupAccountLedger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -26,6 +27,13 @@ use Illuminate\Support\Carbon;
  * el MISMO método que usa CheckinController al cerrar el día del
  * checkout (Fase 3), para que nunca existan dos formas de cobrar una
  * noche.
+ *
+ * 🚀 EXCLUSIÓN: un checkin con al menos un huésped (titular o
+ * acompañante) en corporate_payment_schedules se salta acá -- lo cobra
+ * ChargeCorporatePaymentSchedulesCommand en bloques de su propia
+ * frecuencia, no este comando día a día con el precio combinado. Sin
+ * esta exclusión, el mismo consumo se descontaría dos veces del mismo
+ * fondo.
  */
 class ChargeGroupAccountsDailyCommand extends Command
 {
@@ -43,10 +51,17 @@ class ChargeGroupAccountsDailyCommand extends Command
                 $q->whereNotNull('company_name')
                     ->where('status', '!=', 'cerrado');
             })
-            ->with(['specialAgreement', 'schedule'])
-            ->get();
+            ->with(['specialAgreement', 'schedule', 'companions'])
+            ->get()
+            ->filter(function ($checkin) {
+                $guestIds = array_merge([$checkin->guest_id], $checkin->companions->pluck('id')->toArray());
 
-        $this->info("Procesando {$checkins->count()} checkin(s) de Cuentas Grupales activas...");
+                return !CorporatePaymentSchedule::where('special_agreement_id', $checkin->special_agreement_id)
+                    ->whereIn('guest_id', $guestIds)
+                    ->exists();
+            });
+
+        $this->info("Procesando {$checkins->count()} checkin(s) de Cuentas Grupales activas (sin frecuencia por persona)...");
 
         $totalCargosNuevos = 0;
 

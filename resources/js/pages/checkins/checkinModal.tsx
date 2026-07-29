@@ -182,6 +182,11 @@ export interface CheckinData {
     // precio del titular. null = checkin nunca migrado a precio por
     // huésped (agreed_price se sigue leyendo como venía, entero).
     titular_price?: number | null;
+    // 🚀 FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación): cada
+    // cuántos días se le cobra al TITULAR -- viaja en
+    // corporate_payment_schedules (inyectado por
+    // RoomController::attachPaymentFrequencies()), no en el convenio.
+    titular_payment_frequency_days?: number | null;
     notes?: string;
     services?: string[];
     guest?: Guest;
@@ -292,6 +297,10 @@ interface CompanionData {
     // 🚀 PRECIO POR HUÉSPED (Fase 1, solo tipo 'estandar' por ahora):
     // precio propio del acompañante, viaja con el resto de sus datos.
     price?: number | string;
+    // 🚀 FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación): cada
+    // cuántos días se le cobra a ESTE acompañante en particular -- viaja
+    // en corporate_payment_schedules, no en el pivote del checkin.
+    frequency?: number | string;
 }
 interface Schedule {
     id: number;
@@ -856,9 +865,14 @@ export default function CheckinModal({
                     // migró (titular_price null), queda '' — el Total sigue
                     // siendo editable de golpe, como siempre.
                     titular_price: checkinToEdit.titular_price ?? '',
+                    // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: viaja aparte del
+                    // convenio (corporate_payment_schedules, inyectado por
+                    // RoomController::attachPaymentFrequencies()) -- ya no
+                    // se lee de special_agreement.payment_frequency_days,
+                    // que es compartido por todo el convenio y no sirve
+                    // cuando cada persona se cobra a su propio ritmo.
                     corporate_days:
-                        checkinToEdit.special_agreement
-                            ?.payment_frequency_days || 0,
+                        checkinToEdit.titular_payment_frequency_days || 0,
                     // 🚀 CUENTA GRUPAL: si el convenio vinculado tiene
                     // company_name, es una Cuenta Grupal REAL (no un
                     // convenio ad-hoc de una sola habitación) -- se
@@ -914,6 +928,12 @@ export default function CheckinModal({
                             // 🚀 PRECIO POR HUÉSPED (Fase 1): viaja en el
                             // pivote (checkin_guests.price), no en el Guest.
                             price: c.pivot?.price ?? '',
+                            // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: viaja
+                            // como atributo suelto en el Guest (inyectado
+                            // por RoomController::attachPaymentFrequencies()),
+                            // no en el pivote -- corporate_payment_schedules
+                            // se clava por (guest_id, special_agreement_id).
+                            frequency: c.frequency ?? '',
                         })) || [],
 
                     payment_method:
@@ -1241,6 +1261,12 @@ export default function CheckinModal({
               // leer siempre currentPerson.price sin importar quién esté
               // activo en el carrusel.
               price: data.titular_price,
+              // 🚀 FRECUENCIA DE PAGO POR HUÉSPED (corporativo): la del
+              // titular vive en data.corporate_days -- se expone acá
+              // igual que price, para que el selector de Frecuencia lea
+              // siempre currentPerson.frequency sin importar quién esté
+              // activo en el carrusel.
+              frequency: data.corporate_days,
           }
         : {
               // Datos del Acompañante (con valores por defecto seguros)
@@ -1258,6 +1284,7 @@ export default function CheckinModal({
                   companionsList[currentIndex - 1]?.civil_status || '',
               birth_date: companionsList[currentIndex - 1]?.birth_date || '',
               price: companionsList[currentIndex - 1]?.price ?? '',
+              frequency: companionsList[currentIndex - 1]?.frequency ?? '',
           };
 
     // C. ACTUALIZAR EDAD VISUAL (Reemplaza al useEffect viejo)
@@ -1330,6 +1357,23 @@ export default function CheckinModal({
             newCompanions[currentIndex - 1] = {
                 ...newCompanions[currentIndex - 1],
                 price: value,
+            };
+            setData('companions', newCompanions);
+        }
+    };
+
+    // 🚀 FRECUENCIA DE PAGO POR HUÉSPED (corporativo): igual patrón que
+    // handlePriceChange -- el titular vive en corporate_days, cada
+    // acompañante en su propio campo dentro del array.
+    const handleFrequencyChange = (value: number) => {
+        if (isTitular) {
+            setData('corporate_days', value);
+        } else {
+            const newCompanions = [...companionsList];
+            if (!newCompanions[currentIndex - 1]) return;
+            newCompanions[currentIndex - 1] = {
+                ...newCompanions[currentIndex - 1],
+                frequency: value,
             };
             setData('companions', newCompanions);
         }
@@ -3340,7 +3384,11 @@ export default function CheckinModal({
                                                     'corporativo' && (
                                                     <div className="flex flex-1 animate-in items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 duration-300 fade-in slide-in-from-left-1">
                                                         <span className="text-[11px] font-bold whitespace-nowrap text-indigo-800">
-                                                            Frecuencia:
+                                                            Frecuencia
+                                                            (Huésped{' '}
+                                                            {currentIndex +
+                                                                1}
+                                                            ):
                                                         </span>
                                                         {/* 1. SELECTOR RÁPIDO */}
                                                         <select
@@ -3352,11 +3400,11 @@ export default function CheckinModal({
                                                                     30,
                                                                 ].includes(
                                                                     Number(
-                                                                        data.corporate_days,
+                                                                        currentPerson.frequency,
                                                                     ),
                                                                 )
                                                                     ? String(
-                                                                          data.corporate_days,
+                                                                          currentPerson.frequency,
                                                                       )
                                                                     : 'OTRO'
                                                             }
@@ -3366,8 +3414,7 @@ export default function CheckinModal({
                                                                         .value !==
                                                                     'OTRO'
                                                                 ) {
-                                                                    setData(
-                                                                        'corporate_days',
+                                                                    handleFrequencyChange(
                                                                         Number(
                                                                             e
                                                                                 .target
@@ -3404,14 +3451,12 @@ export default function CheckinModal({
                                                             className="w-14 [appearance:textfield] rounded-xl border border-gray-400 px-2 py-1 text-center text-sm font-black text-black shadow-inner focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                             placeholder="Días"
                                                             value={
-                                                                data.corporate_days ===
-                                                                0
+                                                                !currentPerson.frequency
                                                                     ? ''
-                                                                    : data.corporate_days
+                                                                    : currentPerson.frequency
                                                             }
                                                             onChange={(e) =>
-                                                                setData(
-                                                                    'corporate_days',
+                                                                handleFrequencyChange(
                                                                     Number(
                                                                         e
                                                                             .target

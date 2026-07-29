@@ -137,48 +137,84 @@ class SpecialAgreement extends Model
     }
 
     /**
-     * Saldo disponible para el LIBRO MAYOR de cargos diarios: total
-     * depositado menos SOLO lo ya cubierto en group_account_charges.
-     *
-     * ⚠️ Distinto de $this->balance (arriba): ese compara contra
-     * total_consumed_real (costo total de las habitaciones por
-     * agreed_price*duration_days) y no sabe nada del libro mayor. Este
-     * método es la ÚNICA fuente de verdad que deben usar tanto
-     * ChargeGroupAccountsDailyCommand (Fase 1) como
-     * GroupAccountController::addAdvance() (Fase 2) para decidir si un
-     * cargo se cubre o queda pendiente — si cada uno calculara el saldo
-     * por su cuenta, se desincronizarían entre sí.
+     * Frecuencia de cobro POR PERSONA bajo este convenio -- ver
+     * App\Models\CorporatePaymentSchedule.
      */
-    public function availableLedgerBalance(): float
+    public function paymentSchedules(): HasMany
     {
-        $cubierto = $this->groupAccountCharges()->where('status', 'cubierto')->sum('amount');
-
-        return round((float) $this->total_deposited - (float) $cubierto, 2);
+        return $this->hasMany(CorporatePaymentSchedule::class);
     }
 
     /**
-     * Cubre los cargos 'pendiente' más antiguos primero (charge_date ASC)
-     * mientras el saldo disponible alcance — llamado al recargar la
-     * cuenta (GroupAccountController::addAdvance(), Fase 2). Si el primer
-     * pendiente en orden cronológico no alcanza a cubrirse, se corta ahí
-     * (no se "salta" a uno más nuevo y más barato): el orden es por
+     * Libro mayor de cobros POR PERSONA en bloques de N días -- ver
+     * App\Models\CorporatePaymentCharge.
+     */
+    public function paymentCharges(): HasMany
+    {
+        return $this->hasMany(CorporatePaymentCharge::class);
+    }
+
+    /**
+     * Saldo disponible para el LIBRO MAYOR de cargos: total depositado
+     * menos lo ya cubierto en AMBOS libros -- group_account_charges (por
+     * checkin/día, ChargeGroupAccountsDailyCommand) y
+     * corporate_payment_charges (por persona/bloque de N días,
+     * ChargeCorporatePaymentSchedulesCommand). Un checkin nunca cae en
+     * los dos libros a la vez (ver exclusión en
+     * ChargeGroupAccountsDailyCommand::handle()), pero el FONDO es
+     * compartido por toda la Cuenta Grupal, así que el saldo disponible
+     * tiene que descontar lo que sea que haya cobrado cualquiera de los
+     * dos.
+     *
+     * ⚠️ Distinto de $this->balance (arriba): ese compara contra
+     * total_consumed_real (costo total de las habitaciones por
+     * agreed_price*duration_days) y no sabe nada de ningún libro mayor.
+     * Este método es la ÚNICA fuente de verdad que deben usar
+     * ChargeGroupAccountsDailyCommand, ChargeCorporatePaymentSchedulesCommand
+     * y GroupAccountController::addAdvance() para decidir si un cargo se
+     * cubre o queda pendiente — si cada uno calculara el saldo por su
+     * cuenta, se desincronizarían entre sí.
+     */
+    public function availableLedgerBalance(): float
+    {
+        $cubiertoDiario = $this->groupAccountCharges()->where('status', 'cubierto')->sum('amount');
+        $cubiertoPorPersona = $this->paymentCharges()->where('status', 'cubierto')->sum('amount');
+
+        return round((float) $this->total_deposited - (float) $cubiertoDiario - (float) $cubiertoPorPersona, 2);
+    }
+
+    /**
+     * Cubre los cargos 'pendiente' más antiguos primero, mezclando los
+     * DOS libros (group_account_charges por charge_date,
+     * corporate_payment_charges por cycle_start_date) en un solo orden
+     * cronológico — mientras el saldo disponible alcance. Llamado al
+     * recargar la cuenta (GroupAccountController::addAdvance(), Fase 2).
+     * Si el primero en orden cronológico no alcanza a cubrirse, se corta
+     * ahí (no se "salta" a uno más nuevo y más barato): el orden es por
      * fecha, no por monto. Devuelve cuántos cargos quedaron cubiertos.
      */
     public function coverPendingCharges(): int
     {
-        $pendientes = $this->groupAccountCharges()
+        $pendientesDiarios = $this->groupAccountCharges()
             ->where('status', 'pendiente')
-            ->orderBy('charge_date')
-            ->get();
+            ->get()
+            ->map(fn ($c) => ['model' => $c, 'date' => $c->charge_date]);
+
+        $pendientesPorPersona = $this->paymentCharges()
+            ->where('status', 'pendiente')
+            ->get()
+            ->map(fn ($c) => ['model' => $c, 'date' => $c->cycle_start_date]);
+
+        $pendientes = $pendientesDiarios->concat($pendientesPorPersona)->sortBy('date');
 
         $cubiertos = 0;
 
-        foreach ($pendientes as $cargo) {
-            if ($this->availableLedgerBalance() < (float) $cargo->amount) {
+        foreach ($pendientes as $item) {
+            if ($this->availableLedgerBalance() < (float) $item['model']->amount) {
                 break;
             }
 
-            $cargo->update(['status' => 'cubierto', 'covered_at' => now()]);
+            $item['model']->update(['status' => 'cubierto', 'covered_at' => now()]);
             $cubiertos++;
         }
 
