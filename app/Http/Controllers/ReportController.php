@@ -885,12 +885,26 @@ class ReportController extends Controller
         $fechaStr = $fecha->toDateString();
 
         $rooms = Room::with([
+            // Si el mismo día coinciden, para la misma habitación, un
+            // checkin ya finalizado (checkout hoy) y uno nuevo que arrancó
+            // hoy (turnover del mismo día: el huésped se fue y otro -o el
+            // mismo- volvió a registrarse), ambos matchean el filtro de
+            // fecha de abajo. Sin este orden, ->first() más adelante se
+            // quedaba con el que MySQL devuelve primero sin ORDER BY (el
+            // más antiguo por PK, es decir el ya finalizado), mostrando su
+            // convenio corporativo/delegación como si fuera el de la
+            // ocupación actual. Se prioriza el activo y, si hay empate
+            // (ambos finalizados, consultando una fecha pasada), el más
+            // reciente.
             'checkins' => function ($q) use ($fechaStr) {
                 $q->whereDate('check_in_date', '<=', $fechaStr)
                     ->where(function ($q2) use ($fechaStr) {
                         $q2->whereNull('check_out_date')
                             ->orWhereDate('check_out_date', '>=', $fechaStr);
                     })
+                    ->orderByRaw("CASE WHEN status = 'activo' THEN 0 ELSE 1 END")
+                    ->orderBy('check_in_date', 'desc')
+                    ->orderBy('id', 'desc')
                     ->with([
                         'guest',
                         'companions',
