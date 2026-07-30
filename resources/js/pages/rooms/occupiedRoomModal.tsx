@@ -257,6 +257,17 @@ export default function OccupiedRoomModal({
             currency: 'BOB',
         }).format(amount);
 
+    // 🚀 Exclusivo del desglose "Tarifa por Persona/Noche" de Delegación --
+    // la tarifa fija por cama (60/90) no necesita decimales, a diferencia
+    // del resto de montos del modal (que sí pueden tener centavos reales).
+    const formatCurrencyInt = (amount: number) =>
+        new Intl.NumberFormat('es-BO', {
+            style: 'currency',
+            currency: 'BOB',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(amount);
+
     // En occupiedRoomModal.tsx
     const calculateRealNights = () => {
         // Ancla: si hubo un traslado o un cambio de tarifa a mitad de
@@ -716,50 +727,116 @@ export default function OccupiedRoomModal({
                                             cuando en realidad cada quien
                                             paga la suya. */}
                                         {isSpecialGroup ? (
-                                            <div>
-                                                <span className="mb-1 block text-xs font-bold text-gray-500 uppercase">
-                                                    Tarifa por Persona / Noche:
-                                                </span>
-                                                <div className="space-y-0.5">
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-600">
-                                                            {liveCheckin.guest
-                                                                ?.full_name ||
-                                                                'Titular'}
-                                                        </span>
-                                                        <span className="font-bold text-gray-800">
-                                                            {formatCurrency(
-                                                                Number(
-                                                                    liveCheckin.titular_price,
-                                                                ) || 0,
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                    {liveCheckin.companions?.map(
-                                                        (c: any) => (
-                                                            <div
-                                                                key={c.id}
-                                                                className="flex justify-between text-sm"
-                                                            >
-                                                                <span className="text-gray-600">
-                                                                    {
-                                                                        c.full_name
+                                            groupAgreement?.type ===
+                                            'delegacion' ? (
+                                                <div>
+                                                    <span className="mb-1 block text-xs font-bold text-gray-500 uppercase">
+                                                        Tarifa por Persona /
+                                                        Noche:
+                                                    </span>
+                                                    <div className="space-y-0.5">
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-gray-600">
+                                                                {liveCheckin
+                                                                    .guest
+                                                                    ?.full_name ||
+                                                                    'Titular'}
+                                                            </span>
+                                                            <span className="flex items-center gap-1.5 font-bold text-gray-800">
+                                                                {formatCurrencyInt(
+                                                                    Number(
+                                                                        liveCheckin.titular_price,
+                                                                    ) || 0,
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setShowChangePriceModal(
+                                                                            true,
+                                                                        )
                                                                     }
-                                                                </span>
-                                                                <span className="font-bold text-gray-800">
-                                                                    {formatCurrency(
-                                                                        Number(
-                                                                            c
-                                                                                .pivot
-                                                                                ?.price,
-                                                                        ) || 0,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        ),
-                                                    )}
+                                                                    title="Cambiar tarifa del titular a partir de hoy"
+                                                                    className="text-gray-400 transition hover:text-emerald-600"
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </span>
+                                                        </div>
+                                                        {liveCheckin.companions?.map(
+                                                            (c: any) => (
+                                                                <div
+                                                                    key={c.id}
+                                                                    className="flex justify-between text-sm"
+                                                                >
+                                                                    <span className="text-gray-600">
+                                                                        {
+                                                                            c.full_name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="font-bold text-gray-800">
+                                                                        {formatCurrencyInt(
+                                                                            Number(
+                                                                                c
+                                                                                    .pivot
+                                                                                    ?.price,
+                                                                            ) ||
+                                                                                0,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            ),
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            ) : (
+                                                <div>
+                                                    <span className="mb-1 block text-xs font-bold text-gray-500 uppercase">
+                                                        Tarifa por Persona /
+                                                        Noche:
+                                                    </span>
+                                                    <div className="space-y-0.5">
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-gray-600">
+                                                                {liveCheckin
+                                                                    .guest
+                                                                    ?.full_name ||
+                                                                    'Titular'}
+                                                            </span>
+                                                            <span className="font-bold text-gray-800">
+                                                                {formatCurrency(
+                                                                    Number(
+                                                                        liveCheckin.titular_price,
+                                                                    ) || 0,
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                        {liveCheckin.companions?.map(
+                                                            (c: any) => (
+                                                                <div
+                                                                    key={c.id}
+                                                                    className="flex justify-between text-sm"
+                                                                >
+                                                                    <span className="text-gray-600">
+                                                                        {
+                                                                            c.full_name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="font-bold text-gray-800">
+                                                                        {formatCurrency(
+                                                                            Number(
+                                                                                c
+                                                                                    .pivot
+                                                                                    ?.price,
+                                                                            ) ||
+                                                                                0,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )
                                         ) : (
                                             <div className="flex items-center justify-between text-sm text-gray-500">
                                                 <span className="font-bold">
@@ -2018,6 +2095,8 @@ export default function OccupiedRoomModal({
                 onClose={() => setShowChangePriceModal(false)}
                 checkinId={liveCheckin.id}
                 currentPrice={pricePerNight}
+                isDelegacion={groupAgreement?.type === 'delegacion'}
+                titularPrice={Number(liveCheckin.titular_price) || 0}
                 anchorDate={
                     liveCheckin.price_effective_since ||
                     liveCheckin.check_in_date

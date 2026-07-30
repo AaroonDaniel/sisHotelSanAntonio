@@ -363,7 +363,7 @@ class RoomController
         $groupAccounts = \App\Models\SpecialAgreement::groupAccounts()
             ->where('status', '!=', 'cerrado')
             ->orderBy('company_name')
-            ->get(['id', 'type', 'company_name', 'origin', 'total_advance', 'total_consumed'])
+            ->get(['id', 'type', 'company_name', 'origin'])
             ->map(fn ($a) => [
                 'id' => $a->id,
                 'type' => $a->type,

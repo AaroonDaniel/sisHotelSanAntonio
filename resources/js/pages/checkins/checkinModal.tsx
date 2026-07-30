@@ -541,6 +541,14 @@ export default function CheckinModal({
     // vinculado a una Cuenta Grupal o es un convenio individual ad-hoc.
     const isDelegationType = data.type === 'delegacion';
 
+    // 🐛 BUG CORREGIDO: el candado financiero de "Asignación Corporativa"
+    // (adelanto obligatorio > 0) solo miraba 'corporativo' y dejaba pasar
+    // 'delegacion' con Bs 0 -- en todo el resto del código ambos tipos se
+    // tratan como el mismo "trato especial" (ver CheckinController::store(),
+    // SpecialAgreement::scopeGroupAccounts()). Un solo booleano evita que
+    // vuelva a desincronizarse.
+    const isSpecialDealType = data.type === 'corporativo' || isDelegationType;
+
     // 🚀 SELECTOR "TIPO DE REGISTRO" (reemplaza el checkbox "ASIG. CORP"):
     // Normal / Corporativo / Delegación. Corporativo y Delegación aplican
     // el mismo descuento base de -20 Bs que antes aplicaba el checkbox
@@ -594,15 +602,20 @@ export default function CheckinModal({
                     : '',
             }));
         } else {
-            const precioConvenio = Math.max(0, origPrice - 20);
+            // 🚀 TARIFA FIJA DELEGACIÓN: se cuenta POR CAMA -- monto fijo
+            // por persona según el tipo de baño de la habitación (Bs 60
+            // compartido / Bs 90 privado), mismo patrón que Corporativo
+            // (60/100) pero con su propia tarifa. Reemplaza el viejo
+            // descuento de "-20 Bs sobre el precio de tabla". Editable de
+            // inmediato por persona en el carrusel (mismo campo "Precio
+            // Huésped N" que ya usa Corporativo).
+            const bathroomType = selectedRoom?.price?.bathroom_type;
+            const precioConvenio = bathroomType === 'shared' ? 60 : 90;
             setData((prev) => ({
                 ...prev,
                 type: tipo,
                 auto_adjust_price: false,
                 agreed_price: precioConvenio,
-                // 🚀 PRECIO POR PERSONA: arranca igualado al precio de
-                // convenio (sin acompañantes todavía) -- editable de
-                // inmediato por persona en el carrusel.
                 titular_price: precioConvenio,
                 corporate_days: 0,
                 group_account_id: keepGroupAccount
@@ -797,6 +810,18 @@ export default function CheckinModal({
                     (r: any) => String(r.id) === String(checkinToEdit.room_id),
                 );
                 const originalRoomPrice = currentRoomObj?.price?.amount || 0;
+                // 🚀 TARIFA FIJA DELEGACIÓN (por cama): cuando la reserva se
+                // confirma (ReservationController::update(), rama
+                // CONFIRMADO), el Checkin nace con agreed_price=0 y SIN
+                // titular_price a propósito -- el precio se completa recién
+                // acá, al abrir la asignación para editarla. Si todavía no
+                // tiene titular_price guardado, se sugiere Bs 60 (baño
+                // compartido) / 90 (privado) en vez de dejarlo vacío.
+                const editBathroomType = currentRoomObj?.price?.bathroom_type;
+                const isDelegacionEdit =
+                    checkinToEdit.special_agreement?.type === 'delegacion';
+                const delegacionDefaultPrice =
+                    editBathroomType === 'shared' ? 60 : 90;
 
                 // 2. Leemos directamente de la base de datos si tiene el convenio de Ajuste de Precio
                 // 🚀 CORREGIDO: auto_adjust_price SOLO se activa si la BD registró
@@ -858,13 +883,18 @@ export default function CheckinModal({
                             ? checkinToEdit.special_agreement.type
                             : 'estandar',
                     agreed_price:
-                        checkinToEdit.agreed_price ||
-                        checkinToEdit.special_agreement?.agreed_price ||
-                        Number(originalRoomPrice),
+                        isDelegacionEdit && !checkinToEdit.titular_price
+                            ? delegacionDefaultPrice
+                            : checkinToEdit.agreed_price ||
+                              checkinToEdit.special_agreement?.agreed_price ||
+                              Number(originalRoomPrice),
                     // 🚀 PRECIO POR HUÉSPED (Fase 1): si el checkin nunca se
-                    // migró (titular_price null), queda '' — el Total sigue
-                    // siendo editable de golpe, como siempre.
-                    titular_price: checkinToEdit.titular_price ?? '',
+                    // migró (titular_price null), queda '' -- salvo
+                    // Delegación, que sugiere la tarifa fija por cama
+                    // (60/90 según baño) en vez de dejarlo vacío.
+                    titular_price:
+                        checkinToEdit.titular_price ??
+                        (isDelegacionEdit ? delegacionDefaultPrice : ''),
                     // 🚀 FRECUENCIA DE PAGO POR HUÉSPED: viaja aparte del
                     // convenio (corporate_payment_schedules, inyectado por
                     // RoomController::attachPaymentFrequencies()) -- ya no
@@ -1414,15 +1444,20 @@ export default function CheckinModal({
                 profession: '',
                 origin: '',
                 phone: '',
-                // 🚀 TARIFA FIJA CORPORATIVO: cada acompañante nuevo
-                // arranca con la misma tarifa por persona que el titular
-                // (Bs 60 compartido / Bs 100 privado), no vacío.
+                // 🚀 TARIFA FIJA CORPORATIVO/DELEGACIÓN: cada acompañante
+                // nuevo arranca con la misma tarifa POR CAMA que el
+                // titular (Bs 60 compartido / Bs 100 corporativo ó Bs 90
+                // delegación en baño privado), no vacío.
                 price:
                     data.type === 'corporativo'
                         ? currentRoom?.price?.bathroom_type === 'shared'
                             ? 60
                             : 100
-                        : '',
+                        : data.type === 'delegacion'
+                          ? currentRoom?.price?.bathroom_type === 'shared'
+                              ? 60
+                              : 90
+                          : '',
             };
             setData('companions', [...companionsList, newCompanion]);
             setCurrentIndex((prev) => prev + 1);
@@ -1692,17 +1727,17 @@ export default function CheckinModal({
         }
 
         // =========================================================
-        // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA
+        // 🛑 CANDADO DE SEGURIDAD: ASIGNACIÓN CORPORATIVA/DELEGACIÓN
         // No aplica en Check-in Rápido a Cuenta Grupal: ahí el costo se
         // descuenta del adelanto de la cuenta, nunca se cobra en efectivo.
         // =========================================================
-        if (data.type === 'corporativo' && !isQuickGroupMode) {
+        if (isSpecialDealType && !isQuickGroupMode) {
             const montoAdelanto = Number(data.advance_payment);
 
             if (!montoAdelanto || montoAdelanto <= 0) {                
                 // 1. Alerta en pantalla
                 alert(
-                    "⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.",
+                    "⚠️ ALERTA FINANCIERA:\n\nNo se puede activar la 'Asignación Corporativa/Delegación' sin recibir dinero.\nPor favor, ingresa el monto en el campo de 'Monto de Adelanto'.",
                 );
                 return; // 🛑 EL CANDADO SE CIERRA
             }
@@ -3044,45 +3079,15 @@ export default function CheckinModal({
                                     </div>
                                     )}
 
-                                    {/* 🚀 PRECIO POR PERSONA: exclusivo de
-                                    delegación (convenio institucional, ej.
-                                    Bs 90 a uno y Bs 100 a otro). Corporativo
-                                    ya NO usa este campo aparte -- su precio
-                                    por persona se edita directo en la
-                                    tarjeta verde "HAB {número}" (más abajo).
-                                    Una asignación NORMAL no pasa por acá --
-                                    su precio es siempre el de tabla
+                                    {/* 🚀 PRECIO POR PERSONA: tanto Corporativo
+                                    como Delegación editan su precio por
+                                    persona (por cama) directo en la tarjeta
+                                    verde "HAB {número}" (más abajo, campo
+                                    "Precio Huésped N") -- ya no hay campo
+                                    aparte acá para ninguno de los dos. Una
+                                    asignación NORMAL no pasa por acá -- su
+                                    precio es siempre el de tabla
                                     (Price/RoomType). */}
-                                    {data.type === 'delegacion' && (
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">
-                                                Precio (por noche)
-                                            </label>
-                                            <div className="relative">
-                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                                    <span className="text-sm font-bold text-gray-400">
-                                                        Bs
-                                                    </span>
-                                                </div>
-                                                <input
-                                                    type="number"
-                                                    step="0.10"
-                                                    min={0}
-                                                    value={
-                                                        currentPerson.price ??
-                                                        ''
-                                                    }
-                                                    disabled={isReadOnly}
-                                                    onChange={(e) =>
-                                                        handlePriceChange(
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="block w-full rounded-xl border border-gray-400 py-2 pl-9 text-sm font-bold text-black [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
@@ -3550,27 +3555,21 @@ export default function CheckinModal({
                                                         );
                                                 }
 
-                                                const isAutoAdjusted =
-                                                    finalPrice !==
-                                                    originalPrice;
                                                 const occupantsCount =
                                                     1 +
                                                     (data.companions?.length ||
                                                         0);
-                                                const priceDelta =
-                                                    finalPrice - originalPrice;
 
                                                 let noches =
                                                     Number(
                                                         data.duration_days,
                                                     ) || 0;
-                                                let tituloTotal = isAutoAdjusted
-                                                    ? 'Total a cobrar'
-                                                    : 'Total sugerido';
 
-                                                // 🚀 CORREGIDO: Corporativo y Delegación ya NO comparten la misma
-                                                // rama. Delegación no tiene ciclos ni "noches" — es un monto TOTAL
-                                                // fijo pactado para toda la estadía.
+                                                // 🚀 Corporativo y Delegación ya NO pasan por esta rama --
+                                                // ambos editan su precio POR PERSONA en la tarjeta verde de
+                                                // más abajo ("Precio Huésped N"). Esto queda exclusivo de
+                                                // 'estandar' (precio de tabla × noches, sin desglose por
+                                                // persona).
                                                 if (
                                                     data.type === 'corporativo'
                                                 ) {
@@ -3578,38 +3577,16 @@ export default function CheckinModal({
                                                         Number(
                                                             data.corporate_days,
                                                         ) || 1;
-                                                    tituloTotal = `Cobro (cada ${noches} días)`;
-                                                } else if (
-                                                    data.type === 'delegacion'
-                                                ) {
-                                                    noches = 1;
-                                                    tituloTotal =
-                                                        'Monto Total Acordado';
                                                 }
 
                                                 const total = redondearMoneda(
                                                     finalPrice * noches,
                                                 );
 
-                                                // 🔒 Límites: Estándar/Corporativo mantienen el tope original
-                                                // (precio de tabla × noches/ciclo). Delegación usa precio de
-                                                // tabla × duración real de la estadía como resguardo básico,
-                                                // ya que aquí "noches" siempre vale 1.
                                                 const maxTotal =
-                                                    data.type === 'delegacion'
-                                                        ? redondearMoneda(
-                                                              Math.max(
-                                                                  originalPrice *
-                                                                      (Number(
-                                                                          data.duration_days,
-                                                                      ) || 1),
-                                                                  finalPrice,
-                                                              ),
-                                                          )
-                                                        : redondearMoneda(
-                                                              originalPrice *
-                                                                  noches,
-                                                          );
+                                                    redondearMoneda(
+                                                        originalPrice * noches,
+                                                    );
 
                                                 const minTotal = 0;
 
@@ -3631,12 +3608,16 @@ export default function CheckinModal({
                                                             </span>
                                                         </div>
 
-                                                        {/* DERECHA: corporativo edita el precio POR PERSONA
-                                                            actual acá mismo (ya no hay campo aparte en la
-                                                            ficha); delegación/estándar siguen editando el
-                                                            total como antes. */}
+                                                        {/* DERECHA: corporativo y delegación editan el precio
+                                                            POR PERSONA (por cama) acá mismo -- ya no hay
+                                                            campo de "Monto Total Acordado" aparte para
+                                                            delegación, se cuenta por cama igual que
+                                                            corporativo; estándar sigue editando el total
+                                                            como antes. */}
                                                         {data.type ===
-                                                        'corporativo' ? (
+                                                            'corporativo' ||
+                                                        data.type ===
+                                                            'delegacion' ? (
                                                             <div className="flex flex-col items-end border-l border-green-200 pl-4 text-right">
                                                                 <label className="text-[10px] font-bold text-green-700 uppercase">
                                                                     Precio
@@ -3774,21 +3755,19 @@ export default function CheckinModal({
                                                                                 );
 
                                                                             // 🚀 ASIGNACIÓN NORMAL: agreed_price
-                                                                            // se edita directo acá, sin pasar por
-                                                                            // titular_price (exclusivo de
-                                                                            // delegación -- corporativo ya no
-                                                                            // pasa por esta rama).
+                                                                            // se edita directo acá, como precio de
+                                                                            // tabla × noches -- corporativo y
+                                                                            // delegación ya no pasan por esta
+                                                                            // rama (editan por persona en la
+                                                                            // tarjeta "Precio Huésped N").
                                                                             const valorAGuardar =
-                                                                                data.type ===
-                                                                                'delegacion'
-                                                                                    ? inputVal
-                                                                                    : redondearMoneda(
-                                                                                          noches >
-                                                                                              0
-                                                                                              ? inputVal /
-                                                                                                    noches
-                                                                                              : inputVal,
-                                                                                      );
+                                                                                redondearMoneda(
+                                                                                    noches >
+                                                                                        0
+                                                                                        ? inputVal /
+                                                                                              noches
+                                                                                        : inputVal,
+                                                                                );
 
                                                                             setData(
                                                                                 (
@@ -4196,16 +4175,14 @@ export default function CheckinModal({
                                                                 !isTitular
                                                             }
                                                             required={
-                                                                data.type ===
-                                                                'corporativo'
+                                                                isSpecialDealType
                                                             }
                                                             className={`block w-full [appearance:textfield] rounded-xl border py-2 pl-9 text-sm font-bold text-black focus:border-green-500 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-                                                                data.type ===
-                                                                    'corporativo' &&
+                                                                isSpecialDealType &&
                                                                 (!data.advance_payment ||
                                                                     data.advance_payment <=
                                                                         0)
-                                                                    ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo
+                                                                    ? 'border-red-500 bg-red-50' // Se pinta de rojo si está vacío y es corporativo/delegación
                                                                     : 'border-gray-400'
                                                             }`}
                                                             placeholder="0"

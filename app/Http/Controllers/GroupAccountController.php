@@ -176,4 +176,54 @@ class GroupAccountController extends Controller
             return redirect()->back()->with('success', $mensaje);
         });
     }
+
+    /**
+     * Finaliza la Cuenta Grupal (Fase 4): pasa a status='cerrado' +
+     * closed_at=now(). Con esto sale para siempre de este listado (índice
+     * excluye 'cerrado') y del selector de "Check-in Rápido"
+     * (RoomController::status()), y los comandos de cobro diario dejan de
+     * generarle cargos nuevos (ChargeGroupAccountsDailyCommand,
+     * ChargeCorporatePaymentSchedulesCommand -- ambos ya excluyen
+     * 'cerrado').
+     *
+     * Bloqueada mientras tenga habitaciones activas: cerrar con checkins
+     * activos les cortaría la facturación diaria en silencio (el
+     * cron seguiría corriendo para esos checkins, pero
+     * whereHas('specialAgreement', ...'!=', 'cerrado') los excluiría de
+     * un momento a otro, dejando de cobrarles sin que nadie se entere).
+     *
+     * POST /group-accounts/{groupAccount}/close
+     */
+    public function close(SpecialAgreement $groupAccount)
+    {
+        if ($groupAccount->status === 'cerrado') {
+            return redirect()->back()->with('error', 'Esta Cuenta Grupal ya está finalizada.');
+        }
+
+        $habitacionesActivas = $groupAccount->checkins()->where('status', 'activo')->count();
+        if ($habitacionesActivas > 0) {
+            return redirect()->back()->with(
+                'error',
+                "No se puede finalizar: todavía tiene {$habitacionesActivas} habitación(es) activa(s). Hay que hacer checkout primero.",
+            );
+        }
+
+        $saldoFinal = $groupAccount->balance;
+
+        $groupAccount->update([
+            'status' => 'cerrado',
+            'closed_at' => now(),
+        ]);
+
+        $detalleSaldo = $saldoFinal > 0
+            ? "Queda un saldo a favor de Bs {$saldoFinal} sin reclamar."
+            : ($saldoFinal < 0
+                ? 'Queda una deuda pendiente de Bs ' . abs($saldoFinal) . '.'
+                : 'Saldo en cero.');
+
+        return redirect()->back()->with(
+            'success',
+            "Cuenta Grupal '{$groupAccount->company_name}' finalizada. {$detalleSaldo}",
+        );
+    }
 }

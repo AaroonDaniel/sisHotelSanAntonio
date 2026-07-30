@@ -2,9 +2,6 @@
 
 namespace App\Http\Controllers;
 
-// Si usas FPDF globalmente, esta línea a veces sobra, 
-// pero la dejo porque en tu código anterior estaba.
-use Fpdf;
 use Carbon\Carbon;
 use App\Models\Checkin;
 use App\Models\Guest;
@@ -427,9 +424,18 @@ class CheckinController extends Controller
 
             if ($isSpecialDeal) {
                 // CONVENIO CERRADO: el precio lo fija el Gerente/recepción.
+                // 🐛 CORREGIDO: el fallback (cuando el frontend no manda
+                // agreed_price) usaba la vieja regla "-20 Bs sobre precio de
+                // tabla", ya reemplazada por la tarifa fija POR CAMA que usa
+                // checkinModal.tsx (handleTipoRegistroChange): Bs 60 baño
+                // compartido / 100 corporativo ó 90 delegación en privado.
+                $bathroomType = $roomModelForPrice->price->bathroom_type ?? null;
+                $tarifaPorDefecto = $bathroomType === 'shared'
+                    ? 60
+                    : ($request->input('type') === 'delegacion' ? 90 : 100);
                 $agreedPrice = $request->filled('agreed_price')
                     ? (float) $request->input('agreed_price')
-                    : max(0, $basePrice - 20);
+                    : $tarifaPorDefecto;
             } elseif ($isAutoAdjust) {
                 // AHORA: Solo recalculamos matemáticamente si presionaron "Auto ajuste"
                 $agreedPrice = $this->calculateAgreedPrice($validatedCheckin['room_id'], $totalGuest);
@@ -631,13 +637,24 @@ class CheckinController extends Controller
                 }
             }
 
-            // --- FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación) ---
+            // --- FRECUENCIA DE PAGO POR HUÉSPED (exclusivo CORPORATIVO) ---
             // 🚀 Clavada por (guest_id, special_agreement_id), no por
             // checkin_id -- así sobrevive cualquier transferencia de
             // habitación sin código de arrastre (ver migración
             // create_corporate_payment_schedules_table). Independiente del
             // precio, que sigue viviendo en titular_price/checkin_guests.price.
-            if ($isSpecialDeal && $specialAgreementId) {
+            //
+            // 🐛 BUG CORREGIDO: antes entraba también para 'delegacion'. El
+            // frontend manda corporate_days=0 para ese tipo (selector
+            // oculto) y $request->filled(0) da TRUE (blank(0) es false en
+            // Laravel) -- eso creaba SIEMPRE una fila con
+            // payment_frequency_days=0, que ChargesCorporatePaymentSchedule
+            // redondea a 1 día (max(1, ...)) y ChargeCorporatePaymentSchedulesCommand
+            // (corre diario, ver routes/console.php) empezaba a cobrar
+            // ciclos de 1 día contra el fondo del grupo -- Delegación debe
+            // cobrarse UNA sola vez, el monto total, al checkout, sin
+            // ciclos. Ahora este bloque es exclusivo de 'corporativo'.
+            if ($isSpecialDeal && $specialAgreementId && $request->input('type') === 'corporativo') {
                 if ($request->filled('corporate_days')) {
                     $titularSchedule = \App\Models\CorporatePaymentSchedule::updateOrCreate(
                         ['guest_id' => $guestId, 'special_agreement_id' => $specialAgreementId],
@@ -1482,13 +1499,23 @@ class CheckinController extends Controller
                 );
                 $checkin->special_agreement_id = $agreement->id;
 
-                // --- FRECUENCIA DE PAGO POR HUÉSPED (corporativo/delegación) ---
-                // 🚀 Solo para corporativo/delegación real -- el auto-ajuste
+                // --- FRECUENCIA DE PAGO POR HUÉSPED (exclusivo CORPORATIVO) ---
+                // 🚀 Solo para corporativo real -- el auto-ajuste
                 // (isAutoAdjustNow) no tiene precio ni frecuencia por
                 // persona, es un solo checkin normal con tarifa recalculada.
                 // Clavada por (guest_id, special_agreement_id), no por
                 // checkin_id -- ver migración create_corporate_payment_schedules_table.
-                if (in_array($typeRequest, ['corporativo', 'delegacion']) && $request->filled('corporate_days')) {
+                //
+                // 🐛 BUG CORREGIDO: antes incluía 'delegacion'. El frontend
+                // manda corporate_days=0 para ese tipo (selector oculto) y
+                // filled(0) da TRUE en Laravel (blank(0) es false) -- eso
+                // creaba SIEMPRE un schedule con payment_frequency_days=0,
+                // que se redondeaba a un ciclo de 1 día (ChargesCorporatePaymentSchedule::chargeGuestCycles(),
+                // max(1, ...)) y se cobraba de inmediato acá mismo (más
+                // abajo) además de repetirse cada noche vía
+                // ChargeCorporatePaymentSchedulesCommand -- Delegación debe
+                // cobrarse UNA sola vez, el monto total, al checkout.
+                if ($typeRequest === 'corporativo' && $request->filled('corporate_days')) {
                     $titularSchedule = \App\Models\CorporatePaymentSchedule::updateOrCreate(
                         ['guest_id' => $guestIdToUse, 'special_agreement_id' => $agreement->id],
                         ['payment_frequency_days' => (int) $request->input('corporate_days')],
@@ -2395,10 +2422,34 @@ class CheckinController extends Controller
             return redirect()->back()->with('error', 'Solo se puede cambiar la tarifa de una estadía activa.');
         }
 
-        $precioViejo = (float) ($checkin->agreed_price ?? 0);
-        $precioNuevo = (float) $validated['new_price'];
+        // 🚀 DELEGACIÓN: cada huésped tiene su propio precio (titular_price
+        // + checkin_guests.price) -- acá solo se edita el del TITULAR (los
+        // acompañantes se editan aparte, en checkinModal). 'new_price'
+        // representa el precio del titular, no el total combinado.
+        $isDelegacion = optional($checkin->specialAgreement)->type === 'delegacion';
 
-        if (abs($precioNuevo - $precioViejo) < 0.01) {
+        // $precioViejo/$precioNuevo son el TOTAL combinado por noche --
+        // sirve igual para congelar la deuda de noches ya transcurridas,
+        // sin importar si el cambio vino de un solo precio (normal) o del
+        // titular de un desglose por persona (delegación).
+        $precioViejo = (float) ($checkin->agreed_price ?? 0);
+        $nuevoPrecioInput = (float) $validated['new_price'];
+
+        $sumaAcompanantes = $isDelegacion
+            ? (float) $checkin->companions()->sum('checkin_guests.price')
+            : 0.0;
+        $precioNuevo = $isDelegacion
+            ? round($nuevoPrecioInput + $sumaAcompanantes, 1)
+            : $nuevoPrecioInput;
+
+        // El "¿es realmente un cambio?" se compara contra lo que el
+        // usuario está editando de verdad: el titular en Delegación, el
+        // total combinado en el resto.
+        $precioReferenciaViejo = $isDelegacion
+            ? (float) ($checkin->titular_price ?? 0)
+            : $precioViejo;
+
+        if (abs($nuevoPrecioInput - $precioReferenciaViejo) < 0.01) {
             return redirect()->back()->with('error', 'El nuevo precio es igual al actual.');
         }
 
@@ -2415,7 +2466,7 @@ class CheckinController extends Controller
 
         $operator = User::findOrFail($validated['operator_id']);
 
-        return DB::transaction(function () use ($checkin, $operator, $vigenciaDesde, $precioViejo, $precioNuevo) {
+        return DB::transaction(function () use ($checkin, $operator, $vigenciaDesde, $precioViejo, $precioNuevo, $nuevoPrecioInput, $isDelegacion) {
             // waivePenalty=true: solo queremos el conteo de noches limpio
             // (calendario), sin la penalidad de salida tardía —
             // irrelevante para congelar tarifa a mitad de estadía.
@@ -2425,14 +2476,21 @@ class CheckinController extends Controller
             $noteAddition = " | CAMBIO DE TARIFA: {$diasCongelados} noche(s) a {$precioViejo} Bs "
                 . '(= ' . number_format($deudaCongelada, 2) . ' Bs arrastrados). '
                 . "Nueva tarifa: {$precioNuevo} Bs/noche desde " . $vigenciaDesde->format('d/m/Y H:i')
-                . " (autorizado por {$operator->full_name}).";
+                . " (autorizado por {$operator->full_name})."
+                . ($isDelegacion ? " [Delegación: titular a {$nuevoPrecioInput} Bs, resto sin cambio]" : '');
 
             if ($deudaCongelada > 0) {
                 $checkin->increment('carried_balance', $deudaCongelada);
             }
 
+            // 🚀 DELEGACIÓN: se escribe titular_price (no agreed_price
+            // directo) -- CheckinObserver::saving() recalcula agreed_price
+            // = titular_price + Σ companions.price en este mismo guardado,
+            // sin que quede desincronizado.
             $checkin->update([
-                'agreed_price' => $precioNuevo,
+                ...($isDelegacion
+                    ? ['titular_price' => $nuevoPrecioInput]
+                    : ['agreed_price' => $precioNuevo]),
                 'price_effective_since' => $vigenciaDesde,
                 'notes' => $checkin->notes . $noteAddition,
             ]);
@@ -4216,11 +4274,6 @@ class CheckinController extends Controller
         )->header('Content-Type', 'application/pdf');
     }
 
-    /**
-     * @deprecated Cuerpo legado de la generación FPDF inline, conservado
-     * únicamente como referencia de las líneas que se movieron al Job
-     * GenerateCheckoutReceipt. No se usa en ningún flujo activo.
-     */
     /**
      * Valida que los servicios con capacidad limitada (ej. Garaje con quantity=12)
      * aún tengan espacios disponibles antes de asignarlos a un check-in.

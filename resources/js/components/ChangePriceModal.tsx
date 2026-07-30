@@ -14,7 +14,17 @@ interface ChangePriceModalProps {
     show: boolean;
     onClose: () => void;
     checkinId: number;
+    // Total combinado ACTUAL por noche (titular + acompañantes) -- se
+    // sigue usando tal cual para la deuda congelada de noches ya
+    // transcurridas, sin importar el tipo.
     currentPrice: number;
+    // 🚀 DELEGACIÓN: cada persona tiene su propio precio (titular_price +
+    // checkin_guests.price) -- este modal solo edita el del TITULAR (los
+    // acompañantes se editan aparte, en checkinModal). isDelegacion cambia
+    // qué representa el input "Nuevo Precio": el titular solo, no el total.
+    isDelegacion?: boolean;
+    // Precio actual del titular a solas (solo relevante si isDelegacion).
+    titularPrice?: number;
     // price_effective_since ?? check_in_date: desde cuándo rige la tarifa
     // ACTUAL (mismo ancla que usa el backend en calculateBillableDays()).
     anchorDate: string;
@@ -51,6 +61,8 @@ export default function ChangePriceModal({
     onClose,
     checkinId,
     currentPrice,
+    isDelegacion = false,
+    titularPrice = 0,
     anchorDate,
     existingCarriedBalance,
     servicesCost,
@@ -64,9 +76,28 @@ export default function ChangePriceModal({
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // 🚀 DELEGACIÓN: el input edita solo al titular -- "currentPrice" sigue
+    // siendo el TOTAL combinado (para la deuda congelada de noches ya
+    // transcurridas, que no cambia según quién editó qué). La suma de
+    // acompañantes se deriva restando el titular actual del total actual.
+    const companionsSum = isDelegacion
+        ? Math.max(0, currentPrice - titularPrice)
+        : 0;
+    // Precio de referencia contra el que se compara "¿esto es realmente un
+    // cambio?": el del titular en Delegación, el total combinado en el
+    // resto (donde no hay desglose por persona).
+    const referencePrice = isDelegacion ? titularPrice : currentPrice;
+
     const preview = useMemo(() => {
-        const nuevoPrecio = parseFloat(newPrice);
-        if (isNaN(nuevoPrecio) || !effectiveDate) return null;
+        const nuevoPrecioInput = parseFloat(newPrice);
+        if (isNaN(nuevoPrecioInput) || !effectiveDate) return null;
+
+        // En Delegación, el total nuevo por noche = titular editado +
+        // acompañantes (que no cambian acá) -- en el resto, el input YA es
+        // el total.
+        const nuevoTotalPorNoche = isDelegacion
+            ? nuevoPrecioInput + companionsSum
+            : nuevoPrecioInput;
 
         const anchor = new Date(anchorDate);
         const efectiva = new Date(effectiveDate + 'T00:00:00');
@@ -76,7 +107,8 @@ export default function ChangePriceModal({
         const deudaCongelada = diasCongelados * currentPrice;
 
         const diasNuevaTarifaHastaHoy = diffDaysMinOne(efectiva, hoy);
-        const montoNuevaTarifaHastaHoy = diasNuevaTarifaHastaHoy * nuevoPrecio;
+        const montoNuevaTarifaHastaHoy =
+            diasNuevaTarifaHastaHoy * nuevoTotalPorNoche;
 
         const totalEstimadoHoy =
             existingCarriedBalance +
@@ -90,6 +122,7 @@ export default function ChangePriceModal({
             diasNuevaTarifaHastaHoy,
             montoNuevaTarifaHastaHoy,
             totalEstimadoHoy,
+            nuevoTotalPorNoche,
         };
     }, [
         newPrice,
@@ -98,6 +131,8 @@ export default function ChangePriceModal({
         currentPrice,
         existingCarriedBalance,
         servicesCost,
+        isDelegacion,
+        companionsSum,
     ]);
 
     const canSubmit =
@@ -105,7 +140,7 @@ export default function ChangePriceModal({
         newPrice !== '' &&
         !isNaN(parseFloat(newPrice)) &&
         parseFloat(newPrice) >= 0 &&
-        Math.abs(parseFloat(newPrice) - currentPrice) >= 0.01 &&
+        Math.abs(parseFloat(newPrice) - referencePrice) >= 0.01 &&
         !!effectiveDate;
 
     const handleClose = () => {
@@ -167,16 +202,20 @@ export default function ChangePriceModal({
 
                 <form onSubmit={submit} className="space-y-4 p-5">
                     <p className="text-xs text-gray-500">
-                        Tarifa actual:{' '}
+                        {isDelegacion
+                            ? 'Tarifa actual del titular:'
+                            : 'Tarifa actual:'}{' '}
                         <span className="font-bold text-gray-700">
-                            {formatCurrency(currentPrice)} / noche
+                            {formatCurrency(referencePrice)} / noche
                         </span>
                     </p>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="mb-1 block text-xs font-semibold text-gray-600">
-                                Nuevo Precio / Noche
+                                {isDelegacion
+                                    ? 'Nuevo Precio Titular / Noche'
+                                    : 'Nuevo Precio / Noche'}
                             </label>
                             <input
                                 type="number"
@@ -231,9 +270,14 @@ export default function ChangePriceModal({
                             <p>
                                 🆕 Desde esa fecha, cada noche se cobra a{' '}
                                 <strong>
-                                    {formatCurrency(parseFloat(newPrice) || 0)}
+                                    {formatCurrency(
+                                        preview.nuevoTotalPorNoche,
+                                    )}
                                 </strong>{' '}
-                                / noche.
+                                / noche
+                                {isDelegacion &&
+                                    ' (titular + acompañantes)'}
+                                .
                             </p>
                             <div className="my-1 border-t border-dashed border-emerald-200" />
                             <p className="text-sm font-bold">

@@ -104,11 +104,6 @@ class Checkin extends Model
         return $this->belongsTo(Room::class);
     }
 
-    public function reservation(): BelongsTo
-    {
-        return $this->belongsTo(Reservation::class);
-    }
-
     // El cliente hospedado
     public function guest(): BelongsTo
     {

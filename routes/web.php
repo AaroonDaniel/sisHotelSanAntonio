@@ -108,7 +108,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // --- RECEPCIÓN (CHECKS) ---
     Route::get('/checks', [CheckinController::class, 'index'])->name('checks.index');
-    Route::get('/checks/crear', [CheckinController::class, 'create'])->name('checks.create');
     Route::post('/checks', [CheckinController::class, 'store'])->name('checks.store');
     Route::put('/checks/{checkin}', [CheckinController::class, 'update'])->name('checks.update');
     Route::delete('/checks/{checkin}', [CheckinController::class, 'destroy'])->name('checks.destroy');
@@ -154,6 +153,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/group-accounts', [GroupAccountController::class, 'index'])->name('group-accounts.index');
     Route::post('/group-accounts', [GroupAccountController::class, 'store'])->name('group-accounts.store');
     Route::post('/group-accounts/{groupAccount}/advance', [GroupAccountController::class, 'addAdvance'])->name('group-accounts.advance');
+    Route::post('/group-accounts/{groupAccount}/close', [GroupAccountController::class, 'close'])->name('group-accounts.close');
 
     // Detalle de asignacion
     Route::get('/checkindetails', [CheckinDetailController::class, 'index'])->name('checkindetails.index');

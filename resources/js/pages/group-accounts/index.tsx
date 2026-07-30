@@ -16,6 +16,7 @@ import {
     BedDouble,
     Building2,
     GraduationCap,
+    Lock,
     MapPin,
     Plus,
     Save,
@@ -73,6 +74,10 @@ export default function GroupAccountsIndex({
     const [advanceTarget, setAdvanceTarget] = useState<GroupAccount | null>(
         null,
     );
+    const [finalizeTarget, setFinalizeTarget] = useState<GroupAccount | null>(
+        null,
+    );
+    const [finalizing, setFinalizing] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
@@ -129,6 +134,26 @@ export default function GroupAccountsIndex({
     const closeAdvanceModal = () => {
         setAdvanceTarget(null);
         resetAdvance();
+    };
+
+    const closeFinalizeModal = () => {
+        setFinalizeTarget(null);
+    };
+
+    const confirmFinalize = () => {
+        if (!finalizeTarget) return;
+        setFinalizing(true);
+        router.post(
+            `/group-accounts/${finalizeTarget.id}/close`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setFinalizing(false);
+                    setFinalizeTarget(null);
+                },
+            },
+        );
     };
 
     return (
@@ -250,17 +275,41 @@ export default function GroupAccountsIndex({
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-right text-gray-900">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    setAdvanceTarget(acc)
-                                                }
-                                            >
-                                                <Wallet className="h-3.5 w-3.5" />
-                                                Agregar Abono
-                                            </Button>
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        setAdvanceTarget(acc)
+                                                    }
+                                                >
+                                                    <Wallet className="h-3.5 w-3.5" />
+                                                    Agregar Abono
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        acc.active_rooms_count >
+                                                        0
+                                                    }
+                                                    title={
+                                                        acc.active_rooms_count >
+                                                        0
+                                                            ? 'No se puede finalizar: todavía tiene habitaciones activas.'
+                                                            : 'Finalizar Cuenta Grupal'
+                                                    }
+                                                    onClick={() =>
+                                                        setFinalizeTarget(acc)
+                                                    }
+                                                    className="text-gray-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    <Lock className="h-3.5 w-3.5" />
+                                                    Finalizar
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -682,6 +731,86 @@ export default function GroupAccountsIndex({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* --- MODAL: FINALIZAR CUENTA GRUPAL (confirmación, mismo diseño) --- */}
+            {finalizeTarget && (
+                <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 fade-in">
+                    <div className="flex w-full max-w-md animate-in flex-col overflow-hidden rounded-2xl bg-white shadow-2xl duration-200 zoom-in-95">
+                        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                            <h2 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                <div className="rounded-lg bg-gray-200 p-1.5 text-gray-700">
+                                    <Lock className="h-5 w-5" />
+                                </div>
+                                Finalizar Cuenta Grupal
+                            </h2>
+                            <button
+                                onClick={closeFinalizeModal}
+                                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 p-6">
+                            <p className="text-sm text-gray-600">
+                                Vas a finalizar{' '}
+                                <span className="font-bold text-gray-800">
+                                    {finalizeTarget.name}
+                                </span>
+                                . Ya no va a poder recibir nuevas
+                                habitaciones ni abonos, y desaparece de este
+                                listado para siempre.
+                            </p>
+
+                            <p className="text-sm text-gray-500">
+                                Saldo final: Bs{' '}
+                                <span
+                                    className={
+                                        finalizeTarget.balance < 0
+                                            ? 'font-bold text-red-600'
+                                            : 'font-bold text-emerald-600'
+                                    }
+                                >
+                                    {formatCurrency(finalizeTarget.balance)}
+                                </span>
+                            </p>
+
+                            {finalizeTarget.balance !== 0 && (
+                                <p className="rounded-lg bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                                    {finalizeTarget.balance > 0
+                                        ? 'Esta cuenta todavía tiene saldo a favor sin usar. Una vez finalizada, ese saldo queda solo como registro histórico.'
+                                        : 'Esta cuenta tiene una deuda pendiente. Una vez finalizada, ya no se le podrán generar más cargos ni cobrar ese saldo desde aquí.'}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="flex shrink-0 justify-end gap-3 border-t border-gray-100 bg-gray-50 p-4">
+                            <button
+                                type="button"
+                                onClick={closeFinalizeModal}
+                                className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={finalizing}
+                                onClick={confirmFinalize}
+                                className="flex items-center gap-2 rounded-xl bg-gray-800 px-5 py-2 text-sm font-bold text-white shadow-md transition hover:bg-gray-900 active:scale-95 disabled:opacity-50"
+                            >
+                                {finalizing ? (
+                                    'Finalizando...'
+                                ) : (
+                                    <>
+                                        <Lock className="h-4 w-4" /> Finalizar
+                                        Cuenta
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
