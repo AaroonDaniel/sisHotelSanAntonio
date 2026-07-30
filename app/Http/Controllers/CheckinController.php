@@ -1036,6 +1036,10 @@ class CheckinController extends Controller
             $oldAgreementId = $checkin->special_agreement_id;
             $checkin->update([
                 'special_agreement_id' => null,                 // corporate_client = false
+                'titular_price'        => null,                   // 🚀 sale del modelo de precio por huésped:
+                                                                   // si queda seteado, CheckinObserver::saving()
+                                                                   // vuelve a pisar agreed_price con el precio
+                                                                   // corporativo viejo en el próximo guardado.
                 'agreed_price'         => $precioNormal,          // precio original desde ahora
                 'price_effective_since' => $ahora,
                 'duration_days'        => 1,
@@ -1424,7 +1428,13 @@ class CheckinController extends Controller
             $isSpecialGroupNow = $isAutoAdjustNow || in_array($typeRequest, ['corporativo', 'delegacion']);
 
             $hadSpecialAgreement = !is_null($checkin->special_agreement_id);
-            $precioActualGuardado = $hadSpecialAgreement ? $checkin->specialAgreement->agreed_price : $basePrice;
+            // 🚀 Se lee de $checkin->agreed_price (el precio real y ACTUAL
+            // de esta habitación), no de $checkin->specialAgreement->agreed_price:
+            // ese campo del convenio es compartido por todo el grupo y en
+            // una Cuenta Grupal real queda congelado en 0 para siempre
+            // (ver GroupAccountController::store()) -- si este fallback se
+            // disparaba (request sin 'agreed_price'), podía zerar el precio.
+            $precioActualGuardado = $hadSpecialAgreement ? $checkin->agreed_price : $basePrice;
 
             $extraNotes = "";
 

@@ -104,6 +104,15 @@ class SpecialAgreement extends Model
             'total_deposited' => $this->total_deposited,
             'total_consumed' => $this->total_consumed_real,
             'balance' => $this->balance,
+            // 🚀 Saldo REAL del libro mayor (lo que availableLedgerBalance()
+            // ya dejó 'cubierto' en group_account_charges/
+            // corporate_payment_charges) — distinto de 'balance' de arriba
+            // (que compara contra total_consumed_real, un costo TEÓRICO
+            // recalculado en vivo que puede ir adelantado o atrasado
+            // respecto de lo que el libro mayor ya procesó). Cualquier
+            // pantalla que decida cuánto cobrarle al huésped en caja
+            // (ej. multiCheckoutModal) debe usar ESTE campo, no 'balance'.
+            'available_ledger_balance' => $this->availableLedgerBalance(),
         ];
     }
 

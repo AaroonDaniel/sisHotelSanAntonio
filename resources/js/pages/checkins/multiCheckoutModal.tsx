@@ -295,7 +295,14 @@ export default function MultiCheckoutModal({
                 groupAgreementId: groupAgreement?.id ?? null,
                 groupName: groupAgreement?.company_name ?? null,
                 groupType: groupAgreement?.type ?? null,
-                groupBalance: groupAgreement?.financial_summary?.balance ?? 0,
+                // 🚀 available_ledger_balance (no 'balance'): el saldo que
+                // el checkout realmente va a descontar del fondo grupal es
+                // el del libro mayor (lo ya marcado 'cubierto'), no el
+                // costo teórico total_consumed_real recalculado en vivo —
+                // pueden estar desfasados si el cargo diario no corrió aún.
+                groupBalance:
+                    groupAgreement?.financial_summary
+                        ?.available_ledger_balance ?? 0,
             };
         })
         .filter(Boolean);

@@ -44,7 +44,7 @@ class GroupAccountController extends Controller
                 'type' => $a->type,
                 'origin' => $a->origin,
                 'total_advance' => (float) $a->total_advance,
-                'total_consumed' => (float) $a->total_consumed,
+                'total_consumed' => $a->total_consumed_real,
                 'balance' => $a->balance,
                 'active_rooms_count' => $a->checkins_count,
                 'created_at' => optional($a->created_at)->toIso8601String(),
