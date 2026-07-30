@@ -1591,13 +1591,11 @@ export default function OccupiedRoomModal({
                                                                     <label className="mb-1 block text-[12px] font-bold text-gray-500 uppercase">
                                                                         Método
                                                                     </label>
-                                                                    <div className="grid grid-cols-4 gap-1">
+                                                                    <div className="grid grid-cols-2 gap-1">
                                                                         {(
                                                                             [
                                                                                 'EFECTIVO',
                                                                                 'QR',
-                                                                                'TARJETA',
-                                                                                'TRANSFERENCIA',
                                                                             ] as const
                                                                         ).map(
                                                                             (
@@ -2247,7 +2245,7 @@ interface RefundDialogProps {
     operators: SharedOperator[];
 }
 
-type RefundMethod = 'efectivo' | 'qr' | 'transferencia' | 'tarjeta';
+type RefundMethod = 'efectivo' | 'qr';
 
 function RefundDialog({ checkinId, operators }: RefundDialogProps) {
     const [open, setOpen] = useState<boolean>(false);
@@ -2373,12 +2371,6 @@ function RefundDialog({ checkinId, operators }: RefundDialogProps) {
                                         Efectivo
                                     </SelectItem>
                                     <SelectItem value="qr">QR</SelectItem>
-                                    <SelectItem value="transferencia">
-                                        Transferencia
-                                    </SelectItem>
-                                    <SelectItem value="tarjeta">
-                                        Tarjeta
-                                    </SelectItem>
                                 </SelectContent>
                             </Select>
                             {errors.method && (

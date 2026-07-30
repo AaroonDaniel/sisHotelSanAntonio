@@ -204,7 +204,7 @@ class CheckinController extends Controller
             // Pagos y Convenios
             'selected_services' => 'nullable|array',
             'advance_payment' => 'nullable|numeric|min:0',
-            'payment_method' => 'nullable|required_if:advance_payment,>,0|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'payment_method' => 'nullable|required_if:advance_payment,>,0|in:EFECTIVO,QR',
             'qr_bank' => 'nullable|string',
             'is_temporary' => 'nullable|boolean',
             'type' => 'nullable|string|in:estandar,corporativo,delegacion',
@@ -1826,7 +1826,7 @@ class CheckinController extends Controller
         // 1. Validación
         $request->validate([
             'amount' => 'required|numeric|min:0.5', // Permitir centavos si es necesario
-            'payment_method' => 'required|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'payment_method' => 'required|in:EFECTIVO,QR',
             'qr_bank' => 'nullable|string',
             'operator_id' => 'required|exists:users,id',
         ], [
@@ -1885,7 +1885,7 @@ class CheckinController extends Controller
         // 1. Validación
         $validated = $request->validate([
             'amount' => 'required|numeric|gt:0',
-            'method' => 'required|in:efectivo,qr,transferencia,tarjeta',
+            'method' => 'required|in:efectivo,qr',
             'notes'  => 'required|string|max:500',
             'operator_id' => 'required|exists:users,id',
         ], [
@@ -3061,7 +3061,7 @@ class CheckinController extends Controller
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
-        $pdf->Cell(0, 4, utf8_decode('Calle Principal #123 - Potosi'), 0, 1, 'C');
+        $pdf->Cell(0, 4, utf8_decode('Calle Oruro - Potosi'), 0, 1, 'C');
         $pdf->Ln(2);
 
         $pdf->SetFont('Arial', 'B', 10);

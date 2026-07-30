@@ -77,7 +77,7 @@ class GroupAccountController extends Controller
             'origin' => 'nullable|string|max:255',
             'initial_advance' => 'nullable|numeric|min:0',
             'operator_id' => 'nullable|required_if:initial_advance,>,0|exists:users,id',
-            'method' => 'nullable|string|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'method' => 'nullable|string|in:EFECTIVO,QR',
         ], [
             'operator_id.required_if' => 'Selecciona qué operador recibe el adelanto, para registrarlo en su caja.',
         ]);
@@ -140,7 +140,7 @@ class GroupAccountController extends Controller
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'operator_id' => 'required|exists:users,id',
-            'method' => 'nullable|string|in:EFECTIVO,QR,TARJETA,TRANSFERENCIA',
+            'method' => 'nullable|string|in:EFECTIVO,QR',
         ]);
 
         $amount = round((float) $validated['amount'], 2);

@@ -955,6 +955,7 @@ class ReportController extends Controller
             $pernoctantes = '-';
             $recaudadoTexto = '-';
             $pagadoTexto = '-';
+            $movilidadTexto = '';
 
             if ($checkin) {
                 // Titular con nombre completo; acompañantes solo con el
@@ -984,6 +985,21 @@ class ReportController extends Controller
                 // pagar cada día.
                 $pagosIndividualesHoy = $checkin->payments
                     ->filter(fn ($p) => Carbon::parse($p->created_at)->isSameDay($hoy));
+
+                // 🚀 MOVILIDAD: registra si la habitación pertenece a un
+                // convenio corporativo/delegación y, si es una Cuenta
+                // Grupal real (con nombre propio), qué convenio es —
+                // para que recepción sepa de un vistazo, sin abrir el
+                // checkin, con quién liquidar esa habitación.
+                if (
+                    $checkin->specialAgreement
+                    && in_array($checkin->specialAgreement->type, ['corporativo', 'delegacion'])
+                ) {
+                    $tipoConvenio = $checkin->specialAgreement->type === 'delegacion' ? 'DELEG' : 'CORP';
+                    $movilidadTexto = !empty($checkin->specialAgreement->company_name)
+                        ? $tipoConvenio . ': ' . $checkin->specialAgreement->company_name
+                        : $tipoConvenio;
+                }
 
                 $esGrupoReal = $checkin->specialAgreement
                     && !empty($checkin->specialAgreement->company_name);
@@ -1015,7 +1031,7 @@ class ReportController extends Controller
 
             $pdf->Cell($colPza, 4, utf8_decode($room->number), 1, 0, 'C');
             $pdf->Cell($colPernoctantes, 4, utf8_decode(substr($pernoctantes, 0, 68)), 1, 0, 'L');
-            $pdf->Cell($colMovilidad, 4, '', 1, 0, 'C');
+            $pdf->Cell($colMovilidad, 4, utf8_decode(substr($movilidadTexto, 0, 20)), 1, 0, 'C');
             $pdf->Cell($colRecaudado, 4, $recaudadoTexto, 1, 0, 'R');
             $pdf->Cell($colPagado, 4, utf8_decode(substr($pagadoTexto, 0, 42)), 1, 1, 'L');
         }

@@ -95,7 +95,7 @@ class GenerateCheckoutReceipt implements ShouldQueue
             $pdf->Cell(35, 3, '456123ABC', 0, 1, 'L');
             $pdf->Ln(1);
         } else {
-            $pdf->Cell(0, 4, utf8_decode('Calle Principal #123 - Potosi'), 0, 1, 'C');
+            $pdf->Cell(0, 4, utf8_decode('Calle Oruro - Potosi'), 0, 1, 'C');
             $pdf->Ln(2);
             $pdf->SetFont('Arial', 'B', 9);
             $pdf->Cell(0, 6, 'NOTA DE SALIDA GRUPAL', 0, 1, 'C');

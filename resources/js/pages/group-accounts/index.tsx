@@ -61,8 +61,6 @@ const typeLabel = (type: string) =>
 const paymentMethods = [
     { value: 'EFECTIVO', label: 'Efectivo' },
     { value: 'QR', label: 'QR' },
-    { value: 'TARJETA', label: 'Tarjeta' },
-    { value: 'TRANSFERENCIA', label: 'Transferencia' },
 ] as const;
 
 export default function GroupAccountsIndex({
@@ -513,7 +511,7 @@ export default function GroupAccountsIndex({
                                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                                 Método de Pago
                                             </label>
-                                            <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
+                                            <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
                                                 {paymentMethods.map((m) => (
                                                     <button
                                                         key={m.value}
@@ -682,7 +680,7 @@ export default function GroupAccountsIndex({
                                     <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                                         Método de Pago
                                     </label>
-                                    <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
+                                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-gray-50/50 p-1 shadow-sm">
                                         {paymentMethods.map((m) => (
                                             <button
                                                 key={m.value}

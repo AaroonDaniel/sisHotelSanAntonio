@@ -547,11 +547,7 @@ class ReservationController extends Controller
                     foreach ($reservation->details as $index => $detail) {
                         if (!$detail->room_id) continue;
 
-                        $notaAsignacion ='RESERVADO POR: ' . $reservation->guest->full_name;
-
-                        if ($index > 0) {
-                            $notaAsignacion .= ' (HABITACIÓN ADICIONAL)';
-                        }
+                        $notaAsignacion ='RESERVA: ' . $reservation->guest->full_name;
 
                         // ⚠️ CAMBIO CRUCIAL: El checkin hereda el special_agreement_id de la reserva
                         $checkin = Checkin::create([
