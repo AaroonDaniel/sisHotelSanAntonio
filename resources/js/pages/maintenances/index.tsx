@@ -1,10 +1,12 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { useCan } from '@/hooks/use-can';
 import {
     AlertTriangle,
-    ArrowLeft,
     CheckCircle,
+    ChevronLeft,
+    ChevronRight,
     Eye,
     Pencil,
     Plus,
@@ -44,28 +46,27 @@ export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
         return new Date(dateString).toLocaleString();
     };
 
+    const goToPage = (url: string | null) => {
+        if (!url) return;
+        router.get(
+            url,
+            {},
+            { preserveState: true, replace: true, only: ['maintenances'] },
+        );
+    };
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Registro de Mantenimiento" />
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                {/* Botón Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
                 {/* Título Principal */}
-                <div>
+                <div className="flex items-center justify-between gap-3">
                     <h2 className="flex items-center gap-3 text-3xl font-bold text-white">
                         <Wrench className="h-8 w-8 text-red-500" />
                         Registro de Mantenimiento
                     </h2>
+                    <BackButton />
                 </div>
 
                 <div className="py-8">
@@ -250,6 +251,47 @@ export default function MaintenancesIndex({ auth, maintenances, rooms }: any) {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {maintenances.last_page > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {maintenances.current_page} de{' '}
+                                    {maintenances.last_page} (
+                                    {maintenances.total} registros)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            goToPage(
+                                                maintenances.prev_page_url,
+                                            )
+                                        }
+                                        disabled={
+                                            !maintenances.prev_page_url
+                                        }
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            goToPage(
+                                                maintenances.next_page_url,
+                                            )
+                                        }
+                                        disabled={
+                                            !maintenances.next_page_url
+                                        }
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

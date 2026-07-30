@@ -948,13 +948,28 @@ class ReportController extends Controller
         $pdf->Cell($colRecaudado, 4, 'Recaudado', 1, 0, 'C', true);
         $pdf->Cell($colPagado, 4, 'Pagado', 1, 1, 'C', true);
 
+        // 🚀 ESTADO ACTUAL DEL HOTEL: solo para HOY tiene sentido mirar
+        // Room::status en vivo -- si el huésped ya hizo checkout, la
+        // habitación pasa a LIBRE/LIMPIEZA de inmediato (mismo momento
+        // en que CheckinController::checkout() actualiza ambos), así que
+        // el reporte de HOY debe reflejar eso YA, no seguir listando a
+        // quien ya se fue solo porque ocupó parte del día antes de irse.
+        // Para un día PASADO no aplica: Room::status ya cambió desde
+        // entonces, la única fuente confiable de "quién durmió esa noche"
+        // sigue siendo el rango de fechas de `checkins` (como ya hacía).
+        $esHoy = $fecha->isSameDay($hoyTope);
+
         $pdf->SetFont('Arial', '', 7.5);
         foreach ($rooms as $room) {
             $checkin = $room->checkins->first();
 
-            $pernoctantes = '-';
-            $recaudadoTexto = '-';
-            $pagadoTexto = '-';
+            if ($esHoy && !in_array(strtoupper($room->status), ['OCUPADO', 'INCOMPLETO'])) {
+                $checkin = null;
+            }
+
+            $pernoctantes = '';
+            $recaudadoTexto = '';
+            $pagadoTexto = '';
             $movilidadTexto = '';
 
             if ($checkin) {
@@ -995,10 +1010,9 @@ class ReportController extends Controller
                     $checkin->specialAgreement
                     && in_array($checkin->specialAgreement->type, ['corporativo', 'delegacion'])
                 ) {
-                    $tipoConvenio = $checkin->specialAgreement->type === 'delegacion' ? 'DELEG' : 'CORP';
                     $movilidadTexto = !empty($checkin->specialAgreement->company_name)
-                        ? $tipoConvenio . ': ' . $checkin->specialAgreement->company_name
-                        : $tipoConvenio;
+                        ? $checkin->specialAgreement->company_name
+                        : ($checkin->specialAgreement->type === 'delegacion' ? 'DELEGACION' : 'CORPORATIVO');
                 }
 
                 $esGrupoReal = $checkin->specialAgreement
@@ -1031,7 +1045,7 @@ class ReportController extends Controller
 
             $pdf->Cell($colPza, 4, utf8_decode($room->number), 1, 0, 'C');
             $pdf->Cell($colPernoctantes, 4, utf8_decode(substr($pernoctantes, 0, 68)), 1, 0, 'L');
-            $pdf->Cell($colMovilidad, 4, utf8_decode(substr($movilidadTexto, 0, 20)), 1, 0, 'C');
+            $pdf->Cell($colMovilidad, 4, utf8_decode(substr($movilidadTexto, 0, 24)), 1, 0, 'C');
             $pdf->Cell($colRecaudado, 4, $recaudadoTexto, 1, 0, 'R');
             $pdf->Cell($colPagado, 4, utf8_decode(substr($pagadoTexto, 0, 42)), 1, 1, 'L');
         }

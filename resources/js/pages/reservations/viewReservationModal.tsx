@@ -1,11 +1,11 @@
 import ApprovePaymentModal from '@/components/approvePaymentModal';
+import BackButton from '@/components/BackButton';
 import CancelModal from '@/components/cancelModal';
 import { Operator } from '@/components/OperatorSelector';
 import RejectPaymentModal from '@/components/rejectPaymentModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
-    ArrowLeft,
     Calendar,
     CalendarDays,
     CheckCircle2,
@@ -309,45 +309,42 @@ export default function ViewReservationModal({
             <Head title="Gestión de Reservas" />
 
             <div className="mx-auto max-w-[1500px] space-y-6 px-4 pt-6 pb-12 sm:px-8 lg:px-16 xl:px-20">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-1 text-base font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
                 <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                    <div>
-                        <h1 className="flex items-center gap-3 text-3xl font-black text-white">
-                            <Calendar className="h-8 w-8 text-green-500" />{' '}
-                            Reservas del Hotel
-                        </h1>
-                        <p className="mt-1 font-medium text-gray-300">
-                            Organiza la llegada de tus huéspedes y asigna sus
-                            espacios.
-                        </p>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                        <div>
+                            <h1 className="flex items-center gap-3 text-3xl font-black text-white">
+                                <Calendar className="h-8 w-8 text-green-500" />{' '}
+                                Reservas del Hotel
+                            </h1>
+                            <p className="mt-1 font-medium text-gray-300">
+                                Organiza la llegada de tus huéspedes y asigna
+                                sus espacios.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <div className="group relative">
+                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-green-500" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar al Solicitante"
+                                    value={searchTerm}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
+                                    className="w-64 rounded-2xl border-gray-700 bg-gray-800 py-3 pr-4 pl-10 text-white placeholder-gray-400 shadow-lg transition-all focus:border-green-500 focus:ring-green-500 lg:w-80"
+                                />
+                            </div>
+                            <button
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="flex items-center gap-2 rounded-2xl bg-green-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-green-500 active:scale-95"
+                            >
+                                <Plus className="h-5 w-5" /> Nueva Reserva
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <div className="group relative">
-                            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-green-500" />
-                            <input
-                                type="text"
-                                placeholder="Buscar al Solicitante"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-64 rounded-2xl border-gray-700 bg-gray-800 py-3 pr-4 pl-10 text-white placeholder-gray-400 shadow-lg transition-all focus:border-green-500 focus:ring-green-500 lg:w-80"
-                            />
-                        </div>
-                        <button
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="flex items-center gap-2 rounded-2xl bg-green-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-green-500 active:scale-95"
-                        >
-                            <Plus className="h-5 w-5" /> Nueva Reserva
-                        </button>
-                    </div>
+                    <BackButton />
                 </div>
 
                 {/* LISTADO ÚNICO: reservas sin asignar primero, luego asignadas */}

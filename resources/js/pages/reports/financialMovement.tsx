@@ -1,8 +1,8 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowDownCircle,
-    ArrowLeft,
     ArrowUpCircle,
     CalendarDays,
     FileText,
@@ -226,14 +226,6 @@ export default function ReportsIndex({
         );
     };
 
-    // --- PDF del reporte de caja / Liquidación (¡LA NUEVA!) ---
-    const handleFinancialReportPdf = (): void => {
-        window.open(
-            `/reports/financial/pdf?start_date=${selectedDate}&end_date=${selectedDate}&record_type=ambos&user_id=todos&t=${Date.now()}`,
-            '_blank',
-        );
-    };
-
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Reportes — Libro Diario" />
@@ -243,41 +235,34 @@ export default function ReportsIndex({
                 {/* CABECERA: Selector de fecha                   */}
                 {/* ============================================= */}
 
-                {/* Botón Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
                 <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-600">
-                            <CalendarDays className="h-5 w-5" />
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-600">
+                                <CalendarDays className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-800">
+                                    Libro Diario de Caja
+                                </h3>
+                                <p className="text-xs text-gray-500 capitalize">
+                                    {formatLongDate(selectedDate)}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="text-sm font-bold text-gray-800">
-                                Libro Diario de Caja
-                            </h3>
-                            <p className="text-xs text-gray-500 capitalize">
-                                {formatLongDate(selectedDate)}
-                            </p>
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold tracking-wider text-gray-400 uppercase">
+                                Fecha
+                            </label>
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={handleDateChange}
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
+                            />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs font-bold tracking-wider text-gray-400 uppercase">
-                            Fecha
-                        </label>
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={handleDateChange}
-                            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
-                        />
-                    </div>
+                    <BackButton />
                 </div>
 
                 {/* ============================================= */}

@@ -1,10 +1,12 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { useCan } from '@/hooks/use-can';
 import {
-    ArrowLeft,
     BedDouble,
     Calendar,
+    ChevronLeft,
+    ChevronRight,
     DollarSign,
     Pencil,
     Plus,
@@ -13,7 +15,7 @@ import {
     Trash2,
     User as UserIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import CheckinDetailModal from './checkindetailModal';
 import DeleteModal from './deleteModal';
 
@@ -94,6 +96,21 @@ export default function CheckinDetailsIndex({
         );
     });
 
+    // 🚀 Paginación en cliente, igual que Huéspedes.
+    const DETAILS_PER_PAGE = 15;
+    const [currentPage, setCurrentPage] = useState(1);
+    const totalPages = Math.max(
+        1,
+        Math.ceil(filteredDetails.length / DETAILS_PER_PAGE),
+    );
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+    const paginatedDetails = filteredDetails.slice(
+        (currentPage - 1) * DETAILS_PER_PAGE,
+        currentPage * DETAILS_PER_PAGE,
+    );
+
     // --- ACCIONES ---
     const openCreateModal = () => {
         setDetailToEdit(null);
@@ -124,21 +141,11 @@ export default function CheckinDetailsIndex({
         <AuthenticatedLayout user={auth.user}>
             <Head title="Detalle de Consumos" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Botón Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
-                <div>
+                <div className="flex items-center justify-between gap-3">
                     <h2 className="text-3xl font-bold text-white">
                         Gestión de Consumos
                     </h2>
+                    <BackButton />
                 </div>
 
                 <div className="py-12">
@@ -194,8 +201,8 @@ export default function CheckinDetailsIndex({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
-                                    {filteredDetails.length > 0 ? (
-                                        filteredDetails.map((detail) => (
+                                    {paginatedDetails.length > 0 ? (
+                                        paginatedDetails.map((detail) => (
                                             <tr
                                                 key={detail.id}
                                                 className="transition-colors hover:bg-gray-50"
@@ -309,6 +316,42 @@ export default function CheckinDetailsIndex({
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {currentPage} de {totalPages} (
+                                    {filteredDetails.length} consumos)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.max(1, p - 1),
+                                            )
+                                        }
+                                        disabled={currentPage === 1}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.min(totalPages, p + 1),
+                                            )
+                                        }
+                                        disabled={currentPage === totalPages}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

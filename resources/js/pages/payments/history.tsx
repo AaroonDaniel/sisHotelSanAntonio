@@ -1,10 +1,12 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     ArrowDownRight,
-    ArrowLeft,
     ArrowUpRight,
     Banknote,
+    ChevronLeft,
+    ChevronRight,
     CreditCard,
     Receipt,
     Search,
@@ -87,6 +89,10 @@ interface Props {
     payments: {
         data: Payment[];
         total?: number;
+        current_page: number;
+        last_page: number;
+        prev_page_url: string | null;
+        next_page_url: string | null;
     };
 }
 
@@ -137,27 +143,30 @@ export default function PaymentHistory({ auth, payments }: Props) {
         );
     });
 
+    const goToPage = (url: string | null) => {
+        if (!url) return;
+        router.get(
+            url,
+            {},
+            { preserveState: true, replace: true, only: ['payments'] },
+        );
+    };
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Historial de Pagos" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white">
+                            Historial de Transacciones
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-400">
+                            Registro de todos los pagos y devoluciones
+                            procesados
+                        </p>
                     </div>
-                    <span>Volver</span>
-                </button>
-
-                <div>
-                    <h2 className="text-3xl font-bold text-white">
-                        Historial de Transacciones
-                    </h2>
-                    <p className="mt-1 text-sm text-gray-400">
-                        Registro de todos los pagos y devoluciones procesados
-                    </p>
+                    <BackButton />
                 </div>
 
                 <div className="py-12">
@@ -288,6 +297,40 @@ export default function PaymentHistory({ auth, payments }: Props) {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {payments.last_page > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {payments.current_page} de{' '}
+                                    {payments.last_page} (
+                                    {payments.total ?? payments.data.length}{' '}
+                                    registros)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            goToPage(payments.prev_page_url)
+                                        }
+                                        disabled={!payments.prev_page_url}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            goToPage(payments.next_page_url)
+                                        }
+                                        disabled={!payments.next_page_url}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

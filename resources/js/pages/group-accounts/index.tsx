@@ -1,3 +1,4 @@
+import BackButton from '@/components/BackButton';
 import OperatorSelector from '@/components/OperatorSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import {
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router, useForm } from '@inertiajs/react';
 import {
-    ArrowLeft,
     BedDouble,
     Building2,
     GraduationCap,
@@ -159,30 +159,23 @@ export default function GroupAccountsIndex({
             <Head title="Cuentas Grupales" />
 
             <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-                {/* Botón Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-write flex items-center gap-3 text-2xl font-bold">
-                        <div className="rounded-lg bg-amber-100 p-2 text-amber-600">
-                            <Building2 className="h-6 w-6" />
-                        </div>
-                        Cuentas Grupales
-                    </h2>
-                    <Button
-                        onClick={() => setIsCreateOpen(true)}
-                        className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
-                    >
-                        <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
-                        <span>Nueva Cuenta Grupal</span>
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="text-write flex items-center gap-3 text-2xl font-bold">
+                            <div className="rounded-lg bg-amber-100 p-2 text-amber-600">
+                                <Building2 className="h-6 w-6" />
+                            </div>
+                            Cuentas Grupales
+                        </h2>
+                        <Button
+                            onClick={() => setIsCreateOpen(true)}
+                            className="group flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-green-500 hover:shadow-lg active:scale-95"
+                        >
+                            <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
+                            <span>Nueva Cuenta Grupal</span>
+                        </Button>
+                    </div>
+                    <BackButton />
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">

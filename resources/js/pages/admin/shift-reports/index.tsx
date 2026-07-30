@@ -1,7 +1,8 @@
+import BackButton from '@/components/BackButton';
 import ShiftPreviewModal from '@/components/ShiftPreviewModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Eye, Vault } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { Eye, Vault } from 'lucide-react';
 import { useState } from 'react';
 
 interface ShiftRow {
@@ -46,30 +47,22 @@ export default function ShiftReportsIndex({ auth, Shifts }: Props) {
             <Head title="Aperturas y Cierres" />
 
             <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-                {/* Botón de Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
                 {/* Encabezado */}
-                <div className="mb-6 flex items-center gap-3">
-                    <div className="rounded-lg bg-emerald-100 p-2 text-emerald-600">
-                        <Vault className="h-6 w-6" />
+                <div className="mb-6 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-emerald-100 p-2 text-emerald-600">
+                            <Vault className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-white">
+                                Aperturas y Cierres
+                            </h1>
+                            <p className="text-sm text-gray-400">
+                                Reporte histórico de turnos de caja
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">
-                            Aperturas y Cierres
-                        </h1>
-                        <p className="text-sm text-gray-400">
-                            Reporte histórico de turnos de caja
-                        </p>
-                    </div>
+                    <BackButton />
                 </div>
 
                 {/* TABLA ÚNICA: REPORTE POR TURNO */}

@@ -1,8 +1,8 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head,router, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
-    ArrowLeft,
     CheckCircle2,
     ChevronRight,
     FileText,
@@ -141,45 +141,41 @@ export default function SignificantEventsIndex({
             <Head title="Contingencias SIAT" />
 
             <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
                 {/* ========== ENCABEZADO ========== */}
                 <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <div className="mb-1 flex items-center gap-2 text-base font-bold text-red-500">
-                            <ShieldAlert className="h-4 w-4" />
-                            Facturación SIAT
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                        <div>
+                            <div className="mb-1 flex items-center gap-2 text-base font-bold text-red-500">
+                                <ShieldAlert className="h-4 w-4" />
+                                Facturación SIAT
+                            </div>
+                            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                                Eventos Significativos
+                            </h1>
+                            <p className="mt-1 max-w-2xl text-base text-white/80">
+                                Gestión de cortes de servicio. Registre el
+                                evento al inicio y envíe el paquete de
+                                facturas offline al SIAT cuando se
+                                restablezca la conexión.
+                            </p>
                         </div>
-                        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                            Eventos Significativos
-                        </h1>
-                        <p className="mt-1 max-w-2xl text-base text-white/80">
-                            Gestión de cortes de servicio. Registre el evento al inicio y
-                            envíe el paquete de facturas offline al SIAT cuando se restablezca
-                            la conexión.
-                        </p>
+
+                        <button
+                            type="button"
+                            onClick={openModal}
+                            disabled={hasActiveEvent}
+                            className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                hasActiveEvent
+                                    ? 'cursor-not-allowed bg-gray-200 text-gray-500'
+                                    : 'bg-[#b3282d] text-white hover:bg-[#9a2126] focus:ring-[#b3282d]'
+                            }`}
+                        >
+                            <Plus className="h-4 w-4" />
+                            Iniciar contingencia
+                        </button>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={openModal}
-                        disabled={hasActiveEvent}
-                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                            hasActiveEvent
-                                ? 'cursor-not-allowed bg-gray-200 text-gray-500'
-                                : 'bg-[#b3282d] text-white hover:bg-[#9a2126] focus:ring-[#b3282d]'
-                        }`}
-                    >
-                        <Plus className="h-4 w-4" />
-                        Iniciar contingencia
-                    </button>
+                    <BackButton />
                 </div>
 
                 {/* ========== BANNER: HAY UN EVENTO ACTIVO ========== */}

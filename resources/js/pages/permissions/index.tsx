@@ -1,6 +1,7 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Pencil, Plus, Search, Trash2, Key } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { Pencil, Plus, Search, Trash2, Key } from 'lucide-react';
 import { useState } from 'react';
 import DeleteModal from './deleteModal';
 import PermissionModal from './permissionModal';
@@ -48,21 +49,12 @@ export default function PermissionsIndex({ auth, permissions }: Props) {
         <AuthenticatedLayout user={auth.user}>
             <Head title="Catálogo de Permisos" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
-                <div>
+                <div className="flex items-center justify-between gap-3">
                     <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                         <Key className="h-8 w-8 text-amber-400" />
                         Catálogo de Permisos
                     </h2>
+                    <BackButton />
                 </div>
 
                 <div className="py-12">

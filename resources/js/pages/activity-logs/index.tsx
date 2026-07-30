@@ -1,8 +1,9 @@
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Eye, FileClock, ShieldCheck } from 'lucide-react';
+import { Head, Link } from '@inertiajs/react';
+import { Eye, FileClock, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
+import BackButton from '@/components/BackButton';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
@@ -131,28 +132,20 @@ export default function ActivityLogIndex({ auth, logs }: Props) {
             <Head title="Auditoría y Bitácora" />
 
             <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
-                {/* Botón Volver al Dashboard */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-600 bg-gray-700 transition group-hover:border-gray-400 group-hover:bg-gray-600">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver al Panel de Control</span>
-                </button>
-
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
-                        <div className="rounded-xl border border-indigo-100 bg-indigo-100 p-2">
-                            <ShieldCheck className="h-8 w-8 text-indigo-600" />
-                        </div>
-                        Auditoría y Bitácora
-                    </h2>
-                    <span className="text-sm text-gray-400">
-                        {logs.total} registro{logs.total === 1 ? '' : 's'} en
-                        total
-                    </span>
+                    <div className="flex flex-wrap items-center gap-4">
+                        <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
+                            <div className="rounded-xl border border-indigo-100 bg-indigo-100 p-2">
+                                <ShieldCheck className="h-8 w-8 text-indigo-600" />
+                            </div>
+                            Auditoría y Bitácora
+                        </h2>
+                        <span className="text-sm text-gray-400">
+                            {logs.total} registro{logs.total === 1 ? '' : 's'}{' '}
+                            en total
+                        </span>
+                    </div>
+                    <BackButton />
                 </div>
 
                 <Card className="overflow-hidden border border-gray-200 bg-white shadow-sm">

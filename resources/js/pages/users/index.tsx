@@ -1,7 +1,7 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
-    ArrowLeft,
     Pencil,
     Plus,
     Power,
@@ -73,21 +73,11 @@ export default function UsersIndex({ auth, users, roles }: Props) { // <-- NUEVO
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestión de Usuarios" />
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Botón Volver */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
-                <div>
+                <div className="flex items-center justify-between gap-3">
                     <h2 className="text-3xl font-bold text-white">
                         Personal del Sistema
                     </h2>
+                    <BackButton />
                 </div>
 
                 <div className="py-12">

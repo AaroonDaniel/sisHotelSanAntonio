@@ -559,6 +559,14 @@ export default function OccupiedRoomModal({
                                     • OCUPADA
                                 </p>
                             </div>
+                            <button
+                                type="button"
+                                onClick={onTransfer}
+                                className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-3 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 active:scale-95"
+                            >
+                                <ArrowRightLeft className="h-3.5 w-3.5" />
+                                Cambio de Habitación
+                            </button>
                         </div>
                         <button
                             onClick={handleClose}
@@ -1334,6 +1342,16 @@ export default function OccupiedRoomModal({
                                         )}
                                     </div>
                                     )}
+
+                                    {/* --- DEVOLUCIÓN: justo debajo de "Registrar
+                                        Nuevo Adelanto" -- antes vivía en
+                                        Acciones Administrativas. */}
+                                    <div className="mt-4 border-t border-gray-100 pt-4">
+                                        <RefundDialog
+                                            checkinId={liveCheckin.id}
+                                            operators={operators}
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* --- SECCIÓN DE CONVENIO CORPORATIVO + SEMÁFORO (Punto 3.13) --- */}
@@ -1837,29 +1855,7 @@ export default function OccupiedRoomModal({
                                     )}
                                 </div>
 
-                                {/* --- ACCIONES ADMINISTRATIVAS --- */}
-                                <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
-                                    <h3 className="mb-4 text-xs font-bold tracking-wider text-gray-400 uppercase">
-                                        Acciones Administrativas
-                                    </h3>
-                                    <button
-                                        onClick={onTransfer}
-                                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100 active:scale-95"
-                                    >
-                                        <ArrowRightLeft className="h-4 w-4" />
-                                        Transferir / Unir a Grupo
-                                    </button>
-                                    <p className="mt-2 text-center text-[10px] text-gray-400">
-                                        Mueve al huésped a otra habitación o
-                                        agrégalo a un grupo existente.
-                                    </p>
-                                    <div className="mt-3">
-                                        <RefundDialog
-                                            checkinId={liveCheckin.id}
-                                            operators={operators}
-                                        />
-                                    </div>
-                                </div>
+                                    
                             </div>
                         </div>
                     </div>

@@ -1,3 +1,4 @@
+import BackButton from '@/components/BackButton';
 import CheckinPaymentHistoryModal, {
     CheckinPaymentDetail,
 } from '@/components/CheckinPaymentHistoryModal';
@@ -5,7 +6,6 @@ import RestoreCheckinModal from '@/components/RestoreCheckinModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
-    ArrowLeft,
     BedDouble,
     Calendar,
     History,
@@ -95,25 +95,18 @@ export default function RoomHistoryIndex({
             <Head title="Historial de Habitaciones" />
 
             <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
+                <div className="mb-6 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-red-100 p-2 text-red-600">
+                            <History className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h1 className="text-write text-2xl font-bold">
+                                Historial de Habitaciones
+                            </h1>
+                        </div>
                     </div>
-                    <span>Volver</span>
-                </button>
-
-                <div className="mb-6 flex items-center gap-3">
-                    <div className="rounded-lg bg-red-100 p-2 text-red-600">
-                        <History className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <h1 className="text-write text-2xl font-bold">
-                            Historial de Habitaciones
-                        </h1>
-                    </div>
+                    <BackButton />
                 </div>
                 {/* SELECTOR DE HABITACIÓN */}
                 <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">

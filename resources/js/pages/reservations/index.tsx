@@ -1,12 +1,14 @@
+import BackButton from '@/components/BackButton';
 import { Operator } from '@/components/OperatorSelector';
 import { useCan } from '@/hooks/use-can';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
-    ArrowLeft,
     Calendar,
     CalendarRange,
     CheckCircle,
+    ChevronLeft,
+    ChevronRight,
     Clock,
     DollarSign,
     Filter,
@@ -196,6 +198,25 @@ export default function ReservationsIndex({
         return matchesSearch && matchesStatus;
     });
 
+    // 🚀 Paginación en cliente (solo vista Tabla): el Tape Chart necesita
+    // TODAS las reservas cargadas para dibujar el calendario de 15 días,
+    // así que paginar en el backend rompería esa vista -- se pagina acá,
+    // sobre lo que ya llegó, igual que hace la vista de Huéspedes pero
+    // sin ida y vuelta al servidor.
+    const RESERVATIONS_PER_PAGE = 15;
+    const [currentPage, setCurrentPage] = useState(1);
+    const totalPages = Math.max(
+        1,
+        Math.ceil(filteredReservations.length / RESERVATIONS_PER_PAGE),
+    );
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter]);
+    const paginatedReservations = filteredReservations.slice(
+        (currentPage - 1) * RESERVATIONS_PER_PAGE,
+        currentPage * RESERVATIONS_PER_PAGE,
+    );
+
     const openCreateModal = () => {
         setEditingReservation(null);
         setIsReservationModalOpen(true);
@@ -216,54 +237,48 @@ export default function ReservationsIndex({
             <Head title="Reservas" />
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-6 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver al Panel</span>
-                </button>
-
                 {/* CABECERA PRINCIPAL CON BOTONES DE VISTA */}
                 <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-                    <div>
-                        <h2 className="text-3xl font-bold text-white">
-                            Reservas
-                        </h2>
-                        <p className="mt-1 text-sm text-gray-400">
-                            Gestiona las reservas y visualiza el calendario de
-                            ocupación.
-                        </p>
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">
+                                Reservas
+                            </h2>
+                            <p className="mt-1 text-sm text-gray-400">
+                                Gestiona las reservas y visualiza el
+                                calendario de ocupación.
+                            </p>
+                        </div>
+
+                        <div className="inline-flex rounded-xl border border-gray-700 bg-gray-800 p-1 shadow-sm">
+                            <button
+                                type="button"
+                                onClick={() => setView('table')}
+                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
+                                    view === 'table'
+                                        ? 'bg-green-600 text-white shadow-sm'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                <TableIcon className="h-4 w-4" />
+                                Tabla
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setView('calendar')}
+                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
+                                    view === 'calendar'
+                                        ? 'bg-green-600 text-white shadow-sm'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                <LayoutGrid className="h-4 w-4" />
+                                Calendario
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="inline-flex rounded-xl border border-gray-700 bg-gray-800 p-1 shadow-sm">
-                        <button
-                            type="button"
-                            onClick={() => setView('table')}
-                            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
-                                view === 'table'
-                                    ? 'bg-green-600 text-white shadow-sm'
-                                    : 'text-gray-400 hover:text-white'
-                            }`}
-                        >
-                            <TableIcon className="h-4 w-4" />
-                            Tabla
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setView('calendar')}
-                            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
-                                view === 'calendar'
-                                    ? 'bg-green-600 text-white shadow-sm'
-                                    : 'text-gray-400 hover:text-white'
-                            }`}
-                        >
-                            <LayoutGrid className="h-4 w-4" />
-                            Calendario
-                        </button>
-                    </div>
+                    <BackButton to="/dashboard" />
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
@@ -321,6 +336,7 @@ export default function ReservationsIndex({
 
                     {/* RENDERIZADO CONDICIONAL DE VISTAS */}
                     {view === 'table' ? (
+                        <>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm text-gray-600">
                                 <thead className="bg-gray-50 text-xs font-bold tracking-wider text-gray-500 uppercase">
@@ -344,8 +360,8 @@ export default function ReservationsIndex({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {filteredReservations.length > 0 ? (
-                                        filteredReservations.map((res) => (
+                                    {paginatedReservations.length > 0 ? (
+                                        paginatedReservations.map((res) => (
                                             <tr
                                                 key={res.id}
                                                 className={`transition-colors hover:bg-gray-50 ${res.status === 'cancelado' ? 'bg-gray-50 opacity-60' : ''}`}
@@ -576,6 +592,43 @@ export default function ReservationsIndex({
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {currentPage} de {totalPages} (
+                                    {filteredReservations.length} reservas)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.max(1, p - 1),
+                                            )
+                                        }
+                                        disabled={currentPage === 1}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.min(totalPages, p + 1),
+                                            )
+                                        }
+                                        disabled={currentPage === totalPages}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
                     ) : (
                         <TapeChart reservations={Reservations} rooms={Rooms} />
                     )}

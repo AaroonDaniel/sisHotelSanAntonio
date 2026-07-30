@@ -1,8 +1,8 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { formatMinutesToHM } from '@/lib/utils';
 import { Head, router } from '@inertiajs/react';
 import {
-    ArrowLeft, // Ícono para "Aplicar"
     CheckCircle2, // Ícono para "Aplicado"
     Pencil,
     Play,
@@ -119,26 +119,18 @@ export default function SchedulesIndex({ auth, Schedules }: Props) {
             <Head title="Gestión de Horarios" />
 
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* --- BOTÓN VOLVER --- */}
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
                 {/* --- TÍTULO PRINCIPAL --- */}
-                <div>
-                    <h2 className="text-3xl font-bold text-white">
-                        Lista de Horarios
-                    </h2>
-                    <p className="mt-1 text-sm text-gray-400">
-                        Selecciona y "Aplica" un horario para activar las
-                        tolerancias automáticas en Recepción.
-                    </p>
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white">
+                            Lista de Horarios
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-400">
+                            Selecciona y "Aplica" un horario para activar las
+                            tolerancias automáticas en Recepción.
+                        </p>
+                    </div>
+                    <BackButton />
                 </div>
 
                 <div className="py-12">

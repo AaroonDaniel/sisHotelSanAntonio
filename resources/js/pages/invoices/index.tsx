@@ -1,10 +1,12 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
     AlertTriangle,
-    ArrowLeft,
     Ban,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     Edit3,
     ExternalLink,
     FileText,
@@ -15,7 +17,7 @@ import {
     RotateCw,
     Search,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import VoidInvoiceModal from './VoidInvoiceModal';
 import AttachToEventModal from './AttachToEventModal';
 import RescueOrphansModal from './RescueOrphansModal';
@@ -236,43 +238,54 @@ export default function InvoicesIndex({
         );
     });
 
+    // 🚀 Paginación en cliente, igual que Huéspedes.
+    const INVOICES_PER_PAGE = 15;
+    const [currentPage, setCurrentPage] = useState(1);
+    const totalPages = Math.max(
+        1,
+        Math.ceil(filteredInvoices.length / INVOICES_PER_PAGE),
+    );
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, activeTab]);
+    const paginatedInvoices = filteredInvoices.slice(
+        (currentPage - 1) * INVOICES_PER_PAGE,
+        currentPage * INVOICES_PER_PAGE,
+    );
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Facturación y Recibos" />
 
-            <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-1 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
+            <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl flex-col px-4 py-1 sm:px-6 lg:px-8">
                 <div className="mb-4 flex flex-shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
-                        <div className="rounded-xl border border-green-100 bg-green-100 p-2">
-                            <FileText className="h-8 w-8 text-green-600" />
-                        </div>
-                        Gestión de Documentos
-                    </h2>
-
-                    {!pdfUrl && (
-                        <div className="relative w-full sm:w-72">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <Search className="h-4 w-4 text-gray-400" />
+                    <div className="flex flex-wrap items-center gap-4">
+                        <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
+                            <div className="rounded-xl border border-green-100 bg-green-100 p-2">
+                                <FileText className="h-8 w-8 text-green-600" />
                             </div>
-                            <input
-                                type="text"
-                                placeholder="Buscar por N° o Huésped..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full rounded-xl border border-gray-600 bg-gray-800 py-2.5 pr-4 pl-10 text-sm text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                            />
-                        </div>
-                    )}
+                            Gestión de Documentos
+                        </h2>
+
+                        {!pdfUrl && (
+                            <div className="relative w-full sm:w-72">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por N° o Huésped..."
+                                    value={searchTerm}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
+                                    className="w-full rounded-xl border border-gray-600 bg-gray-800 py-2.5 pr-4 pl-10 text-sm text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <BackButton />
                 </div>
 
                 {hasOrphanedOffline && (
@@ -361,9 +374,9 @@ export default function InvoicesIndex({
                     </div>
                 ) : (
                     <div className="flex flex-1 animate-in flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-                        <div className="flex-1 overflow-auto">
+                        <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
-                                <thead className="sticky top-0 z-10 bg-gray-50">
+                                <thead className="bg-gray-50">
                                     <tr>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-600 uppercase">
                                             N° Doc.
@@ -383,7 +396,7 @@ export default function InvoicesIndex({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
-                                    {filteredInvoices.map((invoice) => {
+                                    {paginatedInvoices.map((invoice) => {
                                         const isFactura = invoice.is_factura;
                                         const isAnulada = invoice.is_voided;
                                         const isOffline = invoice.is_offline;
@@ -611,6 +624,42 @@ export default function InvoicesIndex({
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
+                                <span className="text-xs text-gray-500">
+                                    Página {currentPage} de {totalPages} (
+                                    {filteredInvoices.length} documentos)
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.max(1, p - 1),
+                                            )
+                                        }
+                                        disabled={currentPage === 1}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            setCurrentPage((p) =>
+                                                Math.min(totalPages, p + 1),
+                                            )
+                                        }
+                                        disabled={currentPage === totalPages}
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

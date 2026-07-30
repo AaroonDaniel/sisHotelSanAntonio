@@ -2,7 +2,6 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
-    ArrowLeft,
     CheckCircle2,
     Clock,
     FileText,
@@ -18,6 +17,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
+import { FaArrowLeft } from 'react-icons/fa';
 
 // =====================================================================
 // Tipos
@@ -202,7 +202,7 @@ export default function SignificantEventShow({ event, invoices, auth }: Props) {
                         href="/contingencias"
                         className="inline-flex items-center gap-1.5 text-base font-bold text-gray-400 transition-colors hover:text-[#b3282d]"
                     >
-                        <ArrowLeft className="h-4 w-4" />
+                        <FaArrowLeft className="h-3.5 w-3.5" />
                         Volver al listado
                     </Link>
                 </div>

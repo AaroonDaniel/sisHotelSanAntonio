@@ -1,3 +1,4 @@
+import BackButton from '@/components/BackButton';
 import CloseRegisterModal from '@/components/CloseRegisterModal';
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
@@ -234,34 +235,29 @@ export default function FinancialReport({
             <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-7xl flex-col px-4 pb-10 sm:px-6 lg:px-7">
                 {/* ENCABEZADO */}
                 <div className="mb-4 flex-shrink-0 pt-0">
-                    <button
-                        onClick={() => router.visit('/dashboard')}
-                        className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-500 transition-colors hover:text-white"
-                    >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 transition-all group-hover:bg-gray-700">
-                            <ArrowLeft className="h-4 w-4 text-white" />
-                        </div>
-                        <span className="text-gray-400">Volver atrás</span>
-                    </button>
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
-                            Cierre de Caja
-                        </h2>
-                        {/* Historial de Turnos: TODOS los cierres de caja
-                            guardados hasta ahora (turno, operador, fechas).
-                            Solo se muestra a quien tenga reportes.financiero,
-                            mismo permiso que habilita la vista agregada
-                            "Todos" en esta misma pantalla. */}
-                        {CanViewAll && (
-                            <button
-                                type="button"
-                                onClick={openHistoryModal}
-                                className="flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm font-bold text-gray-200 shadow-sm transition hover:bg-gray-700"
-                            >
-                                <History className="h-4 w-4" />
-                                Historial de Turnos
-                            </button>
-                        )}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight text-white">
+                                Cierre de Caja
+                            </h2>
+                            {/* Historial de Turnos: TODOS los cierres de
+                                caja guardados hasta ahora (turno, operador,
+                                fechas). Solo se muestra a quien tenga
+                                reportes.financiero, mismo permiso que
+                                habilita la vista agregada "Todos" en esta
+                                misma pantalla. */}
+                            {CanViewAll && (
+                                <button
+                                    type="button"
+                                    onClick={openHistoryModal}
+                                    className="flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm font-bold text-gray-200 shadow-sm transition hover:bg-gray-700"
+                                >
+                                    <History className="h-4 w-4" />
+                                    Historial de Turnos
+                                </button>
+                            )}
+                        </div>
+                        <BackButton />
                     </div>
                 </div>
 

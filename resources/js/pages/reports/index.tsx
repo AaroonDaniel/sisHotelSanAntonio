@@ -1,3 +1,4 @@
+import BackButton from '@/components/BackButton';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import {
@@ -16,6 +17,7 @@ import {
     Zap,
 } from 'lucide-react';
 import { useState } from 'react';
+import { FaArrowLeft } from 'react-icons/fa';
 
 interface Guest {
     id: number;
@@ -303,57 +305,51 @@ export default function ReportsIndex({
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Reportes" />
-            <div className="mx-auto max-w-[98%] px-4 sm:px-6 lg:px-8">
-                <button
-                    onClick={() => router.visit('/dashboard')}
-                    className="group mb-4 flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors hover:text-white"
-                >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-700 bg-gray-800 transition-all group-hover:border-gray-500 group-hover:bg-gray-700">
-                        <ArrowLeft className="h-4 w-4" />
-                    </div>
-                    <span>Volver</span>
-                </button>
-
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                        <h2 className="text-3xl font-bold text-white">
-                            Generador de Parte Diario
-                        </h2>
-                        <div className="flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1.5 shadow-sm">
-                            <span className="text-sm font-black tracking-widest text-emerald-300">
-                                Nº {numeroSerie}
-                            </span>
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                            <h2 className="text-3xl font-bold text-white">
+                                Generador de Parte Diario
+                            </h2>
+                            <div className="flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1.5 shadow-sm">
+                                <span className="text-sm font-black tracking-widest text-emerald-300">
+                                    Nº {numeroSerie}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() =>
+                                    viewMode === 'history'
+                                        ? setViewMode('generator')
+                                        : openHistory()
+                                }
+                                className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 shadow-sm transition hover:bg-emerald-500/20"
+                            >
+                                {viewMode === 'history' ? (
+                                    <>
+                                        <FaArrowLeft className="h-3.5 w-3.5" />{' '}
+                                        Volver a Reportes
+                                    </>
+                                ) : (
+                                    <>
+                                        <History className="h-4 w-4" />{' '}
+                                        Historial
+                                    </>
+                                )}
+                            </button>
                         </div>
-                        <button
-                            onClick={() =>
-                                viewMode === 'history'
-                                    ? setViewMode('generator')
-                                    : openHistory()
-                            }
-                            className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 shadow-sm transition hover:bg-emerald-500/20"
-                        >
-                            {viewMode === 'history' ? (
-                                <>
-                                    <ArrowLeft className="h-4 w-4" /> Volver a
-                                    Reportes
-                                </>
-                            ) : (
-                                <>
-                                    <History className="h-4 w-4" /> Historial
-                                </>
-                            )}
-                        </button>
+                        <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/10 p-2 pr-4 shadow-md backdrop-blur-md">
+                            <Calendar className="ml-2 h-5 w-5 text-emerald-400" />
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={handleDateChange}
+                                max={new Date().toISOString().split('T')[0]}
+                                className="cursor-pointer border-none bg-transparent font-bold text-white focus:ring-0"
+                            />
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/10 p-2 pr-4 shadow-md backdrop-blur-md">
-                        <Calendar className="ml-2 h-5 w-5 text-emerald-400" />
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={handleDateChange}
-                            max={new Date().toISOString().split('T')[0]}
-                            className="cursor-pointer border-none bg-transparent font-bold text-white focus:ring-0"
-                        />
-                    </div>
+                    <BackButton />
                 </div>
 
                 <div className="py-6">
