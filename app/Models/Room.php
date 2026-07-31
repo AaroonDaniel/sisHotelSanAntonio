@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Traits\AutoUpperCase;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class Room extends Model
 {
@@ -101,12 +102,31 @@ class Room extends Model
         return $this->hasMany(CheckinDetail::class);
     }
 
-    public function getActivitylogOptions(): LogOptions 
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('room');
+    }
+
+    /**
+     * A diferencia de Payment/Invoice/Checkin, una habitación no "tiene"
+     * un operador propio -- solo el EVENTO que la actualiza (checkin,
+     * checkout, etc.) sabe quién lo hizo. `auditOperatorId` es una
+     * propiedad dinámica, NO persistida (no está en $fillable ni en la
+     * tabla `rooms`): el caller la setea justo antes de `->update(...)`
+     * cuando tiene un operador real a mano (ver checkout()/multiCheckout()
+     * en CheckinController), y tapActivity() la lee acá. Si no se setea,
+     * el causer cae al comportamiento por defecto (Auth::user()).
+     */
+    public ?int $auditOperatorId = null;
+
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        if ($this->auditOperatorId && ($operator = User::find($this->auditOperatorId))) {
+            $activity->causer()->associate($operator);
+        }
     }
 }

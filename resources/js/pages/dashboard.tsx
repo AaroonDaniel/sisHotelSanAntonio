@@ -17,6 +17,7 @@ import {
     History,
     Hotel,
     Key,
+    Landmark,
     Layers,
     LayoutDashboard,
     LayoutGrid,
@@ -264,11 +265,18 @@ export default function Dashboard({
                     anyPerm: ['caja.registrar_pago', 'huespedes.historial'],
                 },
                 {
+                    name: 'Cámara Hotelera Departamental de Potosí',
+                    icon: Landmark,
+                    url: '/camara-hotelera',
+                    anyPerm: ['reportes.camara_hotelera'],
+                },
+                /*
+                {
                     name: 'Eventos Significativos',
                     icon: ShieldAlert,
                     url: '/contingencias',
                     anyPerm: ['auditoria.ver', 'anulaciones.autorizar'],
-                },
+                },*/
             ],
         },
         {
@@ -276,10 +284,10 @@ export default function Dashboard({
             theme: 'amber',
             items: [
                 {
-                    name: 'Reporte de Parte Diario',
+                    name: 'Ver Reportes de Cámara Hotelera de Potosí',
                     icon: FileBarChart,
-                    url: '/reports',
-                    anyPerm: ['reportes.parte_diario'],
+                    url: '/camara-hotelera-reportes',
+                    anyPerm: ['reportes.camara_hotelera'],
                 },
                 {
                     name: 'Cierre de Caja',

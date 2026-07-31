@@ -52,6 +52,7 @@ import ReservationModal from '../reservations/reservationModal';
 import EventOccupiedModal from './EventOccupiedModal';
 import OccupiedRoomModal from './occupiedRoomModal'; //
 import TransferModal from './transferModal';
+import room_types from '@/routes/room_types';
 
 // Evitar errores de TS con Ziggy
 declare let route: any;
@@ -298,10 +299,18 @@ export default function RoomsStatus({
     const [historyRoomData, setHistoryRoomData] = useState<{
         id: number;
         number: string;
+        statusLabel: string;
+        statusColorClass: string;
     } | null>(null);
 
     const handleOpenHistory = (_checkin: any, room: any) => {
-        setHistoryRoomData({ id: room.id, number: room.number });
+        const { label, colorClass } = getStatusConfig(room);
+        setHistoryRoomData({
+            id: room.id,
+            number: room.number,
+            statusLabel: label,
+            statusColorClass: colorClass,
+        });
         setIsHistoryModalOpen(true);
     };
 
@@ -1515,21 +1524,28 @@ export default function RoomsStatus({
                                         />
                                     )}
 
-                                    {activeCheckin && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleOpenHistory(
-                                                    activeCheckin,
-                                                    room,
-                                                );
-                                            }}
-                                            className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
-                                            title="Historial Financiero"
-                                        >
-                                            <History className="h-4 w-4 shadow-sm" />
-                                        </button>
-                                    )}
+                                    {/* Botón de historial: visible para
+                                        CUALQUIER estado de la habitación
+                                        (libre, limpieza, mantenimiento,
+                                        reservada, ocupada), no solo cuando
+                                        hay un checkin activo -- el endpoint
+                                        /rooms/{room}/daily-history se pide
+                                        por room_id y trae TODO el historial
+                                        de estadías pasadas, sin depender de
+                                        que exista una activa ahora mismo. */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenHistory(
+                                                activeCheckin,
+                                                room,
+                                            );
+                                        }}
+                                        className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
+                                        title="Historico de Habitación"
+                                    >
+                                        <History className="h-4 w-4 shadow-sm" />
+                                    </button>
 
                                     {corpState && (
                                         <div
@@ -2629,7 +2645,7 @@ function CheckoutConfirmationModal({
                                                     <div className="mb-3 text-center">
                                                         <span className="block text-[20px] font-bold text-red-600 uppercase">
                                                             Habitación{' '}
-                                                            {room.number}
+                                                            {room.number} 
                                                         </span>
                                                         {/* Se oculta el titular si es Factura */}
                                                         {tipoDocumento !==
@@ -4033,7 +4049,12 @@ function FinancialHistoryModal({
 }: {
     show: boolean;
     onClose: () => void;
-    room: { id: number; number: string } | null;
+    room: {
+        id: number;
+        number: string;
+        statusLabel?: string;
+        statusColorClass?: string;
+    } | null;
 }) {
     const [loading, setLoading] = useState(false);
     const [days, setDays] = useState<any[]>([]);
@@ -4094,7 +4115,19 @@ function FinancialHistoryModal({
                         <div className="rounded-lg bg-yellow-100 p-1.5 text-yellow-600 shadow-inner">
                             <History className="h-5 w-5" />
                         </div>
-                        Historial de la Hab. {room.number}
+                        Habitación. {room.number}
+                        {room.statusLabel && (
+                            <span
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-bold tracking-wide text-white uppercase shadow-sm ${(
+                                    room.statusColorClass || ''
+                                )
+                                    .replace(/hover:\S+/g, '')
+                                    .replace('cursor-pointer', '')
+                                    .trim()}`}
+                            >
+                                {room.statusLabel}
+                            </span>
+                        )}
                     </h3>
                     <button
                         onClick={onClose}
@@ -4133,10 +4166,10 @@ function FinancialHistoryModal({
                                                 Pernoctante
                                             </th>
                                             <th className="px-3 py-2 text-center text-xs font-bold tracking-wider text-gray-500 uppercase">
-                                                Método
+                                                Tipo de pago
                                             </th>
-                                            <th className="px-3 py-2 text-right text-xs font-bold tracking-wider text-gray-500 uppercase">
-                                                Recaudado
+                                            <th className="px-3 py-2 text-center text-xs font-bold tracking-wider text-gray-500 uppercase">
+                                                Monto
                                             </th>
                                             <th className="px-3 py-2 text-xs font-bold tracking-wider text-gray-500 uppercase">
                                                 Pagado a

@@ -26,6 +26,7 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\DataAuditController;
 use App\Http\Controllers\GroupAccountController;
+use App\Http\Controllers\CamaraHoteleraController;
 use Illuminate\Support\Facades\Route;
 //use Inertia\Inertia;
 
@@ -189,6 +190,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/generate-pdf', [ReportController::class, 'generateGuestsReportPdf'])->name('reports.pdf')->middleware('permission:reportes.parte_diario');
     Route::get('/reports/check-daily-book', [ReportController::class, 'checkDailyBookStatus'])->name('reports.check_daily')->middleware('permission:reportes.parte_diario');
     Route::get('/reports/history', [ReportController::class, 'history'])->name('reports.history')->middleware('permission:reportes.parte_diario');
+    // JSON liviano de Entrantes/Quedantes/Salientes por fecha, sin Libro
+    // Diario ni render de Inertia -- lo usa el modal de Cámara Hotelera
+    // para recargar la lista al cambiar de fecha sin navegar de página.
+    Route::get('/reports/guests-for-date', [ReportController::class, 'guestsForDate'])->name('reports.guestsForDate')->middleware('permission:reportes.camara_hotelera');
     Route::get('/reports/financial', [ReportController::class, 'financialIndex'])->name('reports.financial')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/pdf', [ReportController::class, 'generateFinancialReportPdf'])->name('reports.financialPdf')->middleware('permission:reportes.cierre_caja');
     Route::get('/reports/financial/csv', [ReportController::class, 'generateFinancialReportCsv'])->name('reports.financialCsv')->middleware('permission:reportes.cierre_caja');
@@ -203,6 +208,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // `checkins`) — esta página es solo un selector de fecha + el mismo
     // PDF embebido, para poder revisar un día pasado sin ir a Habitaciones.
     Route::get('/reports/lodging-control', [ReportController::class, 'lodgingControlHistory'])->name('reports.lodgingControlHistory');
+
+    // Cámara Hotelera Departamental de Potosí: partes diarios persistidos
+    // (a diferencia del Generador de Parte Diario de arriba, que no guarda
+    // nada -- ver CamaraHoteleraController).
+    Route::middleware('permission:reportes.camara_hotelera')->group(function () {
+        Route::get('/camara-hotelera', [CamaraHoteleraController::class, 'index'])->name('camara-hotelera.index');
+        Route::post('/camara-hotelera', [CamaraHoteleraController::class, 'store'])->name('camara-hotelera.store');
+        Route::put('/camara-hotelera/{camaraHotelera}', [CamaraHoteleraController::class, 'edit'])->name('camara-hotelera.edit');
+        Route::patch('/camara-hotelera/{camaraHotelera}/confirm', [CamaraHoteleraController::class, 'confirm'])->name('camara-hotelera.confirm');
+        // Anular un PENDIENTE lo borra directamente (ver destroy()).
+        Route::delete('/camara-hotelera/{camaraHotelera}', [CamaraHoteleraController::class, 'destroy'])->name('camara-hotelera.destroy');
+        // Tabla del dashboard con SOLO los partes ya confirmados.
+        Route::get('/camara-hotelera-reportes', [CamaraHoteleraController::class, 'confirmedIndex'])->name('camara-hotelera.confirmed');
+    });
 
     // Administración: Aperturas y Cierres (historial de turnos + informe consolidado por día)
     // Exclusivo para el rol Administrador: los recepcionistas no deben

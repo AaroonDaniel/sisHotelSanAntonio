@@ -39,17 +39,28 @@ class AppServiceProvider extends ServiceProvider
 
         // 🕵️ AUDITORÍA: cada registro de actividad guarda también la IP
         // desde donde se hizo el cambio y el ROL del usuario responsable.
+        //
+        // 🚀 TERMINAL COMPARTIDA: bajo el terminal genérico ('recepcion'),
+        // varios modelos (Checkin, Payment, Expense, CashRegister, ahora
+        // también Invoice y Reservation) reasignan el causer real al
+        // operador elegido en OperatorSelector vía tapActivity() -- eso
+        // corre ANTES de este listener (dentro de ActivityLogger, antes
+        // de ->save()), así que $activity->causer ya refleja al operador
+        // correcto cuando existe. Leer el rol de ahí (no de Auth::user())
+        // evita que la columna "Rol" siga mostrando 'recepcionista' del
+        // terminal aunque la columna "Usuario" ya muestre al operador real.
         Activity::saving(function (Activity $activity) {
             $props = collect($activity->properties ?? []);
 
             // IP de origen
             $ip = request()?->ip();
 
-            // Rol del usuario que hizo el cambio
+            // Rol del responsable real de la acción (causer ya resuelto,
+            // con fallback a Auth::user() si ningún tapActivity() lo tocó).
+            $causer = $activity->causer ?? Auth::user();
             $rol = null;
-            $user = Auth::user();
-            if ($user && method_exists($user, 'getRoleNames')) {
-                $rol = $user->getRoleNames()->first();
+            if ($causer && method_exists($causer, 'getRoleNames')) {
+                $rol = $causer->getRoleNames()->first();
             }
 
             $activity->properties = $props->merge([

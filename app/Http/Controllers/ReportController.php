@@ -129,6 +129,124 @@ class ReportController extends Controller
         $targetDateStart = Carbon::parse($targetDate)->startOfDay();
         $targetDateEnd = Carbon::parse($targetDate)->endOfDay();
 
+        [$entrantes, $quedantes, $salientes] = $this->buildGuestLists(
+            $targetDate,
+            $targetDateStart,
+            $targetDateEnd,
+        );
+
+        // ============================================================
+        // 📒 LIBRO DIARIO (Punto 7.9) — Movimientos del día en curso
+        // ============================================================
+        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
+            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd]) // Corrección a created_at aplicada
+            ->get()
+            ->map(function ($p) {
+                $monto = (float) $p->amount; // las devoluciones ya vienen negativas
+                return [
+                    'id'          => 'PAY-' . $p->id,
+                    'kind'        => $monto < 0 ? 'devolucion' : 'ingreso',
+                    'concept'     => $monto < 0
+                        ? 'Devolución a huésped'
+                        : ($p->type === 'ADELANTO' ? 'Adelanto de estadía' : 'Pago / Amortización'),
+                    'reference'   => $p->checkin && $p->checkin->room
+                        ? 'Hab. ' . $p->checkin->room->number
+                        : '—',
+                    'guest'       => $p->checkin && $p->checkin->guest
+                        ? $p->checkin->guest->full_name
+                        : 'Sin Huésped',
+                    'method'      => $p->method,
+                    'bank'        => $p->bank_name,
+                    'user'        => $p->user->name ?? 'Sistema',
+                    'amount'      => $monto,
+                    'occurred_at' => Carbon::parse($p->created_at)->toIso8601String(),
+                ];
+            });
+
+        $expenses = Expense::with('user')
+            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
+            ->get()
+            ->map(function ($e) {
+                return [
+                    'id'          => 'EXP-' . $e->id,
+                    'kind'        => 'egreso',
+                    'concept'     => $e->description ?? 'Gasto operativo',
+                    'reference'   => 'Egreso de caja',
+                    'guest'       => '—',
+                    'method'      => 'EFECTIVO',
+                    'bank'        => null,
+                    'user'        => $e->user->name ?? 'Sistema',
+                    'amount'      => -1 * abs((float) $e->amount), // egreso siempre negativo
+                    'occurred_at' => Carbon::parse($e->created_at)->toIso8601String(),
+                ];
+            });
+
+        // Unificamos y ordenamos cronológicamente (más reciente primero).
+        $dailyBook = $payments->concat($expenses)
+            ->sortByDesc('occurred_at')
+            ->values();
+
+        // Totales para las Cards superiores.
+        $ingresosHoy     = $payments->where('kind', 'ingreso')->sum('amount');
+        $devolucionesHoy = abs($payments->where('kind', 'devolucion')->sum('amount'));
+        $egresosHoy      = abs($expenses->sum('amount'));
+        $totalNeto       = $ingresosHoy - $devolucionesHoy - $egresosHoy;
+
+        return Inertia::render('reports/index', [
+            'Entrantes'  => $entrantes->sortBy('room_number')->values()->all(),
+            'Quedantes'  => $quedantes->sortBy('room_number')->values()->all(),
+            'Salientes'  => $salientes->sortBy('room_number')->values()->all(),
+            'TargetDate' => $targetDate,
+            'DailyBook'  => $dailyBook,
+            'BookSummary' => [
+                'ingresos'     => round($ingresosHoy, 2),
+                'egresos'      => round($egresosHoy, 2),
+                'devoluciones' => round($devolucionesHoy, 2),
+                'neto'         => round($totalNeto, 2),
+            ],
+        ]);
+    }
+
+    /**
+     * GET JSON liviano (sin Libro Diario ni render de Inertia) para que
+     * cualquier consumidor que necesite Entrantes/Quedantes/Salientes de
+     * una fecha SIN navegar de página lo pueda pedir por fetch -- hoy lo
+     * usa el modal de "Cámara Hotelera" (ver CamaraHoteleraController)
+     * para recargar la lista al cambiar de fecha sin salir de esa
+     * pantalla, cosa que el `router.get('/reports', ...)` de la página
+     * completa no permite (navega fuera del modal).
+     */
+    public function guestsForDate(Request $request)
+    {
+        $targetDate = $request->query('date', now()->toDateString());
+        $targetDateStart = Carbon::parse($targetDate)->startOfDay();
+        $targetDateEnd = Carbon::parse($targetDate)->endOfDay();
+
+        [$entrantes, $quedantes, $salientes] = $this->buildGuestLists(
+            $targetDate,
+            $targetDateStart,
+            $targetDateEnd,
+        );
+
+        return response()->json([
+            'Entrantes'  => $entrantes->sortBy('room_number')->values()->all(),
+            'Quedantes'  => $quedantes->sortBy('room_number')->values()->all(),
+            'Salientes'  => $salientes->sortBy('room_number')->values()->all(),
+            'TargetDate' => $targetDate,
+        ]);
+    }
+
+    /**
+     * Arma las tres listas (Entrantes/Quedantes/Salientes) de huéspedes
+     * "activos u ocupando ese día" a partir de `checkins`, en vivo -- sin
+     * tabla propia (ver nota en el controlador). Extraído de index() para
+     * que guestsForDate() (JSON, sin Libro Diario) lo pueda reusar sin
+     * duplicar la lógica de clasificación/validación de datos faltantes.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection, 2: \Illuminate\Support\Collection}
+     */
+    private function buildGuestLists(string $targetDate, Carbon $targetDateStart, Carbon $targetDateEnd): array
+    {
         // 1. OBTENER ACTIVOS (Entrantes y Quedantes)
         $activeCheckins = Checkin::with(['guest', 'room', 'companions'])
             ->where('check_in_date', '<=', $targetDateEnd)
@@ -251,76 +369,23 @@ class ReportController extends Controller
             }
         }
 
-        // ============================================================
-        // 📒 LIBRO DIARIO (Punto 7.9) — Movimientos del día en curso
-        // ============================================================
-        $payments = Payment::with(['user', 'checkin.room', 'checkin.guest'])
-            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd]) // Corrección a created_at aplicada
-            ->get()
-            ->map(function ($p) {
-                $monto = (float) $p->amount; // las devoluciones ya vienen negativas
-                return [
-                    'id'          => 'PAY-' . $p->id,
-                    'kind'        => $monto < 0 ? 'devolucion' : 'ingreso',
-                    'concept'     => $monto < 0
-                        ? 'Devolución a huésped'
-                        : ($p->type === 'ADELANTO' ? 'Adelanto de estadía' : 'Pago / Amortización'),
-                    'reference'   => $p->checkin && $p->checkin->room
-                        ? 'Hab. ' . $p->checkin->room->number
-                        : '—',
-                    'guest'       => $p->checkin && $p->checkin->guest
-                        ? $p->checkin->guest->full_name
-                        : 'Sin Huésped',
-                    'method'      => $p->method,
-                    'bank'        => $p->bank_name,
-                    'user'        => $p->user->name ?? 'Sistema',
-                    'amount'      => $monto,
-                    'occurred_at' => Carbon::parse($p->created_at)->toIso8601String(),
-                ];
-            });
+        return [$entrantes, $quedantes, $salientes];
+    }
 
-        $expenses = Expense::with('user')
-            ->whereBetween('created_at', [$targetDateStart, $targetDateEnd])
-            ->get()
-            ->map(function ($e) {
-                return [
-                    'id'          => 'EXP-' . $e->id,
-                    'kind'        => 'egreso',
-                    'concept'     => $e->description ?? 'Gasto operativo',
-                    'reference'   => 'Egreso de caja',
-                    'guest'       => '—',
-                    'method'      => 'EFECTIVO',
-                    'bank'        => null,
-                    'user'        => $e->user->name ?? 'Sistema',
-                    'amount'      => -1 * abs((float) $e->amount), // egreso siempre negativo
-                    'occurred_at' => Carbon::parse($e->created_at)->toIso8601String(),
-                ];
-            });
+    /**
+     * Correlativo del Parte Diario para una fecha: 6608 + días desde el
+     * 18/abr/2026 (fórmula fija, ver nota histórica en el PDF). `public
+     * static` para que CamaraHoteleraController pueda congelar este mismo
+     * número al persistir un parte, en vez de reimplementar la fórmula
+     * por tercera vez (ya estaba duplicada entre este controlador y
+     * reports/index.tsx).
+     */
+    public static function numeroSerieForDate(string $date): string
+    {
+        $fechaBase = Carbon::create(2026, 4, 18)->startOfDay();
+        $diferenciaDias = $fechaBase->diffInDays(Carbon::parse($date)->startOfDay(), false);
 
-        // Unificamos y ordenamos cronológicamente (más reciente primero).
-        $dailyBook = $payments->concat($expenses)
-            ->sortByDesc('occurred_at')
-            ->values();
-
-        // Totales para las Cards superiores.
-        $ingresosHoy     = $payments->where('kind', 'ingreso')->sum('amount');
-        $devolucionesHoy = abs($payments->where('kind', 'devolucion')->sum('amount'));
-        $egresosHoy      = abs($expenses->sum('amount'));
-        $totalNeto       = $ingresosHoy - $devolucionesHoy - $egresosHoy;
-
-        return Inertia::render('reports/index', [
-            'Entrantes'  => $entrantes->sortBy('room_number')->values()->all(),
-            'Quedantes'  => $quedantes->sortBy('room_number')->values()->all(),
-            'Salientes'  => $salientes->sortBy('room_number')->values()->all(),
-            'TargetDate' => $targetDate,
-            'DailyBook'  => $dailyBook,
-            'BookSummary' => [
-                'ingresos'     => round($ingresosHoy, 2),
-                'egresos'      => round($egresosHoy, 2),
-                'devoluciones' => round($devolucionesHoy, 2),
-                'neto'         => round($totalNeto, 2),
-            ],
-        ]);
+        return str_pad(6608 + $diferenciaDias, 6, '0', STR_PAD_LEFT);
     }
 
     public function generateGuestsReportPdf(Request $request)
@@ -465,11 +530,7 @@ class ReportController extends Controller
         $pdf->SetFont('Courier', 'B', 10);
         $pdf->Cell(0, 5, utf8_decode('Parte de Pasajeros HOTEL  "SAN ANTONIO"'), 0, 1, 'C');
 
-        $fechaBase = Carbon::create(2026, 4, 18)->startOfDay();
-        $hoyParaCalculo = Carbon::parse($targetDate)->startOfDay();
-        $diferenciaDias = $fechaBase->diffInDays($hoyParaCalculo, false);
-        $numeroCalculado = 6608 + $diferenciaDias;
-        $numeroSerie = str_pad($numeroCalculado, 6, '0', STR_PAD_LEFT);
+        $numeroSerie = self::numeroSerieForDate($targetDate);
 
         $pdf->SetFont('Courier', 'B', 12);
         $pdf->Cell(0, 5, utf8_decode('Nº  ' . $numeroSerie), 0, 1, 'R');
@@ -1051,7 +1112,7 @@ class ReportController extends Controller
                 // "Pagado": solo el/los nombre(s) del operador que cobró
                 // hoy, sin monto (el monto ya está en "Recaudado").
                 $pagadoTexto = $pagosDeHoy
-                    ->map(fn ($p) => $p->operador->nickname ?? $p->user->nickname ?? '-')
+                    ->map(fn ($p) => $p->operador->full_name ?? $p->user->full_name ?? '-')
                     ->unique()
                     ->implode(', ');
                 $pagadoTexto = $pagadoTexto !== '' ? $pagadoTexto : '-';

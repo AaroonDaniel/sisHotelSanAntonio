@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class Reservation extends Model
 {
@@ -83,7 +84,7 @@ class Reservation extends Model
         
         return $arrival->isBefore($today) && in_array($this->status, ['pendiente', 'confirmada']);
     }
-    public function getActivitylogOptions(): LogOptions 
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
@@ -92,4 +93,18 @@ class Reservation extends Model
             ->useLogName('reservation');
     }
 
+    /**
+     * Redirige el causer del log automático al OPERADOR real (operator_id,
+     * el avatar elegido), no a Auth::user() (bajo Terminal Compartida,
+     * siempre la cuenta genérica 'recepcion'). Mismo patrón que
+     * Payment/Expense/Checkin/CashRegister. Si la reserva no tuvo adelanto
+     * (operator_id null), el causer queda como el usuario de sesión --
+     * no hay operador real que atribuir en ese caso.
+     */
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        if ($this->operator_id && ($operator = User::find($this->operator_id))) {
+            $activity->causer()->associate($operator);
+        }
+    }
 }

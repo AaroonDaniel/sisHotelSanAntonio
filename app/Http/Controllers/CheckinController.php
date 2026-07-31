@@ -1989,6 +1989,7 @@ class CheckinController extends Controller
                 // limpia" para agilizar la reasignación inmediata.
                 $room = Room::find($checkin->room_id);
                 if ($room) {
+                    $room->auditOperatorId = (int) $request->input('checkout_operator_id');
                     $room->update(['status' => 'LIMPIEZA']);
                 }
 
@@ -2247,7 +2248,12 @@ class CheckinController extends Controller
                         : ($checkin->guest->identification_number ?? '0'),
                     'issue_date'           => now()->format('Y-m-d'),
                     'issue_time'           => now(),
-                    'user_id'              => $userId,
+                    // Terminal Compartida: quién emitió de verdad es
+                    // checkout_operator_id (el avatar elegido), no $userId
+                    // (Auth::id(), siempre la cuenta genérica 'recepcion')
+                    // -- ver Invoice::tapActivity() y la nota de más arriba
+                    // sobre $cajaAbierta con el mismo criterio.
+                    'user_id'              => (int) $request->input('checkout_operator_id'),
                     'payment_method_code'  => $emitInvoice ? (int) $request->input('payment_method_code', $siatMethodCode) : null,
                     'total_amount'         => $grandTotal,
                     'additional_discount'  => $emitInvoice ? floatval($request->input('additional_discount', 0)) : 0,
@@ -3021,7 +3027,12 @@ class CheckinController extends Controller
                 'issue_date'     => now()->toDateString(),
                 'control_code'   => 'RECIBO-INTERNO',
                 'payment_method' => $metodoFinal,
-                'user_id'        => \Illuminate\Support\Facades\Auth::id() ?? 1,
+                // Checkin legacy sin Invoice propio: el operador real más
+                // cercano es quien cobró el último pago (operator_id),
+                // no Auth::id() (la cuenta genérica del terminal).
+                'user_id'        => $lastPayment?->operator_id
+                    ?? $lastPayment?->user_id
+                    ?? (\Illuminate\Support\Facades\Auth::id() ?? 1),
                 'issue_time'     => now(),
                 'status'         => 'valid',
                 'total_amount'   => $granTotal,
@@ -3975,6 +3986,7 @@ class CheckinController extends Controller
                 // Poner la habitación en limpieza
                 $room = Room::find($checkin->room_id);
                 if ($room) {
+                    $room->auditOperatorId = (int) $request->input('checkout_operator_id');
                     $room->update(['status' => 'LIMPIEZA']);
                 }
 
@@ -4168,7 +4180,12 @@ class CheckinController extends Controller
                 'issue_date'     => now()->toDateString(),
                 'control_code'   => '8A-F1-2C-99', // Puedes cambiar esto por tu lógica real
                 'payment_method' => substr($metodoRecibido, 0, 2), // EF, QR, TA, TR
-                'user_id'        => $userId,
+                // Terminal Compartida: quién emitió de verdad es
+                // checkout_operator_id (el avatar elegido), no $userId
+                // (Auth::id(), siempre la cuenta genérica 'recepcion') --
+                // ver Invoice::tapActivity() y el mismo criterio en
+                // checkout().
+                'user_id'        => (int) $request->input('checkout_operator_id'),
                 'issue_time'     => now(),
                 'status'         => 'valid',
             ]);

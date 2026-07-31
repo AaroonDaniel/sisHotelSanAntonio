@@ -58,6 +58,7 @@ class RoleAndPermissionSeeder extends Seeder
         // ── 2) Crear permisos que faltan según la lista del tutor ──
         $extra = [
             'reportes.parte_diario',
+            'reportes.camara_hotelera',
             'reportes.cierre_caja',
             'facturas.ver_todas',
             'dashboard.ver',
@@ -106,6 +107,7 @@ class RoleAndPermissionSeeder extends Seeder
             'facturar.emitir',
             'recibos.imprimir',
             'reportes.parte_diario',
+            'reportes.camara_hotelera',
             'reportes.cierre_caja',
         ]);
 
@@ -116,6 +118,7 @@ class RoleAndPermissionSeeder extends Seeder
             'reportes.ocupacion',
             'reportes.ventas',
             'reportes.parte_diario',
+            'reportes.camara_hotelera',
             'reportes.cierre_caja',
             'huespedes.ver',
             'huespedes.historial',

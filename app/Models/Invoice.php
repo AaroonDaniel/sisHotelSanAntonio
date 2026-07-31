@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 
 class Invoice extends Model
 {
@@ -130,12 +131,26 @@ class Invoice extends Model
             && is_null($this->significant_event_id);
     }
 
-    public function getActivitylogOptions(): LogOptions 
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->useLogName('invoice');
+    }
+
+    /**
+     * Redirige el causer del log automático al OPERADOR real. `user_id`
+     * ahora se llena en CheckinController con checkout_operator_id (el
+     * avatar elegido en OperatorSelector), no con Auth::id() -- bajo
+     * Terminal Compartida ese siempre sería la cuenta genérica
+     * 'recepcion'. Mismo patrón que Payment/Expense/Checkin/CashRegister.
+     */
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        if ($this->user_id && ($operator = User::find($this->user_id))) {
+            $activity->causer()->associate($operator);
+        }
     }
 }
