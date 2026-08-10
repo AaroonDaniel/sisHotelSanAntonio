@@ -25,6 +25,7 @@ use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\DataAuditController;
+use App\Http\Controllers\CocinaController;
 use App\Http\Controllers\GroupAccountController;
 use App\Http\Controllers\CamaraHoteleraController;
 use Illuminate\Support\Facades\Route;
@@ -382,6 +383,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/god-mode/checkins/{checkin}', [DataAuditController::class, 'updateCheckin'])->name('god-mode.checkins.update');
         Route::put('/god-mode/payments/{payment}', [DataAuditController::class, 'updatePayment'])->name('god-mode.payments.update');
         Route::put('/god-mode/expenses/{expense}', [DataAuditController::class, 'updateExpense'])->name('god-mode.expenses.update');
+    });
+
+    // ==========================================
+    // PANEL "COCINA" — exclusivo del rol 'administrador_sistema' (Spatie).
+    // A propósito NO usa el middleware 'god_mode' (candado por nickname):
+    // este panel se protege por rol real, para que la jerarquía
+    // administrador / administrador_sistema quede en el sistema de
+    // permisos, no hardcodeada.
+    // ==========================================
+    Route::prefix('admin')->middleware('role:administrador_sistema')->group(function () {
+        Route::get('/cocina', [CocinaController::class, 'index'])->name('cocina.index');
+        Route::patch('/cocina/rooms/{room}/toggle-active', [CocinaController::class, 'toggleRoomActive'])->name('cocina.rooms.toggle-active');
+        Route::patch('/cocina/rooms/{room}/status', [CocinaController::class, 'changeStatus'])->name('cocina.rooms.change-status');
+
+        // Etapa 6 — gestión de pagos por habitación.
+        Route::get('/cocina/rooms/{room}/payments', [CocinaController::class, 'getRoomPayments'])->name('cocina.rooms.payments');
+        Route::post('/cocina/checkins/{checkin}/payments', [CocinaController::class, 'storeRoomPayment'])->name('cocina.payments.store');
+        Route::patch('/cocina/payments/{payment}', [CocinaController::class, 'updateRoomPayment'])->name('cocina.payments.update');
+        Route::delete('/cocina/payments/{payment}', [CocinaController::class, 'destroyRoomPayment'])->name('cocina.payments.destroy');
+
+        // Etapa 7 — turnos por operador (arqueo por persona).
+        Route::get('/cocina/turnos', [CocinaController::class, 'turnos'])->name('cocina.turnos');
+        Route::get('/cocina/turnos/{cashRegister}/payments', [CocinaController::class, 'getCashRegisterPayments'])->name('cocina.turnos.payments');
     });
 }); // <-- Cierre del grupo autenticado
 

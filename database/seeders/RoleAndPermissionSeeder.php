@@ -139,7 +139,23 @@ class RoleAndPermissionSeeder extends Seeder
         // ── 6) ADMINISTRADOR: TODOS los permisos (+ Gate::before del provider) ──
         $admin->syncPermissions(Permission::all());
 
-        // ── 7) Limpiar caché de permisos ──
+        // ── 7) ADMINISTRADOR DE SISTEMA: rol máximo (superset de
+        //    'administrador') -- el panel Cocina (/admin/cocina/*) se
+        //    protege específicamente con este rol, NO con 'administrador',
+        //    para que un administrador normal (ej. Ricardo) siga sin
+        //    acceso. 'aaron' conserva su rol 'administrador' además de
+        //    este (no se lo reemplaza) para no romper otros chequeos que
+        //    ya buscan 'administrador' puntualmente (ej. sidebar
+        //    "Aperturas y Cierres", ruta /habitaciones). ──
+        $adminSistema = Role::findOrCreate('administrador_sistema', 'web');
+        $adminSistema->syncPermissions(Permission::all());
+
+        $aaron = User::where('nickname', 'aaron')->first();
+        if ($aaron && !$aaron->hasRole('administrador_sistema')) {
+            $aaron->assignRole('administrador_sistema');
+        }
+
+        // ── 8) Limpiar caché de permisos ──
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 }

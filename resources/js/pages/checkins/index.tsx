@@ -14,6 +14,7 @@ import {
     LogOut,
     Pencil,
     Plus,
+    Printer,
     Search,
     Trash2,
     User as UserIcon,
@@ -367,6 +368,25 @@ export default function CheckinsIndex({
                 {/* 5. Acciones */}
                 <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-5">
+                        {/* Imprimir: solo en la fila del titular -- el PDF
+                            trae una página por cada ocupante (titular +
+                            acompañantes), así que no tiene sentido
+                            repetirlo en cada fila. */}
+                        {isTitular && (
+                            <button
+                                onClick={() =>
+                                    window.open(
+                                        `/checks/${checkin.id}/receipt`,
+                                        '_blank',
+                                    )
+                                }
+                                className="text-gray-400 transition hover:text-purple-600"
+                                title="Imprimir Recibo"
+                            >
+                                <Printer className="h-4 w-4" />
+                            </button>
+                        )}
+
                         {/* Checkout: disponible en toda fila (titular y
                             acompañantes), no solo la del titular -- así se
                             puede finalizar la estadía desde cualquier fila

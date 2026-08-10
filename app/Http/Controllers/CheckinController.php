@@ -2746,152 +2746,158 @@ class CheckinController extends Controller
     }
 
     // --- GENERACIÓN DE PERSONA QUE ESTA ---
+    // Imprime una página por cada ocupante de la habitación (titular +
+    // acompañantes), no solo el titular -- así el ticket refleja a todas
+    // las personas que se registraron en la asignación.
     public function generateAssignmentReceipt(Checkin $checkin)
     {
         // [MODIFICADO] Añadimos 'room.price' por precaución para los fallbacks
-        $checkin->load(['guest', 'room.price']);
+        $checkin->load(['guest', 'room.price', 'companions']);
+
+        $occupants = collect([$checkin->guest])
+            ->merge($checkin->companions)
+            ->filter();
 
         // Usamos la barra invertida \FPDF para acceder a la clase global
         $pdf = new \FPDF('P', 'mm', array(80, 150));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
-        $pdf->AddPage();
 
-        // --- CABECERA ---
-        $pdf->SetFont('Arial', 'B', 10);
-        $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+        foreach ($occupants as $guest) {
+            $pdf->AddPage();
 
-        // --- DETALLES DE HABITACIÓN ---
-        $pdf->SetFont('Arial', 'B', 8);
-        $text = 'Pza. Nº ' . str_pad($checkin->room->number, 2, '0', STR_PAD_LEFT);
-        $pdf->Cell(0, 5, utf8_decode($text), 0, 1, 'R');
-        $pdf->Ln(2);
+            // --- CABECERA ---
+            $pdf->SetFont('Arial', 'B', 10);
+            $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
 
-        // --- DATOS DEL HUÉSPED ---
+            // --- DETALLES DE HABITACIÓN ---
+            $pdf->SetFont('Arial', 'B', 8);
+            $text = 'Pza. Nº ' . str_pad($checkin->room->number, 2, '0', STR_PAD_LEFT);
+            $pdf->Cell(0, 5, utf8_decode($text), 0, 1, 'R');
+            $pdf->Ln(2);
 
-        // Nombre
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(12, 4, 'Nombre:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->MultiCell(0, 4, utf8_decode($checkin->guest->full_name), 0, 'L');
+            // --- DATOS DEL HUÉSPED ---
 
-        // Nacionalidad
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(18, 4, 'Nacionalidad:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode($checkin->guest->nationality), 0, 1);
+            // Nombre
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(12, 4, 'Nombre:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->MultiCell(0, 4, utf8_decode($guest->full_name), 0, 'L');
 
-        // Carnet y Otorgado (Misma línea para ahorrar espacio)
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(18, 4, 'CI/Pasaporte:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(20, 4, $checkin->guest->identification_number, 0, 0);
+            // Nacionalidad
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(18, 4, 'Nacionalidad:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, utf8_decode($guest->nationality), 0, 1);
 
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(15, 4, 'Otorgado:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode($checkin->guest->issued_in), 0, 1);
+            // Carnet y Otorgado (Misma línea para ahorrar espacio)
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(18, 4, 'CI/Pasaporte:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(20, 4, $guest->identification_number, 0, 0);
 
-        // Estado Civil y Edad (Misma línea)
-        $estado = $checkin->guest->civil_status;
-        $inicial = $estado ? strtoupper(substr($estado, 0, 1)) : '-';
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(15, 4, 'Otorgado:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, utf8_decode($guest->issued_in), 0, 1);
 
-        $edad = '-';
-        if ($checkin->guest->birth_date) {
-            $edad = \Carbon\Carbon::parse($checkin->guest->birth_date)->age;
+            // Estado Civil y Edad (Misma línea)
+            $estado = $guest->civil_status;
+            $inicial = $estado ? strtoupper(substr($estado, 0, 1)) : '-';
+
+            $edad = '-';
+            if ($guest->birth_date) {
+                $edad = \Carbon\Carbon::parse($guest->birth_date)->age;
+            }
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(18, 4, 'Estado civil:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(20, 4, $inicial, 0, 0);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(10, 4, 'Edad:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, $edad, 0, 1);
+
+            // Profesión
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(18, 4, utf8_decode('Profesión:'), 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, utf8_decode($guest->profession), 0, 1);
+
+            // Procedencia
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            // 'origin' pertenece a 'checkin' (es de la asignación, no del huésped individual).
+            $pdf->Cell(0, 4, utf8_decode($checkin->origin ?? '-'), 0, 1);
+
+            // --- DATOS DE INGRESO ---
+            $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');
+            $horaIngreso  = \Carbon\Carbon::parse($checkin->check_in_date)->format('H:i');
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(20, 4, 'Fecha ingreso:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(18, 4, $fechaIngreso, 0, 0);
+
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(10, 4, 'Hora:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, $horaIngreso, 0, 1);
+
+            // Permanencia
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(28, 4, utf8_decode('Permanencia (días):'), 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, $checkin->duration_days, 0, 1);
+
+            // Tarifa acordada
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(28, 4, 'Tarifa por noche:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $tarifa = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
+            $pdf->Cell(0, 4, number_format($tarifa, 2) . ' Bs.', 0, 1);
+
+            // Total Cancelado (Adelanto)
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(28, 4, 'Total cancelado:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2) . ' Bs.', 0, 1);
+
+            // Observaciones (Multilinea)
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(28, 4, 'Observaciones:', 0, 1);
+            $pdf->SetFont('Arial', '', 7);
+            if ($checkin->notes) {
+                $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
+            } else {
+                $pdf->Cell(0, 4, '-', 0, 1);
+            }
+
+            // Celular
+            $pdf->SetFont('Arial', 'B', 7);
+            $pdf->Cell(15, 4, 'Celular:', 0, 0);
+            $pdf->SetFont('Arial', '', 7);
+            $telefono = $guest->phone ? $guest->phone : '___________________';
+            $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
+
+            // --- FIRMA ---
+            $pdf->Ln(10);
+
+            $pageWidth = $pdf->GetPageWidth();
+            $lineLength = 50;
+
+            $x = ($pageWidth - $lineLength) / 2;
+            $y = $pdf->GetY();
+
+            $pdf->Line($x, $y, $x + $lineLength, $y);
+            $pdf->Ln(2);
+
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C');
         }
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(18, 4, 'Estado civil:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(20, 4, $inicial, 0, 0);
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(10, 4, 'Edad:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $edad, 0, 1);
-
-        // Profesión
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(18, 4, utf8_decode('Profesión:'), 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode($checkin->guest->profession), 0, 1);
-
-        // Procedencia
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        // [CORRECCIÓN] Descomentado y arreglado. 'origin' pertenece a 'checkin', no a 'guest'.
-        $pdf->Cell(0, 4, utf8_decode($checkin->origin ?? '-'), 0, 1);
-
-        // --- DATOS DE INGRESO ---
-        $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');
-        $horaIngreso  = \Carbon\Carbon::parse($checkin->check_in_date)->format('H:i');
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(20, 4, 'Fecha ingreso:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(18, 4, $fechaIngreso, 0, 0);
-
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(10, 4, 'Hora:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $horaIngreso, 0, 1);
-
-        // Permanencia
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, utf8_decode('Permanencia (días):'), 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, $checkin->duration_days, 0, 1);
-
-        // =========================================================
-        // [NUEVO] TARIFA ACORDADA 
-        // Mostrar la tarifa calculada para mayor transparencia
-        // =========================================================
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, 'Tarifa por noche:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $tarifa = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-        $pdf->Cell(0, 4, number_format($tarifa, 2) . ' Bs.', 0, 1);
-
-        // Total Cancelado (Adelanto)
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, 'Total cancelado:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2) . ' Bs.', 0, 1);
-
-        // Observaciones (Multilinea)
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(28, 4, 'Observaciones:', 0, 1);
-        $pdf->SetFont('Arial', '', 7);
-        if ($checkin->notes) {
-            $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
-        } else {
-            $pdf->Cell(0, 4, '-', 0, 1);
-        }
-
-        // Celular
-        $pdf->SetFont('Arial', 'B', 7);
-        $pdf->Cell(15, 4, 'Celular:', 0, 0);
-        $pdf->SetFont('Arial', '', 7);
-        $telefono = $checkin->guest->phone ? $checkin->guest->phone : '___________________';
-        $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
-
-        // --- FIRMA ---
-        $pdf->Ln(10);
-
-        $pageWidth = $pdf->GetPageWidth();
-        $margins = 4;
-        $lineLength = 50;
-
-        $x = ($pageWidth - $lineLength) / 2;
-        $y = $pdf->GetY();
-
-        $pdf->Line($x, $y, $x + $lineLength, $y);
-        $pdf->Ln(2);
-
-        $pdf->SetFont('Arial', '', 7);
-        $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C');
 
         // 4. Salida
         return response($pdf->Output('S'), 200)

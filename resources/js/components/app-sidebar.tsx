@@ -165,6 +165,13 @@ const mainNavItems: NavItem[] = [
         icon: AlertTriangle,
         permission: 'anulaciones.autorizar',
     },
+
+    // === ADMINISTRADOR DE SISTEMA (exclusivo) ===
+    {
+        title: 'Cocina',
+        href: '/admin/cocina',
+        role: 'administrador_sistema',
+    },
 ];
 
 const footerNavItems: NavItem[] = [

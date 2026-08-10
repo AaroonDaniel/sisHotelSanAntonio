@@ -28,6 +28,7 @@ import {
     Loader2,
     LogOut,
     Presentation,
+    Printer,
     Search,
     ShoppingCart,
     SplitSquareHorizontal,
@@ -1501,60 +1502,96 @@ export default function RoomsStatus({
                                 className={`relative flex h-36 flex-col justify-between rounded-lg shadow-lg transition-all ${config.colorClass} ${isSelected ? 'z-10 scale-105 shadow-2xl ring-4 ring-white' : 'hover:scale-105 hover:shadow-xl'} ${isEligibleForMulti && !isMultiSelected ? 'z-10 animate-pulse ring-4 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''} ${isMultiSelected ? 'z-20 scale-105 shadow-2xl ring-4 ring-green-500 brightness-110' : ''}`}
                             >
                                 {/* 🚦 CONTROLES SUPERIOR DERECHA */}
-                                <div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
-                                    {sortedReservations.length > 0 && (
-                                        <ReservationsPopover
-                                            sortedReservations={
-                                                sortedReservations
-                                            }
-                                            firstRes={firstRes}
-                                            isToday={isToday}
-                                            activeCheckin={activeCheckin}
-                                            corpState={corpState}
-                                            onTriggerClick={() => {
-                                                if (isToday) {
-                                                    setPreselectedReservationId(
-                                                        firstRes.id,
-                                                    );
-                                                } else {
-                                                    setSelectedItem(firstRes);
-                                                    setIsActionModalOpen(true);
-                                                }
-                                            }}
-                                        />
-                                    )}
+<div className="absolute top-0 right-0 z-50 flex rounded-tr-lg rounded-bl-xl bg-white/90 shadow-md backdrop-blur-sm">
+    {sortedReservations.length > 0 && (
+        <ReservationsPopover
+            sortedReservations={
+                sortedReservations
+            }
+            firstRes={firstRes}
+            isToday={isToday}
+            activeCheckin={activeCheckin}
+            corpState={corpState}
+            onTriggerClick={() => {
+                if (isToday) {
+                    setPreselectedReservationId(
+                        firstRes.id,
+                    );
+                } else {
+                    setSelectedItem(firstRes);
+                    setIsActionModalOpen(true);
+                }
+            }}
+        />
+    )}
 
-                                    {/* Botón de historial: visible para
-                                        CUALQUIER estado de la habitación
-                                        (libre, limpieza, mantenimiento,
-                                        reservada, ocupada), no solo cuando
-                                        hay un checkin activo -- el endpoint
-                                        /rooms/{room}/daily-history se pide
-                                        por room_id y trae TODO el historial
-                                        de estadías pasadas, sin depender de
-                                        que exista una activa ahora mismo. */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenHistory(
-                                                activeCheckin,
-                                                room,
-                                            );
-                                        }}
-                                        className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${!sortedReservations.length ? 'rounded-bl-xl' : ''} ${!corpState ? 'rounded-tr-lg' : 'border-r border-yellow-500/30'}`}
-                                        title="Historico de Habitación"
-                                    >
-                                        <History className="h-4 w-4 shadow-sm" />
-                                    </button>
+    {/* Imprimir: habitación ya "llena"
+        (isOccupied, no "incomplete") -- abre
+        la misma vista previa compacta que
+        "Lista de Cobros" (ShiftPreviewModal),
+        con el PDF trayendo una página por
+        cada ocupante (titular +
+        acompañantes). */}
+    {isOccupied && activeCheckin && (
+        <button
+            onClick={(e) => {
+                e.stopPropagation();
+                setQuickPreviewUrl(
+                    `/checks/${activeCheckin.id}/receipt?t=${Date.now()}`,
+                );
+            }}
+            className={`flex items-center justify-center border-r border-purple-400/30 bg-purple-600 px-2.5 py-1.5 text-white transition-colors hover:bg-purple-500 ${
+                !sortedReservations.length ? 'rounded-bl-xl' : ''
+            }`}
+            title="Imprimir datos de huéspedes"
+        >
+            <Printer className="h-4 w-4 shadow-sm" />
+        </button>
+    )}
 
-                                    {corpState && (
-                                        <div
-                                            className={`flex items-center rounded-tr-lg px-3 py-1.5 text-[10px] font-black tracking-wider uppercase ${!activeCheckin && !sortedReservations.length ? 'rounded-bl-xl' : ''} ${corpState.badge}`}
-                                        >
-                                            {corpState.text}
-                                        </div>
-                                    )}
-                                </div>
+    {/* Botón de historial: visible para
+        CUALQUIER estado de la habitación
+        (libre, limpieza, mantenimiento,
+        reservada, ocupada), no solo cuando
+        hay un checkin activo -- el endpoint
+        /rooms/{room}/daily-history se pide
+        por room_id y trae TODO el historial
+        de estadías pasadas, sin depender de
+        que exista una activa ahora mismo. */}
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            handleOpenHistory(
+                activeCheckin,
+                room,
+            );
+        }}
+        className={`flex items-center justify-center bg-yellow-400 px-2.5 py-1.5 text-yellow-900 transition-colors hover:bg-yellow-300 ${
+            !sortedReservations.length && !(isOccupied && activeCheckin)
+                ? 'rounded-bl-xl'
+                : ''
+        } ${
+            corpState
+                ? 'border-r border-yellow-500/30'
+                : 'rounded-tr-lg'
+        }`}
+        title="Historico de Habitación"
+    >
+        <History className="h-4 w-4 shadow-sm" />
+    </button>
+
+    {corpState && (
+        <div
+            className={`flex items-center rounded-tr-lg px-3 py-1.5 text-[10px] font-black tracking-wider uppercase ${
+                !activeCheckin && !sortedReservations.length
+                    ? 'rounded-bl-xl'
+                    : ''
+            } ${corpState.badge}`}
+        >
+            {corpState.text}
+        </div>
+    )}
+</div>
 
                                 {isSelected && (
                                     <div
@@ -2018,7 +2055,10 @@ export default function RoomsStatus({
 
 // --- COMPONENTE MODAL MODIFICADO ---
 
-function CheckoutConfirmationModal({
+// export: reutilizado tal cual por el panel Cocina (cocina/index.tsx,
+// etapa 4) para "Finalizar habitación" — mismo componente, mismo cálculo
+// de checkout, cero lógica duplicada.
+export function CheckoutConfirmationModal({
     checkin,
     room,
     onClose,
