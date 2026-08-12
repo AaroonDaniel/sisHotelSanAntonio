@@ -9,20 +9,35 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payments', function (Blueprint $table) {
-            $table->dropColumn('reference');    
-        // 1. Campo para la ruta de la imagen
-            $table->string('voucher_path')->nullable()->after('payment_method');
-            
+            // Solo borra 'reference' si existe (en base nueva nunca se creó)
+            if (Schema::hasColumn('payments', 'reference')) {
+                $table->dropColumn('reference');
+            }
+
+            // 1. Campo para la ruta de la imagen
+            if (!Schema::hasColumn('payments', 'voucher_path')) {
+                $table->string('voucher_path')->nullable()->after('payment_method');
+            }
+
             // 2. Campo para controlar si el pago es real o está en revisión
-            $table->string('status')->default('Pendiente')->after('voucher_path');
+            if (!Schema::hasColumn('payments', 'status')) {
+                $table->string('status')->default('Pendiente')->after('voucher_path');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('payments', function (Blueprint $table) {
-            $table->dropColumn(['voucher_path', 'status']);
-            $table->string('reference')->nullable();
+            if (Schema::hasColumn('payments', 'voucher_path')) {
+                $table->dropColumn('voucher_path');
+            }
+            if (Schema::hasColumn('payments', 'status')) {
+                $table->dropColumn('status');
+            }
+            if (!Schema::hasColumn('payments', 'reference')) {
+                $table->string('reference')->nullable();
+            }
         });
     }
 };
