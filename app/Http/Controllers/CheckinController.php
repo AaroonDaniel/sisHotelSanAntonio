@@ -1687,7 +1687,7 @@ class CheckinController extends Controller
                 $updateData['is_temporary'] = false;
 
                 $checkin->update($updateData);
-                return redirect()->back()->with('success', 'Check-in completado al 100%. Habitación ocupada definitivamente.');
+                return redirect()->back()->with('success', 'Check-in completado al 100%..');
             } else {
                 $updateData['is_temporary'] = true;
                 $checkin->update($updateData);
