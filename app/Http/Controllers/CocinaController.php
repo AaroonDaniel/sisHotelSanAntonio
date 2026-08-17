@@ -318,19 +318,34 @@ class CocinaController extends Controller
      * replicar el mismo criterio de "faltan datos" que ya usa
      * rooms/status.tsx::getDisplayStatus() -- ver esa función en el
      * frontend, se porta tal cual, sin reinventarla.
+     *
+     * guest/companions van con TODAS sus columnas (sin restricción, igual
+     * que RoomController::status()): este mismo checkin activo se reusa
+     * como checkinToEdit del CheckinModal (botón "Editar" del tablero de
+     * cocina), y ese formulario necesita carnet, nacionalidad, estado
+     * civil, edad (birth_date), profesión y teléfono -- si se restringen
+     * columnas acá, esos campos aparecen vacíos/con su valor por defecto
+     * al editar aunque el huésped sí los tenga guardados.
      */
     private function getRooms()
     {
+        // 'number' es VARCHAR (hay habitaciones "A".."M" además de la 1-50),
+        // así que orderBy('number') de SQL las ordena alfabéticamente
+        // (1, 10, 11, 12, ..., 2, 20, ...). sortBy(..., SORT_NATURAL) las
+        // deja en el orden que el usuario espera ver en el tablero: 1, 2,
+        // 3, ..., 50, A, B, C...
         return Room::with([
             'roomType:id,name,capacity',
             'price:id,amount,bathroom_type',
             'checkins' => fn ($q) => $q->where('status', 'activo')
                 ->with([
-                    'guest:id,full_name,profile_status',
-                    'companions:id,profile_status',
+                    'guest',
+                    'companions',
                     'specialAgreement:id,type',
                 ]),
-        ])->orderBy('number')->get();
+        ])->get()
+            ->sortBy('number', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
     }
 
     /**
