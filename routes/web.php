@@ -24,7 +24,6 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\SignificantEventController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentHistoryController;
-use App\Http\Controllers\DataAuditController;
 use App\Http\Controllers\CocinaController;
 use App\Http\Controllers\GroupAccountController;
 use App\Http\Controllers\CamaraHoteleraController;
@@ -375,22 +374,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/auditoria', [ActivityLogController::class, 'index'])->name('activity-logs.index')->middleware('permission:auditoria.ver');
 
     // ==========================================
-    // "GOD MODE" / AUDITORÍA DE DATOS (secreto, solo administrador principal)
-    // ==========================================
-    Route::prefix('admin')->middleware('god_mode')->group(function () {
-        Route::get('/god-mode', [DataAuditController::class, 'index'])->name('god-mode.index');
-        Route::put('/god-mode/cash-registers/{cashRegister}', [DataAuditController::class, 'updateCashRegister'])->name('god-mode.cash-registers.update');
-        Route::put('/god-mode/checkins/{checkin}', [DataAuditController::class, 'updateCheckin'])->name('god-mode.checkins.update');
-        Route::put('/god-mode/payments/{payment}', [DataAuditController::class, 'updatePayment'])->name('god-mode.payments.update');
-        Route::put('/god-mode/expenses/{expense}', [DataAuditController::class, 'updateExpense'])->name('god-mode.expenses.update');
-    });
-
-    // ==========================================
     // PANEL "COCINA" — exclusivo del rol 'administrador_sistema' (Spatie).
-    // A propósito NO usa el middleware 'god_mode' (candado por nickname):
-    // este panel se protege por rol real, para que la jerarquía
+    // A propósito NO usa el middleware 'god_mode' (candado por nickname,
+    // retirado): este panel se protege por rol real, para que la jerarquía
     // administrador / administrador_sistema quede en el sistema de
-    // permisos, no hardcodeada.
+    // permisos, no hardcodeada. La antigua "God Mode" (DataAuditController)
+    // se fusionó acá como la sección de Auditoría.
     // ==========================================
     Route::prefix('admin')->middleware('role:administrador_sistema')->group(function () {
         Route::get('/cocina', [CocinaController::class, 'index'])->name('cocina.index');
@@ -406,6 +395,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Etapa 7 — turnos por operador (arqueo por persona).
         Route::get('/cocina/turnos', [CocinaController::class, 'turnos'])->name('cocina.turnos');
         Route::get('/cocina/turnos/{cashRegister}/payments', [CocinaController::class, 'getCashRegisterPayments'])->name('cocina.turnos.payments');
+
+        // Auditoría (ex "God Mode") — edición cruda sin las validaciones de
+        // negocio normales: cajas, check-ins/pagos y gastos. Prefijo
+        // '/cocina/audit/...' a propósito, para no chocar con
+        // '/cocina/payments/{payment}' de arriba (updateRoomPayment, otro
+        // flujo con sus propias reglas).
+        Route::get('/cocina/auditoria', [CocinaController::class, 'auditoria'])->name('cocina.auditoria');
+        Route::get('/cocina/checkins/{checkin}/audit-data', [CocinaController::class, 'getCheckinAuditData'])->name('cocina.checkins.audit-data');
+        Route::put('/cocina/audit/cash-registers/{cashRegister}', [CocinaController::class, 'updateCashRegisterAudit'])->name('cocina.audit.cash-registers.update');
+        Route::put('/cocina/audit/checkins/{checkin}', [CocinaController::class, 'updateCheckinAudit'])->name('cocina.audit.checkins.update');
+        Route::put('/cocina/audit/payments/{payment}', [CocinaController::class, 'updatePaymentAudit'])->name('cocina.audit.payments.update');
+        Route::put('/cocina/audit/expenses/{expense}', [CocinaController::class, 'updateExpenseAudit'])->name('cocina.audit.expenses.update');
     });
 }); // <-- Cierre del grupo autenticado
 

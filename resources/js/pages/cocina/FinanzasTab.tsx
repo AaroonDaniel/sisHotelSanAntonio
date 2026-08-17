@@ -132,7 +132,7 @@ function PaymentsTable({
     const saveEdit = (id: number) => {
         setIsSaving(true);
         router.put(
-            `/admin/god-mode/payments/${id}`,
+            `/admin/cocina/audit/payments/${id}`,
             {
                 amount: editForm.amount,
                 method: editForm.method,
@@ -292,7 +292,7 @@ function PaymentsTable({
                                                     amount: val,
                                                 }));
                                             }}
-                                            className="w-24 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="w-24 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
                                     <td className="px-4 py-3">
@@ -304,7 +304,7 @@ function PaymentsTable({
                                                     method: e.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             {PAYMENT_METHODS.map((m) => (
                                                 <option key={m} value={m}>
@@ -322,7 +322,7 @@ function PaymentsTable({
                                                     type: e.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             {PAYMENT_TYPES.map((t) => (
                                                 <option key={t} value={t}>
@@ -341,7 +341,7 @@ function PaymentsTable({
                                                         e.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             <option value="">
                                                 (Sin caja)
@@ -366,7 +366,7 @@ function PaymentsTable({
                                                         e.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             <option value="">
                                                 (Sin operador)
@@ -393,7 +393,7 @@ function PaymentsTable({
                                                         e.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
                                     <td className="px-4 py-3">
@@ -470,7 +470,7 @@ function ExpensesTable({
     const saveEdit = (id: number) => {
         setIsSaving(true);
         router.put(
-            `/admin/god-mode/expenses/${id}`,
+            `/admin/cocina/audit/expenses/${id}`,
             {
                 description: editForm.description,
                 amount: editForm.amount,
@@ -592,7 +592,7 @@ function ExpensesTable({
                                                         ev.target.value,
                                                 }))
                                             }
-                                            className="w-full min-w-[10rem] rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="w-full min-w-[10rem] rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
                                     <td className="px-4 py-3">
@@ -622,7 +622,7 @@ function ExpensesTable({
                                                     amount: val,
                                                 }));
                                             }}
-                                            className="w-24 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="w-24 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
                                     <td className="px-4 py-3">
@@ -635,7 +635,7 @@ function ExpensesTable({
                                                         ev.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             <option value="">
                                                 (Selecciona una caja)
@@ -660,7 +660,7 @@ function ExpensesTable({
                                                         ev.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         >
                                             <option value="">
                                                 (Sin operador)
@@ -690,7 +690,7 @@ function ExpensesTable({
                                                         ev.target.value,
                                                 }))
                                             }
-                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                         />
                                     </td>
                                     <td className="px-4 py-3">

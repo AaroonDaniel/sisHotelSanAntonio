@@ -13,11 +13,11 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import FinanzasTab, { ExpenseAudit, PaymentAudit } from './FinanzasTab';
-import GodModeCheckinModal, {
+import CheckinAuditModal, {
     CashRegisterOption,
     CheckinAudit,
     OperatorOption,
-} from './GodModeCheckinModal';
+} from './CheckinAuditModal';
 
 // --- INTERFACES ---
 interface CashRegisterAudit {
@@ -90,7 +90,7 @@ export default function DataAuditIndex({
 }: Props) {
     const [activeTab, setActiveTab] = useState<TabKey>('cajas');
 
-    // --- Modal God Mode de Check-ins ---
+    // --- Modal de auditoría de Check-ins ---
     const [checkinToEdit, setCheckinToEdit] = useState<CheckinAudit | null>(
         null,
     );
@@ -122,7 +122,7 @@ export default function DataAuditIndex({
     const saveEdit = (id: number) => {
         setIsSaving(true);
         router.put(
-            `/admin/god-mode/cash-registers/${id}`,
+            `/admin/cocina/audit/cash-registers/${id}`,
             {
                 opening_amount: editForm.opening_amount,
                 status: editForm.status,
@@ -146,7 +146,7 @@ export default function DataAuditIndex({
             return;
         }
         router.put(
-            `/admin/god-mode/cash-registers/${cr.id}`,
+            `/admin/cocina/audit/cash-registers/${cr.id}`,
             {
                 opening_amount: cr.opening_amount,
                 status: 'CERRADA',
@@ -159,7 +159,7 @@ export default function DataAuditIndex({
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="God Mode · Auditoría de Datos" />
+            <Head title="Auditoría · Cocina" />
 
             <div className="min-h-screen bg-gray-950 p-6 text-gray-100">
                 {/* Header */}
@@ -169,7 +169,7 @@ export default function DataAuditIndex({
                     </div>
                     <div>
                         <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-                            God Mode
+                            Auditoría
                             <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-400">
                                 Acceso exclusivo
                             </span>
@@ -398,7 +398,7 @@ export default function DataAuditIndex({
                                                                     }),
                                                                 );
                                                             }}
-                                                            className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                            className="w-28 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3">
@@ -416,7 +416,7 @@ export default function DataAuditIndex({
                                                                     }),
                                                                 )
                                                             }
-                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                         >
                                                             <option value="ABIERTA">
                                                                 ABIERTA
@@ -443,7 +443,7 @@ export default function DataAuditIndex({
                                                                     }),
                                                                 )
                                                             }
-                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3">
@@ -463,7 +463,7 @@ export default function DataAuditIndex({
                                                                     }),
                                                                 )
                                                             }
-                                                            className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                            className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3">
@@ -743,7 +743,7 @@ export default function DataAuditIndex({
                                                     className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-gray-700"
                                                 >
                                                     <Pencil className="h-3.5 w-3.5" />
-                                                    God Mode
+                                                    Editar
                                                 </button>
                                             </td>
                                         </tr>
@@ -765,7 +765,7 @@ export default function DataAuditIndex({
                 )}
             </div>
 
-            <GodModeCheckinModal
+            <CheckinAuditModal
                 show={!!checkinToEdit}
                 onClose={() => setCheckinToEdit(null)}
                 checkin={checkinToEdit}

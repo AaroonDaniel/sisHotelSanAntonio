@@ -1,6 +1,8 @@
 import AuthenticatedLayout, { User } from '@/layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import axios from 'axios';
 import {
+    ClipboardList,
     LogOut,
     Pencil,
     Power,
@@ -18,7 +20,10 @@ import CheckinModal, {
     Operator,
     Room as BaseRoom,
 } from '../checkins/checkinModal';
-import { CheckoutConfirmationModal } from '../rooms/status';
+import CheckinAuditModal, {
+    CashRegisterOption,
+    CheckinAudit,
+} from './CheckinAuditModal';
 import RoomPaymentsModal from './RoomPaymentsModal';
 
 // El tipo Room de checkinModal.tsx no declara is_active (no lo necesita
@@ -43,6 +48,7 @@ interface Props {
     Operators: Operator[];
     GroupAccounts: GroupAccount[];
     services: any[];
+    AllCashRegisters: CashRegisterOption[];
 }
 
 // Mismos colores sólidos que ya usa rooms/status.tsx (getStatusConfig)
@@ -138,6 +144,7 @@ export default function CocinaIndex({
     Operators,
     GroupAccounts,
     services,
+    AllCashRegisters,
 }: Props) {
     // Modal placeholder para estados que todavía no tienen acción
     // conectada (se van cableando en las próximas etapas: factura en la 5,
@@ -157,10 +164,24 @@ export default function CocinaIndex({
     const [editingCheckin, setEditingCheckin] = useState<CheckinData | null>(
         null,
     );
-    const [checkoutTarget, setCheckoutTarget] = useState<{
-        room: Room;
-        checkin: CheckinData;
-    } | null>(null);
+    // "Finalizar estadía" ya NO usa el checkout de operador
+    // (CheckoutConfirmationModal, con sus reglas de tolerancia/recargo
+    // fijas) -- acá el administrador necesita editar fecha, monto, estado
+    // y pagos sin restricciones, igual que el editor de la ex "God Mode".
+    // El checkin de la tarjeta (CheckinData) no trae ese shape, así que se
+    // pide aparte por fetch al abrir (mismo patrón que RoomPaymentsModal).
+    const [auditCheckin, setAuditCheckin] = useState<CheckinAudit | null>(
+        null,
+    );
+    const [loadingAudit, setLoadingAudit] = useState(false);
+
+    const openFinalizar = (checkinId: number) => {
+        setLoadingAudit(true);
+        axios
+            .get(`/admin/cocina/checkins/${checkinId}/audit-data`)
+            .then((res) => setAuditCheckin(res.data))
+            .finally(() => setLoadingAudit(false));
+    };
 
     // Etapa 6: historial de pagos de la habitación (todas sus estancias).
     const [paymentsRoom, setPaymentsRoom] = useState<Room | null>(null);
@@ -218,19 +239,18 @@ export default function CocinaIndex({
                         <h1 className="text-3xl font-black tracking-tight text-white">
                             Cocina
                         </h1>
-                        <p className="text-sm text-gray-400">
-                            Centro de mando — click en una habitación para
-                            gestionarla.
-                        </p>
                     </div>
 
-                    <Link
-                        href="/admin/cocina/turnos"
-                        className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
-                    >
-                        <Vault className="h-4 w-4" />
-                        Ver Turnos
-                    </Link>
+                    <div className="flex flex-wrap gap-2">
+                        <Link
+                            href="/admin/cocina/turnos"
+                            className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+                        >
+                            <Vault className="h-4 w-4" />
+                            Ver Turnos
+                        </Link>
+                        
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -309,18 +329,16 @@ export default function CocinaIndex({
                 checkinToEdit={editingCheckin}
             />
 
-            {/* Finalizar (checkout) — mismo componente que rooms/status.tsx,
-                etapa 4. */}
-            {checkoutTarget && (
-                <CheckoutConfirmationModal
-                    checkin={checkoutTarget.checkin}
-                    room={checkoutTarget.room}
-                    schedules={Schedules}
-                    guests={Guests}
-                    operators={Operators}
-                    onClose={() => setCheckoutTarget(null)}
-                />
-            )}
+            {/* Finalizar estadía — editor libre (fecha/monto/estado/pagos),
+                mismo componente que usa la Auditoría de Cocina. No es el
+                checkout de operador (ese sigue en rooms/status.tsx). */}
+            <CheckinAuditModal
+                show={!!auditCheckin}
+                checkin={auditCheckin}
+                operators={Operators}
+                cashRegisters={AllCashRegisters}
+                onClose={() => setAuditCheckin(null)}
+            />
 
             {/* Selector rápido para OCUPADO: Editar o Finalizar, etapa 4. */}
             {occupiedChooser && (
@@ -354,16 +372,16 @@ export default function CocinaIndex({
                             </button>
                             <button
                                 onClick={() => {
-                                    setCheckoutTarget({
-                                        room: occupiedChooser.room,
-                                        checkin: occupiedChooser.checkin,
-                                    });
+                                    openFinalizar(occupiedChooser.checkin.id);
                                     setOccupiedChooser(null);
                                 }}
-                                className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-500"
+                                disabled={loadingAudit}
+                                className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50"
                             >
                                 <LogOut className="h-4 w-4" />
-                                Finalizar estadía
+                                {loadingAudit
+                                    ? 'Cargando...'
+                                    : 'Finalizar estadía'}
                             </button>
                             <button
                                 onClick={() => {

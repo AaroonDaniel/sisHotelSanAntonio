@@ -1,11 +1,5 @@
 import { router } from '@inertiajs/react';
-import {
-    AlertTriangle,
-    Calculator,
-    Save,
-    ShieldAlert,
-    X,
-} from 'lucide-react';
+import { AlertTriangle, Calculator, Save, X } from 'lucide-react';
 import { useState } from 'react';
 
 export interface CheckinPaymentAudit {
@@ -100,7 +94,7 @@ const computeNights = (
     return diff <= 0 ? 1 : diff;
 };
 
-export default function GodModeCheckinModal({
+export default function CheckinAuditModal({
     show,
     onClose,
     checkin,
@@ -131,16 +125,25 @@ interface CheckinAuditFormProps {
     onClose: () => void;
 }
 
+// Misma clase para todas las casillas editables de esta vista -- look de
+// "recibo claro" (blanco/rojo), igual que CheckoutConfirmationModal
+// (rooms/status.tsx), NO el panel oscuro de auditoría genérica.
+const inputClass =
+    'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500';
+const inputClassSm =
+    'w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500';
+
 function CheckinAuditForm({
     checkin,
     operators,
     cashRegisters,
     onClose,
 }: CheckinAuditFormProps) {
-    // "Total a pagar" es un campo de conveniencia de la UI: el admin
-    // conoce el TOTAL que debió cobrarse, y este formulario deriva el
-    // costo/noche (lo que realmente se guarda en la columna agreed_price,
-    // que en toda la app es una tarifa POR NOCHE, no un total).
+    // "Total Hospedaje" es un campo de conveniencia de la UI: el admin
+    // conoce el TOTAL que debió cobrarse por las noches, y este formulario
+    // deriva el costo/noche (lo que realmente se guarda en la columna
+    // agreed_price, que en toda la app es una tarifa POR NOCHE, no un
+    // total).
     const initialNights = Math.max(1, Number(checkin.duration_days) || 1);
     const initialTotal = (Number(checkin.agreed_price) || 0) * initialNights;
 
@@ -158,10 +161,10 @@ function CheckinAuditForm({
     });
     const [isSavingCheckin, setIsSavingCheckin] = useState(false);
 
-    // Candado de seguridad: obliga a revisar la Vista Previa (con los
-    // números ya recalculados) antes de habilitar "Guardar". Se reinicia
-    // cada vez que el admin toca un campo que afecta el cálculo, para que
-    // no pueda guardar cambios que nunca llegó a ver reflejados.
+    // Candado de seguridad: obliga a revisar el resumen (con los números ya
+    // recalculados) antes de habilitar el botón final. Se reinicia cada vez
+    // que el admin toca un campo que afecta el cálculo, para que no pueda
+    // guardar cambios que nunca llegó a ver reflejados.
     const [previewAcknowledged, setPreviewAcknowledged] = useState(false);
     const invalidatePreview = () => setPreviewAcknowledged(false);
 
@@ -187,14 +190,25 @@ function CheckinAuditForm({
         null,
     );
 
-    // --- VISTA PREVIA (cálculo en tiempo real, sin efectos) ---
+    // --- RESUMEN / VISTA PREVIA (cálculo en tiempo real, sin efectos) ---
     const nights = computeNights(
         form.check_in_date,
         form.check_out_date,
         checkin.duration_days,
     );
-    const totalAPagar = Number(form.total_a_pagar) || 0;
-    const costPerNight = nights > 0 ? totalAPagar / nights : 0;
+    const totalHospedaje = Number(form.total_a_pagar) || 0;
+    const costPerNight = nights > 0 ? totalHospedaje / nights : 0;
+
+    const serviciosTotal = checkin.checkin_details.reduce(
+        (sum, d) => sum + d.quantity * d.selling_price,
+        0,
+    );
+    const totalEstadia = totalHospedaje + serviciosTotal;
+    const totalPagado = Object.values(paymentForms).reduce(
+        (sum, p) => sum + (Number(p.amount) || 0),
+        0,
+    );
+    const saldoPendiente = Math.max(0, totalEstadia - totalPagado);
 
     const arrivalDate = form.check_in_date
         ? new Date(form.check_in_date)
@@ -209,7 +223,7 @@ function CheckinAuditForm({
     );
 
     const isConsistent =
-        totalAPagar >= 0 && nights > 0 && !!form.check_in_date;
+        totalHospedaje >= 0 && nights > 0 && !!form.check_in_date;
     const canSave = isConsistent && previewAcknowledged;
 
     // El check-in YA estaba finalizado al abrir el modal (dato original,
@@ -217,42 +231,10 @@ function CheckinAuditForm({
     const wasOriginallyFinalizado = checkin.status === 'finalizado';
     const willBeFinalizado = form.status === 'finalizado';
 
-    const lastPayment =
-        checkin.payments.length > 0
-            ? checkin.payments[checkin.payments.length - 1]
-            : null;
-
-    // Caja de la referencia ORIGINAL (tal cual estaba guardada al abrir).
-    const originalClosingCashRegisterLabel = lastPayment?.cash_register_id
-        ? (cashRegisters.find((cr) => cr.id === lastPayment.cash_register_id)
-              ?.label ?? `#${lastPayment.cash_register_id}`)
-        : '(sin caja vinculada)';
-
-    // Caja PROYECTADA: si el admin ya editó el pago de cierre en la sección
-    // de Pagos (más abajo), reflejamos ese cambio aquí también.
-    const projectedCashRegisterId = lastPayment
-        ? Number(
-              paymentForms[lastPayment.id]?.cash_register_id ||
-                  lastPayment.cash_register_id ||
-                  0,
-          ) || null
-        : null;
-    const projectedClosingCashRegisterLabel = projectedCashRegisterId
-        ? (cashRegisters.find((cr) => cr.id === projectedCashRegisterId)
-              ?.label ?? `#${projectedCashRegisterId}`)
-        : '(sin caja vinculada)';
-
-    const projectedCheckinOperatorLabel =
-        operators.find((op) => String(op.id) === form.checkin_operator_id)
-            ?.full_name ?? '(sin operador asignado)';
-    const projectedCheckoutOperatorLabel =
-        operators.find((op) => String(op.id) === form.checkout_operator_id)
-            ?.full_name ?? '(sin operador asignado)';
-
     const saveCheckin = () => {
         setIsSavingCheckin(true);
         router.put(
-            `/admin/god-mode/checkins/${checkin.id}`,
+            `/admin/cocina/audit/checkins/${checkin.id}`,
             {
                 check_in_date: form.check_in_date,
                 check_out_date: form.check_out_date || null,
@@ -276,7 +258,7 @@ function CheckinAuditForm({
 
         setSavingPaymentId(paymentId);
         router.put(
-            `/admin/god-mode/payments/${paymentId}`,
+            `/admin/cocina/audit/payments/${paymentId}`,
             {
                 amount: p.amount,
                 cash_register_id: p.cash_register_id || null,
@@ -289,130 +271,78 @@ function CheckinAuditForm({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-            <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-red-900/60 bg-gray-950 shadow-2xl">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-red-900/50 bg-red-950/30 px-6 py-4">
-                    <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-                        <ShieldAlert className="h-5 w-5 text-red-400" />
-                        God Mode · Check-in #{checkin.id}
-                    </h2>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+            <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                {/* HEADER — mismo estilo que CheckoutConfirmationModal
+                    (rooms/status.tsx): barra roja, título "Finalizar
+                    Estadía". */}
+                <div className="flex flex-none items-center justify-between border-b border-red-100 bg-red-50 px-4 py-2">
+                    <h3 className="flex items-center gap-2 text-lg font-bold text-red-700">
+                        <AlertTriangle className="h-6 w-6" />
+                        Finalizar Estadía
+                    </h3>
                     <button
                         onClick={onClose}
-                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-800"
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-200"
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="overflow-y-auto px-6 py-5">
-                    {/* Advertencia */}
-                    <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-700/60 bg-amber-950/30 p-4 text-amber-300">
-                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                        <p className="text-xs leading-relaxed">
-                            <strong>Edición directa de base de datos.</strong>{' '}
-                            Estos cambios se escriben crudos (bypass de
-                            validaciones de negocio, mutadores y
-                            observers). No hay guardianes de duplicados,
-                            capacidad ni conflictos de huésped. Verifica los
-                            datos antes de guardar.
-                        </p>
-                    </div>
-
-                    <div className="mb-5 grid grid-cols-2 gap-3 rounded-xl border border-gray-800 bg-gray-900 p-4 text-sm text-gray-300 sm:grid-cols-4">
-                        <div>
-                            <span className="block text-xs text-gray-500">
-                                Huésped
+                <div className="overflow-y-auto p-4">
+                    {/* --- RESUMEN / IDENTIDAD (igual que la caja roja del
+                        checkout de operador: habitación + huésped, no
+                        editable, es dato de identidad) --- */}
+                    <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 text-base shadow-inner">
+                        <div className="mb-3 text-center">
+                            <span className="block text-[20px] font-bold text-red-600 uppercase">
+                                Habitación {checkin.room_number}
                             </span>
-                            <span className="font-semibold text-white">
+                            <span className="mt-1 block text-[13px] font-bold text-black uppercase">
                                 {checkin.guest_name}
                             </span>
                         </div>
-                        <div>
-                            <span className="block text-xs text-gray-500">
-                                Habitación
-                            </span>
-                            <span className="font-semibold text-white">
-                                {checkin.room_number}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="block text-xs text-gray-500">
-                                Creado por
-                            </span>
-                            <span className="font-semibold text-white">
-                                {checkin.user_name}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="block text-xs text-gray-500">
-                                Check-in original
-                            </span>
-                            <span className="font-semibold text-white">
-                                {checkin.check_in_date
-                                    ? new Date(
-                                          checkin.check_in_date,
-                                      ).toLocaleString('es-BO')
-                                    : '—'}
-                            </span>
-                        </div>
-                    </div>
 
-                    {/* --- DATOS DE CIERRE ORIGINALES (solo si ya estaba finalizado) --- */}
-                    {wasOriginallyFinalizado && (
-                        <div className="mb-5 rounded-xl border border-sky-800/60 bg-sky-950/20 p-4">
-                            <h3 className="mb-2 text-sm font-bold text-sky-300">
-                                Esta estadía ya estaba Finalizada — datos de
-                                cierre originales
-                            </h3>
-                            <div className="grid grid-cols-1 gap-3 text-xs text-sky-200/80 sm:grid-cols-3">
-                                <div>
-                                    <span className="block text-sky-400/70">
-                                        Fecha de cierre registrada
-                                    </span>
-                                    <span className="font-semibold text-sky-100">
-                                        {checkin.check_out_date
-                                            ? new Date(
-                                                  checkin.check_out_date,
-                                              ).toLocaleString('es-BO')
-                                            : '—'}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="block text-sky-400/70">
-                                        Operador de cierre registrado
-                                    </span>
-                                    <span className="font-semibold text-sky-100">
-                                        {checkin.checkout_operator_name ??
-                                            '(sin operador asignado)'}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="block text-sky-400/70">
-                                        Caja del último pago
-                                    </span>
-                                    <span className="font-semibold text-sky-100">
-                                        {originalClosingCashRegisterLabel}
-                                    </span>
-                                </div>
-                            </div>
-                            <p className="mt-2 text-[11px] text-sky-300/60">
-                                Puedes corregir estos valores abajo (fecha de
-                                salida, operador) y en la sección de Pagos
-                                (caja del pago de cierre).
-                            </p>
-                        </div>
-                    )}
-
-                    {/* --- FORM CHECKIN --- */}
-                    <div className="mb-6 rounded-xl border border-gray-800 bg-gray-900 p-4">
-                        <h3 className="mb-3 text-sm font-bold text-gray-200">
-                            Datos de la estadía
-                        </h3>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {/* RECIBO RESUMEN: mismos 3 tiles que el checkout de
+                            operador, pero recalculados en vivo a partir de
+                            las casillas editables de abajo. */}
+                        <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg bg-white/70 p-2 text-center shadow-inner">
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Fecha de Check-in (check_in_date)
+                                <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                    Total Estadía
+                                </p>
+                                <p className="text-base font-black text-gray-800">
+                                    {totalEstadia.toFixed(2)} Bs
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                    Total Pagado
+                                </p>
+                                <p className="text-base font-black text-emerald-600">
+                                    {totalPagado.toFixed(2)} Bs
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold tracking-wide text-gray-500 uppercase">
+                                    Saldo Pendiente
+                                </p>
+                                <p
+                                    className={`text-base font-black ${saldoPendiente <= 0 ? 'text-green-600' : 'text-red-600'}`}
+                                >
+                                    {saldoPendiente.toFixed(2)} Bs
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* --- CASILLAS EDITABLES: cada campo que el
+                            checkout de operador muestra, acá es una caja de
+                            texto con el valor original, lista para
+                            corregir. --- */}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
+                                    Ingreso
                                 </label>
                                 <input
                                     type="datetime-local"
@@ -424,13 +354,12 @@ function CheckinAuditForm({
                                         }));
                                         invalidatePreview();
                                     }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                    className={inputClass}
                                 />
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Fecha de finalización / salida
-                                    (check_out_date)
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
+                                    Salida
                                 </label>
                                 <input
                                     type="datetime-local"
@@ -442,41 +371,31 @@ function CheckinAuditForm({
                                         }));
                                         invalidatePreview();
                                     }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                    className={inputClass}
                                 />
                                 {hasDateWarning && (
-                                    <p className="mt-1 text-[11px] font-semibold text-red-400">
+                                    <p className="mt-1 text-[11px] font-semibold text-red-600">
                                         La salida es anterior (o igual) a la
-                                        llegada. Se forzará 1 noche mínimo,
-                                        pero revisa las fechas.
+                                        llegada. Se forzará 1 noche mínimo.
                                     </p>
                                 )}
                             </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Estado (status)
-                                </label>
-                                <select
-                                    value={form.status}
-                                    onChange={(e) => {
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            status: e.target.value,
-                                        }));
-                                        invalidatePreview();
-                                    }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
-                                >
-                                    {CHECKIN_STATUSES.map((s) => (
-                                        <option key={s} value={s}>
-                                            {s.toUpperCase()}
-                                        </option>
-                                    ))}
-                                </select>
+                        </div>
+
+                        <div className="my-3 border-t border-dashed border-gray-300" />
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="flex items-center justify-between rounded-lg bg-white/70 px-3 py-2 text-sm text-gray-800 sm:col-span-2">
+                                <span className="font-bold">
+                                    Permanencia (calculada de las fechas):
+                                </span>
+                                <span className="font-black">
+                                    {nights} noche(s)
+                                </span>
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
-                                    Nuevo total a pagar (Bs)
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
+                                    Total Hospedaje (Bs)
                                 </label>
                                 <input
                                     type="number"
@@ -500,19 +419,69 @@ function CheckinAuditForm({
                                         }));
                                         invalidatePreview();
                                     }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                    className={inputClass}
                                 />
                                 <p className="mt-1 text-[11px] text-gray-500">
-                                    Total real que debió cobrarse por toda la
-                                    estadía. El sistema calcula el costo/noche
-                                    resultante (columna agreed_price) en la
-                                    Vista Previa de abajo.
+                                    Costo/noche resultante: Bs{' '}
+                                    {costPerNight.toFixed(2)}
                                 </p>
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
+                                    Estado
+                                </label>
+                                <select
+                                    value={form.status}
+                                    onChange={(e) => {
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            status: e.target.value,
+                                        }));
+                                        invalidatePreview();
+                                    }}
+                                    className={inputClass}
+                                >
+                                    {CHECKIN_STATUSES.map((s) => (
+                                        <option key={s} value={s}>
+                                            {s.toUpperCase()}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {serviciosTotal > 0 && (
+                            <div className="mt-3 rounded-lg bg-white/70 p-2 text-sm text-gray-800">
+                                <span className="font-bold">
+                                    Servicios consumidos:
+                                </span>
+                                <div className="mt-1 space-y-0.5 text-xs">
+                                    {checkin.checkin_details.map((d) => (
+                                        <div
+                                            key={d.id}
+                                            className="flex justify-between"
+                                        >
+                                            <span>
+                                                {d.service_name} x{' '}
+                                                {d.quantity}
+                                            </span>
+                                            <span>
+                                                {(
+                                                    d.quantity *
+                                                    d.selling_price
+                                                ).toFixed(2)}{' '}
+                                                Bs
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
                                     Operador de check-in
-                                    (checkin_operator_id)
                                 </label>
                                 <select
                                     value={form.checkin_operator_id}
@@ -524,7 +493,7 @@ function CheckinAuditForm({
                                         }));
                                         invalidatePreview();
                                     }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                    className={inputClass}
                                 >
                                     <option value="">
                                         (Sin operador asignado)
@@ -540,9 +509,8 @@ function CheckinAuditForm({
                                 </select>
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-400">
+                                <label className="mb-1 block text-xs font-bold text-gray-600">
                                     Operador de checkout
-                                    (checkout_operator_id)
                                 </label>
                                 <select
                                     value={form.checkout_operator_id}
@@ -554,7 +522,7 @@ function CheckinAuditForm({
                                         }));
                                         invalidatePreview();
                                     }}
-                                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                    className={inputClass}
                                 >
                                     <option value="">
                                         (Sin operador asignado)
@@ -570,110 +538,16 @@ function CheckinAuditForm({
                                 </select>
                             </div>
                         </div>
-
-                        {/* --- VISTA PREVIA DE RESULTADOS --- */}
-                        <div className="mt-5 rounded-xl border border-emerald-800/60 bg-emerald-950/20 p-4">
-                            <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-300">
-                                <Calculator className="h-4 w-4" />
-                                Vista Previa de Resultados
-                            </h4>
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                                <div>
-                                    <span className="block text-xs text-emerald-400/70">
-                                        Días totales de estadía
-                                    </span>
-                                    <span className="text-lg font-bold text-white">
-                                        {nights}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs text-emerald-400/70">
-                                        Nuevo total a pagar
-                                    </span>
-                                    <span className="text-lg font-bold text-white">
-                                        Bs {totalAPagar.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs text-emerald-400/70">
-                                        Costo resultante por noche
-                                    </span>
-                                    <span className="text-lg font-bold text-white">
-                                        Bs {costPerNight.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs text-emerald-400/70">
-                                        Estado final proyectado
-                                    </span>
-                                    <span className="text-sm font-bold text-white">
-                                        {form.status.toUpperCase()}
-                                    </span>
-                                    {willBeFinalizado && (
-                                        <span className="mt-0.5 block text-[11px] font-medium text-emerald-300/80">
-                                            Cierre:{' '}
-                                            {departureDate
-                                                ? departureDate.toLocaleString(
-                                                      'es-BO',
-                                                  )
-                                                : '—'}{' '}
-                                            · {projectedCheckoutOperatorLabel}{' '}
-                                            ·{' '}
-                                            {projectedClosingCashRegisterLabel}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* --- CANDADO DE CONFIRMACIÓN --- */}
-                        <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-800 bg-gray-950 p-3 text-xs text-gray-300">
-                            <input
-                                type="checkbox"
-                                checked={previewAcknowledged}
-                                onChange={(e) =>
-                                    setPreviewAcknowledged(e.target.checked)
-                                }
-                                className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-500 focus:ring-emerald-500"
-                            />
-                            <span>
-                                Revisé la Vista Previa de Resultados de
-                                arriba y confirmo que estos cálculos (días,
-                                total y costo por noche) son correctos antes
-                                de guardar.
-                            </span>
-                        </label>
-
-                        <div className="mt-4 flex justify-end">
-                            <button
-                                onClick={saveCheckin}
-                                disabled={isSavingCheckin || !canSave}
-                                title={
-                                    !canSave
-                                        ? 'Marca la casilla de confirmación de la Vista Previa para habilitar el guardado'
-                                        : undefined
-                                }
-                                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                <Save className="h-4 w-4" />
-                                {isSavingCheckin
-                                    ? 'Guardando...'
-                                    : 'Sobrescribir Check-in'}
-                            </button>
-                        </div>
                     </div>
 
-                    {/* --- PAGOS --- */}
-                    <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
-                        <h3 className="mb-3 text-sm font-bold text-gray-200">
-                            Pagos asociados
-                        </h3>
-
-                        {checkin.payments.length === 0 ? (
-                            <p className="text-sm text-gray-500">
-                                Este check-in no tiene pagos registrados.
-                            </p>
-                        ) : (
+                    {/* --- PAGOS: cada pago registrado también es editable
+                        (monto + caja), mismo look claro. --- */}
+                    {checkin.payments.length > 0 && (
+                        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-700">
+                                <Calculator className="h-4 w-4" />
+                                Pagos registrados
+                            </h3>
                             <div className="space-y-3">
                                 {checkin.payments.map((p) => {
                                     const pf = paymentForms[p.id] ?? {
@@ -685,16 +559,16 @@ function CheckinAuditForm({
                                     return (
                                         <div
                                             key={p.id}
-                                            className="grid grid-cols-1 items-end gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3 sm:grid-cols-5"
+                                            className="grid grid-cols-1 items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-5"
                                         >
-                                            <div className="text-xs text-gray-400">
-                                                <span className="block text-gray-500">
+                                            <div className="text-xs text-gray-500">
+                                                <span className="block">
                                                     Pago #{p.id}
                                                 </span>
-                                                <span className="font-semibold text-gray-300">
+                                                <span className="font-semibold text-gray-700">
                                                     {p.type} · {p.method}
                                                 </span>
-                                                <span className="block text-gray-500">
+                                                <span className="block">
                                                     {p.payment_date
                                                         ? new Date(
                                                               p.payment_date,
@@ -744,12 +618,12 @@ function CheckinAuditForm({
                                                             }),
                                                         );
                                                     }}
-                                                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                    className={inputClassSm}
                                                 />
                                             </div>
                                             <div className="sm:col-span-2">
                                                 <label className="mb-1 block text-xs font-semibold text-gray-500">
-                                                    Caja (cash_register_id)
+                                                    Caja
                                                 </label>
                                                 <select
                                                     value={
@@ -769,7 +643,7 @@ function CheckinAuditForm({
                                                             }),
                                                         )
                                                     }
-                                                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:border-red-500 focus:ring-red-500"
+                                                    className={inputClassSm}
                                                 >
                                                     <option value="">
                                                         (Sin caja)
@@ -807,7 +681,44 @@ function CheckinAuditForm({
                                     );
                                 })}
                             </div>
-                        )}
+                        </div>
+                    )}
+
+                    {/* --- CANDADO DE CONFIRMACIÓN --- */}
+                    <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                        <input
+                            type="checkbox"
+                            checked={previewAcknowledged}
+                            onChange={(e) =>
+                                setPreviewAcknowledged(e.target.checked)
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>
+                            Revisé el resumen de arriba (noches, total y saldo)
+                            y confirmo que estos datos son correctos antes de
+                            guardar.
+                        </span>
+                    </label>
+
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={saveCheckin}
+                            disabled={isSavingCheckin || !canSave}
+                            title={
+                                !canSave
+                                    ? 'Marca la casilla de confirmación para habilitar el guardado'
+                                    : undefined
+                            }
+                            className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <Save className="h-4 w-4" />
+                            {isSavingCheckin
+                                ? 'Guardando...'
+                                : willBeFinalizado && !wasOriginallyFinalizado
+                                  ? 'Finalizar Estadía'
+                                  : 'Guardar Cambios'}
+                        </button>
                     </div>
                 </div>
             </div>

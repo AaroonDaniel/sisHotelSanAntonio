@@ -85,21 +85,21 @@ export default function CocinaTurnos({
                         href="/admin/cocina"
                         className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
                     >
-                        ← Volver al tablero
+                        Volver 
                     </Link>
                 </div>
 
                 {/* Filtro por rango de fechas */}
                 <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4">
                     <div>
-                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase">
+                        <label className="mb-1 block text-xs font-bold text-gray-800 uppercase">
                             Desde
                         </label>
                         <input
                             type="date"
                             value={desde}
                             onChange={(e) => setDesde(e.target.value)}
-                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-800"
                         />
                     </div>
                     <div>
@@ -110,7 +110,7 @@ export default function CocinaTurnos({
                             type="date"
                             value={hasta}
                             onChange={(e) => setHasta(e.target.value)}
-                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-800"
                         />
                     </div>
                     <button
