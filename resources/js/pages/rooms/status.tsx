@@ -1540,7 +1540,7 @@ export default function RoomsStatus({
                     `/checks/${activeCheckin.id}/receipt?t=${Date.now()}`,
                 );
             }}
-            className={`flex items-center justify-center border-r border-purple-400/30 bg-purple-600 px-2.5 py-1.5 text-white transition-colors hover:bg-purple-500 ${
+            className={`flex items-center justify-center border-r border-blue-400/30 bg-blue-600 px-2.5 py-1.5 text-white transition-colors hover:bg-blue-500 ${
                 !sortedReservations.length ? 'rounded-bl-xl' : ''
             }`}
             title="Imprimir datos de huéspedes"

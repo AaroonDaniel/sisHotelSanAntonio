@@ -110,7 +110,7 @@ class ReportController extends Controller
      */
     private function normalizeRangeBounds(string $startDate, string $endDate): array
     {
-        $isDateOnly = fn (string $v) => strlen($v) <= 10;
+        $isDateOnly = fn(string $v) => strlen($v) <= 10;
 
         $rangoInicio = $isDateOnly($startDate)
             ? $startDate . ' 00:00:00'
@@ -991,18 +991,61 @@ class ReportController extends Controller
         // hoja, no un valor fijo adivinado.
         $anchoUtil = $pdf->GetPageWidth() - 10 - 5;
 
-        $pdf->SetFont('Arial', 'B', 13);
-        $pdf->Cell(0, 6, utf8_decode('CONTROL DE HOSPEDAJE'), 0, 1, 'C');
+        // ============================================================
+        // CABECERA (logo + título + fecha) — igual al formato físico
+        // ============================================================
+        $logoPath = public_path('images/imagensanantonio.png');
+        $yTop     = $pdf->GetY();     // tras AddPage suele ser el margen superior (5)
+        $logoW    = 32;               // ancho del logo en mm (ajústalo a gusto)
 
+        // Logo a la izquierda. Pasando solo el ancho, FPDF mantiene la proporción.
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 10, $yTop, $logoW);
+        }
+
+        // Título grande, centrado en el espacio a la derecha del logo
+        $pdf->SetX(10 + $logoW + 2);
+        $pdf->SetFont('Arial', 'BI', 22);
+        $pdf->Cell(0, 12, utf8_decode('CONTROL DE HOSPEDAJE'), 0, 1, 'C');
+
+        // Meses y días en español para la línea de fecha
+        $meses = [
+            1 => 'Enero',
+            2 => 'Febrero',
+            3 => 'Marzo',
+            4 => 'Abril',
+            5 => 'Mayo',
+            6 => 'Junio',
+            7 => 'Julio',
+            8 => 'Agosto',
+            9 => 'Septiembre',
+            10 => 'Octubre',
+            11 => 'Noviembre',
+            12 => 'Diciembre',
+        ];
         $diasSemana = [
-            'Sunday' => 'DOMINGO', 'Monday' => 'LUNES', 'Tuesday' => 'MARTES',
-            'Wednesday' => 'MIERCOLES', 'Thursday' => 'JUEVES', 'Friday' => 'VIERNES',
+            'Sunday'   => 'DOMINGO',
+            'Monday'   => 'LUNES',
+            'Tuesday'  => 'MARTES',
+            'Wednesday' => 'MIERCOLES',
+            'Thursday' => 'JUEVES',
+            'Friday' => 'VIERNES',
             'Saturday' => 'SABADO',
         ];
         $hoy = $fecha;
-        $pdf->SetFont('Arial', '', 9);
-        $pdf->Cell(0, 4, utf8_decode($diasSemana[$hoy->format('l')] . ', ' . $hoy->format('d/m/Y')), 0, 1, 'L');
-        $pdf->Ln(1);
+
+        // Línea "Fecha: 28 de Agosto de 2025    Día: JUEVES"
+        $fechaTexto = 'Fecha: ' . $hoy->format('d') . ' de ' . $meses[(int) $hoy->format('n')]
+            . ' de ' . $hoy->format('Y') . '        Día: ' . $diasSemana[$hoy->format('l')];
+
+        $pdf->SetX(10 + $logoW + 2);
+        $pdf->SetFont('Arial', '', 11);
+        $pdf->Cell(0, 6, utf8_decode($fechaTexto), 0, 1, 'C');
+
+        // Aseguramos que el cursor quede POR DEBAJO del logo antes de las tablas,
+        // para que no se solapen si el logo es más alto que el texto.
+        $pdf->SetY(max($pdf->GetY(), $yTop + 24));
+        $pdf->Ln(2);
 
         // --- Tabla de habitaciones ---
         // Anchos proporcionales sobre $anchoUtil (Pza 7% / Pernoctantes 40% /
@@ -1050,7 +1093,7 @@ class ReportController extends Controller
             if ($checkin) {
                 // Titular con nombre completo; acompañantes solo con el
                 // primer nombre (la fila ya es angosta y son varios).
-                $primerNombre = fn ($nombre) => trim(strtok((string) $nombre, ' '));
+                $primerNombre = fn($nombre) => trim(strtok((string) $nombre, ' '));
 
                 $nombres = collect([$checkin->guest->full_name ?? null])
                     ->filter()
@@ -1074,7 +1117,7 @@ class ReportController extends Controller
                 // las habitaciones del grupo, como si se hubiera vuelto a
                 // pagar cada día.
                 $pagosIndividualesHoy = $checkin->payments
-                    ->filter(fn ($p) => Carbon::parse($p->created_at)->isSameDay($hoy));
+                    ->filter(fn($p) => Carbon::parse($p->created_at)->isSameDay($hoy));
 
                 // 🚀 MOVILIDAD: registra si la habitación pertenece a un
                 // convenio corporativo/delegación y, si es una Cuenta
@@ -1094,9 +1137,9 @@ class ReportController extends Controller
                     && !empty($checkin->specialAgreement->company_name);
                 $pagosGrupoHoy = $esGrupoReal
                     ? Payment::where('special_agreement_id', $checkin->specialAgreement->id)
-                        ->whereDate('created_at', $hoy->toDateString())
-                        ->with(['operador:id,full_name,nickname', 'user:id,full_name,nickname'])
-                        ->get()
+                    ->whereDate('created_at', $hoy->toDateString())
+                    ->with(['operador:id,full_name,nickname', 'user:id,full_name,nickname'])
+                    ->get()
                     : collect();
 
                 $pagosDeHoy = $pagosIndividualesHoy->concat($pagosGrupoHoy)
@@ -1112,7 +1155,7 @@ class ReportController extends Controller
                 // "Pagado": solo el/los nombre(s) del operador que cobró
                 // hoy, sin monto (el monto ya está en "Recaudado").
                 $pagadoTexto = $pagosDeHoy
-                    ->map(fn ($p) => $p->operador->full_name ?? $p->user->full_name ?? '-')
+                    ->map(fn($p) => $p->operador->full_name ?? $p->user->full_name ?? '-')
                     ->unique()
                     ->implode(', ');
                 $pagadoTexto = $pagadoTexto !== '' ? $pagadoTexto : '-';

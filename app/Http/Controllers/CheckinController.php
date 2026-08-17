@@ -889,7 +889,7 @@ class CheckinController extends Controller
                 // la BD), inflando el total con gente que ya se fue.
                 $checkin->companions()->sync(
                     $hasTitularPrice
-                        ? collect($newOldCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
+                        ? collect($newOldCompanions)->mapWithKeys(fn($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
                         : $newOldCompanions,
                 );
 
@@ -943,7 +943,7 @@ class CheckinController extends Controller
                 if (!empty($newNewCompanions)) {
                     $nuevoCheckin->companions()->sync(
                         $hasTitularPrice
-                            ? collect($newNewCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
+                            ? collect($newNewCompanions)->mapWithKeys(fn($id) => [$id => ['price' => $priceMap[$id] ?? 0]])->all()
                             : $newNewCompanions,
                     );
                     // 🚀 Al crear el checkin todavía no existían sus
@@ -1054,9 +1054,9 @@ class CheckinController extends Controller
             $checkin->update([
                 'special_agreement_id' => null,                 // corporate_client = false
                 'titular_price'        => null,                   // 🚀 sale del modelo de precio por huésped:
-                                                                   // si queda seteado, CheckinObserver::saving()
-                                                                   // vuelve a pisar agreed_price con el precio
-                                                                   // corporativo viejo en el próximo guardado.
+                // si queda seteado, CheckinObserver::saving()
+                // vuelve a pisar agreed_price con el precio
+                // corporativo viejo en el próximo guardado.
                 'agreed_price'         => $precioNormal,          // precio original desde ahora
                 'price_effective_since' => $ahora,
                 'duration_days'        => 1,
@@ -1175,7 +1175,7 @@ class CheckinController extends Controller
             // Los mismos acompañantes se trasladan al nuevo check-in
             // (conservando su procedencia registrada en el pivote).
             if ($checkin->companions->isNotEmpty()) {
-                $syncData = $checkin->companions->mapWithKeys(fn ($g) => [
+                $syncData = $checkin->companions->mapWithKeys(fn($g) => [
                     $g->id => ['origin' => $g->pivot->origin],
                 ])->toArray();
                 $nuevoCheckin->companions()->sync($syncData);
@@ -1589,7 +1589,11 @@ class CheckinController extends Controller
 
             // Concatenamos las notas que vienen del request, o las antiguas, con las posibles notas extra de "El Castigo"
             $notasFinales = isset($validated['notes']) ? strtoupper($validated['notes']) : $checkin->notes;
-            $notasFinales .= $extraNotes;
+            // Evita duplicar el mismo tag de sistema si el update se dispara más de una vez
+            // (doble submit, etc.) con las mismas notas de base.
+            if ($extraNotes !== '' && !str_contains($notasFinales ?? '', trim($extraNotes))) {
+                $notasFinales .= $extraNotes;
+            }
 
             $updateData = [
                 'actual_arrival_date' => $validated['actual_arrival_date'] ?? $checkin->actual_arrival_date,
@@ -1626,7 +1630,7 @@ class CheckinController extends Controller
                 'checkin_operator_id' => $validated['checkin_operator_id'] ?? $checkin->checkin_operator_id,
             ];
 
-           // actualiza servicios consumidos si vienen del request
+            // actualiza servicios consumidos si vienen del request
             if ($request->has('selected_services')) {
                 $checkin->services()->sync($request->selected_services);
             }
@@ -2762,44 +2766,46 @@ class CheckinController extends Controller
         $pdf = new \FPDF('P', 'mm', array(80, 150));
         $pdf->SetMargins(4, 4, 4);
         $pdf->SetAutoPageBreak(true, 2);
+        $pdf->AddFont('GreatVibes', '', 'GreatVibes-Regular.php');
 
         foreach ($occupants as $guest) {
             $pdf->AddPage();
 
             // --- CABECERA ---
-            $pdf->SetFont('Arial', 'B', 10);
-            $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+            $pdf->SetFont('GreatVibes', '', 24); // cursiva grande para el título
+            $pdf->Cell(0, 11, utf8_decode('Hotel San Antonio'), 0, 1, 'C');
 
             // --- DETALLES DE HABITACIÓN ---
-            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->SetFont('Arial', 'B', 9);
             $text = 'Pza. Nº ' . str_pad($checkin->room->number, 2, '0', STR_PAD_LEFT);
-            $pdf->Cell(0, 5, utf8_decode($text), 0, 1, 'R');
-            $pdf->Ln(2);
+            $pdf->Cell(0, 6, utf8_decode($text), 0, 1, 'R');
+            $pdf->Ln(3);
 
             // --- DATOS DEL HUÉSPED ---
 
             // Nombre
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(12, 4, 'Nombre:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->MultiCell(0, 4, utf8_decode($guest->full_name), 0, 'L');
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(14, 6, 'Nombre:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->MultiCell(0, 6, utf8_decode($guest->full_name), 0, 'L');
 
             // Nacionalidad
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(18, 4, 'Nacionalidad:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, utf8_decode($guest->nationality), 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(20, 6, 'Nacionalidad:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, utf8_decode($guest->nationality), 0, 1);
 
             // Carnet y Otorgado (Misma línea para ahorrar espacio)
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(18, 4, 'CI/Pasaporte:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(20, 4, $guest->identification_number, 0, 0);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(19, 6, 'CI/Pasaporte:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(20, 6, $guest->identification_number, 0, 1);
 
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(15, 4, 'Otorgado:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, utf8_decode($guest->issued_in), 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(20, 6, 'Otorgado:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, utf8_decode($guest->issued_in), 0, 1);
+         
 
             // Estado Civil y Edad (Misma línea)
             $estado = $guest->civil_status;
@@ -2810,84 +2816,80 @@ class CheckinController extends Controller
                 $edad = \Carbon\Carbon::parse($guest->birth_date)->age;
             }
 
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(18, 4, 'Estado civil:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(20, 4, $inicial, 0, 0);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(19, 6, 'Estado civil:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(20, 6, $inicial, 0, 0);
 
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(10, 4, 'Edad:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, $edad, 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(11, 6, 'Edad:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, $edad, 0, 1);
 
             // Profesión
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(18, 4, utf8_decode('Profesión:'), 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, utf8_decode($guest->profession), 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(20, 6, utf8_decode('Profesión:'), 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, utf8_decode($guest->profession), 0, 1);
 
             // Procedencia
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(18, 4, 'Procedencia:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(20, 6, 'Procedencia:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
             // 'origin' pertenece a 'checkin' (es de la asignación, no del huésped individual).
-            $pdf->Cell(0, 4, utf8_decode($checkin->origin ?? '-'), 0, 1);
+            $pdf->Cell(0, 6, utf8_decode($checkin->origin ?? '-'), 0, 1);
+            $pdf->Ln(2);
 
             // --- DATOS DE INGRESO ---
             $fechaIngreso = \Carbon\Carbon::parse($checkin->check_in_date)->format('d/m/Y');
             $horaIngreso  = \Carbon\Carbon::parse($checkin->check_in_date)->format('H:i');
 
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(20, 4, 'Fecha ingreso:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(18, 4, $fechaIngreso, 0, 0);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(21, 6, 'Fecha ingreso:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(18, 6, $fechaIngreso, 0, 0);
 
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(10, 4, 'Hora:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, $horaIngreso, 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(11, 6, 'Hora:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, $horaIngreso, 0, 1);
 
             // Permanencia
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(28, 4, utf8_decode('Permanencia (días):'), 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, $checkin->duration_days, 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(30, 6, utf8_decode('Permanencia (días):'), 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, $checkin->duration_days, 0, 1);
 
-            // Tarifa acordada
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(28, 4, 'Tarifa por noche:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $tarifa = $checkin->agreed_price ?? ($checkin->room->price->amount ?? 0);
-            $pdf->Cell(0, 4, number_format($tarifa, 2) . ' Bs.', 0, 1);
-
+           
             // Total Cancelado (Adelanto)
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(28, 4, 'Total cancelado:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, number_format($checkin->advance_payment, 2) . ' Bs.', 0, 1);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(30, 6, 'Total cancelado:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 6, number_format($checkin->advance_payment, 2) . ' Bs.', 0, 1);
+            $pdf->Ln(2);
 
             // Observaciones (Multilinea)
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(28, 4, 'Observaciones:', 0, 1);
-            $pdf->SetFont('Arial', '', 7);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(30, 6, 'Observaciones:', 0, 1);
+            $pdf->SetFont('Arial', '', 8);
             if ($checkin->notes) {
-                $pdf->MultiCell(0, 4, utf8_decode($checkin->notes), 0, 'L');
+                $pdf->MultiCell(0, 6, utf8_decode($checkin->notes), 0, 'L');
             } else {
-                $pdf->Cell(0, 4, '-', 0, 1);
+                $pdf->Cell(0, 6, '-', 0, 1);
             }
 
             // Celular
-            $pdf->SetFont('Arial', 'B', 7);
-            $pdf->Cell(15, 4, 'Celular:', 0, 0);
-            $pdf->SetFont('Arial', '', 7);
+            $pdf->SetFont('Arial', 'B', 8);
+            $pdf->Cell(16, 6, 'Celular:', 0, 0);
+            $pdf->SetFont('Arial', '', 8);
             $telefono = $guest->phone ? $guest->phone : '___________________';
-            $pdf->Cell(0, 4, utf8_decode($telefono), 0, 1);
+            $pdf->Cell(0, 6, utf8_decode($telefono), 0, 1);
 
             // --- FIRMA ---
-            $pdf->Ln(10);
+            $pdf->Ln(16);
 
             $pageWidth = $pdf->GetPageWidth();
-            $lineLength = 50;
+            $lineLength = 55;
 
             $x = ($pageWidth - $lineLength) / 2;
             $y = $pdf->GetY();
@@ -2895,8 +2897,8 @@ class CheckinController extends Controller
             $pdf->Line($x, $y, $x + $lineLength, $y);
             $pdf->Ln(2);
 
-            $pdf->SetFont('Arial', '', 7);
-            $pdf->Cell(0, 4, utf8_decode('Firma del Huésped'), 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 5, utf8_decode('Firma del Huésped'), 0, 1, 'C');
         }
 
         // 4. Salida
@@ -3009,7 +3011,7 @@ class CheckinController extends Controller
         } else {
             $adelantosPrevios = (float) $checkin->payments
                 ->whereIn('type', ['ADELANTO', 'DEVOLUCION'])
-                ->sum(fn ($pago) => (float) $pago->amount);
+                ->sum(fn($pago) => (float) $pago->amount);
         }
         // =========================================================
 
@@ -3075,8 +3077,11 @@ class CheckinController extends Controller
         $pdf->SetAutoPageBreak(true, 2);
         $pdf->AddPage();
 
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->Cell(0, 5, 'HOTEL SAN ANTONIO', 0, 1, 'C');
+
+        $pdf->AddFont('GreatVibes', '', 'GreatVibes-Regular.php');
+
+        $pdf->SetFont('GreatVibes', '', 26); // cursiva grande para el título
+        $pdf->Cell(0, 12, utf8_decode('Hotel San Antonio'), 0, 1, 'C');
         $pdf->SetFont('Arial', '', 8);
         $pdf->Cell(0, 4, utf8_decode('Calle Oruro - Potosi'), 0, 1, 'C');
         $pdf->Ln(2);
@@ -3631,8 +3636,13 @@ class CheckinController extends Controller
                 $titularSchedule = $schedulesByGuestId->get($checkin->guest_id);
                 if ($titularSchedule) {
                     $this->chargeGuestCycles(
-                        $checkin, $checkin->guest, $titularSchedule,
-                        $anchorDay, $throughDay, (float) $checkin->titular_price, true,
+                        $checkin,
+                        $checkin->guest,
+                        $titularSchedule,
+                        $anchorDay,
+                        $throughDay,
+                        (float) $checkin->titular_price,
+                        true,
                     );
                 }
 
@@ -3650,8 +3660,13 @@ class CheckinController extends Controller
                     $compArrivalDay = $compArrivalDay->lte($throughDay) ? $compArrivalDay : $throughDay->copy();
 
                     $this->chargeGuestCycles(
-                        $checkin, $companion, $schedule,
-                        $compArrivalDay, $throughDay, (float) ($companion->pivot->price ?? 0), true,
+                        $checkin,
+                        $companion,
+                        $schedule,
+                        $compArrivalDay,
+                        $throughDay,
+                        (float) ($companion->pivot->price ?? 0),
+                        true,
                     );
                 }
             } else {
@@ -3835,7 +3850,7 @@ class CheckinController extends Controller
                 $newStayCompanions = array_slice($stayingIds, 1);
                 $checkin->companions()->sync(
                     $hasOriginTitularPrice
-                        ? collect($newStayCompanions)->mapWithKeys(fn ($id) => [$id => ['price' => $originPriceMap[$id] ?? 0]])->all()
+                        ? collect($newStayCompanions)->mapWithKeys(fn($id) => [$id => ['price' => $originPriceMap[$id] ?? 0]])->all()
                         : $newStayCompanions,
                 );
 
