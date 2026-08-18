@@ -8,6 +8,17 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use App\Http\Middleware\EnsurePasswordIsChanged; // <- Importa el middleware que creamos
 
+// FPDF busca sus fuentes (incluida la personalizada GreatVibes que usan los
+// recibos de check-in) en vendor/setasign/fpdf/font/ por defecto -- pero
+// /vendor está en .gitignore, así que cualquier fuente agregada ahí a mano
+// se pierde en un despliegue nuevo (composer install no la trae, porque no
+// es parte del paquete setasign/fpdf). Se apunta acá a resources/fonts/,
+// que sí queda versionado en git, con una copia completa (fuentes core +
+// GreatVibes) para que un servidor recién instalado también las tenga.
+if (! defined('FPDF_FONTPATH')) {
+    define('FPDF_FONTPATH', dirname(__DIR__).'/resources/fonts/');
+}
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
