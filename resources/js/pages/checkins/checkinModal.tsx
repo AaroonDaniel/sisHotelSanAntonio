@@ -4078,7 +4078,6 @@ export default function CheckinModal({
                                                     </label>
                                                     <button
                                                         type="button"
-                                                        disabled={!isTitular}
                                                         onClick={() =>
                                                             setData((prev) => ({
                                                                 ...prev,
@@ -4116,9 +4115,7 @@ export default function CheckinModal({
                                                     </label>
                                                     <div className="relative">
                                                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                                            <span
-                                                                className={`text-sm font-bold ${!isTitular ? 'text-gray-400' : 'text-green-600'}`}
-                                                            >
+                                                            <span className="text-sm font-bold text-green-600">
                                                                 Bs
                                                             </span>
                                                         </div>
@@ -4171,9 +4168,6 @@ export default function CheckinModal({
                                                                     ),
                                                                 );
                                                             }}
-                                                            disabled={
-                                                                !isTitular
-                                                            }
                                                             required={
                                                                 isSpecialDealType
                                                             }
@@ -4218,9 +4212,6 @@ export default function CheckinModal({
                                                             <button
                                                                 key={banco}
                                                                 type="button"
-                                                                disabled={
-                                                                    !isTitular
-                                                                }
                                                                 onClick={() =>
                                                                     setData(
                                                                         (

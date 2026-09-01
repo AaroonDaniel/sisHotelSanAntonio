@@ -102,12 +102,21 @@ class User extends Authenticatable
      * en el selector de la sesión global de recepción (Check-in, Pagos,
      * Gastos, Checkout...). Excluye cuentas de sistema que no son personas
      * físicas reales: 'recepcion' (Terminal Compartida / Kiosk Mode) y
-     * 'sistema_web' (reservas automáticas desde la web).
+     * 'sistema_web' (reservas automáticas desde la web). Solo incluye
+     * administrador/recepcionista, y excluye siempre a quien tenga el rol
+     * administrador_sistema (aunque tenga también otro rol), ya que esas
+     * cuentas no deben aparecer en las vistas operativas de recepción.
      */
     public function scopeOperadores($query)
     {
         return $query->where('is_active', true)
-            ->whereNotIn('nickname', ['recepcion', 'sistema_web']);
+            ->whereNotIn('nickname', ['recepcion', 'sistema_web'])
+            ->whereHas('roles', function ($q) {
+                $q->whereIn('name', ['administrador', 'recepcionista']);
+            })
+            ->whereDoesntHave('roles', function ($q) {
+                $q->where('name', 'administrador_sistema');
+            });
     }
 
     /*Configuraxion de la bitacora de actividades*/
