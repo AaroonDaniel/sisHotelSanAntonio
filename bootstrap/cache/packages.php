@@ -157,6 +157,13 @@
       0 => 'Laravel\\Tinker\\TinkerServiceProvider',
     ),
   ),
+  'laravel/wayfinder' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Laravel\\Wayfinder\\WayfinderServiceProvider',
+    ),
+  ),
   'nesbot/carbon' => 
   array (
     'providers' => 
